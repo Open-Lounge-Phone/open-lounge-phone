@@ -46,6 +46,11 @@ the owner's machine is incidental.) Self-host auto-renames a legacy `opentincan.
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
 traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text
 "Open Lounge Phone".
+**Swappable by design (owner, 2026-09-27):** shells are 3D-printable in any colour
+(`hardware/enclosure/`, code CAD), the handset cord is a **standard RJ9/4P4C coiled cord**, keys
+are standard MX switches + 1u keycaps (12 of them) — all interchangeable/customizable. The
+default look is clean and utilitarian; the site's `/customize/` three.js configurator shows the
+swaps (loads real GLBs from `hardware/enclosure/build/web/` when present).
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
