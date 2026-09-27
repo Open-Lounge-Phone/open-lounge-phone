@@ -123,6 +123,28 @@ export async function pairAndCall({ base, setupToken }: Target): Promise<void> {
     if (m.state === "ended") break;
   }
 
+  // Voicemail round trip through the blob store (disk or R2).
+  const recording = new Uint8Array(4096).map((_, i) => i % 251);
+  const vm = await fetch(`${base}/api/devices/${deviceId}/voicemail?durationMs=3000`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "audio/webm" },
+    body: recording,
+  });
+  expect(vm.status).toBe(201);
+  const { id: vmId } = (await vm.json()) as { id: string };
+  expect(await app.next("voicemail.new")).toMatchObject({ id: vmId, from: "Mom" });
+  for (;;) {
+    const config = await device.next("config");
+    if (config.missed) {
+      expect(config.missed).toEqual([{ from: "Mom" }]);
+      break;
+    }
+  }
+  const audio = await fetch(`${base}/api/voicemails/${vmId}/audio`, { headers: auth });
+  expect(new Uint8Array(await audio.arrayBuffer())).toEqual(recording);
+  await fetch(`${base}/api/voicemails/${vmId}`, { method: "DELETE", headers: auth });
+  expect(await (await fetch(`${base}/api/voicemails`, { headers: auth })).json()).toEqual([]);
+
   // The API can't be used across households or without auth.
   expect((await fetch(`${base}/api/devices`)).status).toBe(401);
 
