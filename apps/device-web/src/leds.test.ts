@@ -121,3 +121,20 @@ describe("hasNewMissed", () => {
     expect(hasNewMissed(with_("Mom"), config)).toBe(false);
   });
 });
+
+describe("menu and function keys", () => {
+  it("dims MENU/BACK when online and turns them off offline", () => {
+    expect(ledsFor(input()).fn).toEqual({ color: "white", mode: "dim" });
+    expect(ledsFor(input({ connection: "offline" })).fn.mode).toBe("off");
+  });
+
+  it("pulses everything blue while pairing", () => {
+    expect(ledsFor(input({ pairing: true })).fn).toEqual({ color: "blue", mode: "pulse" });
+  });
+
+  it("lights only the digits the open menu uses", () => {
+    const leds = ledsFor(input({ menuSlots: [0, 3] }));
+    expect(leds.keys.map((k) => k.mode)).toEqual(["on", "off", "off", "on"]);
+    expect(leds.fn).toEqual({ color: "white", mode: "on" });
+  });
+});

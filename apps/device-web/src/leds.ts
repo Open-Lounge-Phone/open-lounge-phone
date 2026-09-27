@@ -26,14 +26,19 @@ export interface LedInput {
   /** Showing a pairing code. */
   pairing: boolean;
   connection: Connection;
-  /** Number of physical keys. */
+  /** Number of speed-dial digit keys (protocol button indices 0..buttons-1). */
   buttons: number;
   /** The key of the current or most recent outbound call, if any. */
   activeKey?: number;
+  /** Menu open: button indices of the digits that do something on the current screen. */
+  menuSlots?: number[];
 }
 
 export interface LedState {
+  /** Per digit key, by protocol button index. */
   keys: Led[];
+  /** MENU and BACK keys (they always light the same way). */
+  fn: Led;
   status: Led;
 }
 
@@ -52,14 +57,26 @@ export function ledsFor(input: LedInput): LedState {
   else status = { color: "green", mode: "on" };
 
   if (pairing) {
+    const pulse: Led = { color: "blue", mode: "pulse" };
+    return { keys: Array.from({ length: buttons }, () => pulse), fn: pulse, status };
+  }
+
+  const online = connection === "online";
+  if (input.menuSlots) {
+    // Menu: light exactly the digits that mean something on this screen.
+    const lit = new Set(input.menuSlots);
     return {
-      keys: Array.from({ length: buttons }, () => ({ color: "blue", mode: "pulse" })),
+      keys: Array.from({ length: buttons }, (_, i) =>
+        lit.has(i) ? { color: "white", mode: "on" } : OFF,
+      ),
+      fn: { color: "white", mode: "on" },
       status,
     };
   }
+  const fn: Led = online ? { color: "white", mode: "dim" } : OFF;
 
   const keys: Led[] = Array.from({ length: buttons }, (_, i) =>
-    mapped.has(i) && connection === "online" ? { color: "white", mode: "dim" } : OFF,
+    mapped.has(i) && online ? { color: "white", mode: "dim" } : OFF,
   );
   const set = (i: number | undefined, led: Led) => {
     if (i !== undefined && i >= 0 && i < buttons) keys[i] = led;
@@ -96,7 +113,7 @@ export function ledsFor(input: LedInput): LedState {
     default:
       break;
   }
-  return { keys, status };
+  return { keys, fn, status };
 }
 
 /** True when `next` lists a caller with unheard voicemail that `prev` did not. */

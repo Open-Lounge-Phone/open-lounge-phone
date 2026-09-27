@@ -645,9 +645,10 @@ input[type="radio"] {
 }
 
 /* Printable keycap labels (Kids Lite). */
+/* Same order as the phone's digit keys: 1 2 3 4 5 / 6 7 8 9 0. */
 .label-sheet {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, var(--label-mm));
   gap: 3mm;
 }
 .key-label {

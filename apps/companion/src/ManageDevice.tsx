@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Api, ContactEntry, DeviceSummary, User } from "./api.ts";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
-
-const KEY_COUNT = 8;
+import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
 
 interface Props {
   api: Api;
@@ -99,18 +98,24 @@ export function ManageDevice({ api, deviceId, device, onBack }: Props) {
 
       <h3>Keys</h3>
       <p className="muted small">
-        Each key on the phone calls one person. Only people the phone is allowed to call light up.
+        Lift the handset and press a digit to call that person (speed dial). Only people the phone
+        is allowed to call light up.
       </p>
       <div className="card keys">
-        {Array.from({ length: KEY_COUNT }, (_, i) => {
-          const assigned = buttons[String(i)] ?? "";
+        {SPEED_DIAL_ROWS.flat().map((digit) => {
+          const slot = slotOf(digit);
+          const assigned = buttons[String(slot)] ?? "";
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: keys are positional
-            <label key={i} className="key-row">
-              <span className="keycap">{i + 1}</span>
+            <label key={digit} className="key-row">
+              <span className="keycap" title={`Key ${digit}`}>
+                {digit}
+              </span>
               <select
+                aria-label={`Key ${digit}`}
                 value={assigned}
-                onChange={(e) => void run(() => api.setButton(deviceId, i, e.target.value || null))}
+                onChange={(e) =>
+                  void run(() => api.setButton(deviceId, slot, e.target.value || null))
+                }
               >
                 <option value="">— nobody —</option>
                 {contacts.map((c) => (
@@ -124,7 +129,7 @@ export function ManageDevice({ api, deviceId, device, onBack }: Props) {
           );
         })}
       </div>
-      <KeyLabelSheet buttons={buttons} contacts={contacts} keyCount={KEY_COUNT} />
+      <KeyLabelSheet buttons={buttons} contacts={contacts} />
     </section>
   );
 }

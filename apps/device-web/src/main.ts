@@ -22,6 +22,7 @@ import {
   type ServerToDevice,
 } from "@opentincan/protocol";
 import { playChime, unlockChime } from "./chime.ts";
+import { keyGrid } from "./grid.ts";
 import {
   forgetIdentity,
   getDeviceId,
@@ -29,7 +30,25 @@ import {
   setDeviceId,
   sign,
 } from "./identity.ts";
+import {
+  digitOf,
+  isDigit,
+  KEY_ROWS,
+  type KeyId,
+  keyFromKeyboard,
+  SLOT_COUNT,
+  slotOf,
+} from "./keypad.ts";
 import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
+import {
+  DEFAULT_SETTINGS,
+  type MenuEvent,
+  type MenuState,
+  menuLines,
+  menuStep,
+  menuView,
+  type Settings,
+} from "./menu.ts";
 import { type PowerSource, parseVariant, powerStatus } from "./power.ts";
 import { renderSegments } from "./segments.ts";
 import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
@@ -44,7 +63,6 @@ const CLOSE_REPLACED = 4000;
 
 const params = new URLSearchParams(location.search);
 const profile = params.get("profile")?.trim() || "default";
-const keyCount = Math.min(8, Math.max(1, Math.trunc(Number(params.get("keys"))) || 4));
 const startedAt = Date.now();
 // The hardware display is undecided: a small e-ink stripe or 14-segment LED characters.
 // `none` = Kids Lite (no display; keys carry printed labels), `segments` = 14-segment module.
@@ -56,7 +74,7 @@ let powerSource: PowerSource = "3A";
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 const handsetEl = $<HTMLButtonElement>(".handset");
-const keysEl = $<HTMLDivElement>(".keys");
+const keyRowEls = [$<HTMLDivElement>(".keys--top"), $<HTMLDivElement>(".keys--bottom")];
 const displayEl = $<HTMLDivElement>(".display");
 const statusLedEl = $<HTMLSpanElement>(".status-led");
 // Live call audio (no captions possible), so it is created here rather than in the markup.
@@ -87,6 +105,10 @@ let lastStatusText = "";
 let callStartedAt: number | undefined;
 let callTicker: ReturnType<typeof setInterval> | undefined;
 let noticeTicker: ReturnType<typeof setInterval> | undefined;
+let menu: MenuState | undefined;
+let settings: Settings = { ...DEFAULT_SETTINGS };
+let menuTicker: ReturnType<typeof setInterval> | undefined;
+const keyEls = new Map<KeyId, HTMLButtonElement>();
 
 const tones = new TonePlayer();
 const identity = await loadOrCreateIdentity(profile);
@@ -129,7 +151,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
       proto: PROTOCOL_VERSION,
       model: "web-emulator",
       fw: FW,
-      buttons: keyCount,
+      buttons: SLOT_COUNT,
       display: displayMode === "segments" ? "seg14" : displayMode,
       ...(deviceId ? { deviceId } : {}),
     };
@@ -253,6 +275,8 @@ function step(input: DeviceInput): void {
   if (authed) for (const m of r.send) send(m);
 
   const s = deviceState;
+  // Lifting the handset or an incoming call leaves the menu.
+  if (menu && s.kind !== "idle") applyMenu({ type: "exit" });
   if (s.kind === "dialing") {
     activeKey = s.button;
     activeLabel = labelFor(s.button);
@@ -337,36 +361,104 @@ function toggleHook(): void {
   step({ type: "hook", state: hookUp ? "up" : "down" });
 }
 
-function pressKey(index: number): void {
-  tones.unlock();
-  unlockChime();
-  const el = keysEl.children[index];
+function flash(key: KeyId): void {
+  const el = keyEls.get(key);
   el?.classList.add("is-pressed");
   setTimeout(() => el?.classList.remove("is-pressed"), 140);
-  if (!authed || pairingCode) return; // keys do nothing until the phone is paired and online
-  step({ type: "button", index });
 }
 
-for (let i = 0; i < keyCount; i++) {
-  const key = document.createElement("button");
-  key.type = "button";
-  key.className = "key";
-  key.innerHTML = `<span class="key__cap"><span class="key__num">${i + 1}</span><span class="key__led"></span><span class="key__legend"></span></span>`;
-  key.addEventListener("click", () => pressKey(i));
-  keysEl.append(key);
+function canUseMenu(): boolean {
+  return authed && !pairingCode && !hookUp && deviceState.kind === "idle";
 }
-keysEl.style.setProperty("--cols", String(keyCount <= 4 ? 2 : 4));
+
+function pressKey(key: KeyId): void {
+  tones.unlock();
+  unlockChime();
+  flash(key);
+  if (!authed || pairingCode) return; // keys do nothing until the phone is paired and online
+  const now = Date.now();
+  if (key === "menu") {
+    if (menu || canUseMenu()) applyMenu({ type: "menu", now });
+    return;
+  }
+  if (key === "back") {
+    if (menu) applyMenu({ type: "back", now });
+    return;
+  }
+  const digit = Number(key);
+  if (menu) {
+    applyMenu({ type: "digit", digit, now });
+    return;
+  }
+  // Speed dial: digit 1–9 → slot 0–8, digit 0 → slot 9.
+  step({ type: "button", index: slotOf(digit) });
+}
+
+function menuContext() {
+  return { missedCount: config?.missed?.length ?? 0, fw: FW };
+}
+
+function applyMenu(event: MenuEvent): void {
+  const was = menu;
+  const r = menuStep(menu, settings, event, menuContext());
+  menu = r.state;
+  if (r.settings !== settings) applySettings(r.settings);
+  // Phones without a display speak the menu; the others can show it.
+  if (r.say && displayMode === "none") speak(r.say);
+  if (was && !menu && displayMode === "none" && event.type !== "exit") speak("Menu closed.");
+  if (menu && !menuTicker) {
+    menuTicker = setInterval(() => applyMenu({ type: "tick", now: Date.now() }), 1000);
+  } else if (!menu && menuTicker) {
+    clearInterval(menuTicker);
+    menuTicker = undefined;
+  }
+  render();
+}
+
+function applySettings(next: Settings): void {
+  settings = next;
+  audioEl.volume = settings.volume / 10;
+  const level = settings.brightness / 5;
+  displayEl.style.setProperty("--brightness", String(level));
+  brightnessEl.value = String(Math.round(level * 100));
+  log("•", `settings ${JSON.stringify(settings)}`);
+}
+
+for (const [r, row] of KEY_ROWS.entries()) {
+  for (const key of row) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = isDigit(key) ? "key" : "key key--fn";
+    el.dataset.key = key;
+    const face = isDigit(key) ? key : key.toUpperCase();
+    el.innerHTML = `<span class="key__cap"><span class="key__num">${face}</span><span class="key__led"></span><span class="key__legend"></span></span>`;
+    el.addEventListener("click", () => pressKey(key));
+    keyRowEls[r]?.append(el);
+    keyEls.set(key, el);
+  }
+}
 handsetEl.addEventListener("click", toggleHook);
 
 document.addEventListener("keydown", (e) => {
-  if (e.target instanceof HTMLInputElement || e.repeat || e.metaKey || e.ctrlKey) return;
+  if (
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLSelectElement ||
+    e.repeat ||
+    e.metaKey ||
+    e.ctrlKey
+  ) {
+    return;
+  }
   if (e.code === "Space") {
     e.preventDefault();
     toggleHook();
     return;
   }
-  const n = Number(e.key);
-  if (Number.isInteger(n) && n >= 1 && n <= keyCount) pressKey(n - 1);
+  const key = keyFromKeyboard(e.key);
+  if (key) {
+    e.preventDefault();
+    pressKey(key);
+  }
 });
 
 // --- developer panel controls ----------------------------------------------------
@@ -400,11 +492,16 @@ $<HTMLButtonElement>(".devpanel__forget").addEventListener("click", async () => 
 
 // --- pairing announcement (no screen needed) ---------------------------------------
 
-function announce(): void {
-  if (!pairingCode || !("speechSynthesis" in window)) return;
-  const digits = pairingCode.split("").join(". ");
+/** Speaks through the handset (on hardware: pre-recorded prompts). Replaces anything playing. */
+function speak(text: string): void {
+  if (!("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
-  speechSynthesis.speak(new SpeechSynthesisUtterance(`Your pairing code is ${digits}.`));
+  speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
+function announce(): void {
+  if (!pairingCode) return;
+  speak(`Your pairing code is ${pairingCode.split("").join(". ")}.`);
 }
 
 function updateAnnouncement(): void {
@@ -424,23 +521,35 @@ function updateAnnouncement(): void {
 function render(): void {
   handsetEl.setAttribute("aria-pressed", String(hookUp));
 
+  const view = menu ? menuView(menu, settings, menuContext()) : undefined;
   const leds = ledsFor({
     deviceState,
     config,
     pairing: Boolean(pairingCode),
     connection,
-    buttons: keyCount,
+    buttons: SLOT_COUNT,
     activeKey,
+    ...(view ? { menuSlots: Object.keys(view.labels).map((d) => slotOf(Number(d))) } : {}),
   });
-  leds.keys.forEach((led, i) => {
-    const el = keysEl.children[i] as HTMLElement | undefined;
+  leds.keys.forEach((led, slot) => {
+    const digit = digitOf(slot);
+    const el = keyEls.get(String(digit) as KeyId);
     if (!el) return;
     el.dataset.color = led.color;
     el.dataset.mode = led.mode;
+    // Kids Lite has no display: names are printed on the (relegendable) keycaps instead.
+    const name = labelFor(slot);
     const legend = el.querySelector(".key__legend");
-    if (legend) legend.textContent = labelFor(i) ?? "";
-    el.setAttribute("aria-label", `Key ${i + 1}${labelFor(i) ? `: ${labelFor(i)}` : ""}`);
+    if (legend) legend.textContent = displayMode === "none" ? (name ?? "") : "";
+    el.setAttribute("aria-label", `Key ${digit}${name ? `: ${name}` : ""}`);
   });
+  for (const key of ["menu", "back"] as const) {
+    const el = keyEls.get(key);
+    if (!el) continue;
+    el.dataset.color = leds.fn.color;
+    el.dataset.mode = leds.fn.mode;
+    el.setAttribute("aria-label", key === "menu" ? "Menu" : "Back");
+  }
   statusLedEl.dataset.color = leds.status.color;
   statusLedEl.dataset.mode = leds.status.mode;
 
@@ -462,21 +571,32 @@ function render(): void {
   fact("missed").textContent = config?.missed?.length
     ? config.missed.map((m) => m.from).join(", ")
     : "—";
+  fact("menu").textContent = menu ? menu.screen : "closed";
+  fact("settings").textContent = `volume ${settings.volume}/10 · speakerphone ${
+    settings.speakerphone ? "on" : "off"
+  } · brightness ${settings.brightness}/5`;
 }
 
 function renderDisplay(): void {
-  const lines = statusLines({
-    connection,
-    ...(pairingCode ? { pairingCode } : {}),
-    deviceState,
-    ...(config ? { config } : {}),
-    ...(activeLabel ? { activeLabel } : {}),
-    ...(callStartedAt !== undefined ? { callStartedAt } : {}),
-    battery,
-    power: powerStatus(variant, powerSource),
-    now: Date.now(),
-  });
-  const text = lines.join("\n");
+  const view = menu ? menuView(menu, settings, menuContext()) : undefined;
+  const lines = view
+    ? displayMode === "segments"
+      ? menuLines(view, Date.now())
+      : ([view.title] as [string])
+    : statusLines({
+        connection,
+        ...(pairingCode ? { pairingCode } : {}),
+        deviceState,
+        ...(config ? { config } : {}),
+        ...(activeLabel ? { activeLabel } : {}),
+        ...(callStartedAt !== undefined ? { callStartedAt } : {}),
+        battery,
+        power: powerStatus(variant, powerSource),
+        now: Date.now(),
+      });
+  // The key map needs a signed-in phone; while pairing or offline the status says it all.
+  const grid = authed && !pairingCode ? keyGrid(config, view) : undefined;
+  const text = JSON.stringify([lines, displayMode === "eink" ? grid : null]);
   if (text === lastStatusText) return;
   lastStatusText = text;
   displayEl.setAttribute("aria-label", lines.join(". "));
@@ -485,14 +605,34 @@ function renderDisplay(): void {
     renderSegments(displayEl, lines, STATUS_WIDTH);
     return;
   }
-  displayEl.replaceChildren(
-    ...lines.map((line) => {
-      const div = document.createElement("div");
-      div.className = "eink-line";
-      div.textContent = line;
-      return div;
-    }),
-  );
+  const children: HTMLElement[] = lines.map((line) => {
+    const div = document.createElement("div");
+    div.className = "eink-line";
+    div.textContent = line;
+    return div;
+  });
+  if (grid) {
+    // A small map of the keys: same order as the rows above and below the display.
+    const map = document.createElement("div");
+    map.className = "eink-grid";
+    for (const [r, row] of grid.entries()) {
+      for (const [c, label] of row.entries()) {
+        const cell = document.createElement("div");
+        const key = KEY_ROWS[r]?.[c];
+        cell.className = `eink-cell${key && !isDigit(key) ? " eink-cell--fn" : ""}`;
+        const num = document.createElement("span");
+        num.className = "eink-cell__key";
+        num.textContent = key && isDigit(key) ? key : "";
+        const name = document.createElement("span");
+        name.className = "eink-cell__label";
+        name.textContent = label;
+        cell.append(num, name);
+        map.append(cell);
+      }
+    }
+    children.push(map);
+  }
+  displayEl.replaceChildren(...children);
   // E-ink panels flash on a full refresh; skip it for the call timer's partial updates.
   if (!(deviceState.kind === "incall" && deviceState.connected)) {
     displayEl.classList.remove("display--refresh");

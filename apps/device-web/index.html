@@ -19,8 +19,9 @@
           <span class="cord" aria-hidden="true"></span>
         </div>
         <div class="deck">
+          <div class="keys keys--top"></div>
           <div class="display" role="status" aria-live="polite"></div>
-          <div class="keys"></div>
+          <div class="keys keys--bottom"></div>
           <div class="badge">
             <span class="status-led" aria-hidden="true"></span>
             <span class="brand">opentincan</span>
@@ -39,6 +40,8 @@
           <dt>Config</dt><dd data-fact="config"></dd>
           <dt>Quiet until</dt><dd data-fact="quietUntil"></dd>
           <dt>Missed</dt><dd data-fact="missed"></dd>
+          <dt>Menu</dt><dd data-fact="menu"></dd>
+          <dt>Settings</dt><dd data-fact="settings"></dd>
         </dl>
         <fieldset class="devpanel__battery">
           <legend>Battery</legend>
@@ -58,7 +61,7 @@
         <label class="devpanel__brightness">Display brightness
           <input type="range" min="10" max="100" value="100" data-display="brightness" /></label>
         <button type="button" class="devpanel__forget">Forget identity / re-pair</button>
-        <p class="devpanel__keys">Keyboard: <kbd>Space</kbd> lifts or hangs up the handset, <kbd>1</kbd>–<kbd>8</kbd> press keys. Add <code>?profile=name</code> to run another phone, <code>?keys=N</code> for 1–8 keys, <code>?display=segments</code> for an LED character display instead of e-ink, <code>?display=none</code> for Kids Lite (no display), <code>?variant=lounge</code> for the Lounge phone.</p>
+        <p class="devpanel__keys">Keys: <kbd>1 2 3 4 5 MENU</kbd> over <kbd>6 7 8 9 0 BACK</kbd>. Lift the handset and press a digit to speed-dial; MENU opens the menu (digits pick what the display shows, BACK steps out). Keyboard: <kbd>Space</kbd> lifts or hangs up the handset, <kbd>0</kbd>–<kbd>9</kbd> press digits, <kbd>M</kbd> = MENU, <kbd>Esc</kbd>/<kbd>Backspace</kbd> = BACK. Add <code>?profile=name</code> to run another phone, <code>?display=segments</code> for an LED character display instead of e-ink, <code>?display=none</code> for Kids Lite (no display), <code>?variant=lounge</code> for the Lounge phone.</p>
         <ol class="devpanel__log" reversed></ol>
       </details>
     </main>
