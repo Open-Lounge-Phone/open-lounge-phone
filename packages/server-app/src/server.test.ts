@@ -1,0 +1,491 @@
+import { Store, type User } from "@opentincan/db";
+import { migrate, openSqlite } from "@opentincan/db/node";
+import {
+  encode,
+  fromBase64Url,
+  type ServerToApp,
+  type ServerToDevice,
+  toBase64Url,
+} from "@opentincan/protocol";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  CloseCode,
+  CONNECT_TIMEOUT_MS,
+  type Conn,
+  HELLO_TIMEOUT_MS,
+  RING_TIMEOUT_MS,
+  type ServerEnv,
+} from "./env.ts";
+import { type ConnectionHandler, Gateway } from "./gateway.ts";
+import { createApi, ensureSetupToken } from "./http.ts";
+
+type Msg = ServerToDevice | ServerToApp;
+
+// Monday 2026-03-02 12:00 UTC.
+const NOON_MONDAY = Date.UTC(2026, 2, 2, 12);
+
+class FakeConn implements Conn {
+  sent: Msg[] = [];
+  closed?: { code: number; reason: string };
+  private cursor = 0;
+  handler!: ConnectionHandler;
+
+  send(msg: Msg) {
+    this.sent.push(structuredClone(msg));
+  }
+  close(code: number, reason: string) {
+    this.closed = { code, reason };
+    this.handler.closed();
+  }
+  write<T extends { t: string }>(msg: T) {
+    this.handler.message(encode(msg));
+  }
+  /** Waits for the next message of type `t` after the ones already consumed. */
+  async next<T extends Msg["t"]>(t: T): Promise<Extract<Msg, { t: T }>> {
+    return vi.waitFor(() => {
+      const i = this.sent.findIndex((m, idx) => idx >= this.cursor && m.t === t);
+      if (i < 0)
+        throw new Error(`no ${t} yet; sent: ${JSON.stringify(this.sent.slice(this.cursor))}`);
+      this.cursor = i + 1;
+      return this.sent[i] as Extract<Msg, { t: T }>;
+    });
+  }
+  async nextState(state: string) {
+    for (;;) {
+      const m = await this.next("call.state");
+      if (m.state === state) return m;
+    }
+  }
+}
+
+class ManualTimers {
+  now = NOON_MONDAY;
+  private timers: { at: number; fn: () => void; live: boolean }[] = [];
+  set = (fn: () => void, ms: number) => {
+    const t = { at: this.now + ms, fn, live: true };
+    this.timers.push(t);
+    return () => {
+      t.live = false;
+    };
+  };
+  advance(ms: number) {
+    this.now += ms;
+    for (const t of this.timers.filter((t) => t.live && t.at <= this.now)) {
+      t.live = false;
+      t.fn();
+    }
+  }
+}
+
+let store: Store;
+let timers: ManualTimers;
+let env: ServerEnv;
+let gateway: Gateway;
+let api: ReturnType<typeof createApi>;
+
+beforeEach(() => {
+  const { sql, db } = openSqlite(":memory:");
+  migrate(db);
+  store = new Store(sql);
+  timers = new ManualTimers();
+  env = {
+    store,
+    now: () => timers.now,
+    iceServers: async () => [{ urls: "stun:stun.example:3478" }],
+    setTimer: timers.set,
+    log: () => {},
+  };
+  gateway = new Gateway(env);
+  api = createApi(env, gateway);
+});
+
+async function http(path: string, init: { method?: string; token?: string; body?: unknown } = {}) {
+  const res = await api.request(path, {
+    method: init.method ?? (init.body ? "POST" : "GET"),
+    headers: {
+      "content-type": "application/json",
+      ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+    },
+    ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+  });
+  const text = await res.text();
+  return { status: res.status, json: text ? JSON.parse(text) : undefined };
+}
+
+async function setup(timeZone = "UTC") {
+  const setupToken = await ensureSetupToken(env);
+  const res = await http("/setup", {
+    body: { token: setupToken, householdName: "Home", guardianName: "Mom", timeZone },
+  });
+  expect(res.status).toBe(201);
+  return { token: res.json.token as string, user: res.json.user as User };
+}
+
+function openDevice() {
+  const conn = new FakeConn();
+  conn.handler = gateway.openDevice(conn);
+  return conn;
+}
+function openApp() {
+  const conn = new FakeConn();
+  conn.handler = gateway.openApp(conn);
+  return conn;
+}
+
+const hello = (deviceId?: string) => ({
+  t: "hello",
+  proto: 1,
+  model: "web-emulator",
+  fw: "test",
+  buttons: 4,
+  display: "eink",
+  ...(deviceId ? { deviceId } : {}),
+});
+
+async function newKey() {
+  const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const pub = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  return { pair, publicKey: toBase64Url(pub) };
+}
+
+/** Pairs a new device into the household of `guardianToken`; returns its id and key. */
+async function pairDevice(guardianToken: string, name = "Kid phone") {
+  const key = await newKey();
+  const conn = openDevice();
+  conn.write(hello());
+  conn.write({ t: "pair.begin", publicKey: key.publicKey });
+  const { code } = await conn.next("pair.code");
+  const res = await http("/devices/pair", { token: guardianToken, body: { code, name } });
+  expect(res.status).toBe(201);
+  const done = await conn.next("pair.done");
+  return { deviceId: done.deviceId, key };
+}
+
+async function connectDevice(deviceId: string, key: CryptoKeyPair) {
+  const conn = openDevice();
+  conn.write(hello(deviceId));
+  const { nonce } = await conn.next("auth.challenge");
+  const sig = await crypto.subtle.sign("Ed25519", key.privateKey, fromBase64Url(nonce));
+  conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+  await conn.next("config");
+  return conn;
+}
+
+async function connectApp(token: string) {
+  const conn = openApp();
+  conn.write({ t: "app.hello", proto: 1, token });
+  await conn.next("app.ready");
+  return conn;
+}
+
+/** Household with a guardian, a paired + connected device, and a connected guardian app. */
+async function household() {
+  const g = await setup();
+  const { deviceId, key } = await pairDevice(g.token);
+  const device = await connectDevice(deviceId, key.pair);
+  const app = await connectApp(g.token);
+  return { ...g, deviceId, key, device, app };
+}
+
+describe("setup", () => {
+  it("is single-use", async () => {
+    const setupToken = await ensureSetupToken(env);
+    const body = { token: setupToken, householdName: "H", guardianName: "G", timeZone: "UTC" };
+    expect((await http("/setup", { body })).status).toBe(201);
+    expect((await http("/setup", { body })).status).toBe(403);
+    expect(await ensureSetupToken(env)).toBeUndefined();
+  });
+
+  it("rejects bad time zones and wrong tokens", async () => {
+    const setupToken = await ensureSetupToken(env);
+    const base = { householdName: "H", guardianName: "G" };
+    expect(
+      (await http("/setup", { body: { ...base, token: "nope", timeZone: "UTC" } })).status,
+    ).toBe(403);
+    expect(
+      (await http("/setup", { body: { ...base, token: setupToken, timeZone: "Nowhere/X" } }))
+        .status,
+    ).toBe(400);
+  });
+
+  it("requires auth for everything else", async () => {
+    expect((await http("/me")).status).toBe(401);
+    expect((await http("/me", { token: "bogus" })).status).toBe(401);
+  });
+});
+
+describe("pairing and device auth", () => {
+  it("pairs, then authenticates with a signature and receives config", async () => {
+    const g = await setup();
+    const { deviceId, key } = await pairDevice(g.token);
+    const conn = openDevice();
+    conn.write(hello(deviceId));
+    const { nonce } = await conn.next("auth.challenge");
+    const sig = await crypto.subtle.sign("Ed25519", key.pair.privateKey, fromBase64Url(nonce));
+    conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+    expect(await conn.next("config")).toEqual({
+      t: "config",
+      buttons: [{ index: 0, label: "Mom" }],
+      quiet: false,
+    });
+  });
+
+  it("rejects a signature from the wrong key", async () => {
+    const g = await setup();
+    const { deviceId } = await pairDevice(g.token);
+    const imposter = await newKey();
+    const conn = openDevice();
+    conn.write(hello(deviceId));
+    const { nonce } = await conn.next("auth.challenge");
+    const sig = await crypto.subtle.sign("Ed25519", imposter.pair.privateKey, fromBase64Url(nonce));
+    conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+    await vi.waitFor(() => expect(conn.closed?.code).toBe(CloseCode.unauthorized));
+  });
+
+  it("rejects unknown devices, wrong protocol versions, and skipped handshakes", async () => {
+    const unknown = openDevice();
+    unknown.write(hello("dev_nope"));
+    await vi.waitFor(() => expect(unknown.closed?.code).toBe(CloseCode.unauthorized));
+
+    const old = openDevice();
+    old.write({ ...hello(), proto: 99 });
+    expect((await old.next("error")).code).toBe("unsupported_version");
+
+    const rude = openDevice();
+    rude.write({ t: "button", index: 0 });
+    await vi.waitFor(() => expect(rude.closed?.code).toBe(CloseCode.badHandshake));
+  });
+
+  it("drops sockets that never say hello", async () => {
+    const conn = openDevice();
+    timers.advance(HELLO_TIMEOUT_MS);
+    expect(conn.closed?.code).toBe(CloseCode.timeout);
+  });
+
+  it("only guardians can pair, and codes are single use", async () => {
+    const g = await setup();
+    const kid = await store.createUser(
+      { householdId: g.user.householdId, name: "Kid", role: "contact" },
+      0,
+    );
+    const kidToken = await store.createSession(kid.id, timers.now);
+    const conn = openDevice();
+    conn.write(hello());
+    conn.write({ t: "pair.begin", publicKey: (await newKey()).publicKey });
+    const { code } = await conn.next("pair.code");
+    expect(
+      (await http("/devices/pair", { token: kidToken, body: { code, name: "X" } })).status,
+    ).toBe(403);
+    expect(
+      (await http("/devices/pair", { token: g.token, body: { code, name: "X" } })).status,
+    ).toBe(201);
+    expect(
+      (await http("/devices/pair", { token: g.token, body: { code, name: "X" } })).status,
+    ).toBe(404);
+  });
+});
+
+describe("calls", () => {
+  it("device calls the guardian: ring, answer, negotiate, talk, hang up", async () => {
+    const { device, app } = await household();
+    device.write({ t: "hook", state: "up" });
+    device.write({ t: "button", index: 0 });
+
+    const ringing = await device.nextState("ringing");
+    const incoming = await app.next("call.ringing");
+    expect(incoming).toEqual({
+      t: "call.ringing",
+      callId: ringing.callId,
+      from: { label: "Kid phone" },
+    });
+
+    app.write({ t: "call.answer", callId: incoming.callId });
+    for (const c of [device, app]) {
+      expect((await c.next("rtc.config")).iceServers).toEqual([{ urls: "stun:stun.example:3478" }]);
+      await c.nextState("connecting");
+    }
+
+    // The caller (device) offers; the hub relays both ways and marks the call active on answer.
+    const callId = incoming.callId;
+    device.write({ t: "rtc.sdp", callId, type: "offer", sdp: "v=0 offer" });
+    expect((await app.next("rtc.sdp")).sdp).toBe("v=0 offer");
+    app.write({ t: "rtc.ice", callId, candidate: "candidate:1", sdpMid: "0" });
+    expect((await device.next("rtc.ice")).candidate).toBe("candidate:1");
+    app.write({ t: "rtc.sdp", callId, type: "answer", sdp: "v=0 answer" });
+    expect((await device.next("rtc.sdp")).sdp).toBe("v=0 answer");
+    await device.nextState("active");
+    await app.nextState("active");
+
+    device.write({ t: "call.hangup", callId });
+    expect(await app.nextState("ended")).toMatchObject({ reason: "hangup" });
+    expect(await device.nextState("ended")).toMatchObject({ reason: "hangup" });
+  });
+
+  it("guardian calls the device and the device answers", async () => {
+    const { device, app, deviceId } = await household();
+    app.write({ t: "call.dial", deviceId });
+    const { callId } = await app.nextState("ringing");
+    expect(await device.next("call.ringing")).toEqual({
+      t: "call.ringing",
+      callId,
+      from: { label: "Mom" },
+    });
+    device.write({ t: "hook", state: "up" });
+    device.write({ t: "call.answer", callId });
+    await app.nextState("connecting");
+    await device.nextState("connecting");
+  });
+
+  it("stops ringing on the user's other sessions once one answers", async () => {
+    const { device, app, token } = await household();
+    const second = await connectApp(token);
+    device.write({ t: "button", index: 0 });
+    const { callId } = await app.next("call.ringing");
+    await second.next("call.ringing");
+    app.write({ t: "call.answer", callId });
+    expect(await second.nextState("ended")).toMatchObject({ callId });
+    // The other session cannot hijack the answered call.
+    second.write({ t: "rtc.sdp", callId, type: "offer", sdp: "x" });
+    await app.nextState("connecting");
+    expect(device.sent.filter((m) => m.t === "rtc.sdp")).toEqual([]);
+  });
+
+  it("times out unanswered calls and stalled media", async () => {
+    const { device, app } = await household();
+    device.write({ t: "button", index: 0 });
+    const { callId } = await app.next("call.ringing");
+    timers.advance(RING_TIMEOUT_MS);
+    expect(await device.nextState("ended")).toMatchObject({ callId, reason: "timeout" });
+    expect(await app.nextState("ended")).toMatchObject({ callId, reason: "timeout" });
+
+    device.write({ t: "button", index: 0 });
+    const second = await app.next("call.ringing");
+    app.write({ t: "call.answer", callId: second.callId });
+    await device.nextState("connecting");
+    timers.advance(CONNECT_TIMEOUT_MS);
+    expect(await device.nextState("ended")).toMatchObject({ reason: "unreachable" });
+  });
+
+  it("ends the call when a participant disconnects", async () => {
+    const { device, app } = await household();
+    device.write({ t: "button", index: 0 });
+    const { callId } = await app.next("call.ringing");
+    app.write({ t: "call.answer", callId });
+    await device.nextState("connecting");
+    app.handler.closed();
+    expect(await device.nextState("ended")).toMatchObject({ callId, reason: "hangup" });
+  });
+
+  it("reports unreachable, busy, and denied without ringing anyone", async () => {
+    const { device, app, deviceId, token } = await household();
+    // Unmapped button: denied.
+    device.write({ t: "button", index: 3 });
+    expect(await device.nextState("ended")).toMatchObject({ reason: "denied" });
+
+    // Handset up: busy.
+    device.write({ t: "hook", state: "up" });
+    app.write({ t: "call.dial", deviceId });
+    expect(await app.nextState("ended")).toMatchObject({ reason: "busy" });
+    device.write({ t: "hook", state: "down" });
+
+    // Guardian offline: unreachable.
+    app.handler.closed();
+    device.write({ t: "button", index: 0 });
+    expect(await device.nextState("ended")).toMatchObject({ reason: "unreachable" });
+
+    // Device offline: unreachable.
+    device.handler.closed();
+    const app2 = await connectApp(token);
+    app2.write({ t: "call.dial", deviceId });
+    expect(await app2.nextState("ended")).toMatchObject({ reason: "unreachable" });
+  });
+
+  it("applies the allow-list and quiet hours", async () => {
+    const { device, deviceId, user } = await household();
+    const grandma = await store.createUser(
+      { householdId: user.householdId, name: "Grandma", role: "contact" },
+      0,
+    );
+    const grandmaToken = await store.createSession(grandma.id, timers.now);
+    const grandmaApp = await connectApp(grandmaToken);
+
+    // Not on the allow-list yet.
+    grandmaApp.write({ t: "call.dial", deviceId });
+    expect(await grandmaApp.nextState("ended")).toMatchObject({ reason: "denied" });
+
+    const g = { token: await store.createSession(user.id, timers.now) };
+    await http(`/devices/${deviceId}/contacts/${grandma.id}`, {
+      method: "PUT",
+      token: g.token,
+      body: { label: "Grandma", canCallDevice: true, deviceCanCall: true, bypassQuietHours: false },
+    });
+    await http(`/devices/${deviceId}/buttons/1`, {
+      method: "PUT",
+      token: g.token,
+      body: { userId: grandma.id },
+    });
+    await device.next("config"); // pushed by the allow-list change, before the button mapping
+    expect(await device.next("config")).toMatchObject({
+      buttons: [
+        { index: 0, label: "Mom" },
+        { index: 1, label: "Grandma" },
+      ],
+    });
+
+    // All-day quiet hours: Grandma gets voicemail, the kid cannot call her, Mom still can.
+    const res = await http("/quiet-hours", {
+      method: "PUT",
+      token: g.token,
+      body: { rules: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "00:00" }] },
+    });
+    expect(res.status).toBe(204);
+    expect(await device.next("config")).toMatchObject({ quiet: true });
+
+    grandmaApp.write({ t: "call.dial", deviceId });
+    expect(await grandmaApp.nextState("ended")).toMatchObject({ reason: "voicemail" });
+    expect(device.sent.some((m) => m.t === "call.ringing")).toBe(false);
+
+    device.write({ t: "button", index: 1 });
+    expect(await device.nextState("ended")).toMatchObject({ reason: "denied" });
+  });
+
+  it("pushes config when quiet hours begin on their own", async () => {
+    const { device, token } = await household();
+    await http("/quiet-hours", {
+      method: "PUT",
+      token,
+      body: { rules: [{ days: [1], start: "12:05", end: "13:00" }] },
+    });
+    expect(await device.next("config")).toMatchObject({ quiet: false });
+    timers.advance(6 * 60_000);
+    expect(await device.next("config")).toMatchObject({ quiet: true });
+  });
+
+  it("keeps households apart", async () => {
+    const a = await household();
+    // A second household on the same instance.
+    const other = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Eve" },
+      0,
+    );
+    const eveToken = await store.createSession(other.guardian.id, timers.now);
+    const eve = await connectApp(eveToken);
+    eve.write({ t: "call.dial", deviceId: a.deviceId });
+    expect((await eve.next("error")).code).toBe("not_found");
+    expect((await http(`/devices/${a.deviceId}/contacts`, { token: eveToken })).status).toBe(404);
+    expect(eve.sent.some((m) => m.t === "device.status")).toBe(false);
+  });
+
+  it("forwards device status to guardians", async () => {
+    const { device, app, deviceId } = await household();
+    device.write({ t: "status", battery: { pct: 14, charging: false }, rssi: -60 });
+    let status = await app.next("device.status");
+    while (!status.battery) status = await app.next("device.status");
+    expect(status).toMatchObject({ deviceId, online: true, battery: { pct: 14, charging: false } });
+    device.handler.closed();
+    expect(await app.next("device.status")).toMatchObject({ deviceId, online: false });
+  });
+});

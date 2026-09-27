@@ -1,4 +1,20 @@
 {
   "files": [],
-  "references": [{ "path": "packages/protocol" }, { "path": "packages/core" }]
+  "references": [
+    {
+      "path": "packages/protocol"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/server-app"
+    },
+    {
+      "path": "apps/server-selfhost"
+    }
+  ]
 }

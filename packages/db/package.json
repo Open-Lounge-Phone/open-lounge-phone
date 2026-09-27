@@ -1,0 +1,20 @@
+{
+  "name": "@opentincan/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenTinCan storage: SQL migrations shared by Cloudflare D1 and SQLite, plus a typed store.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./d1": "./src/d1.ts"
+  },
+  "dependencies": {
+    "@opentincan/core": "0.0.0",
+    "@opentincan/protocol": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3"
+  }
+}
