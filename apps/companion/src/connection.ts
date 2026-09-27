@@ -57,9 +57,9 @@ export class Connection {
   private mic?: MediaStream;
   private dismissTimer?: ReturnType<typeof setTimeout>;
 
-  constructor(token: string, onUnauthorized: () => void) {
+  constructor(token: string, householdId: string, onUnauthorized: () => void) {
     this.socket = new ProtocolSocket<ServerToApp, AppToServer>({
-      url: socketUrl("/ws/app"),
+      url: socketUrl(`/ws/app?household=${encodeURIComponent(householdId)}`),
       decode: decodeServerToApp,
       onOpen: (send) => send({ t: "app.hello", proto: PROTOCOL_VERSION, token }),
       onMessage: (msg) => this.onMessage(msg),

@@ -1,0 +1,275 @@
+import { DurableObject } from "cloudflare:workers";
+import { type Device, Store } from "@opentincan/db";
+import { d1Sql } from "@opentincan/db/d1";
+import { encode, type IceServer, Id } from "@opentincan/protocol";
+import {
+  type Conn,
+  type ConnectionHandler,
+  type ConnMemo,
+  type Coordinator,
+  createApi,
+  Gateway,
+  type GatewayOptions,
+  type RoomSnapshot,
+  type ServerEnv,
+  seedSetupToken,
+} from "@opentincan/server-app";
+import { Hono } from "hono";
+
+export interface Env {
+  DB: D1Database;
+  HOUSEHOLD: DurableObjectNamespace<HouseholdObject>;
+  PAIRING: DurableObjectNamespace<PairingObject>;
+  ASSETS: Fetcher;
+  SETUP_TOKEN?: string;
+  TURN_KEY_ID?: string;
+  TURN_KEY_API_TOKEN?: string;
+  /** Comma-separated; used when no TURN key is configured. */
+  STUN_URLS?: string;
+}
+
+const PAIRING_OBJECT = "pairing";
+
+// --- shared host plumbing ------------------------------------------------------
+
+/**
+ * ICE servers: short-lived Cloudflare TURN credentials when a TURN key is configured, otherwise
+ * STUN only. https://developers.cloudflare.com/realtime/turn/generate-credentials/
+ */
+async function iceServers(env: Env): Promise<IceServer[]> {
+  if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
+    try {
+      const res = await fetch(
+        `https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ ttl: 6 * 60 * 60 }),
+        },
+      );
+      if (!res.ok) throw new Error(`TURN credentials: HTTP ${res.status}`);
+      const body = (await res.json()) as { iceServers: IceServer | IceServer[] };
+      const list = Array.isArray(body.iceServers) ? body.iceServers : [body.iceServers];
+      // Port 53 is blocked by browsers; drop those URLs.
+      return list.map((s) => ({
+        ...s,
+        urls: (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => !/:53(\?|$)/.test(u)),
+      }));
+    } catch (e) {
+      console.error("falling back to STUN only", String(e));
+    }
+  }
+  const stun = (env.STUN_URLS ?? "stun:stun.cloudflare.com:3478")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return stun.length ? [{ urls: stun }] : [];
+}
+
+function serverEnv(env: Env, extra: Partial<ServerEnv> = {}): ServerEnv {
+  return {
+    store: new Store(d1Sql(env.DB)),
+    now: () => Date.now(),
+    iceServers: () => iceServers(env),
+    setTimer: (fn, ms) => {
+      const t = setTimeout(fn, ms);
+      return () => clearTimeout(t);
+    },
+    log: (level, msg, data) => console[level](msg, data ?? ""),
+    ...extra,
+  };
+}
+
+/** Stored with each hibernatable socket. */
+interface Attachment {
+  app: boolean;
+  memo?: ConnMemo;
+}
+
+/**
+ * A Durable Object that runs the shared `Gateway` over hibernatable WebSockets. Sockets carry
+ * their state in attachments, so after hibernation the gateway is rebuilt with `resume`.
+ */
+abstract class GatewayObject extends DurableObject<Env> {
+  protected readonly gateway: Gateway;
+  private readonly handlers = new Map<WebSocket, ConnectionHandler>();
+
+  constructor(
+    ctx: DurableObjectState,
+    env: Env,
+    options: GatewayOptions,
+    extra: Partial<ServerEnv>,
+  ) {
+    super(ctx, env);
+    this.gateway = new Gateway(serverEnv(env, extra), options);
+    // Keep-alives are answered without waking the object.
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(encode({ t: "ping" }), encode({ t: "pong" })),
+    );
+    ctx.blockConcurrencyWhile(async () => {
+      const sockets = ctx.getWebSockets();
+      if (sockets.length === 0) return;
+      const rooms = (await ctx.storage.get<RoomSnapshot[]>("rooms")) ?? [];
+      const handlers = this.gateway.resume(
+        sockets.map((ws) => {
+          const a = (ws.deserializeAttachment() ?? { app: false }) as Attachment;
+          return { conn: this.conn(ws), memo: a.memo, app: a.app };
+        }),
+        () => rooms,
+      );
+      sockets.forEach((ws, i) => {
+        const h = handlers[i];
+        if (h) this.handlers.set(ws, h);
+      });
+    });
+  }
+
+  private conn(ws: WebSocket): Conn {
+    return {
+      send: (msg) => {
+        try {
+          ws.send(encode(msg));
+        } catch {
+          // Socket already closed; the close handler cleans up.
+        }
+      },
+      close: (code, reason) => {
+        try {
+          ws.close(code, reason);
+        } catch {}
+      },
+      remember: (memo) => {
+        const a = (ws.deserializeAttachment() ?? { app: false }) as Attachment;
+        ws.serializeAttachment({ ...a, memo } satisfies Attachment);
+      },
+    };
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("expected a WebSocket", { status: 426 });
+    }
+    const app = new URL(request.url).pathname === "/ws/app";
+    const { 0: client, 1: server } = new WebSocketPair();
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ app } satisfies Attachment);
+    const conn = this.conn(server);
+    this.handlers.set(server, app ? this.gateway.openApp(conn) : this.gateway.openDevice(conn));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (typeof message !== "string") {
+      ws.close(1003, "text frames only");
+      return;
+    }
+    this.handlers.get(ws)?.message(message);
+  }
+
+  async webSocketClose(ws: WebSocket): Promise<void> {
+    this.handlers.get(ws)?.closed();
+    this.handlers.delete(ws);
+  }
+
+  async webSocketError(ws: WebSocket): Promise<void> {
+    await this.webSocketClose(ws);
+  }
+}
+
+/** One per household: all of its phones, companion sessions and calls. */
+export class HouseholdObject extends GatewayObject {
+  private readonly householdId: string;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    const householdId = ctx.id.name;
+    if (!householdId) throw new Error("HouseholdObject must be addressed by name");
+    super(
+      ctx,
+      env,
+      { household: householdId },
+      {
+        wakeAt: (at) => {
+          void (at === null ? ctx.storage.deleteAlarm() : ctx.storage.setAlarm(at));
+        },
+        saveRooms: (_hh, rooms) => {
+          void ctx.storage.put("rooms", rooms);
+        },
+      },
+    );
+    this.householdId = householdId;
+  }
+
+  async alarm(): Promise<void> {
+    await this.gateway.hub(this.householdId).wake();
+  }
+
+  isOnline(deviceId: string): Promise<boolean> {
+    return this.gateway.isOnline(this.householdId, deviceId);
+  }
+
+  refreshDevice(deviceId: string): Promise<void> {
+    return this.gateway.refreshDevice(this.householdId, deviceId);
+  }
+}
+
+/** Holds unpaired phones while they show a pairing code. */
+export class PairingObject extends GatewayObject {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, { pairingOnly: true }, {});
+  }
+
+  notifyPaired(code: string, device: Device): Promise<void> {
+    return this.gateway.notifyPaired(code, device);
+  }
+}
+
+// --- Worker entry -----------------------------------------------------------------
+
+function coordinator(env: Env): Coordinator {
+  return {
+    isOnline: (hh, deviceId) => env.HOUSEHOLD.getByName(hh).isOnline(deviceId),
+    refreshDevice: (hh, deviceId) => env.HOUSEHOLD.getByName(hh).refreshDevice(deviceId),
+    notifyPaired: (code, device) =>
+      env.PAIRING.getByName(PAIRING_OBJECT).notifyPaired(code, device),
+  };
+}
+
+const isId = (s: string | null): s is string => s !== null && Id.safeParse(s).success;
+
+const app = new Hono<{ Bindings: Env }>();
+
+app.use("/api/setup", async (c, next) => {
+  if (c.env.SETUP_TOKEN) await seedSetupToken(serverEnv(c.env), c.env.SETUP_TOKEN);
+  await next();
+});
+
+app.all("/api/*", (c) => {
+  const api = new Hono().route("/api", createApi(serverEnv(c.env), coordinator(c.env)));
+  return api.fetch(c.req.raw, c.env, c.executionCtx);
+});
+
+// Sockets are routed by a hint in the URL; the object still authenticates every connection.
+app.get("/ws/device", async (c) => {
+  const deviceId = c.req.query("device") ?? null;
+  const device = isId(deviceId) ? await new Store(d1Sql(c.env.DB)).getDevice(deviceId) : undefined;
+  const stub = device
+    ? c.env.HOUSEHOLD.getByName(device.householdId)
+    : c.env.PAIRING.getByName(PAIRING_OBJECT);
+  return stub.fetch(c.req.raw);
+});
+
+app.get("/ws/app", async (c) => {
+  const householdId = c.req.query("household") ?? null;
+  if (!isId(householdId)) return c.text("missing ?household=", 400);
+  if (!(await new Store(d1Sql(c.env.DB)).getHousehold(householdId))) {
+    return c.text("unknown household", 404);
+  }
+  return c.env.HOUSEHOLD.getByName(householdId).fetch(c.req.raw);
+});
+
+app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+
+export default app satisfies ExportedHandler<Env>;

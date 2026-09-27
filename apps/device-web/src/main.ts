@@ -105,7 +105,11 @@ function send(msg: DeviceToServer): void {
 }
 
 const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
-  url: socketUrl("/ws/device"),
+  // The device id routes the socket to its household (a Durable Object on Cloudflare).
+  url: () => {
+    const id = getDeviceId(profile);
+    return socketUrl(id ? `/ws/device?device=${encodeURIComponent(id)}` : "/ws/device");
+  },
   decode: decodeServerToDevice,
   onOpen: (raw) => {
     authed = false;

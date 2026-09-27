@@ -11,3 +11,4 @@ coverage/
 .DS_Store
 dist-types/
 .playwright-mcp/
+apps/server-cloudflare/public/

@@ -50,13 +50,15 @@ export function App() {
 const EMPTY: Snapshot = { status: "connecting", call: { phase: "idle" }, live: {}, muted: false };
 const noop = () => () => {};
 
-function useConnection(token: string, onUnauthorized: () => void) {
+function useConnection(token: string, householdId: string | undefined, onUnauthorized: () => void) {
   const [conn, setConn] = useState<Connection>();
   useEffect(() => {
-    const c = new Connection(token, onUnauthorized);
+    // The household id routes the socket to its hub (a Durable Object on Cloudflare).
+    if (!householdId) return;
+    const c = new Connection(token, householdId, onUnauthorized);
     setConn(c);
     return () => c.close();
-  }, [token, onUnauthorized]);
+  }, [token, householdId, onUnauthorized]);
   const snap = useSyncExternalStore(conn?.subscribe ?? noop, conn?.getSnapshot ?? (() => EMPTY));
   return { conn, snap };
 }
@@ -66,8 +68,8 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
     () => createApi({ token, onUnauthorized: onSignOut }),
     [token, onSignOut],
   );
-  const { conn, snap } = useConnection(token, onSignOut);
   const [me, setMe] = useState<{ user: User; household: Household }>();
+  const { conn, snap } = useConnection(token, me?.household.id, onSignOut);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [loadError, setLoadError] = useState<string>();

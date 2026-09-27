@@ -1,0 +1,23 @@
+{
+  "name": "@opentincan/server-cloudflare",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenTinCan on your own Cloudflare account: Worker + Durable Objects + D1 + TURN.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/assemble-assets.ts",
+    "dev": "npm run assets && wrangler d1 migrations apply DB --local && wrangler dev",
+    "deploy": "npm run assets && wrangler d1 migrations apply DB --remote && wrangler deploy"
+  },
+  "dependencies": {
+    "@opentincan/db": "0.0.0",
+    "@opentincan/protocol": "0.0.0",
+    "@opentincan/server-app": "0.0.0",
+    "hono": "^4.13.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "wrangler": "^4.141.0"
+  }
+}

@@ -49,6 +49,8 @@ type AppPhase =
 export interface GatewayOptions {
   /** Only accept devices and users of this household (a Durable Object serves one). */
   household?: string;
+  /** Only handle pairing; reject every paired device and app (the Cloudflare pairing object). */
+  pairingOnly?: boolean;
 }
 
 export interface ResumeEntry {
@@ -68,10 +70,12 @@ export class Gateway implements Coordinator {
   private readonly waitingToPair = new Map<string, Conn>();
   private readonly env: ServerEnv;
   private readonly household?: string;
+  private readonly pairingOnly: boolean;
 
   constructor(env: ServerEnv, options: GatewayOptions = {}) {
     this.env = env;
     if (options.household) this.household = options.household;
+    this.pairingOnly = options.pairingOnly ?? false;
   }
 
   hub(householdId: string): HouseholdHub {
@@ -81,6 +85,7 @@ export class Gateway implements Coordinator {
   }
 
   private allowed(householdId: string): boolean {
+    if (this.pairingOnly) return false;
     return this.household === undefined || this.household === householdId;
   }
 

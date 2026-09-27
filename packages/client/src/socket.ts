@@ -3,7 +3,8 @@ import { type DecodeResult, encode } from "@opentincan/protocol";
 export type SocketStatus = "connecting" | "open" | "closed";
 
 export interface SocketOptions<In, Out extends { t: string }> {
-  url: string;
+  /** Re-evaluated on every (re)connect, so it can carry routing hints that change. */
+  url: string | (() => string);
   decode(raw: string): DecodeResult<In>;
   /** Called on every (re)connect; send the handshake here. */
   onOpen(send: (msg: Out) => void): void;
@@ -48,7 +49,8 @@ export class ProtocolSocket<In, Out extends { t: string }> {
 
   private connect(): void {
     this.opts.onStatus?.("connecting");
-    const ws = new WebSocket(this.opts.url);
+    const url = typeof this.opts.url === "function" ? this.opts.url() : this.opts.url;
+    const ws = new WebSocket(url);
     this.ws = ws;
     ws.onopen = () => {
       this.attempt = 0;

@@ -5,6 +5,8 @@
       "**",
       "!**/dist",
       "!**/dist-types",
+      "!**/.wrangler",
+      "!apps/server-cloudflare/public",
       "!**/node_modules",
       "!**/*.tsbuildinfo",
       "!LICENSE",

@@ -93,7 +93,16 @@ Keep this section current when finishing a milestone.
   invites for non-guardian contacts (today contacts must be created via the store); passkeys;
   voicemail recording + transcription; strip text for "quiet until HH:MM" needs the end time in
   `config`; per-key LED/strip state pushed from the server.
-- M3 Cloudflare backend, M4 Kids' features, M5 CLI + Tauri — not started.
+- **M3 Cloudflare backend** — done locally, **not yet deployed to a real account** (needs the
+  owner's Cloudflare login). `apps/server-cloudflare`: Worker (Hono) + `HouseholdObject` (one DO
+  per household, hibernatable WebSockets, alarm for quiet-hours changes, rooms in DO storage) +
+  `PairingObject` + D1 (same migrations) + static assets. The shared `tests/e2e/scenario.ts`
+  passes against `wrangler dev`; browser check reached WebRTC `connected` via the Worker.
+- **Media decision (provisional, 2026-09-27):** calls are 1:1 peer-to-peer WebRTC with
+  Cloudflare Realtime **TURN** credentials (or coturn when self-hosting). The Realtime **SFU** is
+  deferred until a feature needs it (group calls, server-side recording, or an ESP32 media path
+  that's simpler against an SFU). The original plan said SFU; tell the owner if this matters.
+- M4 Kids' features, M5 CLI + Tauri — not started.
 
 ## Client notes
 - `packages/client`: `ProtocolSocket` (reconnect with backoff, 25s app ping), `CallMedia`
@@ -105,6 +114,17 @@ Keep this section current when finishing a milestone.
   `?display=eink|segments`. Keyboard: Space = hook, 1–8 = keys.
 - `apps/companion` (React 19): `connection.ts` (socket + media), `calls.ts` (call UI state),
   `api.ts`, screens per file. Session token in localStorage; `#setup=<token>` runs first-run setup.
+
+## Cloudflare notes
+- Worker routes: `/api/*` → shared Hono API with a DO-RPC `Coordinator`; `/ws/device?device=` →
+  household DO (looked up in D1) or the pairing DO; `/ws/app?household=` → household DO; the rest
+  → static assets (`npm run assets` copies companion → `public/`, emulator → `public/device/`).
+- `GatewayObject` base class: `acceptWebSocket`, attachments `{app, memo}`, `Gateway.resume` in
+  the constructor after hibernation, `setWebSocketAutoResponse` for `{"t":"ping"}`.
+- First-run on Cloudflare: `SETUP_TOKEN` secret is seeded as the setup token until a household
+  exists (`seedSetupToken`). TURN: `TURN_KEY_ID` + `TURN_KEY_API_TOKEN` secrets, else STUN only.
+- `@cloudflare/vitest-pool-workers` needs Vitest 4 (we use 5), so Worker testing is the shared
+  e2e scenario against `wrangler dev` (`OTC_E2E_URL`, `OTC_E2E_SETUP_TOKEN`).
 
 ## Server architecture notes
 - `Gateway` (packages/server-app/src/gateway.ts) owns the per-socket handshake. Devices: `hello`

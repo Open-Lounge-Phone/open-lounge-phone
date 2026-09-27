@@ -11,6 +11,12 @@ ignored; unknown `t` values are rejected with `bad_message`.
 
 **App connection:** `app.hello` (session token from HTTP login) → `app.ready`.
 
+**Endpoints and routing hints.** Devices connect to `/ws/device`, adding `?device=<deviceId>`
+once paired; apps connect to `/ws/app?household=<householdId>`. Hints only route the socket (to
+the household's Durable Object on Cloudflare; the self-hosted server ignores them) — every
+connection is still authenticated by the handshake. Keep-alive `{"t":"ping"}` must be sent
+byte-for-byte as shown so hibernating servers can answer it without waking.
+
 ## Device → server
 
 ### `hello`

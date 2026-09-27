@@ -24,6 +24,12 @@
     },
     {
       "path": "apps/companion"
+    },
+    {
+      "path": "apps/server-cloudflare"
+    },
+    {
+      "path": "tests"
     }
   ]
 }

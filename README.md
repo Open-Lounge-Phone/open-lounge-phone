@@ -25,8 +25,8 @@ Phase 1 (software, runs on ordinary computers) is in progress.
 | M0 | Monorepo, CI, licenses | done |
 | M1 | Wire protocol + core logic (access control, quiet hours, call state machines) | done |
 | M2 | Self-hosted server, browser phone emulator, companion app — first real call | done |
-| M3 | Cloudflare backend (Workers, Durable Objects, D1, R2, Realtime SFU) | next |
-| M4 | Kids' features: button mapping, allow-list, quiet hours, voicemail, device status | |
+| M3 | Cloudflare backend (Workers, Durable Objects, D1, TURN) | done (local; see [docs/cloudflare.md](docs/cloudflare.md)) |
+| M4 | Kids' features: invites, passkeys, voicemail + transcripts, richer device status | next |
 | M5 | One-command deploy CLI, desktop app (Tauri) with USB keypads | |
 
 Later phases: Lounge variant → ESP32-S3 firmware on dev boards → custom PCB → wireless product.

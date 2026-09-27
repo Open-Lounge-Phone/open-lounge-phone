@@ -70,6 +70,16 @@ export async function ensureSetupToken(env: ServerEnv): Promise<string | undefin
   return token;
 }
 
+/**
+ * For hosts without a startup hook (Cloudflare): accepts a deploy-time secret as the setup token
+ * until the first household exists.
+ */
+export async function seedSetupToken(env: ServerEnv, token: string): Promise<void> {
+  if (!token || (await env.store.countHouseholds()) > 0) return;
+  if (await env.store.getSetting(SETUP_TOKEN_KEY)) return;
+  await env.store.setSetting(SETUP_TOKEN_KEY, await sha256(token));
+}
+
 /** REST API mounted at `/api`. Transports add the WebSocket routes and static files. */
 export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   const { store } = env;
