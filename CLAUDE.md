@@ -17,8 +17,10 @@ LCSC/footprint validity). Open questions are parameters in `config.py`.
 printed relegendable keycap labels (companion: Manage phone → "Print key labels"), LEDs + voice.
 **E-ink 2.9" (GDEY029T94) is the standard option** (Kids Standard, Lounge); cheaper displays
 (0.91" SSD1306 OLED @0x3C, HT16K33 14-seg @0x70) plug into an optional Qwiic/STEMMA-QT I2C port on
-the deck. `hello.display` = eink | seg14 | oled | none. Target **≈$25 electronics per phone at
-1k qty** (some wiggle room); the hardware build reports cost per variant.
+the deck. `hello.display` = eink | seg14 | oled | none. Cost goal (revised): **$28–40 per phone is
+fine**; it must be **affordable to build one-off** (a hobbyist's minimum JLCPCB order) and
+**cheap at scale**. The hardware build reports both per variant; prefer JLC "basic" parts where
+function allows (extended parts add setup fees that dominate small orders).
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
