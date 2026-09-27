@@ -1,0 +1,251 @@
+import { z } from "zod";
+import { Base64Url, CallState, EndReason, EpochMs, ErrorCode, IceServer, Id } from "./common.ts";
+
+// Every message is a flat JSON object discriminated by `t`. An optional `id` lets a sender
+// correlate an `error` reply with the message that caused it.
+const Ref = { id: Id.optional() };
+
+// ---------------------------------------------------------------------------
+// Shared between devices and companion apps: call control and WebRTC signaling.
+// ---------------------------------------------------------------------------
+
+export const CallAnswer = z
+  .object({ t: z.literal("call.answer"), ...Ref, callId: Id })
+  .describe("Accept an incoming call.");
+
+export const CallHangup = z
+  .object({ t: z.literal("call.hangup"), ...Ref, callId: Id })
+  .describe("Leave (or decline) a call.");
+
+export const RtcSdp = z
+  .object({
+    t: z.literal("rtc.sdp"),
+    ...Ref,
+    callId: Id,
+    type: z.enum(["offer", "answer"]),
+    sdp: z.string().min(1),
+  })
+  .describe("SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).");
+
+export const RtcIce = z
+  .object({
+    t: z.literal("rtc.ice"),
+    ...Ref,
+    callId: Id,
+    candidate: z.string().nullable().describe("null signals end-of-candidates."),
+    sdpMid: z.string().nullable().optional(),
+    sdpMLineIndex: z.number().int().nonnegative().nullable().optional(),
+  })
+  .describe("Trickled ICE candidate.");
+
+export const Ping = z.object({ t: z.literal("ping"), ...Ref }).describe("Keep-alive.");
+
+// ---------------------------------------------------------------------------
+// Device -> server
+// ---------------------------------------------------------------------------
+
+export const DeviceModel = z.enum(["web-emulator", "desktop", "esp32s3"]);
+
+export const DeviceHello = z
+  .object({
+    t: z.literal("hello"),
+    ...Ref,
+    proto: z.number().int().positive(),
+    deviceId: Id.optional().describe("Omitted by an unpaired device."),
+    model: DeviceModel,
+    fw: z.string().min(1).max(32).describe("Firmware / emulator version."),
+    buttons: z.number().int().min(1).max(16).describe("Number of speed-dial buttons."),
+    display: z.enum(["eink", "none"]),
+  })
+  .describe("First message on every connection.");
+
+export const PairBegin = z
+  .object({
+    t: z.literal("pair.begin"),
+    ...Ref,
+    publicKey: Base64Url.length(43).describe("Ed25519 public key (32 bytes, base64url)."),
+  })
+  .describe("Unpaired device asks for a pairing code to show on its display.");
+
+export const AuthProof = z
+  .object({
+    t: z.literal("auth.proof"),
+    ...Ref,
+    sig: Base64Url.length(86).describe("Ed25519 signature (64 bytes) over the challenge nonce."),
+  })
+  .describe("Answer to `auth.challenge`.");
+
+export const Hook = z
+  .object({ t: z.literal("hook"), ...Ref, state: z.enum(["up", "down"]) })
+  .describe("Handset lifted (`up`) or returned to the cradle (`down`).");
+
+export const Button = z
+  .object({ t: z.literal("button"), ...Ref, index: z.number().int().min(0).max(15) })
+  .describe("Speed-dial button pressed (0-based).");
+
+export const Status = z
+  .object({
+    t: z.literal("status"),
+    ...Ref,
+    battery: z.object({ pct: z.number().int().min(0).max(100), charging: z.boolean() }).optional(),
+    rssi: z.number().int().optional().describe("Wi-Fi signal strength in dBm."),
+    uptimeS: z.number().int().nonnegative().optional(),
+  })
+  .describe("Periodic health report, forwarded to guardians.");
+
+export const DeviceToServer = z.discriminatedUnion("t", [
+  DeviceHello,
+  PairBegin,
+  AuthProof,
+  Hook,
+  Button,
+  Status,
+  CallAnswer,
+  CallHangup,
+  RtcSdp,
+  RtcIce,
+  Ping,
+]);
+export type DeviceToServer = z.infer<typeof DeviceToServer>;
+
+// ---------------------------------------------------------------------------
+// Server -> device
+// ---------------------------------------------------------------------------
+
+export const AuthChallenge = z
+  .object({ t: z.literal("auth.challenge"), ...Ref, nonce: Base64Url.min(22) })
+  .describe("Paired device must sign `nonce` with its private key.");
+
+export const PairCode = z
+  .object({
+    t: z.literal("pair.code"),
+    ...Ref,
+    code: z.string().regex(/^\d{6}$/),
+    expiresAt: EpochMs,
+  })
+  .describe("Code the device displays; a guardian types it into the companion app.");
+
+export const PairDone = z
+  .object({ t: z.literal("pair.done"), ...Ref, deviceId: Id, householdId: Id })
+  .describe("Pairing succeeded; device persists `deviceId` and reconnects with it.");
+
+export const ButtonConfig = z.object({
+  index: z.number().int().min(0).max(15),
+  label: z.string().min(1).max(24),
+});
+
+export const Config = z
+  .object({
+    t: z.literal("config"),
+    ...Ref,
+    buttons: z.array(ButtonConfig).max(16).describe("Only mapped buttons are listed."),
+    quiet: z.boolean().describe("Quiet hours currently in effect."),
+  })
+  .describe("Sent after authentication and whenever guardians change settings.");
+
+export const CallRinging = z
+  .object({
+    t: z.literal("call.ringing"),
+    ...Ref,
+    callId: Id,
+    from: z.object({ label: z.string().min(1).max(24) }),
+  })
+  .describe("Incoming call; device rings until answered, hung up, or ended.");
+
+export const CallStateMsg = z
+  .object({
+    t: z.literal("call.state"),
+    ...Ref,
+    callId: Id,
+    state: CallState,
+    reason: EndReason.optional().describe("Present when `state` is `ended`."),
+  })
+  .describe("Call progress update.");
+
+export const RtcConfig = z
+  .object({ t: z.literal("rtc.config"), ...Ref, callId: Id, iceServers: z.array(IceServer) })
+  .describe("ICE servers for this call; precedes any `rtc.sdp`.");
+
+export const ErrorMsg = z
+  .object({
+    t: z.literal("error"),
+    ...Ref,
+    code: ErrorCode,
+    message: z.string().max(256),
+    ref: Id.optional().describe("`id` of the message that caused the error."),
+  })
+  .describe("Request failed. Connection stays open unless `code` is `unauthorized`.");
+
+export const Pong = z.object({ t: z.literal("pong"), ...Ref }).describe("Keep-alive reply.");
+
+export const ServerToDevice = z.discriminatedUnion("t", [
+  AuthChallenge,
+  PairCode,
+  PairDone,
+  Config,
+  CallRinging,
+  CallStateMsg,
+  RtcConfig,
+  RtcSdp,
+  RtcIce,
+  ErrorMsg,
+  Pong,
+]);
+export type ServerToDevice = z.infer<typeof ServerToDevice>;
+
+// ---------------------------------------------------------------------------
+// Companion app <-> server. Apps authenticate with a session token obtained over HTTP.
+// ---------------------------------------------------------------------------
+
+export const AppHello = z
+  .object({
+    t: z.literal("app.hello"),
+    ...Ref,
+    proto: z.number().int().positive(),
+    token: z.string().min(16).max(512),
+  })
+  .describe("First message from a companion app.");
+
+export const CallDial = z
+  .object({ t: z.literal("call.dial"), ...Ref, deviceId: Id })
+  .describe("Companion app calls a device.");
+
+export const AppToServer = z.discriminatedUnion("t", [
+  AppHello,
+  CallDial,
+  CallAnswer,
+  CallHangup,
+  RtcSdp,
+  RtcIce,
+  Ping,
+]);
+export type AppToServer = z.infer<typeof AppToServer>;
+
+export const AppReady = z
+  .object({ t: z.literal("app.ready"), ...Ref, userId: Id })
+  .describe("Companion app authenticated.");
+
+export const DeviceStatus = z
+  .object({
+    t: z.literal("device.status"),
+    ...Ref,
+    deviceId: Id,
+    online: z.boolean(),
+    battery: Status.shape.battery,
+    rssi: Status.shape.rssi,
+    lastSeen: EpochMs,
+  })
+  .describe("Presence and health of a device in the guardian's household.");
+
+export const ServerToApp = z.discriminatedUnion("t", [
+  AppReady,
+  DeviceStatus,
+  CallRinging,
+  CallStateMsg,
+  RtcConfig,
+  RtcSdp,
+  RtcIce,
+  ErrorMsg,
+  Pong,
+]);
+export type ServerToApp = z.infer<typeof ServerToApp>;

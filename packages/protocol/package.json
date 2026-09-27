@@ -1,0 +1,14 @@
+{
+  "name": "@opentincan/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Versioned wire protocol shared by OpenTinCan devices, companion apps, and backends.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

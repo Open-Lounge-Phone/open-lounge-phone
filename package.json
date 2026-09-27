@@ -1,0 +1,28 @@
+{
+  "name": "opentincan",
+  "private": true,
+  "description": "Open-source, screen-free intercom phone: device emulator, companion app, and pluggable edge/self-hosted backend.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "docs:protocol": "node packages/protocol/scripts/gen-docs.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}
