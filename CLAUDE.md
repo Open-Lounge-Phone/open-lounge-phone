@@ -3,7 +3,12 @@
 Open-source, screen-free intercom phone. Software phase first (runs on computers), then ESP32-S3
 firmware, then a custom PCB in a Trimline-style corded phone powered by USB-C. Read
 `README.md` (status table), `docs/architecture.md`, and `docs/protocol.md` before changing code.
-Hardware design lives in `hardware/DESIGN.md`.
+Hardware design lives in `hardware/DESIGN.md` (proposal r0.1: ESP32-S3-WROOM-1-N16R8,
+ES8311+ES7210+NS4150B audio with hardware AEC reference, passive RJ9 handset, 10 MX hot-swap
+keys with SK6812MINI-E LEDs, 2.9" e-ink strip between key rows, DRV5032 hall hook, USB-C →
+BQ24074, LD2410C radar on Lounge, ST25DV NFC; its §13 lists protocol recommendations such as
+key-algorithm negotiation ed25519|p256, per-key LED/strip messages, audio prompt ids). Its open
+questions are the owner's to answer — don't decide them silently.
 
 ## Decisions already made (don't relitigate without the owner)
 - **Variants:** Kids' phone first; Lounge phone (QR takeover, presence, ephemeral sessions) later.
