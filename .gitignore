@@ -15,3 +15,6 @@ apps/server-cloudflare/public/
 
 # third-party skills, installed by hardware/tools/install-skills.sh
 .claude/skills/
+
+# per-instance deploy state (account IDs) written by apps/server-cloudflare/scripts/deploy.ts
+apps/server-cloudflare/instances/

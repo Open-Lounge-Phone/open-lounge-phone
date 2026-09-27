@@ -8,7 +8,8 @@
   "scripts": {
     "assets": "node scripts/assemble-assets.ts",
     "dev": "npm run assets && wrangler d1 migrations apply DB --local && wrangler dev",
-    "deploy": "npm run assets && wrangler d1 migrations apply DB --remote && wrangler deploy"
+    "deploy": "npm run assets && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "deploy:instance": "node scripts/deploy.ts"
   },
   "dependencies": {
     "@openloungephone/db": "0.0.0",

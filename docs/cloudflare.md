@@ -15,24 +15,28 @@ What gets created:
 | Workers AI (optional) | voicemail transcripts (Whisper, billed per audio minute) |
 | Realtime TURN key (optional) | relays audio when phones can't connect directly |
 
-> A one-command `openloungephone deploy cloudflare` is planned (M5). Until then, deploy by hand:
+## Deploy (one command)
 
 ```sh
 npm install && npm run build
+npx wrangler login                     # once
 cd apps/server-cloudflare
-npx wrangler login
-npx wrangler d1 create openloungephone         # paste the database_id into wrangler.jsonc
-npx wrangler r2 bucket create openloungephone-voicemail
-# Optional transcripts: uncomment the "ai" binding in wrangler.jsonc
-npx wrangler secret put SETUP_TOKEN        # any long random string, e.g. openssl rand -hex 24
-# Optional but recommended: create a TURN key in the dashboard (Realtime → TURN), then
-npx wrangler secret put TURN_KEY_ID
-npx wrangler secret put TURN_KEY_API_TOKEN
-npm run deploy                             # applies D1 migrations and deploys
+npm run deploy:instance -- --instance home --domain phone.example.com
 ```
 
-Then open `https://openloungephone.<your-subdomain>.workers.dev/#setup=<SETUP_TOKEN>` to create your
-household. The token only works until the first household exists.
+The script is idempotent. It creates the D1 database `openloungephone-<instance>` and the R2
+bucket `openloungephone-<instance>-voicemail` if they're missing, applies migrations, and
+deploys the Worker `openloungephone-<instance>` on your custom domain (the domain must be a
+zone in the same Cloudflare account). On first run it sets a one-time `SETUP_TOKEN` and prints
+your setup link. Account-specific IDs go to `apps/server-cloudflare/instances/` (gitignored).
+
+Options:
+- `--turn-key-id <id> --turn-key-token <token>`: TURN relay for calls across networks. Create
+  a key in the dashboard under Realtime → TURN.
+- `--no-ai`: skip Workers AI voicemail transcripts.
+- `--new-setup-token`: issue a fresh setup link (only useful before the first household exists).
+
+Re-run the same command after pulling updates to migrate and redeploy.
 
 ## Local development
 

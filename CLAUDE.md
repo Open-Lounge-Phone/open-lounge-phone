@@ -158,7 +158,26 @@ Keep this section current when finishing a milestone.
   authenticator, invite join in a separate context, quiet-hours voicemail record → inbox →
   phone "MISSED GRANDMA" → heard clears it. Not yet: real transcription run (needs
   TRANSCRIBE_URL or Workers AI login), passkeys on a real phone over HTTPS.
-- M5 CLI + Tauri — not started.
+- **Live instance (owner):** `l1.openloungephone.app` deployed 2026-09-27 with
+  `apps/server-cloudflare/scripts/deploy.ts --instance l1 --domain l1.openloungephone.app`
+  (Worker `openloungephone-l1`, D1 `openloungephone-l1`, R2 `openloungephone-l1-voicemail`, AI
+  on, TURN not yet). The owner's Cloudflare account hosts OTHER projects — only ever touch
+  resources named `openloungephone-*`. Root `openloungephone.app` = project site
+  (`apps/site`, Astro Starlight).
+- M5 CLI + Tauri — deploy script done (seed of the CLI); rest not started.
+- **Roadmap (owner vision, 2026-09-27):**
+  - **M6 multi-server companion:** one companion app (web/PWA, later native) can hold
+    memberships on many independent Open Lounge Phone servers at once (e.g. l1, l2, a friend's
+    self-hosted domain), like an email client with several accounts: per-server session, socket
+    and household; unified incoming-call/voicemail view; server switcher. Servers stay
+    independent (no federation needed — each allow-list is local). Needs: CORS allowlist for
+    API/WebSocket, tokens obtained via invite/sign-in links or a redirect "connect this server"
+    flow (passkeys are per-domain, so authentication happens on the server's own origin and a
+    scoped token is handed back).
+  - **M7 public-good service:** a multi-household instance run by the owner (e.g.
+    `hub.openloungephone.app`) for people who don't want to host: open household sign-up with
+    abuse controls (Turnstile, rate limits, quotas), privacy policy/retention, backups. The server
+    already supports many households; the gap is sign-up and operations.
 
 ## Client notes
 - `packages/client`: `ProtocolSocket` (reconnect with backoff, 25s app ping), `CallMedia`
