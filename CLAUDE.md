@@ -28,6 +28,11 @@ at any other PCB/PCBA house
 bare boards + self-sourced parts + hand assembly: design rules = common 4-layer capability
 (≥0.15 mm trace/space, ≥0.3 mm drill), Gerber X2 + Excellon + IPC-2581, generic BOM (MPN +
 LCSC/DigiKey/Mouser) and pick-and-place, plus a hand-assembly difficulty guide.
+**Keys (owner decision 2026-09-27):** 12 keys, 6 per row: `MENU 1 2 3 4 SPEAKER` /
+`BACK 5 6 7 8 END`; the e-ink strip sits between the rows over the 4 contact columns. MENU turns
+the 8 contact keys into soft keys labelled on the strip (voice menu on Kids Lite); BACK exits.
+Protocol button indices 0–7 = contacts 1–8; function keys are handled on the device (future
+protocol messages as needed). Deck ≈117 mm; base ≈350 mm long.
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
