@@ -6,7 +6,7 @@ import type { BlobStore, Transcriber } from "@opentincan/server-app";
 export function fileBlobStore(root: string): BlobStore {
   const pathFor = (key: string) => {
     const path = resolve(root, key);
-    if (!path.startsWith(resolve(root) + "/")) throw new Error(`bad blob key ${key}`);
+    if (!path.startsWith(`${resolve(root)}/`)) throw new Error(`bad blob key ${key}`);
     return path;
   };
   return {
