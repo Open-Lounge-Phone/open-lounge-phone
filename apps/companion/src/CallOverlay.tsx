@@ -36,7 +36,7 @@ export function CallOverlay({ snap, conn, api }: { snap: Snapshot; conn: Connect
               {call.phase === "outgoing" && (call.ringing ? "Ringing…" : "Calling…")}
               {call.phase === "connecting" && "Connecting…"}
               {call.phase === "active" && formatDuration(now - (call.startedAt ?? now))}
-              {call.phase === "ended" && endReasonText(call.reason)}
+              {call.phase === "ended" && endReasonText(call.reason, call.person)}
             </div>
             {canLeaveVoicemail(call) && (
               <LeaveVoicemail

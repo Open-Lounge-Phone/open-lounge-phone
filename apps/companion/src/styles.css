@@ -369,18 +369,32 @@ input.code {
   padding: 0;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.days legend {
+  font-weight: 500;
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+.day-chips {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
 }
 .day {
   flex-direction: row;
+  justify-content: center;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  font-size: 0.875rem;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem 0.2rem;
+  font-size: 0.85rem;
   cursor: pointer;
-  min-height: 36px;
+  min-height: 44px;
+  color: var(--muted);
+  background: transparent;
+  white-space: nowrap;
 }
 .day input[type="checkbox"] {
   position: absolute;
@@ -391,6 +405,17 @@ input.code {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+  font-weight: 600;
+  position: relative;
+}
+/* A small corner check makes "selected" unmistakable without crowding the label. */
+.day.on::after {
+  content: "✓";
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  font-size: 0.6rem;
+  line-height: 1;
 }
 .day:focus-within {
   outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent);
@@ -687,5 +712,205 @@ input[type="radio"] {
     position: absolute;
     top: 10mm;
     left: 10mm;
+  }
+}
+
+/* --- quiet hours ---------------------------------------------------------------------- */
+.title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.quiet-status {
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--online) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--online) 35%, transparent);
+  font-weight: 500;
+}
+.quiet-status.is-quiet {
+  background: color-mix(in srgb, #6b6fd6 16%, var(--surface));
+  border-color: color-mix(in srgb, #6b6fd6 40%, transparent);
+}
+button.link.inline {
+  display: inline;
+  padding: 0;
+  text-decoration: underline;
+}
+.rule-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.rule-text {
+  font-weight: 600;
+}
+.rule-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+.shortcuts .link {
+  padding: 0.35rem 0;
+  min-height: 32px;
+}
+.time-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+@media (min-width: 480px) {
+  .time-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.time-fields input[type="time"] {
+  /* iOS gives time inputs an intrinsic width that overflows narrow cards. */
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  text-align: left;
+}
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.presets button {
+  text-align: left;
+}
+.week {
+  margin: 0;
+}
+.week-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+.week-row {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+}
+.week-bar {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--online) 18%, transparent);
+  overflow: hidden;
+}
+.week-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, #6b6fd6 85%, var(--surface));
+}
+.week-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+}
+.save-status {
+  white-space: nowrap;
+}
+
+/* --- grown-ups & presence ---------------------------------------------------------------- */
+.dot.away {
+  background: var(--warn);
+}
+.availability {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.switch {
+  flex: none;
+  position: relative;
+  width: 52px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--offline);
+  border: none;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.switch[aria-checked="true"] {
+  background: var(--online);
+}
+.switch[aria-checked="true"]::after {
+  transform: translateX(20px);
+}
+
+/* --- header: brand row + scrollable tabs on phones ---------------------------------------- */
+.topbar {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+.topbar .brand {
+  flex: 1;
+}
+.topbar nav.tabs {
+  order: 3;
+  width: 100%;
+  margin-left: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.topbar nav.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs .tab {
+  flex: none;
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.92rem;
+  min-height: 40px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.tabs .tab[aria-current="page"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.narrow-only {
+  display: none;
+}
+@media (max-width: 420px) {
+  .narrow-only {
+    display: inline;
+  }
+  .wide-only {
+    display: none;
   }
 }

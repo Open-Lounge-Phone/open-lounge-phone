@@ -4,7 +4,15 @@ import type { EndReason, ServerToApp } from "@openloungephone/protocol";
 /** What the call UI shows. At most one call at a time. */
 export type CallView =
   | { phase: "idle" }
-  | { phase: "outgoing"; callId?: string; label: string; ringing: boolean; deviceId?: string }
+  | {
+      phase: "outgoing";
+      callId?: string;
+      label: string;
+      ringing: boolean;
+      deviceId?: string;
+      /** A grown-up, app-to-app call to another person (no voicemail). */
+      person?: boolean;
+    }
   | { phase: "incoming"; callId: string; label: string }
   | {
       phase: "connecting" | "active";
@@ -19,10 +27,11 @@ export type CallView =
       reason: EndReason | undefined;
       /** The phone this app dialled, so a voicemail can be left for it. */
       deviceId?: string;
+      person?: boolean;
     };
 
 export type CallEvent =
-  | { type: "dial"; label: string; deviceId?: string }
+  | { type: "dial"; label: string; deviceId?: string; person?: boolean }
   | { type: "answer" }
   | { type: "hangup" }
   | { type: "dismiss" }
@@ -56,6 +65,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           label: e.label,
           ringing: false,
           ...(e.deviceId ? { deviceId: e.deviceId } : {}),
+          ...(e.person ? { person: true } : {}),
         },
       };
     case "answer":
@@ -113,6 +123,7 @@ function stateFor(
           label,
           reason: msg.reason,
           ...(view.phase === "outgoing" && view.deviceId ? { deviceId: view.deviceId } : {}),
+          ...(view.phase === "outgoing" && view.person ? { person: true } : {}),
         },
       };
     case "requesting":

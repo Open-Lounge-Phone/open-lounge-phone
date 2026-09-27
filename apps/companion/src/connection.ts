@@ -23,10 +23,18 @@ export interface DeviceLive {
   lastSeen: number;
 }
 
+/** Another member of the server, as their app sessions report it. */
+export interface MemberLive {
+  online: boolean;
+  available: boolean;
+}
+
 export interface Snapshot {
   status: SocketStatus;
   call: CallView;
   live: Record<string, DeviceLive>;
+  /** Presence of the other members, by user id. */
+  members: Record<string, MemberLive>;
   remote?: MediaStream;
   muted: boolean;
   error?: string;
@@ -49,6 +57,7 @@ export class Connection {
     status: "connecting",
     call: { phase: "idle" },
     live: {},
+    members: {},
     muted: false,
   };
   private readonly listeners = new Set<() => void>();
@@ -99,6 +108,24 @@ export class Connection {
       this.apply({ type: "hangup" });
       this.set({ error: "Not connected to the server" });
     }
+  }
+
+  /** Grown-up, app-to-app call. The server refuses it unless they're online and available. */
+  async callUser(userId: string, label: string): Promise<void> {
+    const phase = this.snap.call.phase;
+    if (phase !== "idle" && phase !== "ended") return;
+    this.tones.unlock();
+    if (!(await this.acquireMic())) return;
+    this.apply({ type: "dial", label, person: true });
+    if (!this.socket.send({ t: "call.user", userId })) {
+      this.apply({ type: "hangup" });
+      this.set({ error: "Not connected to the server" });
+    }
+  }
+
+  /** Whether you're taking app-to-app calls; the server remembers it. */
+  setAvailable(available: boolean): boolean {
+    return this.socket.send({ t: "presence.set", available });
   }
 
   async answer(): Promise<void> {
@@ -190,6 +217,14 @@ export class Connection {
         this.set({ live: { ...this.snap.live, [msg.deviceId]: live } });
         return;
       }
+      case "member.status":
+        this.set({
+          members: {
+            ...this.snap.members,
+            [msg.userId]: { online: msg.online, available: msg.available },
+          },
+        });
+        return;
       case "voicemail.new":
         this.set({
           voicemail: {

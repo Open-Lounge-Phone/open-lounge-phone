@@ -87,7 +87,13 @@ export function App() {
   return <SignedIn token={token} onSignOut={() => signIn(null)} />;
 }
 
-const EMPTY: Snapshot = { status: "connecting", call: { phase: "idle" }, live: {}, muted: false };
+const EMPTY: Snapshot = {
+  status: "connecting",
+  call: { phase: "idle" },
+  live: {},
+  members: {},
+  muted: false,
+};
 const noop = () => () => {};
 
 function useConnection(token: string, householdId: string | undefined, onUnauthorized: () => void) {
@@ -108,8 +114,11 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
     () => createApi({ token, onUnauthorized: onSignOut }),
     [token, onSignOut],
   );
-  const [me, setMe] = useState<{ user: User; household: Household }>();
+  const [me, setMe] = useState<{ user: User; household: Household; available?: boolean }>();
   const { conn, snap } = useConnection(token, me?.household.id, onSignOut);
+  const [people, setPeople] = useState<User[]>([]);
+  // Your own "taking calls" flag; the server persists it and /api/me reports it.
+  const [available, setAvailable] = useState(true);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [loadError, setLoadError] = useState<string>();
@@ -125,10 +134,38 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
     }
   }, [api]);
 
+  const loadPeople = useCallback(async () => {
+    try {
+      setPeople(await api.users());
+    } catch {
+      // Home still works without the grown-ups list.
+    }
+  }, [api]);
+
   useEffect(() => {
-    api.me().then(setMe, (e: Error) => setLoadError(e.message));
+    api.me().then(
+      (m) => {
+        setMe(m);
+        setAvailable(m.available ?? true);
+      },
+      (e: Error) => setLoadError(e.message),
+    );
     void refresh();
-  }, [api, refresh]);
+    void loadPeople();
+  }, [api, refresh, loadPeople]);
+
+  // Someone we haven't listed yet joined the server.
+  useEffect(() => {
+    if (Object.keys(snap.members).some((id) => !people.some((p) => p.id === id))) {
+      void loadPeople();
+    }
+  }, [snap.members, people, loadPeople]);
+
+  const others = people.filter((p) => p.id !== me?.user.id);
+  const changeAvailable = (v: boolean) => {
+    setAvailable(v);
+    if (!conn?.setAvailable(v)) setLoadError("Not connected to the server — try again");
+  };
 
   // A device we haven't listed yet just came online (e.g. paired elsewhere).
   useEffect(() => {
@@ -177,28 +214,29 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
           <span>{me?.household.name ?? "Open Lounge Phone"}</span>
         </button>
         <span className={`conn conn-${snap.status}`} title={`Server: ${snap.status}`} />
-        <nav>
+        <nav className="tabs" aria-label="Sections">
+          <Tab route={route} name="home" onGo={setRoute}>
+            Home
+          </Tab>
           {guardian && (
-            <>
-              <button
-                type="button"
-                className="link"
-                onClick={() => setRoute({ name: "voicemail" })}
-                aria-label={unheard ? `Voicemail, ${unheard} new` : "Voicemail"}
-              >
-                Voicemail{unheard > 0 && <span className="count">{unheard}</span>}
-              </button>
-              <button type="button" className="link" onClick={() => setRoute({ name: "people" })}>
-                People
-              </button>
-              <button type="button" className="link" onClick={() => setRoute({ name: "quiet" })}>
-                Quiet hours
-              </button>
-            </>
+            <Tab route={route} name="voicemail" onGo={setRoute}>
+              Voicemail{unheard > 0 && <span className="count">{unheard}</span>}
+            </Tab>
           )}
-          <button type="button" className="link" onClick={() => setRoute({ name: "account" })}>
+          {guardian && (
+            <Tab route={route} name="people" onGo={setRoute}>
+              People
+            </Tab>
+          )}
+          {guardian && (
+            <Tab route={route} name="quiet" onGo={setRoute}>
+              <span className="wide-only">Quiet hours</span>
+              <span className="narrow-only">Quiet</span>
+            </Tab>
+          )}
+          <Tab route={route} name="account" onGo={setRoute}>
             Account
-          </button>
+          </Tab>
         </nav>
       </header>
 
@@ -226,6 +264,11 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
             guardian={guardian}
             userName={me?.user.name}
             onCall={(d) => void conn?.dial(d.id, d.name)}
+            people={others}
+            members={snap.members}
+            onCallPerson={(u) => void conn?.callUser(u.id, u.name)}
+            available={available}
+            onAvailable={changeAvailable}
             onManage={(d) => setRoute({ name: "device", id: d.id })}
             onPair={() => setRoute({ name: "pair" })}
           />
@@ -252,15 +295,27 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
           />
         )}
         {route.name === "quiet" && (
-          <QuietHours api={api} onBack={() => setRoute({ name: "home" })} />
+          <QuietHours
+            api={api}
+            onBack={() => setRoute({ name: "home" })}
+            onPhones={() => setRoute({ name: "home" })}
+          />
         )}
         {route.name === "people" && (
-          <People api={api} me={me?.user} onBack={() => setRoute({ name: "home" })} />
+          <People
+            api={api}
+            me={me?.user}
+            members={snap.members}
+            onCall={(u) => void conn?.callUser(u.id, u.name)}
+            onBack={() => setRoute({ name: "home" })}
+          />
         )}
         {route.name === "account" && (
           <Account
             api={api}
             me={me?.user}
+            available={available}
+            onAvailable={changeAvailable}
             onBack={() => setRoute({ name: "home" })}
             onSignOut={() => void signOut()}
           />
@@ -296,5 +351,28 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
 
       {conn && <CallOverlay snap={snap} conn={conn} api={api} />}
     </div>
+  );
+}
+
+function Tab({
+  route,
+  name,
+  onGo,
+  children,
+}: {
+  route: Route;
+  name: Route["name"];
+  onGo(r: Route): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="tab"
+      aria-current={route.name === name ? "page" : undefined}
+      onClick={() => onGo({ name } as Route)}
+    >
+      {children}
+    </button>
   );
 }

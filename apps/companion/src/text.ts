@@ -1,8 +1,11 @@
 import type { EndReason } from "@openloungephone/protocol";
 
 /** Human wording for why a call ended. */
-export function endReasonText(reason: EndReason | undefined): string {
+/** Why a call ended, in plain words. `person` = a grown-up, app-to-app call. */
+export function endReasonText(reason: EndReason | undefined, person = false): string {
   switch (reason) {
+    case "unavailable":
+      return "Not taking calls right now";
     case "denied":
       return "Not allowed right now";
     case "voicemail":
@@ -10,7 +13,7 @@ export function endReasonText(reason: EndReason | undefined): string {
     case "busy":
       return "Line is busy";
     case "unreachable":
-      return "Phone is offline";
+      return person ? "They're offline — they need the app open" : "Phone is offline";
     case "timeout":
       return "No answer";
     case "declined":

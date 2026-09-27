@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@openloungephone/client": "0.0.0",
+    "@openloungephone/core": "0.0.0",
     "@openloungephone/protocol": "0.0.0",
     "@simplewebauthn/browser": "^14.0.0",
     "react": "^19.3.0",

@@ -164,7 +164,7 @@ export function createApi(opts: ApiOptions) {
       guardianName: string;
       timeZone: string;
     }) => request<{ token: string; user: User; household: Household }>("POST", "/setup", input),
-    me: () => request<{ user: User; household: Household }>("GET", "/me"),
+    me: () => request<{ user: User; household: Household; available?: boolean }>("GET", "/me"),
     logout: () => request<void>("POST", "/logout"),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),

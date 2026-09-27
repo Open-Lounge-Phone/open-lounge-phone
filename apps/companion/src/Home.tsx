@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { DeviceSummary } from "./api.ts";
-import type { DeviceLive } from "./connection.ts";
+import type { DeviceSummary, User } from "./api.ts";
+import type { DeviceLive, MemberLive } from "./connection.ts";
+import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
@@ -11,6 +12,11 @@ interface Props {
   onCall(d: DeviceSummary): void;
   onManage(d: DeviceSummary): void;
   onPair(): void;
+  people: User[];
+  members: Record<string, MemberLive>;
+  onCallPerson(u: User): void;
+  available: boolean;
+  onAvailable(v: boolean): void;
 }
 
 function useNow(intervalMs: number) {
@@ -22,11 +28,26 @@ function useNow(intervalMs: number) {
   return now;
 }
 
-export function Home({ devices, live, guardian, userName, onCall, onManage, onPair }: Props) {
+export function Home({
+  devices,
+  live,
+  guardian,
+  userName,
+  onCall,
+  onManage,
+  onPair,
+  people,
+  members,
+  onCallPerson,
+  available,
+  onAvailable,
+}: Props) {
   const now = useNow(30_000);
   return (
     <section className="stack">
       <h2>{userName ? `Hi, ${userName}` : "Phones"}</h2>
+      <AvailabilityToggle available={available} onChange={onAvailable} />
+      <h3>Phones</h3>
       {devices.length === 0 && (
         <div className="card empty">
           <p>No phones yet.</p>
@@ -90,6 +111,7 @@ export function Home({ devices, live, guardian, userName, onCall, onManage, onPa
           + Pair a phone
         </button>
       )}
+      <GrownUps people={people} members={members} onCall={onCallPerson} />
     </section>
   );
 }

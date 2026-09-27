@@ -1,6 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist-types", "rootDir": "src", "jsx": "react-jsx" },
+  "compilerOptions": {
+    "outDir": "dist-types",
+    "rootDir": "src",
+    "jsx": "react-jsx"
+  },
   "include": ["src"],
-  "references": [{ "path": "../../packages/client" }, { "path": "../../packages/protocol" }]
+  "references": [
+    {
+      "path": "../../packages/client"
+    },
+    {
+      "path": "../../packages/protocol"
+    },
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }

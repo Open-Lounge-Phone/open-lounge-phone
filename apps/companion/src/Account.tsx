@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Api, PasskeySummary, User } from "./api.ts";
+import { AvailabilityToggle } from "./GrownUps.tsx";
 import {
   defaultPasskeyName,
   passkeyErrorText,
@@ -11,11 +12,13 @@ import { formatWhen } from "./text.ts";
 interface Props {
   api: Api;
   me: User | undefined;
+  available: boolean;
+  onAvailable(v: boolean): void;
   onBack(): void;
   onSignOut(): void;
 }
 
-export function Account({ api, me, onBack, onSignOut }: Props) {
+export function Account({ api, me, available, onAvailable, onBack, onSignOut }: Props) {
   const [passkeys, setPasskeys] = useState<PasskeySummary[]>([]);
   const [name, setName] = useState(() => defaultPasskeyName(navigator.userAgent));
   const [busy, setBusy] = useState(false);
@@ -68,6 +71,7 @@ export function Account({ api, me, onBack, onSignOut }: Props) {
         ← Back
       </button>
       <h2>{me ? me.name : "Account"}</h2>
+      <AvailabilityToggle available={available} onChange={onAvailable} />
       {me && (
         <p className="muted">{me.role === "guardian" ? "Guardian" : "Contact"} in this household</p>
       )}

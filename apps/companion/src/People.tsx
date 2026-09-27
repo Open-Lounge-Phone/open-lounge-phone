@@ -1,10 +1,14 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, Role, User } from "./api.ts";
+import type { MemberLive } from "./connection.ts";
+import { presenceOf } from "./presence.ts";
 import { inviteLink } from "./session.ts";
 
 interface Props {
   api: Api;
   me: User | undefined;
+  members: Record<string, MemberLive>;
+  onCall(u: User): void;
   onBack(): void;
 }
 
@@ -15,7 +19,7 @@ interface Shared {
 }
 
 /** Guardians: who's in the household, invite links, sign-in links, and removal. */
-export function People({ api, me, onBack }: Props) {
+export function People({ api, me, members, onCall, onBack }: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string>();
   const [name, setName] = useState("");
@@ -87,41 +91,61 @@ export function People({ api, me, onBack }: Props) {
       {shared && <ShareLink shared={shared} onDone={() => setShared(undefined)} />}
 
       <ul className="stack">
-        {users.map((u) => (
-          <li key={u.id} className="card person">
-            <div>
-              <div className="device-name">
-                {u.name}
-                {u.id === me?.id && <span className="muted small"> (you)</span>}
+        {users.map((u) => {
+          const self = u.id === me?.id;
+          const p = presenceOf(members[u.id]);
+          return (
+            <li key={u.id} className="card person device">
+              <div className="device-main">
+                {!self && <span className={`dot ${p.dot}`} role="img" aria-label={p.label} />}
+                <div>
+                  <div className="device-name">
+                    {u.name}
+                    {self && <span className="muted small"> (you)</span>}
+                  </div>
+                  <div className="muted small">
+                    {u.role === "guardian" ? "Guardian" : "Contact"}
+                    {!self && ` · ${p.label}`}
+                  </div>
+                </div>
               </div>
-              <div className="muted small">{u.role === "guardian" ? "Guardian" : "Contact"}</div>
-            </div>
-            <div className="device-actions">
-              <button type="button" onClick={() => void signInLink(u)}>
-                Sign-in link
-              </button>
-              {u.id !== me?.id &&
-                (confirmRemove === u.id ? (
-                  <>
-                    <button type="button" className="danger" onClick={() => void remove(u)}>
-                      Remove {u.name}?
-                    </button>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => setConfirmRemove(undefined)}
-                    >
-                      Keep
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="danger" onClick={() => setConfirmRemove(u.id)}>
-                    Remove
+              <div className="device-actions">
+                {!self && (
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={!p.callable}
+                    onClick={() => onCall(u)}
+                  >
+                    Call
                   </button>
-                ))}
-            </div>
-          </li>
-        ))}
+                )}
+                <button type="button" onClick={() => void signInLink(u)}>
+                  Sign-in link
+                </button>
+                {u.id !== me?.id &&
+                  (confirmRemove === u.id ? (
+                    <>
+                      <button type="button" className="danger" onClick={() => void remove(u)}>
+                        Remove {u.name}?
+                      </button>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setConfirmRemove(undefined)}
+                      >
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" className="danger" onClick={() => setConfirmRemove(u.id)}>
+                      Remove
+                    </button>
+                  ))}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       <form className="card stack" onSubmit={(e) => void invite(e)}>
