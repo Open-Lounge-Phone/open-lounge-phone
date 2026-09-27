@@ -42,7 +42,10 @@ the keypad**, with finger clearance so the 12 keys and e-ink strip stay visible 
 hung up. The rest's **hook plunger dips under the handset's weight and carries a magnet over the
 hall sensor** (literal on/off the hook, no wearing contacts; any standard RJ9 G-style handset,
 incl. vintage, works — no magnet needed in the handset). Base ≈ handset footprint (~240 × 110 mm);
-key deck on top, main board stacked beneath via the FFC.
+key deck on top, main board stacked beneath via the FFC. Owner references: `hardware/art/reference-base-top.png`
+(top view of the base without the handset: rounded cream slab that is essentially the keypad deck,
+2×6 keys + e-ink strip, framed by a dark metal frame that rises into the hook rest) and
+`hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo).
 **Name (owner decision 2026-09-27):** the project is **Open Lounge Phone** (slug/package scope
 `openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
 registered trademark of another phone. The owner has confirmed "Open Lounge Phone" is clear
