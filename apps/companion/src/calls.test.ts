@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CallEvent, type CallView, callStep, toneFor } from "./calls.ts";
+import { type CallEvent, type CallView, callStep, canLeaveVoicemail, toneFor } from "./calls.ts";
 
 const idle: CallView = { phase: "idle" };
 const state = (
@@ -95,5 +95,31 @@ describe("local actions", () => {
   it("ignores dialing while in a call", () => {
     const busy = run([ringing("c1")]).view;
     expect(run([{ type: "dial", label: "X" }], busy).view).toBe(busy);
+  });
+});
+
+describe("voicemail after a quiet-hours refusal", () => {
+  const ended = (reason: "voicemail" | "busy", deviceId?: string) => {
+    let view = callStep(
+      { phase: "idle" },
+      { type: "dial", label: "Kid", ...(deviceId ? { deviceId } : {}) },
+    ).view;
+    view = callStep(view, {
+      type: "server",
+      msg: { t: "call.state", callId: "c1", state: "ended", reason },
+      now: 0,
+    }).view;
+    return view;
+  };
+
+  it("remembers the dialled phone so a message can be left", () => {
+    const view = ended("voicemail", "dev_1");
+    expect(view).toEqual({ phase: "ended", label: "Kid", reason: "voicemail", deviceId: "dev_1" });
+    expect(canLeaveVoicemail(view)).toBe(true);
+  });
+
+  it("does not offer voicemail for other reasons or unknown phones", () => {
+    expect(canLeaveVoicemail(ended("busy", "dev_1"))).toBe(false);
+    expect(canLeaveVoicemail(ended("voicemail"))).toBe(false);
   });
 });

@@ -13,7 +13,7 @@ import {
   PROTOCOL_VERSION,
   type ServerToApp,
 } from "@opentincan/protocol";
-import { type CallEvent, type CallView, callStep, toneFor } from "./calls.ts";
+import { type CallEvent, type CallView, callStep, canLeaveVoicemail, toneFor } from "./calls.ts";
 
 export interface DeviceLive {
   online: boolean;
@@ -29,6 +29,8 @@ export interface Snapshot {
   remote?: MediaStream;
   muted: boolean;
   error?: string;
+  /** Latest `voicemail.new`; `seq` changes on every announcement. */
+  voicemail?: { seq: number; id: string; deviceId: string; from: string };
 }
 
 type Rtc = Extract<ServerToApp, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -91,7 +93,7 @@ export class Connection {
     if (phase !== "idle" && phase !== "ended") return;
     this.tones.unlock();
     if (!(await this.acquireMic())) return;
-    this.apply({ type: "dial", label });
+    this.apply({ type: "dial", label, deviceId });
     if (!this.socket.send({ t: "call.dial", deviceId })) {
       this.apply({ type: "hangup" });
       this.set({ error: "Not connected to the server" });
@@ -161,7 +163,8 @@ export class Connection {
     this.tones.play(toneFor(view));
     if (view.phase === "ended" || view.phase === "idle") this.teardown();
     clearTimeout(this.dismissTimer);
-    if (view.phase === "ended") {
+    // A quiet-hours refusal stays up so the caller can record a message.
+    if (view.phase === "ended" && !canLeaveVoicemail(view)) {
       this.dismissTimer = setTimeout(() => this.dismiss(), ENDED_DISPLAY_MS);
     }
     this.set({ call: view });
@@ -185,6 +188,16 @@ export class Connection {
         this.set({ live: { ...this.snap.live, [msg.deviceId]: live } });
         return;
       }
+      case "voicemail.new":
+        this.set({
+          voicemail: {
+            seq: (this.snap.voicemail?.seq ?? 0) + 1,
+            id: msg.id,
+            deviceId: msg.deviceId,
+            from: msg.from,
+          },
+        });
+        return;
       case "rtc.config":
         this.ice.set(msg.callId, msg.iceServers);
         return;

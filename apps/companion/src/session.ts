@@ -14,11 +14,25 @@ export function saveToken(storage: Store, token: string | null): void {
   else storage.removeItem(TOKEN_KEY);
 }
 
+function readHashParam(hash: string, key: string): string | undefined {
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const value = params.get(key)?.trim();
+  return value ? value : undefined;
+}
+
 /** Extracts the one-time token from a `#setup=<token>` hash. */
 export function readSetupToken(hash: string): string | undefined {
-  const params = new URLSearchParams(hash.replace(/^#/, ""));
-  const token = params.get("setup")?.trim();
-  return token ? token : undefined;
+  return readHashParam(hash, "setup");
+}
+
+/** Extracts the invite token from a `#invite=<token>` hash. */
+export function readInviteToken(hash: string): string | undefined {
+  return readHashParam(hash, "invite");
+}
+
+/** The link a guardian shares; the token stays in the fragment so it never reaches server logs. */
+export function inviteLink(origin: string, token: string): string {
+  return `${origin.replace(/\/$/, "")}/#invite=${encodeURIComponent(token)}`;
 }
 
 export function defaultTimeZone(): string {

@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Account } from "./Account.tsx";
 import { type Api, createApi, type DeviceSummary, type Household, type User } from "./api.ts";
 import { CallOverlay } from "./CallOverlay.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
 import { Home } from "./Home.tsx";
+import { Invite } from "./Invite.tsx";
 import { ManageDevice } from "./ManageDevice.tsx";
 import { Pair } from "./Pair.tsx";
+import { PasskeyOffer } from "./PasskeyOffer.tsx";
+import { People } from "./People.tsx";
 import { QuietHours } from "./QuietHours.tsx";
 import { Setup, SignedOut } from "./Setup.tsx";
-import { loadToken, readSetupToken, saveToken } from "./session.ts";
+import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
+import { VoicemailInbox } from "./Voicemail.tsx";
 
 export type Route =
   | { name: "home" }
   | { name: "pair" }
   | { name: "device"; id: string }
-  | { name: "quiet" };
+  | { name: "quiet" }
+  | { name: "people" }
+  | { name: "account" }
+  | { name: "voicemail" };
 
 function clearHash() {
   history.replaceState(null, "", location.pathname + location.search);
@@ -21,7 +29,11 @@ function clearHash() {
 
 export function App() {
   const [token, setToken] = useState(() => loadToken(localStorage));
-  const [setupToken] = useState(() => readSetupToken(location.hash));
+  // Cleared once used, so signing out later shows the signed-out screen, not setup again.
+  const [setupToken, setSetupToken] = useState(() => readSetupToken(location.hash));
+  const [inviteToken, setInviteToken] = useState(() => readInviteToken(location.hash));
+  /** A fresh session from first-run setup, waiting on the passkey offer. */
+  const [offerFor, setOfferFor] = useState<string>();
 
   const signIn = useCallback((t: string | null) => {
     saveToken(localStorage, t);
@@ -29,16 +41,44 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (token && setupToken) clearHash();
+    if (token && setupToken) {
+      clearHash();
+      setSetupToken(undefined);
+    }
   }, [token, setupToken]);
 
+  const finishOffer = useCallback(() => {
+    if (offerFor) signIn(offerFor);
+    setOfferFor(undefined);
+  }, [offerFor, signIn]);
+
+  if (offerFor) return <PasskeyOffer token={offerFor} onDone={finishOffer} />;
+
+  // An invite link works even when signed in (e.g. a sign-in link for another person).
+  if (inviteToken) {
+    return (
+      <Invite
+        inviteToken={inviteToken}
+        onDone={(t) => {
+          clearHash();
+          setInviteToken(undefined);
+          signIn(t);
+        }}
+        onCancel={() => {
+          clearHash();
+          setInviteToken(undefined);
+        }}
+      />
+    );
+  }
   if (!token && setupToken) {
     return (
       <Setup
         setupToken={setupToken}
         onDone={(t) => {
           clearHash();
-          signIn(t);
+          setSetupToken(undefined);
+          setOfferFor(t);
         }}
       />
     );
@@ -73,6 +113,8 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [loadError, setLoadError] = useState<string>();
+  const [unheard, setUnheard] = useState(0);
+  const [toast, setToast] = useState<string>();
 
   const refresh = useCallback(async () => {
     try {
@@ -103,6 +145,30 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
 
   const guardian = me?.user.role === "guardian";
 
+  const countUnheard = useCallback(async () => {
+    if (!guardian) return;
+    try {
+      setUnheard((await api.voicemails()).filter((v) => !v.heardAt).length);
+    } catch {
+      // The inbox shows its own errors.
+    }
+  }, [api, guardian]);
+
+  useEffect(() => {
+    void countUnheard();
+  }, [countUnheard]);
+
+  // Live voicemail announcements.
+  const vmSeq = snap.voicemail?.seq ?? 0;
+  const vmFrom = snap.voicemail?.from;
+  useEffect(() => {
+    if (!vmSeq) return;
+    setToast(`New voicemail from ${vmFrom}`);
+    void countUnheard();
+    const t = setTimeout(() => setToast(undefined), 5000);
+    return () => clearTimeout(t);
+  }, [vmSeq, vmFrom, countUnheard]);
+
   return (
     <div className="app">
       <header className="topbar">
@@ -113,12 +179,25 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
         <span className={`conn conn-${snap.status}`} title={`Server: ${snap.status}`} />
         <nav>
           {guardian && (
-            <button type="button" className="link" onClick={() => setRoute({ name: "quiet" })}>
-              Quiet hours
-            </button>
+            <>
+              <button
+                type="button"
+                className="link"
+                onClick={() => setRoute({ name: "voicemail" })}
+                aria-label={unheard ? `Voicemail, ${unheard} new` : "Voicemail"}
+              >
+                Voicemail{unheard > 0 && <span className="count">{unheard}</span>}
+              </button>
+              <button type="button" className="link" onClick={() => setRoute({ name: "people" })}>
+                People
+              </button>
+              <button type="button" className="link" onClick={() => setRoute({ name: "quiet" })}>
+                Quiet hours
+              </button>
+            </>
           )}
-          <button type="button" className="link" onClick={() => void signOut()}>
-            Sign out
+          <button type="button" className="link" onClick={() => setRoute({ name: "account" })}>
+            Account
           </button>
         </nav>
       </header>
@@ -175,9 +254,47 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
         {route.name === "quiet" && (
           <QuietHours api={api} onBack={() => setRoute({ name: "home" })} />
         )}
+        {route.name === "people" && (
+          <People api={api} me={me?.user} onBack={() => setRoute({ name: "home" })} />
+        )}
+        {route.name === "account" && (
+          <Account
+            api={api}
+            me={me?.user}
+            onBack={() => setRoute({ name: "home" })}
+            onSignOut={() => void signOut()}
+          />
+        )}
+        {route.name === "voicemail" && (
+          <VoicemailInbox
+            api={api}
+            devices={devices}
+            refreshKey={vmSeq}
+            onChanged={() => void countUnheard()}
+            onBack={() => setRoute({ name: "home" })}
+          />
+        )}
       </main>
 
-      {conn && <CallOverlay snap={snap} conn={conn} />}
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast}</span>
+          {guardian && (
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setToast(undefined);
+                setRoute({ name: "voicemail" });
+              }}
+            >
+              Listen
+            </button>
+          )}
+        </div>
+      )}
+
+      {conn && <CallOverlay snap={snap} conn={conn} api={api} />}
     </div>
   );
 }

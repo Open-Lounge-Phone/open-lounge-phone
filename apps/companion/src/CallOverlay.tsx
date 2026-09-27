@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import type { Api } from "./api.ts";
+import { canLeaveVoicemail } from "./calls.ts";
 import type { Connection, Snapshot } from "./connection.ts";
+import { LeaveVoicemail } from "./LeaveVoicemail.tsx";
 import { endReasonText, formatDuration } from "./text.ts";
 
-export function CallOverlay({ snap, conn }: { snap: Snapshot; conn: Connection }) {
+export function CallOverlay({ snap, conn, api }: { snap: Snapshot; conn: Connection; api: Api }) {
   const audio = useRef<HTMLAudioElement>(null);
   const call = snap.call;
 
@@ -35,6 +38,14 @@ export function CallOverlay({ snap, conn }: { snap: Snapshot; conn: Connection }
               {call.phase === "active" && formatDuration(now - (call.startedAt ?? now))}
               {call.phase === "ended" && endReasonText(call.reason)}
             </div>
+            {canLeaveVoicemail(call) && (
+              <LeaveVoicemail
+                api={api}
+                deviceId={call.deviceId}
+                label={call.label}
+                onClose={() => conn.dismiss()}
+              />
+            )}
             <div className="overlay-actions">
               {call.phase === "incoming" && (
                 <>
@@ -63,7 +74,7 @@ export function CallOverlay({ snap, conn }: { snap: Snapshot; conn: Connection }
                   </button>
                 </>
               )}
-              {call.phase === "ended" && (
+              {call.phase === "ended" && !canLeaveVoicemail(call) && (
                 <button type="button" className="round" onClick={() => conn.dismiss()}>
                   Close
                 </button>

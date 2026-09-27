@@ -70,3 +70,58 @@ describe("createApi", () => {
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 });
+
+describe("M4 endpoints", () => {
+  it("uploads voicemail as a raw audio body with its type", async () => {
+    const fetch = fakeFetch(201, { id: "vm_1" });
+    const api = createApi({ token: "t".repeat(20), fetch });
+    const blob = new Blob([new Uint8Array(10)], { type: "audio/webm;codecs=opus" });
+    expect(await api.leaveVoicemail("dev 1", blob, 4200.4)).toEqual({ id: "vm_1" });
+    const [url, init] = fetch.mock.calls[0] ?? [];
+    expect(url).toBe("/api/devices/dev%201/voicemail?durationMs=4200");
+    expect(init?.headers).toMatchObject({ "content-type": "audio/webm;codecs=opus" });
+    expect(init?.body).toBe(blob);
+  });
+
+  it("surfaces server errors from raw requests", async () => {
+    const onUnauthorized = vi.fn();
+    const api = createApi({
+      token: "t".repeat(20),
+      fetch: fakeFetch(403, { error: "not allowed" }),
+      onUnauthorized,
+    });
+    const err = await api
+      .leaveVoicemail("d", new Blob(["x"], { type: "audio/ogg" }), 1)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 403, message: "not allowed" });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("fetches voicemail audio as a blob with auth", async () => {
+    const fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    const api = createApi({ token: "t".repeat(20), fetch });
+    const blob = await api.voicemailAudio("vm_1");
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(fetch.mock.calls[0]).toMatchObject([
+      "/api/voicemails/vm_1/audio",
+      { method: "GET", headers: { authorization: `Bearer ${"t".repeat(20)}` } },
+    ]);
+  });
+
+  it("sends invite and passkey requests to the right routes", async () => {
+    const fetch = fakeFetch(201, { token: "x", expiresAt: 1 });
+    const api = createApi({ token: null, fetch });
+    await api.invite({ name: "Grandma", role: "contact" });
+    await api.invite({ userId: "usr_1" });
+    await api.acceptInvite("tok");
+    await api.passkeyLoginVerify("ch_1", { id: "cred" });
+    const calls = fetch.mock.calls.map(([u, i]) => [u, i?.method, JSON.parse(String(i?.body))]);
+    expect(calls).toEqual([
+      ["/api/invites", "POST", { name: "Grandma", role: "contact" }],
+      ["/api/invites", "POST", { userId: "usr_1" }],
+      ["/api/invites/accept", "POST", { token: "tok" }],
+      ["/api/passkeys/login/verify", "POST", { challengeId: "ch_1", response: { id: "cred" } }],
+    ]);
+  });
+});

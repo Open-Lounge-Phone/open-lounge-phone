@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { loadToken, readSetupToken, saveToken, TOKEN_KEY } from "./session.ts";
+import {
+  inviteLink,
+  loadToken,
+  readInviteToken,
+  readSetupToken,
+  saveToken,
+  TOKEN_KEY,
+} from "./session.ts";
 
 function memoryStorage() {
   const m = new Map<string, string>();
@@ -33,5 +40,15 @@ describe("session", () => {
     expect(readSetupToken("#other=1")).toBeUndefined();
     expect(readSetupToken("")).toBeUndefined();
     expect(readSetupToken("#setup=")).toBeUndefined();
+  });
+
+  it("builds and reads invite links, keeping the token in the fragment", () => {
+    const link = inviteLink("https://phone.example/", "Ab_c-9");
+    expect(link).toBe("https://phone.example/#invite=Ab_c-9");
+    const url = new URL(link);
+    expect(url.search).toBe("");
+    expect(readInviteToken(url.hash)).toBe("Ab_c-9");
+    expect(readInviteToken("#setup=x")).toBeUndefined();
+    expect(readSetupToken("#invite=x")).toBeUndefined();
   });
 });

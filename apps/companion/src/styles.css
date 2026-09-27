@@ -167,6 +167,8 @@ label.check {
 .topbar nav {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .brand {
   display: flex;
@@ -478,7 +480,8 @@ details summary {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .overlay-incoming .avatar {
+  .overlay-incoming .avatar,
+  .rec-dot {
     animation: none;
   }
 }
@@ -490,4 +493,143 @@ details summary {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* --- people, account ----------------------------------------------------- */
+
+.person {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.link-field {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+.share .row {
+  align-items: center;
+}
+fieldset.choice {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+fieldset.choice legend {
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+input[type="radio"] {
+  width: 1.2rem;
+  height: 1.2rem;
+  min-height: 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* --- voicemail ------------------------------------------------------------- */
+
+.count,
+.badge {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.4em;
+  margin-left: 0.3em;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4em;
+  text-align: center;
+}
+.badge {
+  margin: 0 0.3em 0 0;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.voicemail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.voicemail.unheard {
+  border-color: var(--accent);
+}
+.transcript {
+  white-space: pre-wrap;
+}
+.transcript.pending,
+.transcript.failed,
+.transcript.unavailable {
+  color: var(--muted);
+  font-style: italic;
+}
+.vm-audio {
+  width: 100%;
+}
+
+.voicemail-panel {
+  width: 100%;
+  align-items: center;
+}
+.voicemail-panel audio,
+.voicemail-panel progress {
+  width: 100%;
+}
+.voicemail-panel .overlay-actions {
+  margin-top: 0.5rem;
+}
+.voicemail-panel .link {
+  color: #fff;
+  opacity: 0.85;
+}
+.voicemail-panel .error {
+  color: #ffb4ad;
+}
+.voicemail-panel .ok {
+  color: #9ff0c1;
+}
+.recording {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5a4f;
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 32px);
+  padding: 0.6rem 0.8rem 0.6rem 1rem;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+}
+.toast .link {
+  color: var(--bg);
+  font-weight: 600;
 }

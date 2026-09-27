@@ -6,7 +6,7 @@ export function endReasonText(reason: EndReason | undefined): string {
     case "denied":
       return "Not allowed right now";
     case "voicemail":
-      return "Quiet hours — voicemail coming soon";
+      return "It's quiet hours";
     case "busy":
       return "Line is busy";
     case "unreachable":
@@ -43,4 +43,31 @@ export function formatDuration(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export type TranscriptStatus = "pending" | "done" | "failed" | "unavailable";
+
+/** What to show where a voicemail transcript goes. */
+export function transcriptText(status: TranscriptStatus, text: string | null): string {
+  switch (status) {
+    case "pending":
+      return "Transcribing…";
+    case "done":
+      return text?.trim() ? text.trim() : "(no words detected)";
+    case "failed":
+      return "Couldn't transcribe this message";
+    case "unavailable":
+      return "No transcript";
+  }
+}
+
+/** "Today 7:42 PM", "Yesterday 8:05 AM", or a date, in the viewer's locale. */
+export function formatWhen(ts: number, now: number, locale?: string): string {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date(now)) - startOfDay(d)) / 86_400_000);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  return `${d.toLocaleDateString(locale, { month: "short", day: "numeric" })} ${time}`;
 }
