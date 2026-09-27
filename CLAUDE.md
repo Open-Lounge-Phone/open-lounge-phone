@@ -29,9 +29,9 @@ bare boards + self-sourced parts + hand assembly: design rules = common 4-layer 
 (≥0.15 mm trace/space, ≥0.3 mm drill), Gerber X2 + Excellon + IPC-2581, generic BOM (MPN +
 LCSC/DigiKey/Mouser) and pick-and-place, plus a hand-assembly difficulty guide.
 **Keys (owner decision 2026-09-27, final):** 12 keys in two rows of six:
-`1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`, e-ink strip between the rows centered over the digit columns
-(it's narrower than the 95 mm span, so the firmware maps labels to key positions with a small
-offset). Digits 0–9 are essential (dialing, entering codes); pressing a digit selects whatever the
+`1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`, e-ink strip between the rows centered over the digit columns.
+The strip is **representational**, not physically aligned: it draws two rows of labels in the
+same order as the keys. Digits 0–9 are essential (dialing, entering codes); pressing a digit selects whatever the
 strip shows for it; MENU opens the menu, BACK steps out; no ENTER/SPEAKER/END keys (hang up = hook;
 speakerphone is a menu item). Kids Lite uses a voice menu with the same keys. Protocol `button`
 index: digits 1–9 → 0–8, digit 0 → 9 (speed-dial slots); MENU/BACK are handled on the device.
