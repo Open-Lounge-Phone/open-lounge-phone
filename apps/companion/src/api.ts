@@ -30,6 +30,8 @@ export interface DeviceSummary {
   name: string;
   online: boolean;
   lastSeen: number | null;
+  /** Set when this is a person's own phone (physical or virtual); null for household phones. */
+  ownerUserId?: string | null;
   /** How this device lists the signed-in user, if at all. */
   contact: ContactEntry | null;
 }

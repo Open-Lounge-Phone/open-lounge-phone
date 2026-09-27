@@ -959,6 +959,18 @@ describe("personal phones", () => {
     expect(contacts.json.buttons).toEqual({ "0": user.id });
   });
 
+  it("sends a personal phone's status to its (non-guardian) owner", async () => {
+    const { dadToken } = await family();
+    const dadApp = await connectApp(dadToken);
+    const { deviceId, phone } = await pairMine(dadToken);
+    let s = await dadApp.next("device.status");
+    while (s.deviceId !== deviceId || !s.online) s = await dadApp.next("device.status");
+    phone.write({ t: "status", battery: { pct: 50, charging: true } });
+    s = await dadApp.next("device.status");
+    while (!s.battery) s = await dadApp.next("device.status");
+    expect(s).toMatchObject({ deviceId, battery: { pct: 50 } });
+  });
+
   it("a connected personal phone makes its owner show as online", async () => {
     const { token, dad, dadToken } = await family();
     const mom = await connectApp(token);

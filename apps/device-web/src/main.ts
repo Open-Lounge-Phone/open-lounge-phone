@@ -21,6 +21,13 @@ import {
   PROTOCOL_VERSION,
   type ServerToDevice,
 } from "@openloungephone/protocol";
+import {
+  type Autopair,
+  COMPANION_TOKEN_KEY,
+  claimPairing,
+  parseAutopair,
+  shouldAutopair,
+} from "./autopair.ts";
 import { playChime, unlockChime } from "./chime.ts";
 import { keyGrid } from "./grid.ts";
 import {
@@ -91,6 +98,9 @@ let config: DeviceConfig | undefined;
 let connection: Connection = "connecting";
 let authed = false;
 let pairingCode: string | undefined;
+const autopair: Autopair | undefined = parseAutopair(new URLSearchParams(location.search));
+const autopairTried = new Set<string>();
+let autopairStatus = autopair ? "waiting for a code" : "off";
 let pairingTimer: ReturnType<typeof setTimeout> | undefined;
 let hookUp = false;
 let activeKey: number | undefined;
@@ -185,6 +195,24 @@ function forgetDeviceId(): void {
   log("•", "server does not know this phone; it will pair again");
 }
 
+/** Opened from the companion's "Add my virtual phone": pair with that account, no typing. */
+async function tryAutopair(code: string): Promise<void> {
+  let token: string | null = null;
+  try {
+    token = localStorage.getItem(COMPANION_TOKEN_KEY);
+  } catch {}
+  if (!shouldAutopair(autopair, token, code, autopairTried)) return;
+  autopairTried.add(code);
+  autopairStatus = "Pairing with your account…";
+  render();
+  const res = await claimPairing(code, autopair, token as string);
+  autopairStatus = res.ok
+    ? "paired with your account"
+    : `couldn't pair automatically (${res.error}); use the code`;
+  log("•", `autopair: ${autopairStatus}`);
+  render();
+}
+
 async function handle(msg: ServerToDevice): Promise<void> {
   switch (msg.t) {
     case "auth.challenge":
@@ -198,6 +226,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
         () => send({ t: "pair.begin", publicKey: identity.publicKey }),
         Math.max(5_000, msg.expiresAt - Date.now() - 5_000),
       );
+      void tryAutopair(msg.code);
       break;
     case "pair.done":
       setDeviceId(profile, msg.deviceId);
@@ -563,6 +592,7 @@ function render(): void {
   fact("connection").textContent = `${connection}${authed ? " (authenticated)" : ""}`;
   fact("deviceId").textContent = getDeviceId(profile) ?? "— (unpaired)";
   fact("pairing").textContent = pairingCode ?? "—";
+  fact("autopair").textContent = autopairStatus;
   fact("state").textContent = JSON.stringify(deviceState);
   fact("config").textContent = config
     ? JSON.stringify({ buttons: config.buttons, quiet: config.quiet })

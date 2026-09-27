@@ -914,3 +914,55 @@ button.link.inline {
     display: none;
   }
 }
+
+/* Header dot: mirrors the status LED of your phone (see phoneLed.ts). */
+.phone-led {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  flex: none;
+  background: var(--led, #8a8a8a);
+  box-shadow:
+    0 0 0 3px transparent,
+    0 0 8px var(--led-glow, transparent);
+  cursor: pointer;
+}
+.phone-led.led-green {
+  --led: #3ecf7a;
+  --led-glow: rgba(62, 207, 122, 0.55);
+}
+.phone-led.led-red {
+  --led: #e05252;
+  --led-glow: rgba(224, 82, 82, 0.5);
+}
+.phone-led.led-purple {
+  --led: #a77bff;
+  --led-glow: rgba(167, 123, 255, 0.55);
+}
+.phone-led.led-blue {
+  --led: #4aa3ff;
+  --led-glow: rgba(74, 163, 255, 0.6);
+}
+.phone-led.led-grey {
+  --led: #8a8a8a;
+}
+.phone-led.socket-down {
+  box-shadow: 0 0 0 3px var(--warn, #e0a33e);
+}
+.phone-led.pulse {
+  animation: led-pulse 1.1s ease-in-out infinite;
+}
+@keyframes led-pulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.75;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-led.pulse {
+    animation: none;
+  }
+}

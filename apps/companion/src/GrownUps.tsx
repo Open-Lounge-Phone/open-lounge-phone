@@ -58,8 +58,8 @@ export function AvailabilityToggle({
       <div>
         <div className="device-name">Available for calls</div>
         <div className="muted small">
-          You're reachable while this app is open. Turn this off to stop calls without closing the
-          app.
+          You're reachable while your phone or this app is connected. Turn this off to stop calls
+          without unplugging.
         </div>
       </div>
       <button

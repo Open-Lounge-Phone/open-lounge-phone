@@ -211,11 +211,10 @@ export class HouseholdHub {
         });
       }
       if (cameOnline) this.broadcastMember(user.id, true, available.get(user.id) ?? true);
-      if (peer.guardian) {
-        for (const d of await this.env.store.listDevices(this.householdId)) {
-          const live = this.devices.get(d.id);
-          conn.send(this.statusMessage(d.id, live, d.lastSeen ?? 0));
-        }
+      for (const d of await this.env.store.listDevices(this.householdId)) {
+        if (!peer.guardian && d.ownerUserId !== user.id) continue;
+        const live = this.devices.get(d.id);
+        conn.send(this.statusMessage(d.id, live, d.lastSeen ?? 0));
       }
       return peer;
     });
@@ -689,10 +688,11 @@ export class HouseholdHub {
     };
   }
 
+  /** Phone status goes to guardians (all phones) and to a personal phone's owner. */
   private broadcastStatus(peer: DevicePeer, online: boolean): void {
     const msg = this.statusMessage(peer.id, online ? peer : undefined, this.env.now());
     for (const set of this.apps.values()) {
-      for (const app of set) if (app.guardian) app.conn.send(msg);
+      for (const app of set) if (app.guardian || app.id === peer.owner) app.conn.send(msg);
     }
   }
 }

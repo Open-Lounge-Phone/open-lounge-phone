@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Account } from "./Account.tsx";
-import { type Api, createApi, type DeviceSummary, type Household, type User } from "./api.ts";
+import {
+  type Api,
+  createApi,
+  type DeviceSummary,
+  type Household,
+  type Schedule,
+  type User,
+} from "./api.ts";
 import { CallOverlay } from "./CallOverlay.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
 import { Home } from "./Home.tsx";
@@ -9,7 +16,9 @@ import { ManageDevice } from "./ManageDevice.tsx";
 import { Pair } from "./Pair.tsx";
 import { PasskeyOffer } from "./PasskeyOffer.tsx";
 import { People } from "./People.tsx";
+import { phoneLed } from "./phoneLed.ts";
 import { QuietHours } from "./QuietHours.tsx";
+import { quietStatus } from "./quietStatus.ts";
 import { Setup, SignedOut } from "./Setup.tsx";
 import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
@@ -182,6 +191,39 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
 
   const guardian = me?.user.role === "guardian";
 
+  // Phone presence reaches guardians live via `device.status`; everyone also re-reads the phone
+  // list periodically (own phones' online state), and quickly while a new virtual phone pairs.
+  const [pairingSince, setPairingSince] = useState<number>();
+  const hasOwnPhone = devices.some((d) => me && d.ownerUserId === me.user.id);
+  useEffect(() => {
+    const fast = pairingSince !== undefined && !hasOwnPhone && Date.now() - pairingSince < 90_000;
+    const t = setInterval(() => void refresh(), fast ? 2_000 : 15_000);
+    return () => clearInterval(t);
+  }, [refresh, pairingSince, hasOwnPhone]);
+
+  // Household quiet hours, for the header dot (re-evaluated every minute).
+  const [schedule, setSchedule] = useState<Schedule>();
+  const [minute, setMinute] = useState(() => Date.now());
+  useEffect(() => {
+    api.quietHours().then(setSchedule, () => {});
+    const t = setInterval(() => setMinute(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [api]);
+  const led = phoneLed({
+    devices,
+    live: snap.live,
+    meId: me?.user.id,
+    guardian,
+    quietNow: schedule ? quietStatus(schedule, new Date(minute)).quiet : false,
+    ringing: snap.call.phase === "incoming",
+  });
+  const openLed = () => {
+    if (!led.deviceId || led.mine) {
+      setRoute({ name: "home" });
+      requestAnimationFrame(() => document.getElementById("my-phone")?.scrollIntoView());
+    } else setRoute({ name: "device", id: led.deviceId });
+  };
+
   const countUnheard = useCallback(async () => {
     if (!guardian) return;
     try {
@@ -213,7 +255,15 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
           <img src="/icon.svg" alt="" width={28} height={28} />
           <span>{me?.household.name ?? "Open Lounge Phone"}</span>
         </button>
-        <span className={`conn conn-${snap.status}`} title={`Server: ${snap.status}`} />
+        <button
+          type="button"
+          className={`phone-led led-${led.color}${led.pulse ? " pulse" : ""}${snap.status === "open" ? "" : " socket-down"}`}
+          title={snap.status === "open" ? led.label : `${led.label} · reconnecting to the server`}
+          aria-label={
+            snap.status === "open" ? led.label : `${led.label}. Reconnecting to the server.`
+          }
+          onClick={openLed}
+        />
         <nav className="tabs" aria-label="Sections">
           <Tab route={route} name="home" onGo={setRoute}>
             Home
@@ -269,6 +319,8 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
             onCallPerson={(u) => void conn?.callUser(u.id, u.name)}
             available={available}
             onAvailable={changeAvailable}
+            meId={me?.user.id}
+            onAddingPhone={() => setPairingSince(Date.now())}
             onManage={(d) => setRoute({ name: "device", id: d.id })}
             onPair={() => setRoute({ name: "pair" })}
           />
