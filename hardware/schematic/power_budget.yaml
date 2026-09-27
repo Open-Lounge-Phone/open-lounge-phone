@@ -1,0 +1,44 @@
+# Power budget checked by checks.check_power_budget on every build.
+# Loads are mA at the 5 V USB input, from DESIGN.md §9.2. `vbus_direct` is the part that bypasses
+# the charger (the LD2410C radar hangs off VBUS); everything else flows through the BQ24074 and
+# counts against its input current limit (ILIM).
+
+charger:
+  # BQ24074 datasheet SLUS810N, Electrical Characteristics + Thermal Information
+  k_ilim_aohm: {min: 1500, typ: 1610, max: 1720}   # ILIM = K_ILIM / R_ILIM, 0.5-1.5 A range
+  r_ilim_tolerance: 0.01                            # 1 % resistor
+  vsys_max_v: 4.5                                   # VO(REG) max; OUT is regulated, not VBUS
+  theta_ja_c_per_w: 44.5
+  tj_reg_c: 125                                     # charge current folds back above this
+
+supply:
+  vbus_max_v: 5.25          # USB 2.0 / Type-C default range 4.75-5.25 V
+  ambient_max_c: 40         # inside the enclosure, warm room
+
+# Supply-voltage ratings of everything on VSYS; must exceed charger vsys_max_v.
+vsys_parts_max_v:
+  NS4150B: 5.25
+  LP5907-3.0: 5.5
+  TLV62569: 5.5
+  SN74LV1T125: 5.5
+  SK6812MINI-E: 5.5
+  SUPERCAP: 5.5
+
+# margin: required headroom below the guaranteed-minimum ILIM for firmware-capped scenarios.
+policy_margin: 0.10
+
+scenarios:
+  # name: [total_mA, vbus_direct_mA, source_limit_mA, kind]
+  # kind: policy = firmware caps applied (must pass with margin);
+  #       uncapped = firmware bug / caps off (must still not exceed guaranteed ILIM)
+  idle_kids:               [59, 0, 1500, policy]
+  idle_lounge:             [151, 79, 1500, policy]
+  handset_call_lounge:     [240, 79, 1500, policy]
+  speakerphone_lounge:     [370, 79, 1500, policy]
+  ringing_max:             [730, 79, 1500, policy]
+  worst_case_capped:       [1070, 100, 1500, policy]
+  worst_case_uncapped:     [1350, 100, 1500, uncapped]
+  # Default-USB source (plain USB 2.0 port, 500 mA): ringer <=0.5 W, LEDs <=10 %, charging off.
+  # ESP32 TX peak 266 + codecs 25 + e-ink 6 + misc 1 + LEDs 67 + amp 0.5 W/(4.4 V*0.9)=126.
+  default_usb_kids:        [491, 0, 500, policy]
+  default_usb_lounge:      [591, 100, 500, advisory]

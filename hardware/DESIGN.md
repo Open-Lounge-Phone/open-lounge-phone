@@ -1124,3 +1124,11 @@ found while checking datasheets. The r0.1 text above has not been edited.
 - **§9.3 B-option connector:** a JST-PH-2 cannot carry the pack NTC to TS. Changed to
   **JST-PH-3**.
 - **§12.1 NS4150B package:** it is **MSOP-8**, not ESOP-8.
+
+- **Input current limit (2026-09-27):** R_ILIM = 1.1 kΩ gives 1.46 A typ / **1.35 A guaranteed**
+  (not the 1.5 A written in §9.1; 1.5 A would need a resistor below the 1.1 kΩ minimum). The §9.2
+  budget fits under the guaranteed value with 28 % headroom (firmware-capped) and 7 % (uncapped);
+  this is now enforced by `check_power_budget` on every build. Same check flags that the
+  **Lounge** SKU can draw ≈590 mA on a plain 500 mA USB port (radar bypasses the charger), so
+  Lounge should ship with a ≥1.5 A USB-C adapter or have firmware drop radar duty on Default-USB
+  sources.

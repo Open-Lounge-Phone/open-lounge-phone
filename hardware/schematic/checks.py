@@ -272,9 +272,79 @@ def run_all(circuit, board: str = "main"):
     fns = [check_i2c, check_nets, check_sourcing, check_footprints]
     if board == "main":
         fns.insert(0, check_pin_table)
+        fns.append(check_power_budget)
     for fn in fns:
         try:
             results += [(lvl, f"[{fn.__name__}] {msg}") for lvl, msg in fn(circuit)]
         except Exception as exc:  # a crashing check is a failing check
             results.append(("ERROR", f"[{fn.__name__}] crashed: {exc!r}"))
     return results
+
+
+def _parse_ohms(value: str) -> float:
+    m = re.fullmatch(r"([\d.]+)([kKmM]?)", value.strip())
+    if not m:
+        raise ValueError(f"can't parse resistance {value!r}")
+    mult = {"": 1, "k": 1e3, "K": 1e3, "m": 1e-3, "M": 1e6}[m.group(2)]
+    return float(m.group(1)) * mult
+
+
+def check_power_budget(circuit):
+    """Proves every load scenario fits the charger's *guaranteed* input current limit, the
+    VSYS rail stays within every part's rating, and the charger stays cool enough."""
+    budget = yaml.safe_load((HERE / "power_budget.yaml").read_text())
+    ch, supply = budget["charger"], budget["supply"]
+    out = []
+    chargers = [p for p in circuit.parts if p.fields.get("SpecKey") in ("BQ24074",)]
+    if len(chargers) != 1:
+        return [("ERROR", f"expected one BQ24074, found {len(chargers)}")]
+    ilim_net = _net_of(chargers[0]["ILIM"])
+    rs = _resistors_to(ilim_net, GND_NAMES) if ilim_net else []
+    if len(rs) != 1:
+        return [("ERROR", f"expected one R_ILIM to GND, found {len(rs)}")]
+    r_nom = _parse_ohms(str(rs[0].value))
+    tol = ch["r_ilim_tolerance"]
+    k = ch["k_ilim_aohm"]
+    i_min = k["min"] / (r_nom * (1 + tol)) * 1000
+    i_typ = k["typ"] / r_nom * 1000
+    i_max = k["max"] / (r_nom * (1 - tol)) * 1000
+    out.append(("INFO", f"ILIM with R={r_nom:g} Ω: {i_min:.0f} mA guaranteed, {i_typ:.0f} typ, "
+                        f"{i_max:.0f} max"))
+    if r_nom < 1100:
+        out.append(("ERROR", f"R_ILIM {r_nom:g} Ω is below the 1.1 kΩ minimum"))
+
+    margin = budget["policy_margin"]
+    for name, (total, direct, source, kind) in budget["scenarios"].items():
+        through = total - direct
+        headroom = (i_min - through) / i_min
+        line = (f"{name}: {through} mA through charger (limit ≥{i_min:.0f}, headroom "
+                f"{headroom:+.0%}); {total} mA from USB (source {source})")
+        if kind == "policy":
+            if through > i_min * (1 - margin):
+                out.append(("ERROR", line + f" — needs ≥{margin:.0%} headroom"))
+            elif total > source:
+                out.append(("ERROR", line + " — exceeds what the USB source may supply"))
+            else:
+                out.append(("INFO", line))
+        elif kind == "uncapped":
+            out.append(("ERROR" if through > i_min else "INFO", line))
+        else:  # advisory: report, don't fail
+            out.append(("WARN" if total > source else "INFO", line))
+
+    worst_rating = min(budget["vsys_parts_max_v"].values())
+    if ch["vsys_max_v"] > worst_rating:
+        out.append(("ERROR", f"VSYS can reach {ch['vsys_max_v']} V but a part on it is rated "
+                             f"{worst_rating} V"))
+    else:
+        out.append(("INFO", f"VSYS ≤{ch['vsys_max_v']} V; lowest rating on VSYS "
+                            f"{worst_rating} V"))
+
+    # Linear power path: the charger drops VBUS -> 4.4 V at full load current.
+    through_worst = max(t - d for t, d, _, kind in budget["scenarios"].values()
+                        if kind == "policy")
+    watts = (supply["vbus_max_v"] - 4.4) * through_worst / 1000
+    tj = supply["ambient_max_c"] + watts * ch["theta_ja_c_per_w"]
+    lvl = "ERROR" if tj >= ch["tj_reg_c"] else "INFO"
+    out.append((lvl, f"charger dissipation {watts:.2f} W at {through_worst} mA -> Tj ≈ "
+                     f"{tj:.0f} °C (fold-back at {ch['tj_reg_c']} °C)"))
+    return out

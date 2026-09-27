@@ -1,0 +1,12 @@
+main-kids: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-kids: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (kids): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+FFC main<->deck (kids): OK
+main-lounge: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-lounge: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (lounge): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+FFC main<->deck (lounge): OK
+main-kids-batt: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-kids-batt: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (kids-batt): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+FFC main<->deck (kids-batt): OK

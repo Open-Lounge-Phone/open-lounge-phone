@@ -1,0 +1,28 @@
+WARN  [check_nets] net U0TXD only reaches U1.TXD0 and test points
+WARN  [check_nets] net U0RXD only reaches U1.RXD0 and test points
+WARN  [check_nets] net ES8311_ASDOUT only reaches U6.ASDOUT and test points
+WARN  [check_nets] net FFC_SPARE only reaches J6.20 and test points
+WARN  [check_sourcing] C7 SE-5R5-D474VYV: [UNVERIFIED] no LCSC/JLCPCB listing found for 0.47 F 5.5 V (C150565 did not resolve); part, lead pitch and footprint to choose; ESR ~40 ohm is fine for 0.9 W hold-up
+WARN  [check_sourcing] C7 SE-5R5-D474VYV: no LCSC code
+WARN  [check_sourcing] U7 ES7210: [UNVERIFIED] pins 3/4 (CDATA/CCLK) follow the datasheet pinout drawing and Korvo-2 schematic; the datasheet pin table lists them swapped
+WARN  [check_sourcing] Q1 MMBT3904: [UNVERIFIED] standard SOT-23 B/E/C order; JSCJ datasheet text not readable
+WARN  [check_sourcing] J3 5301-4P4C: [UNVERIFIED] pin order and body width not checked (datasheet not reachable); the 4 solder jumpers cover either pair assignment
+WARN  [check_sourcing] MK1 GMI6027-2C42DB: [UNVERIFIED] ground (can) pad identification not checked against drawing
+WARN  [check_sourcing] U11 ITR8307: [UNVERIFIED] pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant
+WARN  [check_sourcing] U12 LIS2DH12TR: C110926 showed zero JLCPCB stock on 2026-09-27 (LCSC stock 0)
+WARN  [check_sourcing] U14 MAX17048G+T10: [UNVERIFIED] pin map from datasheet text via search (PDF fetch timed out); EP-to-GND assumed; footprint EP size to confirm
+TODO  [check_footprints] footprint OpenTinCan:Electret_6mm_SMD_pads must be drawn in OpenTinCan.pretty (MK1)
+TODO  [check_footprints] footprint OpenTinCan:RJ9_4P4C_EVERCOM_5301-4P4C must be drawn in OpenTinCan.pretty (J3)
+TODO  [check_footprints] footprint OpenTinCan:Supercap_D11.5mm_P5.0mm must be drawn in OpenTinCan.pretty (C7)
+INFO  [check_power_budget] ILIM with R=1100 Ω: 1350 mA guaranteed, 1464 typ, 1579 max
+INFO  [check_power_budget] idle_kids: 59 mA through charger (limit ≥1350, headroom +96%); 59 mA from USB (source 1500)
+INFO  [check_power_budget] idle_lounge: 72 mA through charger (limit ≥1350, headroom +95%); 151 mA from USB (source 1500)
+INFO  [check_power_budget] handset_call_lounge: 161 mA through charger (limit ≥1350, headroom +88%); 240 mA from USB (source 1500)
+INFO  [check_power_budget] speakerphone_lounge: 291 mA through charger (limit ≥1350, headroom +78%); 370 mA from USB (source 1500)
+INFO  [check_power_budget] ringing_max: 651 mA through charger (limit ≥1350, headroom +52%); 730 mA from USB (source 1500)
+INFO  [check_power_budget] worst_case_capped: 970 mA through charger (limit ≥1350, headroom +28%); 1070 mA from USB (source 1500)
+INFO  [check_power_budget] worst_case_uncapped: 1250 mA through charger (limit ≥1350, headroom +7%); 1350 mA from USB (source 1500)
+INFO  [check_power_budget] default_usb_kids: 491 mA through charger (limit ≥1350, headroom +64%); 491 mA from USB (source 500)
+WARN  [check_power_budget] default_usb_lounge: 491 mA through charger (limit ≥1350, headroom +64%); 591 mA from USB (source 500)
+INFO  [check_power_budget] VSYS ≤4.5 V; lowest rating on VSYS 5.25 V
+INFO  [check_power_budget] charger dissipation 0.82 W at 970 mA -> Tj ≈ 77 °C (fold-back at 125 °C)

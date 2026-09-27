@@ -173,7 +173,16 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 5. **B-option battery connector is JST-PH-3** (VBAT/NTC/GND) instead of PH-2. A 2-pin plug cannot bring the pack NTC to the BQ24074 TS pin.
 6. **P-FET load switches get N-FET gate drivers** (radar 5 V, LED VSYS). A 3.3 V GPIO or AW9523B output cannot pull a 4.4–5 V P-FET gate high enough to turn it off. DESIGN.md didn't specify the driver.
 7. **Supercap charge resistor is a 47 Ω 2512 (1 W).** It dissipates 0.41 W at t = 0.
-8. **ILIM is 1.46 A, not 1.5 A.** 1.5 A needs 1.07 kΩ, which is below the BQ24074's 1.1 kΩ minimum.
+8. **ILIM is 1.46 A typ (1.35 A guaranteed), not 1.5 A.** 1.5 A needs 1.07 kΩ, which is below
+   the BQ24074's 1.1 kΩ minimum — and it isn't needed: `check_power_budget` (data in
+   `schematic/power_budget.yaml`) proves every scenario fits under the *guaranteed minimum*
+   (K_ILIM 1500 AΩ, 1 % resistor): worst firmware-capped load 970 mA through the charger (28 %
+   headroom), worst uncapped 1250 mA (7 %). It also checks VSYS against every VSYS part's rating
+   and the charger's junction temperature (≈77 °C worst case at 40 °C ambient).
+   Considered and rejected: BQ24075 (same footprint, OUT follows VBUS up to 5.5 V). It runs
+   cooler, but VSYS would exceed the NS4150B's 5.25 V rating and sit at the 5.5 V limit of the
+   LDO, buck, LEDs and supercap; the BQ24074's regulated 4.4 V is a feature. The check fails if
+   anyone makes that swap.
 9. **Additions DESIGN.md implied but didn't list:**
    - 100 k bleed on the post-mute bias, so the privacy LED goes out quickly;
    - 330 Ω LED-data series resistor and a GPIO42 pull-down, to limit back-feed into an unpowered LED chain;

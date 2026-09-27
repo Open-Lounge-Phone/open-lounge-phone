@@ -1,0 +1,71 @@
+Refs,Qty,Value,Description,MPN,LCSC,Footprint,Fitted,Verified
+C1 C3 C4 C8 C13 C35 C60 C66,8,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C2 C11 C12 C16 C20 C22 C23 C24 C27 C28 C29 C30 C31 C32 C33 C34 C40 C41 C47 C48 C50 C52 C54 C55 C56,25,1uF 25V X5R,capacitor,CL05A105KA5NQNC,C52923,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C5 C15 C17 C18 C19 C21 C25 C26 C44 C45 C57 C58 C61 C64 C65,15,100nF 16V X7R,capacitor,CL05B104KO5NNNC,C1525,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C6,1,4.7uF 16V X5R,capacitor,CL10A475KO8NNNC,C19666,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C9 C10 C14,3,22uF 25V X5R,capacitor,CL21A226MAQNNNE,C45783,Capacitor_SMD:C_0805_2012Metric,yes,yes
+C36 C37 C38 C39 C53,5,100pF 50V C0G,capacitor,0402CG101J500NT,C1546,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C46,1,33pF 50V C0G,capacitor,0402CG330J500NT,C1562,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C49 C51,2,470nF 25V X5R,capacitor,CL05A474KA5NNNC,C92361,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C59,1,100uF 6.3V X5R,capacitor,CL31A107MQHNNNE,C15008,Capacitor_SMD:C_1206_3216Metric,yes,yes
+C62 C63,2,220pF 50V C0G,capacitor,0402CG221J500NT,C39122,Capacitor_SMD:C_0402_1005Metric,yes,yes
+D1 D2,2,USBLC6-2SC6,"2-line low-cap ESD (USB D+/D-, or CC1/CC2)",USBLC6-2SC6,C7519,Package_TO_SOT_SMD:SOT-23-6,yes,yes
+D3,1,SMF5.0A,TVS 5 V unidirectional 200 W (VBUS),SMF5.0A,C151296,Diode_SMD:D_SOD-123F,yes,yes
+D5,1,SRV05-4.TCT,"4-line ESD array (REF1=GND, REF2=VCC or float)",SRV05-4.TCT,C13612,Package_TO_SOT_SMD:SOT-23-6,yes,yes
+F1,1,SMD1206P150TFT,"PTC resettable fuse, hold 1.5 A, trip 3 A, 8 V",SMD1206P150TFT,C495353,Fuse:Fuse_1206_3216Metric,yes,yes
+FB1 FB2 FB3 FB4,4,BLM15AG601SN1D,Ferrite bead 600R@100MHz 300mA 0402,BLM15AG601SN1D,C76884,Inductor_SMD:L_0402_1005Metric,yes,yes
+FB5 FB6,2,BLM18KG221SN1D,Ferrite bead 220R@100MHz 2.2 A 50 mOhm 0603 (speaker outputs),BLM18KG221SN1D,C88980,Inductor_SMD:L_0603_1608Metric,yes,yes
+J1,1,TYPE-C-31-M-12,"USB-C 16P receptacle (USB 2.0), sink only",TYPE-C-31-M-12,C165948,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,yes,yes
+J3,1,5301-4P4C,"4P4C handset jack, right-angle THT",5301-4P4C,C3097715,OpenTinCan:RJ9_4P4C_EVERCOM_5301-4P4C,yes,[UNVERIFIED] pin order and body width not checked (datasheet not reachable); the 4 solder jumpers cover either pair assignment
+J4,1,S2B-PH-SM4-TB(LF)(SN),JST PH 2-pin SMD right-angle (speaker),S2B-PH-SM4-TB(LF)(SN),C295747,Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal,yes,yes
+J6,1,FH12-24S-0.5SH(55),"24P 0.5 mm FFC/FPC connector, bottom contact, flip lock (main <-> deck FFC)",FH12-24S-0.5SH(55),C202112,Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal,yes,yes
+L1,1,SWPA4020S2R2MT,2.2 uH power inductor 4x4 mm (buck),SWPA4020S2R2MT,C83423,Inductor_SMD:L_Sunlord_SWPA4020S,yes,yes
+MK1,1,GMI6027-2C42DB,"6 mm electret capsule, -42 dB, 2.2k load (base speakerphone mic, in rubber boot)",GMI6027-2C42DB,C233885,OpenTinCan:Electret_6mm_SMD_pads,yes,[UNVERIFIED] ground (can) pad identification not checked against drawing
+Q1,1,MMBT3904,NPN 40 V 200 mA,MMBT3904,C20526,Package_TO_SOT_SMD:SOT-23,yes,[UNVERIFIED] standard SOT-23 B/E/C order; JSCJ datasheet text not readable
+Q4,1,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,yes,yes
+R1 R2,2,5.1k,resistor,0402WGF5101TCE,C25905,Resistor_SMD:R_0402_1005Metric,yes,yes
+R3 R4,2,1k,resistor,0402WGF1001TCE,C11702,Resistor_SMD:R_0402_1005Metric,yes,yes
+R5 R6 R40 R47,4,0,resistor,0402WGF0000TCE,C17168,Resistor_SMD:R_0402_1005Metric,yes,yes
+R7,1,1.1k,resistor,0402WGF1101TCE,C25860,Resistor_SMD:R_0402_1005Metric,yes,yes
+R8,1,1.8k,resistor,0402WGF1801TCE,C25871,Resistor_SMD:R_0402_1005Metric,yes,yes
+R9 R10 R11 R12 R16 R17 R24 R27 R29 R30,10,10k,resistor,0402WGF1002TCE,C25744,Resistor_SMD:R_0402_1005Metric,yes,yes
+R14 R18 R19 R20 R21 R25 R31 R34 R38 R39 R51,11,100k,resistor,0402WGF1003TCE,C25741,Resistor_SMD:R_0402_1005Metric,yes,yes
+R15 R33,2,22k,resistor,0402WGF2202TCE,C25768,Resistor_SMD:R_0402_1005Metric,yes,yes
+R22 R23,2,4.7k,resistor,0402WGF4701TCE,C25900,Resistor_SMD:R_0402_1005Metric,yes,yes
+R26,1,330,resistor,0402WGF3300TCE,C25104,Resistor_SMD:R_0402_1005Metric,yes,yes
+R28,1,47,resistor,0402WGF470JTCE,C25118,Resistor_SMD:R_0402_1005Metric,yes,yes
+R32,1,100,resistor,0402WGF1000TCE,C25076,Resistor_SMD:R_0402_1005Metric,yes,yes
+R35 R41,2,2.2k,resistor,0402WGF2201TCE,C25879,Resistor_SMD:R_0402_1005Metric,yes,yes
+R42 R43,2,20k,resistor,0402WGF2002TCE,C25765,Resistor_SMD:R_0402_1005Metric,yes,yes
+R44,1,4.3k,resistor,0402WGF4301TCE,C25899,Resistor_SMD:R_0402_1005Metric,yes,yes
+R45 R46,2,150k,resistor,0402WGF1503TCE,C25755,Resistor_SMD:R_0402_1005Metric,yes,yes
+SW1 SW2,2,TS-1187A-B-A-B,Tactile switch 5.1x5.1 mm (pads 1-1 and 2-2 internally joined),TS-1187A-B-A-B,C318884,Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A,yes,yes
+U1,1,ESP32-S3-WROOM-1-N16R8,"ESP32-S3 module, 16 MB flash, 8 MB octal PSRAM, PCB antenna",ESP32-S3-WROOM-1-N16R8,C2913202,RF_Module:ESP32-S3-WROOM-1,yes,yes
+U2,1,BQ24074RGTR,1S Li-ion charger with power path; OVP 10.5 V; OUT regulated 4.4 V on input power,BQ24074RGTR,C54313,Package_DFN_QFN:VQFN-16-1EP_3x3mm_P0.5mm_EP1.68x1.68mm,yes,yes
+U3,1,TLV62569DBVR,"2 A sync buck, VFB 0.6 V, 100% duty",TLV62569DBVR,C141836,Package_TO_SOT_SMD:SOT-23-5,yes,yes
+U4,1,LP5907MFX-3.0/NOPB,250 mA ultra-low-noise LDO 3.0 V (6.5 uVrms) - codec/mic AVDD,LP5907MFX-3.0/NOPB,C475492,Package_TO_SOT_SMD:SOT-23-5,yes,yes
+U5,1,SN74LV1T125DBVR,"Single buffer, level-shifting inputs (3.3 V in valid at VCC 4.4 V); LED data",SN74LV1T125DBVR,C473338,Package_TO_SOT_SMD:SOT-23-5,yes,yes
+U6,1,ES8311,Mono audio codec (DAC drives 16/32 ohm earpiece differentially); I2C 0x18 (CE=0),ES8311,C962342,Package_DFN_QFN:QFN-20-1EP_3x3mm_P0.4mm_EP1.65x1.65mm,yes,yes
+U7,1,ES7210,"4-ch audio ADC, TDM out; CH1 handset mic, CH2 base mic, CH3 AEC reference; I2C 0x40",ES7210,C365743,Package_DFN_QFN:QFN-32-1EP_4x4mm_P0.4mm_EP2.65x2.65mm,yes,[UNVERIFIED] pins 3/4 (CDATA/CCLK) follow the datasheet pinout drawing and Korvo-2 schematic; the datasheet pin table lists them swapped
+U8,1,TS5A3166DCKR,"SPST analog switch, 0.9 ohm, normally open (IN high = on); EAR_EN",TS5A3166DCKR,C133819,Package_TO_SOT_SMD:SOT-353_SC-70-5,yes,yes
+U9,1,NS4150B,3 W class-D mono speaker amp; gain = 240k/Rin; CTRL high = on,NS4150B,C189961,Package_SO:MSOP-8_3x3mm_P0.65mm,yes,yes
+U10,1,DRV5032FADBZR,"Hall switch, omnipolar, 20 Hz, push-pull, BOP +-3 mT typ (hook)",DRV5032FADBZR,C140921,Package_TO_SOT_SMD:SOT-23,yes,yes
+U12,1,LIS2DH12TR,3-axis accelerometer; I2C 0x19 (SA0=1); INT pins push-pull only,LIS2DH12TR,C110926,Package_LGA:LGA-12_2x2mm_P0.5mm,yes,yes
+C7,1,SE-5R5-D474VYV,"0.47 F 5.5 V supercap, power-fail hold-up (Lounge)",SE-5R5-D474VYV,,OpenTinCan:Supercap_D11.5mm_P5.0mm,DNP,"[UNVERIFIED] no LCSC/JLCPCB listing found for 0.47 F 5.5 V (C150565 did not resolve); part, lead pitch and footprint to choose; ESR ~40 ohm is fine for 0.9 W hold-up"
+C42 C43,2,1uF 25V X5R,capacitor,CL05A105KA5NQNC,C52923,Capacitor_SMD:C_0402_1005Metric,DNP,yes
+C67 C68,2,100nF 16V X7R,capacitor,CL05B104KO5NNNC,C1525,Capacitor_SMD:C_0402_1005Metric,DNP,yes
+C69,1,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,DNP,yes
+D4,1,B5819W SL,Schottky 40 V 1 A (supercap discharge path),B5819W SL,C8598,Diode_SMD:D_SOD-123,DNP,yes
+J2,1,S3B-PH-SM4-TB(LF)(SN),"JST PH 3-pin SMD right-angle (B-option battery: VBAT, NTC, GND)",S3B-PH-SM4-TB(LF)(SN),C265101,Connector_JST:JST_PH_S3B-PH-SM4-TB_1x03-1MP_P2.00mm_Horizontal,DNP,yes
+J5,1,2.54-1*5P (right angle),5-pin right-angle socket for the HLK-LD2410C radar (module bought separately),2.54-1*5P (right angle),C35167,Connector_PinSocket_2.54mm:PinSocket_1x05_P2.54mm_Horizontal,DNP,yes
+Q2,1,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_SMD:SOT-23,DNP,yes
+Q3,1,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,DNP,yes
+R13,1,47,resistor,25121WJ0470T4E,C15261,Resistor_SMD:R_2512_6332Metric,DNP,yes
+R36 R37 R50,3,0,resistor,0402WGF0000TCE,C17168,Resistor_SMD:R_0402_1005Metric,DNP,yes
+R48,1,330,resistor,0402WGF3300TCE,C25104,Resistor_SMD:R_0402_1005Metric,DNP,yes
+R49,1,10k,resistor,0402WGF1002TCE,C25744,Resistor_SMD:R_0402_1005Metric,DNP,yes
+R52,1,100k,resistor,0402WGF1003TCE,C25741,Resistor_SMD:R_0402_1005Metric,DNP,yes
+R53 R54 R55,3,1k,resistor,0402WGF1001TCE,C11702,Resistor_SMD:R_0402_1005Metric,DNP,yes
+U11,1,ITR8307,IR reflective sensor (hook option for magnet-less handsets),ITR8307,C63451,OptoDevice:Everlight_ITR8307,DNP,[UNVERIFIED] pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant
+U13,1,ATECC608B-SSHDA-T,"Secure element (P-256), DNP footprint; I2C 0x60",ATECC608B-SSHDA-T,C1518769,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,DNP,yes
+U14,1,MAX17048G+T10,1S fuel gauge (B-option only); I2C 0x36,MAX17048G+T10,C2682616,Package_DFN_QFN:DFN-8-1EP_2x2mm_P0.5mm_EP0.8x1.6mm,DNP,[UNVERIFIED] pin map from datasheet text via search (PDF fetch timed out); EP-to-GND assumed; footprint EP size to confirm

@@ -121,7 +121,8 @@ def main() -> int:
                 cwd=out, capture_output=True, text=True, env=env,
             )
             log = proc.stdout + proc.stderr
-            erc = [line for line in log.splitlines() if line.startswith("ERC ")]
+            # sorted: SKiDL reports in set order, which varies run to run
+            erc = sorted(line for line in log.splitlines() if line.startswith("ERC "))
             (out / "erc.txt").write_text("\n".join(erc) + "\n")
             (out / "build.log").write_text(log)
             n_erc_err = sum(1 for line in erc if line.startswith("ERC ERROR"))
