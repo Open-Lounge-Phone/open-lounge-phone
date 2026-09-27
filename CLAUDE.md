@@ -35,7 +35,8 @@ same order as the keys. Digits 0–9 are essential (dialing, entering codes); pr
 strip shows for it; MENU opens the menu, BACK steps out; no ENTER/SPEAKER/END keys (hang up = hook;
 speakerphone is a menu item). Kids Lite uses a voice menu with the same keys. Protocol `button`
 index: digits 1–9 → 0–8, digit 0 → 9 (speed-dial slots); MENU/BACK are handled on the device.
-Deck ≈117 mm; base ≈350 mm long.
+Deck ≈117 mm; base ≈350 mm long — **accepted by the owner** (both boards fit the shell; the
+handset may be made bigger, which only lengthens the cradle section).
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
