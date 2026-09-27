@@ -1,0 +1,280 @@
+"""Design-rule checks that SKiDL's ERC does not do. Each returns a list of (level, message).
+
+level is "ERROR" (fails the build) or "WARN" (reported in checks.txt).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import yaml
+
+from lib import SPECS, norm_mpn
+from lcsc import load_cache
+
+HERE = Path(__file__).parent
+PIN_TABLE = yaml.safe_load((HERE / "pin_table.yaml").read_text())
+
+GND_NAMES = {"GND"}
+RTC_GPIOS = set(range(0, 22))
+ADC1_GPIOS = set(range(1, 11))
+
+
+def _net_of(pin):
+    """The pin's net, or None if unconnected / explicitly no-connect (SKiDL NC)."""
+    net = getattr(pin, "net", None)
+    if net is None or net.name == "__NOCONNECT":
+        return None
+    return net
+
+
+def _name(net):
+    return net.name if net is not None else None
+
+
+def pins_on(net):
+    return [p for p in net.pins]
+
+
+def _resistors_to(net, target_names):
+    """Resistors with one end on `net` and the other on a net named in target_names."""
+    found = []
+    for p in pins_on(net):
+        part = p.part
+        if part.ref_prefix != "R" or part.fields.get("DNP"):
+            continue
+        other = [q for q in part.pins if q is not p][0]
+        if _name(_net_of(other)) in target_names:
+            found.append(part)
+    return found
+
+
+def check_pin_table(circuit):
+    out = []
+    mods = [p for p in circuit.parts if p.fields.get("SpecKey") == "ESP32-S3-WROOM-1"]
+    if len(mods) != 1:
+        return [("ERROR", f"expected one ESP32-S3-WROOM-1, found {len(mods)}")]
+    mod = mods[0]
+    by_gpio = {}
+    for pin in mod.pins:
+        m = re.fullmatch(r"IO(\d+)", pin.name)
+        if m:
+            by_gpio[int(m.group(1))] = pin
+        elif pin.name == "TXD0":
+            by_gpio[43] = pin
+        elif pin.name == "RXD0":
+            by_gpio[44] = pin
+    for gpio, row in PIN_TABLE["gpio"].items():
+        pin = by_gpio.get(gpio)
+        if pin is None:
+            out.append(("ERROR", f"GPIO{gpio} not found on module symbol"))
+            continue
+        net = _net_of(pin)
+        want = row.get("net")
+        got = _name(net)
+        if want is None:
+            if net is not None and len(net.pins) > 1:
+                out.append(("ERROR", f"GPIO{gpio} must be unconnected ({row.get('note')}), is on {got}"))
+            continue
+        if got != want:
+            out.append(("ERROR", f"GPIO{gpio}: pin table says {want}, schematic has {got}"))
+            continue
+        if row.get("adc1") and gpio not in ADC1_GPIOS:
+            out.append(("ERROR", f"GPIO{gpio} ({want}) is analog but not on ADC1"))
+        if row.get("rtc") and gpio not in RTC_GPIOS:
+            out.append(("ERROR", f"GPIO{gpio} ({want}) is a wake source but not an RTC GPIO"))
+        for key in ("strap", "strap_like", "pull"):
+            kind = row.get(key)
+            if not kind:
+                continue
+            kind = {"up": "pullup", "down": "pulldown"}.get(kind, kind)
+            ups = _resistors_to(net, {"3V3"})
+            downs = _resistors_to(net, GND_NAMES)
+            if kind == "pullup" and (not ups or downs):
+                out.append(("ERROR", f"GPIO{gpio} ({want}) needs a pull-up only; up={len(ups)} down={len(downs)}"))
+            if kind == "pulldown" and (not downs or ups):
+                out.append(("ERROR", f"GPIO{gpio} ({want}) needs a pull-down only; up={len(ups)} down={len(downs)}"))
+    # every IO pad not in the table must be unconnected (catches accidental extra use)
+    for gpio, pin in by_gpio.items():
+        if gpio not in PIN_TABLE["gpio"] and _net_of(pin) is not None:
+            out.append(("ERROR", f"GPIO{gpio} is connected ({_name(_net_of(pin))}) but not in pin_table.yaml"))
+    return out
+
+
+def check_i2c(circuit):
+    """Per-board: derived addresses must match DESIGN.md's I2C map for known parts."""
+    out = []
+    expected = {k.split("-")[0]: v for k, v in PIN_TABLE["i2c_expected"].items()}
+    for a, ref, key, _ in i2c_devices(circuit):
+        want = expected.get(key.split("-")[0].split("FA")[0])
+        if want is None:
+            continue
+        wants = want if isinstance(want, list) else [want]
+        if a not in wants:
+            out.append(("ERROR", f"{ref} ({key}) strapped to 0x{a:02X}, DESIGN.md says "
+                                 + "/".join(f"0x{w:02X}" for w in wants)))
+    return out
+
+
+def strap_level(pin):
+    """0/1 for a pin tied to GND/3V3 directly or through one fitted resistor, else None."""
+    net = _net_of(pin)
+    if net is None:
+        return None
+    if net.name in GND_NAMES:
+        return 0
+    if net.name == "3V3":
+        return 1
+    ups, downs = _resistors_to(net, {"3V3"}), _resistors_to(net, GND_NAMES)
+    if bool(ups) != bool(downs):
+        return 1 if ups else 0
+    return None
+
+
+def i2c_devices(circuit) -> list:
+    """[(address, ref, spec, fitted)] for every I2C part; strap pins are read from the wiring."""
+    out = []
+    for part in circuit.parts:
+        s = SPECS.get(part.fields.get("SpecKey"))
+        if not (s and s.i2c):
+            continue
+        offset = 0
+        for pin_name, bit in s.i2c_straps:
+            level = strap_level(part[pin_name])
+            if level is None:
+                raise ValueError(f"{part.ref}.{pin_name}: I2C address strap not tied high/low")
+            offset |= level << bit
+        for addrs in s.i2c.values():
+            for a in addrs if isinstance(addrs, (list, tuple)) else [addrs]:
+                out.append([a + offset, part.ref, s.key, not part.fields.get("DNP")])
+    return out
+
+
+def check_i2c_union(per_board: dict) -> list:
+    """The I2C bus spans main + deck (FFC): addresses must be unique across both boards,
+    counting DNP footprints too (they may be populated later)."""
+    out, seen = [], {}
+    for board, devs in per_board.items():
+        for a, ref, key, fitted in devs:
+            tag = f"{board}:{ref}({key}{'' if fitted else ',DNP'})"
+            if a in seen:
+                out.append(("ERROR", f"address 0x{a:02X} used by {seen[a]} and {tag}"))
+            seen[a] = tag
+    expected = {}
+    for name, addr in PIN_TABLE["i2c_expected"].items():
+        for a in addr if isinstance(addr, list) else [addr]:
+            expected[a] = name
+    for a, name in expected.items():
+        if a not in seen and a != 0x2D:
+            out.append(("WARN", f"DESIGN.md lists {name} at 0x{a:02X}; not on either board"))
+    out.append(("INFO", "OK, " + ", ".join(f"0x{a:02X} {t}" for a, t in sorted(seen.items()))))
+    return out
+
+
+def check_nets(circuit):
+    out = []
+    for net in circuit.nets:
+        if net.name == "__NOCONNECT" or not net.pins:
+            continue
+        real = [p for p in net.pins if p.part.ref_prefix not in ("TP",)]
+        if len(net.pins) == 1 and not net.name.startswith("FFC_SPARE"):
+            p = net.pins[0]
+            out.append(("ERROR", f"net {net.name} has a single pin ({p.part.ref}.{p.name})"))
+        elif len(real) == 1 and len(net.pins) > 1:
+            out.append(("WARN", f"net {net.name} only reaches {real[0].part.ref}.{real[0].name} and test points"))
+    # input / power-in pins left floating
+    for part in circuit.parts:
+        for pin in part.pins:
+            if _net_of(pin) is None and pin.func in (pin.types.INPUT, pin.types.PWRIN):
+                out.append(("ERROR", f"{part.ref}.{pin.name} ({pin.num}) is an unconnected input"))
+    return out
+
+
+def _passive_matches(value: str, desc: str) -> bool:
+    """'10k' vs 'RES 10kΩ ±1% ...', '100nF 16V X7R' vs 'CAP CER 100nF 16V X7R 0402'."""
+    d = desc.replace(" ", "").replace("Ω", "").replace("µ", "u").lower()
+    v = value.split()[0].lower()
+    if v.endswith("f"):  # capacitor, e.g. 100nf / 1uf / 4.7uf
+        return v in d
+    v = {"0": "0"}.get(v, v)
+    return re.search(rf"(^|[^0-9.]){re.escape(v)}([^0-9.a-z]|$)", d) is not None
+
+
+def check_sourcing(circuit):
+    out = []
+    cache = load_cache()
+    groups = {}
+    for part in circuit.parts:
+        if part.fields.get("BOM") == "exclude":
+            continue
+        key = (part.fields.get("LCSC"), part.fields.get("MPN"), part.value,
+               part.fields.get("Verified"), bool(part.fields.get("DNP")),
+               part.fields.get("SpecKey", "").startswith("_"))
+        groups.setdefault(key, []).append(part.ref)
+    for (code, mpn, value, ver, dnp, passive), refs in groups.items():
+        who = f"{', '.join(refs[:6])}{' ...' if len(refs) > 6 else ''} {mpn or value}"
+        if ver != "yes":
+            out.append(("WARN", f"{who}: [UNVERIFIED] {ver}"))
+        if not code:
+            out.append(("WARN", f"{who}: no LCSC code"))
+            continue
+        c = cache.get(code)
+        if not c:
+            out.append(("ERROR", f"{who}: LCSC {code} not in lcsc_cache.json (run `make lcsc`)"))
+        elif not c.get("found"):
+            out.append(("ERROR", f"{who}: LCSC {code} does not exist"))
+        elif mpn and norm_mpn(mpn) not in norm_mpn(c["mpn"]) and norm_mpn(c["mpn"]) not in norm_mpn(mpn):
+            out.append(("ERROR", f"{who}: LCSC {code} is {c['mpn']}, schematic says {mpn}"))
+        elif passive and not _passive_matches(value, c.get("desc") or ""):
+            out.append(("ERROR", f"{who}: value {value!r} does not match LCSC {code}: {c['desc']}"))
+        elif not c.get("jlc_stock") and not dnp:
+            out.append(("WARN", f"{who}: {code} showed zero JLCPCB stock on {c['checked']} "
+                                f"(LCSC stock {c.get('stock')})"))
+    return out
+
+
+def check_footprints(circuit):
+    import fpcheck
+
+    out = []
+    cache = fpcheck.load_cache()
+    seen = {}
+    for part in circuit.parts:
+        seen.setdefault(part.footprint, []).append(part.ref)
+    for fp, refs in sorted(seen.items()):
+        st = fpcheck.status(fp, cache)
+        if st == "missing":
+            out.append(("ERROR", f"footprint {fp} not in the KiCad library ({', '.join(refs[:4])})"))
+        elif st == "unknown-lib":
+            out.append(("ERROR", f"footprint library of {fp} not cached (run `make footprints`)"))
+        elif st == "local":
+            out.append(("TODO", f"footprint {fp} must be drawn in OpenTinCan.pretty ({', '.join(refs[:4])})"))
+    return out
+
+
+def check_ffc(main_map: dict, deck_map: dict):
+    """Both ends of the 24-pin FFC carry the same net on the same pin number."""
+    out = []
+    if len(main_map) != 24 or len(deck_map) != 24:
+        out.append(("ERROR", f"FFC pin count main={len(main_map)} deck={len(deck_map)} (want 24)"))
+    for n in sorted(set(main_map) | set(deck_map), key=int):
+        if main_map.get(n) != deck_map.get(n):
+            out.append(("ERROR", f"FFC pin {n}: main={main_map.get(n)} deck={deck_map.get(n)}"))
+    gnds = sum(1 for v in main_map.values() if v == "GND")
+    if gnds != 6:
+        out.append(("ERROR", f"FFC has {gnds} GND pins; DESIGN.md §5 specifies 6"))
+    return out
+
+
+def run_all(circuit, board: str = "main"):
+    results = []
+    fns = [check_i2c, check_nets, check_sourcing, check_footprints]
+    if board == "main":
+        fns.insert(0, check_pin_table)
+    for fn in fns:
+        try:
+            results += [(lvl, f"[{fn.__name__}] {msg}") for lvl, msg in fn(circuit)]
+        except Exception as exc:  # a crashing check is a failing check
+            results.append(("ERROR", f"[{fn.__name__}] crashed: {exc!r}"))
+    return results

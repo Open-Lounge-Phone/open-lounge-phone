@@ -1103,3 +1103,24 @@ a prompt player.
 - Cord: [Wikipedia — Telephone jack and plug (4P4C handset)](https://en.wikipedia.org/wiki/Telephone_jack_and_plug);
   [Wikipedia — Registered jack](https://en.wikipedia.org/wiki/Registered_jack)
 - PCB: [JLCPCB impedance stackups (JLC04161H-7628)](https://jlcpcb.com/impedance)
+
+---
+
+## Revision notes
+
+**r0.1a (2026-09-27, schematic capture; see [SCHEMATIC.md](SCHEMATIC.md)).** These are errata
+found while checking datasheets. The r0.1 text above has not been edited.
+
+- **§9.1 BQ24074 OVP:** the BQ24074's OVP is **10.5 V**. 6.6 V is the OVP of the '72/'73/'75/'79.
+  The OUT regulation of **4.4 V** on input power is confirmed (datasheet SLUS810N).
+- **§6.4 / §12.1 DRV5032 variant:** the 20 Hz omnipolar push-pull part is **DRV5032FA**
+  (LCSC C140921). FB (C2655033) is the 5 Hz variant.
+- **§5 IRQ:** the LIS2DH12 INT pins are push-pull only; there is no open-drain option. INT1
+  joins the wired-OR IRQ through an N-FET.
+- **§5 FFC:** the signal list adds up to 25 for a 24-pin FFC, so it now has 1 spare
+  (pinout in `schematic/ffc.py`).
+- **§5 / §6.3 LED level shift:** 74AHCT1G125 needs VCC ≥ 4.5 V, above the 4.4 V VSYS.
+  Replaced with **SN74LV1T125** on the main board.
+- **§9.3 B-option connector:** a JST-PH-2 cannot carry the pack NTC to TS. Changed to
+  **JST-PH-3**.
+- **§12.1 NS4150B package:** it is **MSOP-8**, not ESOP-8.

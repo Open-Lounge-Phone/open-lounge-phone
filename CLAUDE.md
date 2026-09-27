@@ -9,6 +9,11 @@ keys with SK6812MINI-E LEDs, 2.9" e-ink strip between key rows, DRV5032 hall hoo
 BQ24074, LD2410C radar on Lounge, ST25DV NFC; its §13 lists protocol recommendations such as
 key-algorithm negotiation ed25519|p256, per-key LED/strip messages, audio prompt ids). Its open
 questions are the owner's to answer — don't decide them silently.
+The main and deck boards are captured as **schematic-as-code in SKiDL** (`hardware/schematic/`,
+`make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`): 3 variants
+(kids, lounge, kids-batt) × 2 boards, ERC + custom checks (pin table, I2C addresses, FFC pinout,
+LCSC/footprint validity). Open questions are parameters in `config.py`. Layout (KiCad) and 5
+custom footprints are not done yet.
 
 ## Decisions already made (don't relitigate without the owner)
 - **Variants:** Kids' phone first; Lounge phone (QR takeover, presence, ephemeral sessions) later.
