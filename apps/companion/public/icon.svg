@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OpenTinCan">
+  <title>OpenTinCan</title>
+  <rect width="512" height="512" rx="112" fill="#2f6f5e"/>
+  <!-- two tin cans joined by a string -->
+  <g fill="#f6f4ef">
+    <path d="M96 176h96v160H96z"/>
+    <ellipse cx="144" cy="176" rx="48" ry="16"/>
+    <ellipse cx="144" cy="336" rx="48" ry="16"/>
+    <path d="M320 176h96v160h-96z"/>
+    <ellipse cx="368" cy="176" rx="48" ry="16"/>
+    <ellipse cx="368" cy="336" rx="48" ry="16"/>
+  </g>
+  <g fill="none" stroke="#2f6f5e" stroke-width="8" opacity=".5">
+    <path d="M96 216h96M96 296h96M320 216h96M320 296h96"/>
+  </g>
+  <path d="M192 256c40-56 88 56 128 0" fill="none" stroke="#f2c14e" stroke-width="10" stroke-linecap="round"/>
+</svg>

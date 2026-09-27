@@ -1,0 +1,14 @@
+{
+  "name": "@opentincan/client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser helpers shared by the device emulator and companion app: socket, WebRTC call media, tones.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opentincan/protocol": "0.0.0"
+  }
+}

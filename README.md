@@ -8,6 +8,10 @@ no browser, no games, no strangers.
 - **Lounge phone** *(later)* — a shared booth phone you take over by scanning a QR code, which
   forgets you the moment you walk away.
 
+<p align="center">
+  <img src="docs/images/emulator-ringing.png" alt="The browser phone emulator ringing, with its developer panel" width="640">
+</p>
+
 OpenTinCan is "batteries included": deploy the backend to **your own free Cloudflare account**
 or **self-host it with Docker** on hardware you control. Nobody — including this project — sits
 in the middle of your calls.
@@ -20,8 +24,8 @@ Phase 1 (software, runs on ordinary computers) is in progress.
 |---|---|---|
 | M0 | Monorepo, CI, licenses | done |
 | M1 | Wire protocol + core logic (access control, quiet hours, call state machines) | done |
-| M2 | Self-hosted server, browser phone emulator, companion app — first real call | next |
-| M3 | Cloudflare backend (Workers, Durable Objects, D1, R2, Realtime SFU) | |
+| M2 | Self-hosted server, browser phone emulator, companion app — first real call | done |
+| M3 | Cloudflare backend (Workers, Durable Objects, D1, R2, Realtime SFU) | next |
 | M4 | Kids' features: button mapping, allow-list, quiet hours, voicemail, device status | |
 | M5 | One-command deploy CLI, desktop app (Tauri) with USB keypads | |
 
@@ -33,11 +37,28 @@ See [docs/architecture.md](docs/architecture.md).
 ```
 packages/protocol   wire protocol (zod schemas) — the contract every device speaks
 packages/core       pure domain logic shared by all backends and devices
-apps/               servers, device emulator, companion app (coming in M2+)
+packages/db         SQL migrations + typed store (Cloudflare D1 and SQLite)
+packages/server-app backend-agnostic HTTP API, connection gateway, household call hub
+packages/client     browser helpers: socket, WebRTC call media, tones
+apps/server-selfhost Node server (+ Dockerfile, compose.yaml with coturn)
+apps/device-web     browser emulator of the phone (keys, LEDs, status display, handset)
+apps/companion      companion PWA for guardians and contacts
 firmware/           ESP32-S3 firmware (later phase)
 hardware/           KiCad PCB and enclosure (later phase)
 docs/               architecture and the generated protocol reference
 ```
+
+## Try it
+
+```sh
+npm install
+npm start
+```
+
+Open the setup link the server prints, create your household, then open
+`http://localhost:8787/device/` in another tab. That's an emulated phone. Press Space to lift its
+handset and it reads out a pairing code; enter it in the companion app, then call each other.
+See [docs/self-hosting.md](docs/self-hosting.md) for Docker and HTTPS.
 
 ## Development
 

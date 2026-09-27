@@ -25,7 +25,7 @@ First message on every connection.
 | `model` | `"web-emulator"` \| `"desktop"` \| `"esp32s3"` | yes |  |
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
-| `display` | `"eink"` \| `"none"` | yes |  |
+| `display` | `"eink"` \| `"none"` | yes | `eink` = the phone's small e-ink status strip; `none` = LEDs only. |
 
 ### `pair.begin`
 

@@ -1,0 +1,465 @@
+:root {
+  --bg: #e9e4da;
+  --bg-ink: #3b352c;
+  --shell: #f3efe6;
+  --shell-edge: #d8d1c3;
+  --shell-shadow: rgb(60 50 35 / 0.28);
+  --cap: #fbf9f4;
+  --cap-edge: #d9d3c6;
+  --cap-ink: #3a342a;
+  --paper: #ecebe4;
+  --paper-ink: #1d1d1b;
+  --panel: #fffdf8;
+  --panel-ink: #2b2720;
+  --muted: #7c7465;
+  --led-white: #fff6dc;
+  --led-green: #3ddc84;
+  --led-red: #ff4a3d;
+  --led-blue: #4aa3ff;
+  --led-amber: #ffb02e;
+  --led-purple: #b77bff;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1916;
+    --bg-ink: #e9e4da;
+    --shell-shadow: rgb(0 0 0 / 0.55);
+    --panel: #26231e;
+    --panel-ink: #ece6da;
+    --muted: #a39a89;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(
+    ellipse at 50% 20%,
+    color-mix(in srgb, var(--bg) 85%, white),
+    var(--bg)
+  );
+  color: var(--bg-ink);
+}
+
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 16px;
+}
+
+/* --- phone base ------------------------------------------------------------ */
+
+.phone {
+  width: min(340px, 100%);
+  padding: 22px 22px 26px;
+  border-radius: 34px 34px 46px 46px;
+  background: linear-gradient(180deg, var(--shell), color-mix(in srgb, var(--shell) 88%, #b9ae98));
+  border: 1px solid var(--shell-edge);
+  box-shadow:
+    0 30px 50px -18px var(--shell-shadow),
+    0 2px 0 rgb(255 255 255 / 0.7) inset,
+    0 -3px 8px rgb(0 0 0 / 0.06) inset;
+  user-select: none;
+}
+
+.cradle {
+  position: relative;
+  height: 96px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--shell) 80%, #a99d86);
+  box-shadow: 0 6px 12px rgb(0 0 0 / 0.18) inset;
+}
+
+.handset {
+  position: absolute;
+  inset: 10px 8px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 30px;
+  background: linear-gradient(180deg, #faf7f0, #e4dccb);
+  box-shadow:
+    0 6px 10px rgb(0 0 0 / 0.25),
+    0 1px 0 #fff inset;
+  cursor: grab;
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    box-shadow 260ms;
+}
+.handset:focus-visible {
+  outline: 3px solid var(--led-blue);
+  outline-offset: 3px;
+}
+.handset[aria-pressed="true"] {
+  transform: translate(10px, -34px) rotate(-7deg) scale(1.04);
+  box-shadow:
+    0 28px 30px rgb(0 0 0 / 0.28),
+    0 1px 0 #fff inset;
+  cursor: grabbing;
+}
+.handset__cup {
+  width: 70px;
+  height: 100%;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle, rgb(0 0 0 / 0.22) 1.5px, transparent 2px) 0 0 / 9px 9px,
+    linear-gradient(180deg, #f6f1e6, #ddd3bf);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06) inset;
+}
+.handset__grip {
+  flex: 1;
+  height: 44%;
+}
+
+.cord {
+  position: absolute;
+  right: -14px;
+  bottom: 18px;
+  width: 16px;
+  height: 46px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(180deg, #d6ccb8 0 3px, #bdb19a 3px 5px);
+  opacity: 0.8;
+}
+
+.deck {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+/* --- status display: e-ink stripe or 14-segment LEDs (hardware undecided) --------- */
+
+.display {
+  --brightness: 1;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 62px;
+  padding: 8px 10px;
+  border: 6px solid #2d2a25;
+  border-radius: 6px;
+}
+
+.display--eink {
+  background: var(--paper);
+  color: var(--paper-ink);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.25) inset;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  /* e-ink is reflective: brightness only models the room light */
+  filter: brightness(calc(0.55 + var(--brightness) * 0.45));
+}
+.eink-line + .eink-line {
+  font-weight: 400;
+}
+.display--refresh {
+  animation: eink-refresh 420ms steps(3);
+}
+@keyframes eink-refresh {
+  0% {
+    filter: invert(1);
+  }
+  50% {
+    filter: invert(0);
+  }
+  75% {
+    filter: invert(1);
+  }
+  100% {
+    filter: none;
+  }
+}
+
+.display--segments {
+  --seg-on: #ffb02e;
+  background: radial-gradient(ellipse at 50% 0%, #2a211b, #110d0b);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6) inset;
+}
+.seg-row {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 1px;
+}
+.seg-cell {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.seg {
+  stroke: var(--seg-on);
+  stroke-width: 4.2;
+  stroke-linecap: round;
+  fill: var(--seg-on);
+  opacity: 0.07;
+}
+.seg.on {
+  opacity: var(--brightness);
+  filter: drop-shadow(0 0 1.5px var(--seg-on));
+}
+
+/* --- keys ------------------------------------------------------------------ */
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 2), 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--shell) 70%, #8f846f);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.25) inset;
+}
+
+.key {
+  --led: transparent;
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+.key::before {
+  /* LED glow through the switch housing, around the cap */
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 70%, var(--led), transparent 70%);
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.key__cap {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  height: 100%;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--cap), color-mix(in srgb, var(--cap) 88%, #b8ad97));
+  border: 1px solid var(--cap-edge);
+  box-shadow:
+    0 5px 0 color-mix(in srgb, var(--cap-edge) 80%, #8a7f69),
+    0 8px 10px rgb(0 0 0 / 0.2);
+  transition:
+    transform 70ms,
+    box-shadow 70ms;
+}
+.key__cap::before {
+  /* dished top */
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 8px;
+  background: radial-gradient(ellipse at 50% 30%, rgb(255 255 255 / 0.7), rgb(0 0 0 / 0.04));
+}
+.key__legend {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cap-ink);
+}
+.key__num {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.key__led {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--led, #000) 30%, #cfc7b8);
+}
+.key:active .key__cap,
+.key.is-pressed .key__cap {
+  transform: translateY(4px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--cap-edge) 80%, #8a7f69),
+    0 2px 4px rgb(0 0 0 / 0.2);
+}
+.key:focus-visible {
+  outline: 3px solid var(--led-blue);
+  outline-offset: 3px;
+}
+
+[data-color="white"] {
+  --led: var(--led-white);
+}
+[data-color="green"] {
+  --led: var(--led-green);
+}
+[data-color="red"] {
+  --led: var(--led-red);
+}
+[data-color="blue"] {
+  --led: var(--led-blue);
+}
+[data-color="amber"] {
+  --led: var(--led-amber);
+}
+[data-color="purple"] {
+  --led: var(--led-purple);
+}
+
+.key[data-mode="dim"]::before {
+  opacity: 0.35;
+}
+.key[data-mode="on"]::before {
+  opacity: 1;
+}
+.key[data-mode="pulse"]::before {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.key[data-mode="blink"]::before {
+  animation: blink 0.5s steps(1) infinite;
+}
+.key[data-mode="off"] .key__led {
+  background: #cfc7b8;
+}
+.key:not([data-mode="off"]) .key__led {
+  background: var(--led);
+  box-shadow: 0 0 6px var(--led);
+}
+.key[data-mode="dim"] .key__led {
+  opacity: 0.55;
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.brand {
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.status-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--led);
+  box-shadow: 0 0 8px var(--led);
+}
+.status-led[data-mode="off"] {
+  background: #cfc7b8;
+  box-shadow: none;
+}
+.status-led[data-mode="pulse"] {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.status-led[data-mode="blink"] {
+  animation: blink 0.5s steps(1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handset {
+    transition: none;
+  }
+  .key[data-mode="pulse"]::before,
+  .status-led[data-mode="pulse"] {
+    animation: none;
+    opacity: 0.8;
+  }
+  .display--refresh {
+    animation: none;
+  }
+}
+
+/* --- developer panel --------------------------------------------------------- */
+
+.devpanel {
+  width: min(420px, 100%);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--panel-ink);
+  border: 1px dashed var(--muted);
+  font-size: 13px;
+}
+.devpanel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.devpanel__hint {
+  font-weight: 400;
+  color: var(--muted);
+}
+.devpanel__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+}
+.devpanel__facts dt {
+  color: var(--muted);
+}
+.devpanel__facts dd {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+.devpanel__battery {
+  border: 1px solid var(--muted);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+}
+.devpanel__forget {
+  margin: 10px 0;
+}
+.devpanel__keys {
+  color: var(--muted);
+}
+.devpanel__log {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding-left: 28px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}

@@ -15,6 +15,15 @@
     },
     {
       "path": "apps/server-selfhost"
+    },
+    {
+      "path": "packages/client"
+    },
+    {
+      "path": "apps/device-web"
+    },
+    {
+      "path": "apps/companion"
     }
   ]
 }

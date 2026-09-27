@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!**/dist",
+      "!**/dist-types",
       "!**/node_modules",
       "!**/*.tsbuildinfo",
       "!LICENSE",

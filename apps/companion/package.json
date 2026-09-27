@@ -1,0 +1,24 @@
+{
+  "name": "@opentincan/companion",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenTinCan companion PWA for guardians and contacts.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@opentincan/client": "0.0.0",
+    "@opentincan/protocol": "0.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.1"
+  }
+}

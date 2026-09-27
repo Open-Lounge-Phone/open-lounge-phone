@@ -18,7 +18,9 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "npm run lint && npm run typecheck && npm test",
-    "docs:protocol": "node packages/protocol/scripts/gen-docs.ts"
+    "docs:protocol": "node packages/protocol/scripts/gen-docs.ts",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run build && npm start -w @opentincan/server-selfhost"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

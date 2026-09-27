@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>OpenTinCan Phone</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <section class="phone" aria-label="OpenTinCan phone">
+        <div class="cradle">
+          <button class="handset" type="button" aria-pressed="false" title="Lift / hang up (Space)">
+            <span class="handset__cup handset__cup--ear"></span>
+            <span class="handset__grip"></span>
+            <span class="handset__cup handset__cup--mouth"></span>
+          </button>
+          <span class="cord" aria-hidden="true"></span>
+        </div>
+        <div class="deck">
+          <div class="display" role="status" aria-live="polite"></div>
+          <div class="keys"></div>
+          <div class="badge">
+            <span class="status-led" aria-hidden="true"></span>
+            <span class="brand">opentincan</span>
+          </div>
+        </div>
+      </section>
+
+      <details class="devpanel">
+        <summary>Developer panel <span class="devpanel__hint">(not part of the phone)</span></summary>
+        <dl class="devpanel__facts">
+          <dt>Profile</dt><dd data-fact="profile"></dd>
+          <dt>Connection</dt><dd data-fact="connection"></dd>
+          <dt>Device ID</dt><dd data-fact="deviceId"></dd>
+          <dt>Pairing code</dt><dd data-fact="pairing"></dd>
+          <dt>Call state</dt><dd data-fact="state"></dd>
+          <dt>Config</dt><dd data-fact="config"></dd>
+        </dl>
+        <fieldset class="devpanel__battery">
+          <legend>Battery</legend>
+          <label>Level <input type="range" min="0" max="100" value="100" data-battery="pct" />
+            <output data-battery="out">100%</output></label>
+          <label><input type="checkbox" checked data-battery="charging" /> Charging</label>
+        </fieldset>
+        <label class="devpanel__brightness">Display brightness
+          <input type="range" min="10" max="100" value="100" data-display="brightness" /></label>
+        <button type="button" class="devpanel__forget">Forget identity / re-pair</button>
+        <p class="devpanel__keys">Keyboard: <kbd>Space</kbd> lifts or hangs up the handset, <kbd>1</kbd>–<kbd>8</kbd> press keys. Add <code>?profile=name</code> to run another phone, <code>?keys=N</code> for 1–8 keys, <code>?display=segments</code> for an LED character display instead of e-ink.</p>
+        <ol class="devpanel__log" reversed></ol>
+      </details>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -34,8 +34,8 @@ and self-host.
 
 ## Key flows
 
-**Pairing.** An unpaired phone generates an Ed25519 keypair, sends `pair.begin`, and shows the
-returned 6-digit code. A guardian enters it in the companion app; the server binds the public key
+**Pairing.** An unpaired phone generates an Ed25519 keypair, sends `pair.begin`, shows the
+returned 6-digit code on its e-ink status strip, and reads it aloud when the handset is lifted. A guardian enters it in the companion app; the server binds the public key
 to the household and sends `pair.done`. Every later connection is a signed `auth.challenge`, so
 no shared secret is ever stored on the device.
 
@@ -50,10 +50,15 @@ rings.
 
 ## Phases beyond software
 
-1. **Lounge variant** — QR identity takeover, presence ("open to chat"), ephemeral sessions with
-   a dead-man logout.
-2. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with
-   INMP441 mic, MAX98357A amp, SPI e-ink, mechanical switches, implementing the same protocol and
-   the `deviceStep` state machine from `packages/core`.
-3. **Custom PCB** — KiCad board adding LD2410 mmWave presence, AH3144 hall-effect hook switch,
-   MAX17048 fuel gauge, BH1750 light sensor, TP4056/DW01A 18650 power path.
+The phone has **no main screen**: keycapped keys with per-key LEDs, a small e-ink status strip,
+handset audio, a ringer speaker, and radios and sensors. Hardware details and part choices live in [hardware/DESIGN.md](../hardware/DESIGN.md).
+
+1. **Lounge variant** — takeover via a printed QR/NFC tag on the base plus a proximity proof
+   (press the flashing key, NFC tap, or mmWave presence), "open to chat" presence on key LEDs,
+   ephemeral sessions with a dead-man logout.
+2. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
+   audio codec, handset earpiece/mic, and MX-style key switches with per-key LEDs, implementing
+   the same protocol and the `deviceStep` state machine from `packages/core`.
+3. **Custom PCB** — a single base board in a Trimline-style corded phone: bare, passive handset;
+   USB-C power; hot-swap keyboard switches with keycaps; mmWave presence, hall-effect hook
+   sensing, light sensor, BLE/NFC for provisioning and lounge proximity.

@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/dist-types
+**/*.tsbuildinfo
+data
+.git
+.wrangler
+hardware
+firmware

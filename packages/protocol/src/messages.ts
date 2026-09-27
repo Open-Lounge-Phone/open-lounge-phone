@@ -55,7 +55,9 @@ export const DeviceHello = z
     model: DeviceModel,
     fw: z.string().min(1).max(32).describe("Firmware / emulator version."),
     buttons: z.number().int().min(1).max(16).describe("Number of speed-dial buttons."),
-    display: z.enum(["eink", "none"]),
+    display: z
+      .enum(["eink", "none"])
+      .describe("`eink` = the phone's small e-ink status strip; `none` = LEDs only."),
   })
   .describe("First message on every connection.");
 
