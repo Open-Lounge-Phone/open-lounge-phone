@@ -35,6 +35,8 @@ export interface Coordinator {
   notifyPaired(code: string, device: Device): Promise<void>;
   /** Sends a message to the household's connected guardians. */
   announce(householdId: string, msg: ServerToApp): Promise<void>;
+  /** Disconnects a removed phone so it goes back to pairing. */
+  forgetDevice(householdId: string, deviceId: string): Promise<void>;
 }
 
 type DevicePhase =
@@ -104,6 +106,10 @@ export class Gateway implements Coordinator {
 
   async announce(householdId: string, msg: ServerToApp): Promise<void> {
     await this.hubs.get(householdId)?.announce(msg);
+  }
+
+  async forgetDevice(householdId: string, deviceId: string): Promise<void> {
+    await this.hubs.get(householdId)?.forgetDevice(deviceId);
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */

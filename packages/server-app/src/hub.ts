@@ -323,11 +323,35 @@ export class HouseholdHub {
     });
   }
 
+  /** A removed phone is told it's no longer paired (it then shows a new pairing code). */
+  forgetDevice(deviceId: string): Promise<void> {
+    return this.run(() => {
+      const peer = this.devices.get(deviceId);
+      if (!peer) return;
+      peer.conn.send({ t: "error", code: "unauthorized", message: "this phone was removed" });
+      this.dropPeer(peer);
+      peer.conn.close(CloseCode.unauthorized, "removed");
+    });
+  }
+
   /** Re-send config to a device after guardians change settings (incl. quiet hours). */
   refreshDevice(deviceId: string): Promise<void> {
     return this.run(async () => {
       const peer = this.devices.get(deviceId);
       if (!peer) return;
+      // Name or owner may have changed (e.g. "make this my phone").
+      const device = await this.env.store.getDevice(deviceId);
+      if (device) {
+        const before = peer.owner;
+        peer.label = device.name;
+        if (device.ownerUserId) peer.owner = device.ownerUserId;
+        else delete peer.owner;
+        this.remember(peer);
+        if (before !== peer.owner) {
+          for (const u of [before, peer.owner]) if (u) await this.announceMember(u);
+          this.broadcastStatus(peer, true);
+        }
+      }
       await this.sendConfig(peer, true);
       await this.scheduleQuietCheck();
     });

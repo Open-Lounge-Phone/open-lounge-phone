@@ -410,6 +410,27 @@ export class Store {
     return rows.map(toDevice);
   }
 
+  async updateDevice(
+    id: string,
+    changes: { name?: string; ownerUserId?: string | null },
+  ): Promise<void> {
+    if (changes.name !== undefined) {
+      await this.sql.run("UPDATE devices SET name = ? WHERE id = ?", changes.name, id);
+    }
+    if (changes.ownerUserId !== undefined) {
+      await this.sql.run(
+        "UPDATE devices SET owner_user_id = ? WHERE id = ?",
+        changes.ownerUserId,
+        id,
+      );
+    }
+  }
+
+  /** Removes a phone; its allow-list, keys and voicemail go with it. */
+  async deleteDevice(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM devices WHERE id = ?", id);
+  }
+
   async touchDevice(id: string, now: number): Promise<void> {
     await this.sql.run("UPDATE devices SET last_seen = ? WHERE id = ?", now, id);
   }

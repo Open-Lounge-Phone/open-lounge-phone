@@ -1026,3 +1026,47 @@ describe("personal phones", () => {
     expect(cfg).toMatchObject({ quiet: false });
   });
 });
+
+describe("managing phones", () => {
+  it("renames, claims as my phone, releases, and removes a phone", async () => {
+    const { deviceId, device, token, app } = await household();
+    expect(
+      (await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { name: "Kitchen" } }))
+        .status,
+    ).toBe(204);
+    await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { owner: "me" } });
+    let list = (await http("/devices", { token })).json;
+    expect(list[0]).toMatchObject({ name: "Kitchen", ownerUserId: expect.any(String) });
+    await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { owner: "household" } });
+    list = (await http("/devices", { token })).json;
+    expect(list[0].ownerUserId).toBeNull();
+
+    expect((await http(`/devices/${deviceId}`, { method: "DELETE", token })).status).toBe(204);
+    await vi.waitFor(() => expect(device.closed?.code).toBe(CloseCode.unauthorized));
+    expect((await http("/devices", { token })).json).toEqual([]);
+    let s = await app.next("device.status");
+    while (s.online) s = await app.next("device.status");
+    expect(s).toMatchObject({ deviceId, online: false });
+  });
+
+  it("lets a member manage only their own phone", async () => {
+    const { deviceId, user } = await household();
+    const dad = await store.createUser(
+      { householdId: user.householdId, name: "Dad", role: "contact" },
+      0,
+    );
+    const dadToken = await store.createSession(dad.id, timers.now);
+    expect(
+      (
+        await http(`/devices/${deviceId}`, {
+          method: "PATCH",
+          token: dadToken,
+          body: { owner: "me" },
+        })
+      ).status,
+    ).toBe(404);
+    expect((await http(`/devices/${deviceId}`, { method: "DELETE", token: dadToken })).status).toBe(
+      404,
+    );
+  });
+});

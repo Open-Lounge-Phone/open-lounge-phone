@@ -26,6 +26,9 @@ const PairBody = z.object({
   /** Pair as the caller's own phone (any member) rather than a household phone (guardians). */
   forMe: z.boolean().optional(),
 });
+const DevicePatch = z
+  .object({ name: Name.optional(), owner: z.enum(["me", "household"]).optional() })
+  .refine((b) => b.name !== undefined || b.owner !== undefined, { message: "nothing to change" });
 const ContactBody = z.object({
   label: Name,
   canCallDevice: z.boolean(),
@@ -235,6 +238,42 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!device) return c.json({ error: "not found" }, 404);
     await store.removeContact(device.id, c.req.param("userId"));
     await live.refreshDevice(user.householdId, device.id);
+    return c.body(null, 204);
+  });
+
+  /** Rename a phone and/or make it someone's own phone (or a household phone again). */
+  api.patch("/devices/:id", async (c) => {
+    const user = c.get("user");
+    const device = await manageable(user, c.req.param("id"));
+    if (!device) return c.json({ error: "not found" }, 404);
+    const b = await body(c.req.raw, DevicePatch);
+    if (b instanceof Response) return b;
+    if (b.owner !== undefined) {
+      // You can claim a phone for yourself or release your own; guardians can also release any.
+      const allowed =
+        (b.owner === "me" && (user.role === "guardian" || device.ownerUserId === user.id)) ||
+        (b.owner === "household" && (user.role === "guardian" || device.ownerUserId === user.id));
+      if (!allowed) return c.json({ error: "not allowed" }, 403);
+    }
+    await store.updateDevice(device.id, {
+      ...(b.name !== undefined ? { name: b.name } : {}),
+      ...(b.owner === "me" ? { ownerUserId: user.id } : {}),
+      ...(b.owner === "household" ? { ownerUserId: null } : {}),
+    });
+    await live.refreshDevice(user.householdId, device.id);
+    return c.body(null, 204);
+  });
+
+  api.delete("/devices/:id", async (c) => {
+    const user = c.get("user");
+    const device = await manageable(user, c.req.param("id"));
+    if (!device) return c.json({ error: "not found" }, 404);
+    // Voicemail rows cascade with the phone; their audio lives in the blob store.
+    for (const vm of await store.listVoicemails(user.householdId, 10_000)) {
+      if (vm.deviceId === device.id) await env.blobs.delete(vm.blobKey);
+    }
+    await store.deleteDevice(device.id);
+    await live.forgetDevice(user.householdId, device.id);
     return c.body(null, 204);
   });
 

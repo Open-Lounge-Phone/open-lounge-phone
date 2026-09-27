@@ -270,6 +270,10 @@ export class HouseholdObject extends GatewayObject {
   announce(msg: ServerToApp): Promise<void> {
     return this.gateway.announce(this.householdId, msg);
   }
+
+  forgetDevice(deviceId: string): Promise<void> {
+    return this.gateway.forgetDevice(this.householdId, deviceId);
+  }
 }
 
 /** Holds unpaired phones while they show a pairing code. */
@@ -292,6 +296,7 @@ function coordinator(env: Env): Coordinator {
     notifyPaired: (code, device) =>
       env.PAIRING.getByName(PAIRING_OBJECT).notifyPaired(code, device),
     announce: (hh, msg) => env.HOUSEHOLD.getByName(hh).announce(msg),
+    forgetDevice: (hh, deviceId) => env.HOUSEHOLD.getByName(hh).forgetDevice(deviceId),
   };
 }
 
