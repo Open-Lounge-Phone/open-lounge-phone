@@ -1,0 +1,21 @@
+{
+  "name": "@openloungephone/site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open Lounge Phone project website (openloungephone.app), built with Astro Starlight.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-docs.ts",
+    "dev": "npm run sync && astro dev",
+    "build": "npm run sync && astro build && node scripts/check-links.ts",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@astrojs/markdown-remark": "^7.3.1"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.4",
+    "astro": "7.3.5"
+  }
+}

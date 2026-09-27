@@ -7,11 +7,11 @@ What gets created:
 
 | Resource | Used for |
 |---|---|
-| Worker `openloungephone` | API, companion app (`/`), device emulator (`/device/`) |
+| Worker `openloungephone-<instance>` | API, companion app (`/`), device emulator (`/device/`) |
 | Durable Object `HouseholdObject` (one per household) | live phones, companion sessions, calls; hibernates when idle |
 | Durable Object `PairingObject` | phones waiting for a pairing code |
-| D1 database `openloungephone` | households, people, phones, allow-lists, quiet hours, voicemail index |
-| R2 bucket `openloungephone-voicemail` | voicemail audio |
+| D1 database `openloungephone-<instance>` | households, people, phones, allow-lists, quiet hours, voicemail index |
+| R2 bucket `openloungephone-<instance>-voicemail` | voicemail audio |
 | Workers AI (optional) | voicemail transcripts (Whisper, billed per audio minute) |
 | Realtime TURN key (optional) | relays audio when phones can't connect directly |
 

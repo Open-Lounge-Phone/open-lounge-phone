@@ -1,0 +1,44 @@
+/* Open Lounge Phone palette, shared with the companion app (apps/companion/src/styles.css). */
+:root {
+  --sl-color-accent-low: #d7e8e2;
+  --sl-color-accent: #2f6f5e;
+  --sl-color-accent-high: #1f4a3f;
+  --sl-color-white: #1d2321;
+  --sl-color-gray-1: #2b3330;
+  --sl-color-gray-2: #3d4744;
+  --sl-color-gray-3: #5e6a66;
+  --sl-color-gray-4: #8f9a96;
+  --sl-color-gray-5: #dcd8ce;
+  --sl-color-gray-6: #ece9e1;
+  --sl-color-gray-7: #f6f4ef;
+  --sl-color-black: #fbfaf7;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #173a31;
+  --sl-color-accent: #5fb89c;
+  --sl-color-accent-high: #c9ecdf;
+  --sl-color-white: #f6f4ef;
+  --sl-color-gray-1: #ece9e1;
+  --sl-color-gray-2: #cfd3d1;
+  --sl-color-gray-3: #a3aca9;
+  --sl-color-gray-4: #6f7a76;
+  --sl-color-gray-5: #3a4441;
+  --sl-color-gray-6: #232b28;
+  --sl-color-gray-7: #181e1c;
+  --sl-color-black: #121614;
+}
+
+.feature-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin-block: 1.5rem;
+}
+
+.screenshot {
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 6%),
+    0 4px 16px rgb(0 0 0 / 8%);
+}

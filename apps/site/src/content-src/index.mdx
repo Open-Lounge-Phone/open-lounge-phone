@@ -1,0 +1,49 @@
+---
+title: Open Lounge Phone
+description: A screen-light phone for kids and lounges — open source, self-hosted, no spam.
+template: splash
+hero:
+  tagline: A screen-light phone for kids and lounges — open source, self-hosted, no spam.
+  image:
+    file: ../../logo.svg
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Try it on your computer
+      link: /getting-started/
+      icon: laptop
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+<CardGrid>
+  <Card title="Kids phone" icon="heart">
+    Mechanical keys, a handset, and nothing else. It can only call — and be called by — the
+    people a guardian approves. Quiet hours send callers to voicemail with a transcript instead of
+    waking anyone up.
+  </Card>
+  <Card title="Lounge phone" icon="rocket">
+    A shared booth phone for hospitality spaces: take it over with your own contacts, see who's
+    open to chat, and it forgets you the moment you walk away.
+  </Card>
+  <Card title="Your own server" icon="setting">
+    Deploy to your own free Cloudflare account or self-host with Docker. Nobody — including this
+    project — sits in the middle of your calls.
+  </Card>
+</CardGrid>
+
+<img
+  class="screenshot"
+  src="/images/emulator-menu.png"
+  alt="The browser emulator of the phone: twelve keys, a handset and a small e-ink status strip showing the menu"
+  width="520"
+/>
+
+<CardGrid>
+  <LinkCard title="Try it on your computer" href="/getting-started/" description="Run the server, the emulated phone and the companion app in five minutes." />
+  <LinkCard title="Deploy your own" href="/how-to/deploy-cloudflare/" description="Your household on your own Cloudflare account." />
+  <LinkCard title="Build the hardware" href="/how-to/build-the-hardware/" description="Open hardware: schematic, PCB layout, assembly." />
+  <LinkCard title="About the project" href="/project/about/" description="Why it exists, principles, and status." />
+</CardGrid>

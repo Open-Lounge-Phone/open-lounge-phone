@@ -9,6 +9,8 @@
       "!apps/server-cloudflare/public",
       "!hardware",
       "!.claude",
+      "!**/.astro",
+      "!apps/server-cloudflare/instances",
       "!**/node_modules",
       "!**/*.tsbuildinfo",
       "!LICENSE",
