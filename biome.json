@@ -8,6 +8,7 @@
       "!**/.wrangler",
       "!apps/server-cloudflare/public",
       "!hardware",
+      "!.claude",
       "!**/node_modules",
       "!**/*.tsbuildinfo",
       "!LICENSE",
