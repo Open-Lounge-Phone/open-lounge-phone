@@ -4,7 +4,7 @@ Open-source, screen-free intercom phone. Software phase first (runs on computers
 firmware, then a custom PCB in a Trimline-style corded phone powered by USB-C. Read
 `README.md` (status table), `docs/architecture.md`, and `docs/protocol.md` before changing code.
 Hardware design lives in `hardware/DESIGN.md` (proposal r0.1: ESP32-S3-WROOM-1-N16R8,
-ES8311+ES7210+NS4150B audio with hardware AEC reference, passive RJ9 handset, 10 MX hot-swap
+ES8311+ES7210+NS4150B audio with hardware AEC reference, USB-C handset port (see below), 12 MX hot-swap
 keys with SK6812MINI-E LEDs, 2.9" e-ink strip between key rows, DRV5032 hall hook, USB-C →
 BQ24074, LD2410C radar on Lounge, ST25DV NFC; its §13 lists protocol recommendations such as
 key-algorithm negotiation ed25519|p256, per-key LED/strip messages, audio prompt ids). Its open
@@ -68,8 +68,8 @@ traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the te
 **Handset connection (owner decision 2026-09-27, supersedes RJ9):** **no RJ9/4P4C**. The handset
 connects with a **standard USB-C to USB-C cable** and the base works with **off-the-shelf USB-C
 headsets/handsets**: digital USB Audio Class (UAC 1.0) with the ESP32-S3's native USB as **host**
-on a dedicated handset USB-C port (current-limited VBUS); our own handset has a small USB audio
-chip. Flashing/console moves to a USB-UART bridge on the power USB-C port. Analog audio-accessory
+on a dedicated handset USB-C port (current-limited VBUS). We **use an off-the-shelf G-style USB-C
+handset** (Native Union POP-style) rather than building one; the cradle fits it and a classic G handset. Flashing/console moves to a USB-UART bridge on the power USB-C port. Analog audio-accessory
 mode is not used (most C-to-C cables lack the SBU wires it needs).
 **Swappable by design (owner, 2026-09-27):** shells are 3D-printable in any colour
 (`hardware/enclosure/`, code CAD), the handset cord is a **standard USB-C to USB-C cable** (coiled or not), keys
