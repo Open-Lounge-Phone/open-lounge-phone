@@ -116,7 +116,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   api.get("/me", async (c) => {
     const user = c.get("user");
-    return c.json({ user, household: await store.getHousehold(user.householdId) });
+    const [household, availability] = await Promise.all([
+      store.getHousehold(user.householdId),
+      store.availability(user.householdId),
+    ]);
+    // `available`: whether this person is taking app-to-app calls (see presence.set).
+    return c.json({ user, household, available: availability.get(user.id) ?? true });
   });
 
   api.post("/logout", async (c) => {

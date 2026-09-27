@@ -883,8 +883,9 @@ describe("grown-up app-to-app calls", () => {
     mom.write({ t: "call.user", userId: dad.id });
     expect(await mom.nextState("ended")).toMatchObject({ reason: "unavailable" });
     expect(dadApp.sent.some((m) => m.t === "call.ringing")).toBe(false);
-    // Availability persists across sessions.
+    // Availability persists across sessions and is reported to the person themselves.
     expect((await store.availability(user.householdId)).get(dad.id)).toBe(false);
+    expect((await http("/me", { token: dadToken })).json.available).toBe(false);
 
     dadApp.write({ t: "presence.set", available: true });
     await vi.waitFor(async () =>
