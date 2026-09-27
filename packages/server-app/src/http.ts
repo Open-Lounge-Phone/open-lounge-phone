@@ -20,7 +20,12 @@ const SetupBody = z.object({
   guardianName: Name,
   timeZone: z.string().min(1),
 });
-const PairBody = z.object({ code: z.string().regex(/^\d{6}$/), name: Name });
+const PairBody = z.object({
+  code: z.string().regex(/^\d{6}$/),
+  name: Name,
+  /** Pair as the caller's own phone (any member) rather than a household phone (guardians). */
+  forMe: z.boolean().optional(),
+});
 const ContactBody = z.object({
   label: Name,
   canCallDevice: z.boolean(),
@@ -114,6 +119,13 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return device && device.householdId === user.householdId ? device : undefined;
   };
 
+  /** A phone the caller may configure: any household phone for guardians, or their own phone. */
+  const manageable = async (user: User, id: string) => {
+    const device = await ownDevice(user, id);
+    if (!device) return undefined;
+    return user.role === "guardian" || device.ownerUserId === user.id ? device : undefined;
+  };
+
   api.get("/me", async (c) => {
     const user = c.get("user");
     const [household, availability] = await Promise.all([
@@ -141,36 +153,60 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           name: d.name,
           online: await live.isOnline(user.householdId, d.id),
           lastSeen: d.lastSeen,
+          ownerUserId: d.ownerUserId,
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
       ),
     );
   });
 
-  api.post("/devices/pair", guardianOnly, async (c) => {
+  api.post("/devices/pair", async (c) => {
     const user = c.get("user");
     const b = await body(c.req.raw, PairBody);
     if (b instanceof Response) return b;
+    if (!b.forMe && user.role !== "guardian") {
+      return c.json({ error: "only guardians can add household phones" }, 403);
+    }
     const device = await store.claimPairing(
-      { code: b.code, householdId: user.householdId, name: b.name },
+      {
+        code: b.code,
+        householdId: user.householdId,
+        name: b.name,
+        ownerUserId: b.forMe ? user.id : null,
+      },
       env.now(),
     );
     if (!device) return c.json({ error: "unknown or expired code" }, 404);
-    // The guardian who paired the phone is its first contact, on the first button.
-    await store.upsertContact(device.id, {
-      id: user.id,
-      label: user.name,
-      canCallDevice: true,
-      deviceCanCall: true,
-      bypassQuietHours: true,
-    });
-    await store.setButton(device.id, 0, user.id);
+    if (b.forMe) {
+      // A grown-up's own phone: everyone else in the household on its speed-dial keys.
+      const others = (await store.listUsers(user.householdId)).filter((u) => u.id !== user.id);
+      for (const [i, other] of others.slice(0, 10).entries()) {
+        await store.upsertContact(device.id, {
+          id: other.id,
+          label: other.name,
+          canCallDevice: true,
+          deviceCanCall: true,
+          bypassQuietHours: true,
+        });
+        await store.setButton(device.id, i, other.id);
+      }
+    } else {
+      // The guardian who paired the phone is its first contact, on the first button.
+      await store.upsertContact(device.id, {
+        id: user.id,
+        label: user.name,
+        canCallDevice: true,
+        deviceCanCall: true,
+        bypassQuietHours: true,
+      });
+      await store.setButton(device.id, 0, user.id);
+    }
     await live.notifyPaired(b.code, device);
     return c.json({ id: device.id, name: device.name }, 201);
   });
 
-  api.get("/devices/:id/contacts", guardianOnly, async (c) => {
-    const device = await ownDevice(c.get("user"), c.req.param("id"));
+  api.get("/devices/:id/contacts", async (c) => {
+    const device = await manageable(c.get("user"), c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
     const [contacts, buttons] = await Promise.all([
       store.listContacts(device.id),
@@ -179,9 +215,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.json({ contacts, buttons: Object.fromEntries(buttons) });
   });
 
-  api.put("/devices/:id/contacts/:userId", guardianOnly, async (c) => {
+  api.put("/devices/:id/contacts/:userId", async (c) => {
     const user = c.get("user");
-    const device = await ownDevice(user, c.req.param("id"));
+    const device = await manageable(user, c.req.param("id"));
     const target = await store.getUser(c.req.param("userId"));
     if (!device || !target || target.householdId !== user.householdId) {
       return c.json({ error: "not found" }, 404);
@@ -193,18 +229,18 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.body(null, 204);
   });
 
-  api.delete("/devices/:id/contacts/:userId", guardianOnly, async (c) => {
+  api.delete("/devices/:id/contacts/:userId", async (c) => {
     const user = c.get("user");
-    const device = await ownDevice(user, c.req.param("id"));
+    const device = await manageable(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
     await store.removeContact(device.id, c.req.param("userId"));
     await live.refreshDevice(user.householdId, device.id);
     return c.body(null, 204);
   });
 
-  api.put("/devices/:id/buttons/:index", guardianOnly, async (c) => {
+  api.put("/devices/:id/buttons/:index", async (c) => {
     const user = c.get("user");
-    const device = await ownDevice(user, c.req.param("id"));
+    const device = await manageable(user, c.req.param("id"));
     const index = Number(c.req.param("index"));
     if (!device) return c.json({ error: "not found" }, 404);
     if (!Number.isInteger(index) || index < 0 || index > 15) {

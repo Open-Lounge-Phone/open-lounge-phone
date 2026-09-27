@@ -168,11 +168,14 @@ export class HouseholdHub {
         conn,
         guardian: false,
         hook: "down",
+        ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
       };
+      const wasOnline = device.ownerUserId ? this.userOnline(device.ownerUserId) : true;
       this.devices.set(device.id, peer);
       await this.sendConfig(peer, true);
       this.remember(peer);
       this.broadcastStatus(peer, true);
+      if (device.ownerUserId && !wasOnline) await this.announceMember(device.ownerUserId);
       await this.scheduleQuietCheck();
       return peer;
     });
@@ -191,7 +194,7 @@ export class HouseholdHub {
         guardian: user.role === "guardian",
       };
       const set = this.apps.get(user.id) ?? new Set<Peer>();
-      const cameOnline = set.size === 0;
+      const cameOnline = set.size === 0 && !this.userOnline(user.id);
       this.apps.set(user.id, set);
       set.add(peer);
       this.remember(peer);
@@ -200,7 +203,12 @@ export class HouseholdHub {
       const available = await this.env.store.availability(this.householdId);
       for (const [userId, avail] of available) {
         if (userId === user.id) continue;
-        conn.send({ t: "member.status", userId, online: this.apps.has(userId), available: avail });
+        conn.send({
+          t: "member.status",
+          userId,
+          online: this.userOnline(userId),
+          available: avail,
+        });
       }
       if (cameOnline) this.broadcastMember(user.id, true, available.get(user.id) ?? true);
       if (peer.guardian) {
@@ -221,6 +229,7 @@ export class HouseholdHub {
     if (peer.kind === "device") {
       if (this.devices.get(peer.id) !== peer) return;
       this.devices.delete(peer.id);
+      if (peer.owner && !this.userOnline(peer.owner)) void this.announceMember(peer.owner);
       this.broadcastStatus(peer as DevicePeer, false);
       if (this.devices.size === 0) this.cancelQuietCheck();
     } else {
@@ -228,16 +237,16 @@ export class HouseholdHub {
       if (!set?.delete(peer)) return;
       if (set.size === 0) {
         this.apps.delete(peer.id);
-        void this.env.store
-          .availability(this.householdId)
-          .then((a) => this.broadcastMember(peer.id, false, a.get(peer.id) ?? true));
+        if (!this.userOnline(peer.id)) void this.announceMember(peer.id);
       }
     }
     for (const room of [...this.rooms.values()]) {
-      if (room.caller === peer || room.calleePeer === peer) {
-        void this.apply(room, { type: "hangup", by: peer.key });
-      } else if (!room.calleePeer && room.state.callee === peer.key && !this.apps.has(peer.id)) {
-        // The last ringing session of the callee went away.
+      if (room.caller === peer) {
+        void this.apply(room, { type: "hangup", by: room.state.caller });
+      } else if (room.calleePeer === peer) {
+        void this.apply(room, { type: "hangup", by: room.state.callee });
+      } else if (!room.calleePeer && this.ringTargets(room).length === 0) {
+        // The last session or phone that was ringing for the callee went away.
         void this.apply(room, { type: "timeout" });
       }
     }
@@ -362,7 +371,7 @@ export class HouseholdHub {
     const [buttons, contacts, schedule] = await Promise.all([
       store.listButtons(device.id),
       store.listContacts(device.id),
-      store.getSchedule(this.householdId),
+      this.scheduleFor(device),
     ]);
     const contact = resolveButton(buttons, new Map(contacts.map((c) => [c.id, c])), index);
     const decision = authorizeOutbound(contact, {
@@ -370,8 +379,8 @@ export class HouseholdHub {
       now: new Date(this.env.now()),
     });
     if (decision.decision === "deny" || !contact) return this.refuse(device, "denied");
-    const targets = this.apps.get(contact.id);
-    if (!targets?.size) return this.refuse(device, "unreachable");
+    const targets = this.reachable(contact.id, device);
+    if (!targets.length) return this.refuse(device, "unreachable");
     if (this.busy(userKey(contact.id))) return this.refuse(device, "busy");
 
     const room = this.openRoom(device, userKey(contact.id));
@@ -390,7 +399,9 @@ export class HouseholdHub {
     }
     const [contact, schedule] = await Promise.all([
       store.getContact(deviceId, user.id),
-      store.getSchedule(this.householdId),
+      device.ownerUserId
+        ? store.getSchedule(this.householdId).then((q) => ({ ...q, rules: [] }))
+        : store.getSchedule(this.householdId),
     ]);
     const decision = authorizeInbound(contact, {
       quietHours: schedule,
@@ -425,8 +436,8 @@ export class HouseholdHub {
       caller.conn.send({ t: "error", code: "not_found", message: "no such person" });
       return;
     }
-    const targets = this.apps.get(userId);
-    if (!targets?.size) return this.refuse(caller, "unreachable");
+    const targets = this.reachable(userId);
+    if (!targets.length) return this.refuse(caller, "unreachable");
     const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
     if (!available) return this.refuse(caller, "unavailable");
     if (this.busy(caller.key) || this.busy(userKey(userId))) return this.refuse(caller, "busy");
@@ -436,6 +447,20 @@ export class HouseholdHub {
     for (const t of targets) {
       t.conn.send({ t: "call.ringing", callId: room.id, from: { label: caller.label } });
     }
+  }
+
+  /** Where a person can be rung right now: open app sessions + own phones that are hung up. */
+  private reachable(userId: string, except?: Peer): Peer[] {
+    const phones = [...this.devices.values()].filter(
+      (d) => d.owner === userId && d !== except && d.hook === "down" && !this.busy(d.key),
+    );
+    return [...(this.apps.get(userId) ?? []), ...phones];
+  }
+
+  /** Grown-ups' own phones don't follow the household's (kids') quiet hours. */
+  private async scheduleFor(peer: DevicePeer | undefined) {
+    const schedule = await this.env.store.getSchedule(this.householdId);
+    return peer?.owner ? { ...schedule, rules: [] } : schedule;
   }
 
   /** Presence of one member, to every other connected member. */
@@ -462,8 +487,36 @@ export class HouseholdHub {
   private partyOf(room: Room, peer: Peer): "caller" | "callee" | undefined {
     if (room.caller === peer) return "caller";
     if (room.calleePeer === peer) return "callee";
-    if (!room.calleePeer && room.state.callee === peer.key) return "callee";
+    if (!room.calleePeer && this.answersFor(peer, room.state.callee)) return "callee";
     return undefined;
+  }
+
+  /** A person's calls ring their open app sessions and their own phones. */
+  private answersFor(peer: Peer, calleeKey: string): boolean {
+    return (
+      peer.key === calleeKey ||
+      (peer.kind === "device" && !!peer.owner && userKey(peer.owner) === calleeKey)
+    );
+  }
+
+  /** Everything currently ringing for an unanswered call. */
+  private ringTargets(room: Room): Peer[] {
+    if (room.calleePeer) return [];
+    const key = room.state.callee;
+    if (!key.startsWith("usr:")) return [];
+    const userId = idOf(key);
+    const phones = [...this.devices.values()].filter((d) => d.owner === userId);
+    return [...(this.apps.get(userId) ?? []), ...phones];
+  }
+
+  /** Online = an open companion session or a connected personal phone. */
+  private userOnline(userId: string): boolean {
+    return this.apps.has(userId) || [...this.devices.values()].some((d) => d.owner === userId);
+  }
+
+  private async announceMember(userId: string): Promise<void> {
+    const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
+    this.broadcastMember(userId, this.userOnline(userId), available);
   }
 
   private async callMessage(
@@ -482,19 +535,20 @@ export class HouseholdHub {
 
     if (msg.t === "call.answer") {
       if (party !== "callee" || room.state.phase !== "ringing") return;
-      room.calleePeer = peer;
-      this.roomsDirty = true;
-      // Other sessions of the same user stop ringing.
-      for (const other of this.apps.get(peer.id) ?? []) {
+      // Everything else that was ringing for the callee (other sessions, own phones) stops.
+      for (const other of this.ringTargets(room)) {
         if (other !== peer) {
           other.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
         }
       }
-      await this.apply(room, { type: "answer", by: peer.key });
+      room.calleePeer = peer;
+      this.roomsDirty = true;
+      await this.apply(room, { type: "answer", by: room.state.callee });
       return;
     }
     if (msg.t === "call.hangup") {
-      await this.apply(room, { type: "hangup", by: peer.key });
+      const by = party === "caller" ? room.state.caller : room.state.callee;
+      await this.apply(room, { type: "hangup", by });
       return;
     }
 
@@ -543,7 +597,7 @@ export class HouseholdHub {
         room.cancelTimer?.();
         this.rooms.delete(room.id);
         const reason = r.state.reason ?? "hangup";
-        const ringing = room.calleePeer ? [] : [...(this.apps.get(idOf(room.state.callee)) ?? [])];
+        const ringing = this.ringTargets(room);
         for (const p of [...both, ...ringing]) {
           p.conn.send({ t: "call.state", callId: room.id, state: "ended", reason });
         }
@@ -561,7 +615,7 @@ export class HouseholdHub {
     const [buttons, contacts, schedule, missed] = await Promise.all([
       store.listButtons(peer.id),
       store.listContacts(peer.id),
-      store.getSchedule(this.householdId),
+      this.scheduleFor(peer),
       store.unheardFrom(peer.id),
     ]);
     const now = new Date(this.env.now());

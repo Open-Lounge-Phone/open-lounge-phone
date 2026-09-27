@@ -55,6 +55,8 @@ export interface PeerInfo {
   label: string;
   guardian: boolean;
   hook?: "up" | "down";
+  /** A device that is a person's own phone: their user id. */
+  owner?: string;
   status?: Extract<DeviceToServer, { t: "status" }>;
   lastQuiet?: boolean;
 }

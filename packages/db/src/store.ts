@@ -32,6 +32,8 @@ export interface Device {
   name: string;
   publicKey: string;
   keyAlg: KeyAlg;
+  /** Set for a person's own phone; null for a household phone (e.g. a kid's). */
+  ownerUserId: string | null;
   createdAt: number;
   lastSeen: number | null;
 }
@@ -134,6 +136,7 @@ type DeviceRow = {
   name: string;
   public_key: string;
   key_alg: KeyAlg;
+  owner_user_id: string | null;
   created_at: number;
   last_seen: number | null;
 };
@@ -152,6 +155,7 @@ const toDevice = (r: DeviceRow): Device => ({
   name: r.name,
   publicKey: r.public_key,
   keyAlg: r.key_alg,
+  ownerUserId: r.owner_user_id,
   createdAt: r.created_at,
   lastSeen: r.last_seen,
 });
@@ -352,7 +356,7 @@ export class Store {
 
   /** Claims a pairing code for a household, creating the device. Single use. */
   async claimPairing(
-    input: { code: string; householdId: string; name: string },
+    input: { code: string; householdId: string; name: string; ownerUserId?: string | null },
     now: number,
   ): Promise<Device | undefined> {
     const pending = await this.sql.first<{ public_key: string; key_alg: KeyAlg }>(
@@ -369,6 +373,7 @@ export class Store {
       name: input.name,
       publicKey: pending.public_key,
       keyAlg: pending.key_alg,
+      ownerUserId: input.ownerUserId ?? null,
       createdAt: now,
       lastSeen: null,
     };
@@ -377,8 +382,16 @@ export class Store {
       { query: "DELETE FROM devices WHERE public_key = ?", params: [device.publicKey] },
       {
         query:
-          "INSERT INTO devices (id, household_id, name, public_key, key_alg, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        params: [device.id, device.householdId, device.name, device.publicKey, device.keyAlg, now],
+          "INSERT INTO devices (id, household_id, name, public_key, key_alg, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        params: [
+          device.id,
+          device.householdId,
+          device.name,
+          device.publicKey,
+          device.keyAlg,
+          device.ownerUserId,
+          now,
+        ],
       },
     ]);
     return device;

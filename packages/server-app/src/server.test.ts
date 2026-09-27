@@ -912,3 +912,105 @@ describe("grown-up app-to-app calls", () => {
     expect((await mom.next("error")).code).toBe("not_found");
   });
 });
+
+describe("personal phones", () => {
+  /** Pairs a phone as `token`'s own; returns the connected device socket and its id. */
+  async function pairMine(token: string, name = "Dad's phone") {
+    const key = await newKey();
+    const conn = openDevice();
+    conn.write(hello());
+    conn.write({ t: "pair.begin", publicKey: key.publicKey });
+    const { code } = await conn.next("pair.code");
+    const res = await http("/devices/pair", { token, body: { code, name, forMe: true } });
+    expect(res.status).toBe(201);
+    const { deviceId } = await conn.next("pair.done");
+    return { deviceId, phone: await connectDevice(deviceId, key.pair) };
+  }
+
+  async function family() {
+    const g = await setup();
+    const dad = await store.createUser(
+      { householdId: g.user.householdId, name: "Dad", role: "contact" },
+      0,
+    );
+    const dadToken = await store.createSession(dad.id, timers.now);
+    return { ...g, dad, dadToken };
+  }
+
+  it("any member can pair their own phone; household phones stay guardian-only", async () => {
+    const { dadToken, dad, user } = await family();
+    const conn = openDevice();
+    conn.write(hello());
+    conn.write({ t: "pair.begin", publicKey: (await newKey()).publicKey });
+    const { code } = await conn.next("pair.code");
+    expect(
+      (await http("/devices/pair", { token: dadToken, body: { code, name: "X" } })).status,
+    ).toBe(403);
+    const { deviceId } = await pairMine(dadToken);
+    const list = (await http("/devices", { token: dadToken })).json as {
+      id: string;
+      ownerUserId: string;
+    }[];
+    expect(list.find((d) => d.id === deviceId)?.ownerUserId).toBe(dad.id);
+    // The owner can manage their own phone; its keys start with the other grown-ups.
+    const contacts = await http(`/devices/${deviceId}/contacts`, { token: dadToken });
+    expect(contacts.status).toBe(200);
+    expect(contacts.json.contacts.map((c: { id: string }) => c.id)).toEqual([user.id]);
+    expect(contacts.json.buttons).toEqual({ "0": user.id });
+  });
+
+  it("a connected personal phone makes its owner show as online", async () => {
+    const { token, dad, dadToken } = await family();
+    const mom = await connectApp(token);
+    expect(await mom.next("member.status")).toMatchObject({ userId: dad.id, online: false });
+    const { phone } = await pairMine(dadToken);
+    let s = await mom.next("member.status");
+    while (s.userId !== dad.id || !s.online) s = await mom.next("member.status");
+    phone.handler.closed();
+    expect(await mom.next("member.status")).toMatchObject({ userId: dad.id, online: false });
+  });
+
+  it("calling a person rings their phone; answering there stops their app ringing", async () => {
+    const { token, dad, dadToken } = await family();
+    const mom = await connectApp(token);
+    const { phone } = await pairMine(dadToken);
+    const dadApp = await connectApp(dadToken);
+    mom.write({ t: "call.user", userId: dad.id });
+    const { callId } = await mom.nextState("ringing");
+    expect(await phone.next("call.ringing")).toMatchObject({ callId, from: { label: "Mom" } });
+    await dadApp.next("call.ringing");
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "call.answer", callId });
+    expect(await dadApp.nextState("ended")).toMatchObject({ callId });
+    await mom.nextState("connecting");
+    mom.write({ t: "rtc.sdp", callId, type: "offer", sdp: "o" });
+    expect(await phone.next("rtc.sdp")).toMatchObject({ type: "offer" });
+    phone.write({ t: "call.hangup", callId });
+    expect(await mom.nextState("ended")).toMatchObject({ reason: "hangup" });
+  });
+
+  it("with only a phone connected, the phone alone makes them reachable; lifted = busy", async () => {
+    const { token, dad, dadToken } = await family();
+    const mom = await connectApp(token);
+    const { phone } = await pairMine(dadToken);
+    phone.write({ t: "hook", state: "up" });
+    mom.write({ t: "call.user", userId: dad.id });
+    expect(await mom.nextState("ended")).toMatchObject({ reason: "unreachable" });
+    phone.write({ t: "hook", state: "down" });
+    mom.write({ t: "call.user", userId: dad.id });
+    await mom.nextState("ringing");
+    await phone.next("call.ringing");
+  });
+
+  it("grown-ups' own phones ignore the household's quiet hours", async () => {
+    const { token, dadToken } = await family();
+    await http("/quiet-hours", {
+      method: "PUT",
+      token,
+      body: { rules: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "00:00" }] },
+    });
+    const { phone } = await pairMine(dadToken);
+    const cfg = phone.sent.filter((m) => m.t === "config").at(-1);
+    expect(cfg).toMatchObject({ quiet: false });
+  });
+});
