@@ -36,6 +36,11 @@ Configuration is by environment variable:
 | `DATA_DIR` | `./data` | SQLite database location |
 | `STUN_URLS` | `stun:stun.cloudflare.com:3478` | Comma-separated; empty disables STUN |
 | `TURN_URLS`, `TURN_SECRET` | unset | TURN relay with time-limited credentials (coturn `use-auth-secret`) |
+| `TRANSCRIBE_URL` | unset | OpenAI-compatible `/v1/audio/transcriptions` endpoint for voicemail transcripts |
+| `TRANSCRIBE_MODEL`, `TRANSCRIBE_API_KEY` | `whisper-1`, unset | Passed to that endpoint |
+
+Passkeys are tied to the site's host name. If you reach the server through a reverse proxy or
+several names, set `PUBLIC_URL` to the one address people use.
 
 ## HTTPS
 
@@ -51,4 +56,5 @@ Until hardware exists, open `/device/` in a browser to get an emulated phone. Ad
 
 ## Backups
 
-Everything lives in `DATA_DIR/opentincan.sqlite` (the `opentincan-data` volume with Docker).
+Everything lives in `DATA_DIR`: the database `opentincan.sqlite` and voicemail audio under
+`blobs/` (the `opentincan-data` volume with Docker).

@@ -102,7 +102,11 @@ Keep this section current when finishing a milestone.
   Cloudflare Realtime **TURN** credentials (or coturn when self-hosting). The Realtime **SFU** is
   deferred until a feature needs it (group calls, server-side recording, or an ESP32 media path
   that's simpler against an SFU). The original plan said SFU; tell the owner if this matters.
-- M4 Kids' features, M5 CLI + Tauri — not started.
+- **M4 Kids' features** — server done (`f7414c8`): invites/sign-in links, passkeys
+  (SimpleWebAuthn), voicemail upload + background transcription + `voicemail.new` + phone
+  `config.missed`, `config.quietUntil`, P-256 device keys, removing people. Companion/emulator
+  UIs in progress.
+- M5 CLI + Tauri — not started.
 
 ## Client notes
 - `packages/client`: `ProtocolSocket` (reconnect with backoff, 25s app ping), `CallMedia`
@@ -114,6 +118,20 @@ Keep this section current when finishing a milestone.
   `?display=eink|segments`. Keyboard: Space = hook, 1–8 = keys.
 - `apps/companion` (React 19): `connection.ts` (socket + media), `calls.ts` (call UI state),
   `api.ts`, screens per file. Session token in localStorage; `#setup=<token>` runs first-run setup.
+
+## M4 notes
+- `ServerEnv` now also carries `blobs` (BlobStore), optional `transcriber`, `defer` (background
+  work; Workers `waitUntil`), optional `publicUrl` (passkey RP id/origin; else request URL).
+- Routes live in `http.ts` (setup, devices, allow-list, quiet hours), `people.ts` (invites,
+  passkeys, removing people; public routes are registered before the auth middleware) and
+  `voicemail.ts`. Shared helpers in `httpUtil.ts` (`body`, `guardianOnly`, `Vars`).
+- Voicemail: `POST /api/devices/:id/voicemail?durationMs=` raw `audio/*` body ≤ 2 MB, caller must
+  be on the allow-list with `canCallDevice`. Guardians: `GET /api/voicemails`,
+  `GET /api/voicemails/:id/audio`, `POST …/heard`, `DELETE …`. Blob keys never leave the server.
+- Single-use tokens (invites, WebAuthn challenges, pairing codes) check `changes === 1` on the
+  DELETE; race tests in `store.test.ts` prove it.
+- Self-host transcription: `TRANSCRIBE_URL` (OpenAI-compatible). Cloudflare: optional `AI`
+  binding (commented out in wrangler.jsonc so `wrangler dev` works without login).
 
 ## Cloudflare notes
 - Worker routes: `/api/*` → shared Hono API with a DO-RPC `Coordinator`; `/ws/device?device=` →

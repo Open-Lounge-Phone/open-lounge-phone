@@ -10,7 +10,9 @@ What gets created:
 | Worker `opentincan` | API, companion app (`/`), device emulator (`/device/`) |
 | Durable Object `HouseholdObject` (one per household) | live phones, companion sessions, calls; hibernates when idle |
 | Durable Object `PairingObject` | phones waiting for a pairing code |
-| D1 database `opentincan` | households, people, phones, allow-lists, quiet hours |
+| D1 database `opentincan` | households, people, phones, allow-lists, quiet hours, voicemail index |
+| R2 bucket `opentincan-voicemail` | voicemail audio |
+| Workers AI (optional) | voicemail transcripts (Whisper, billed per audio minute) |
 | Realtime TURN key (optional) | relays audio when phones can't connect directly |
 
 > A one-command `opentincan deploy cloudflare` is planned (M5). Until then, deploy by hand:
@@ -20,6 +22,8 @@ npm install && npm run build
 cd apps/server-cloudflare
 npx wrangler login
 npx wrangler d1 create opentincan         # paste the database_id into wrangler.jsonc
+npx wrangler r2 bucket create opentincan-voicemail
+# Optional transcripts: uncomment the "ai" binding in wrangler.jsonc
 npx wrangler secret put SETUP_TOKEN        # any long random string, e.g. openssl rand -hex 24
 # Optional but recommended: create a TURN key in the dashboard (Realtime → TURN), then
 npx wrangler secret put TURN_KEY_ID
