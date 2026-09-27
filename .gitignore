@@ -12,3 +12,6 @@ coverage/
 dist-types/
 .playwright-mcp/
 apps/server-cloudflare/public/
+
+# third-party skills, installed by hardware/tools/install-skills.sh
+.claude/skills/

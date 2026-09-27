@@ -13,6 +13,12 @@ The main and deck boards are captured as **schematic-as-code in SKiDL** (`hardwa
 `make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`): 3 variants
 (kids, lounge, kids-batt) × 2 boards, ERC + custom checks (pin table, I2C addresses, FFC pinout,
 LCSC/footprint validity). Open questions are parameters in `config.py`.
+**Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
+user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
+grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
+review gates). PCB skills: run `hardware/tools/install-skills.sh` (kicad, emc, pcb-layout-review,
+specs-to-pcb reference; pinned, MIT) — read them before layout work. KiCad 10 via
+`brew install --cask kicad` (needs the owner's sudo password once).
 **Power (owner decision 2026-09-27):** the Lounge phone requires a USB-C source advertising
 ≥1.5 A (ship a 5 V/3 A adapter); on a Default/USB-A source it runs in *reduced mode* (radar off,
 LEDs ≤10 %, ringer ≤0.5 W, charging off) and reports `status.power {source, reduced}`; the strip
