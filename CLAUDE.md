@@ -104,8 +104,11 @@ Keep this section current when finishing a milestone.
   that's simpler against an SFU). The original plan said SFU; tell the owner if this matters.
 - **M4 Kids' features** — server done (`f7414c8`): invites/sign-in links, passkeys
   (SimpleWebAuthn), voicemail upload + background transcription + `voicemail.new` + phone
-  `config.missed`, `config.quietUntil`, P-256 device keys, removing people. Companion/emulator
-  UIs in progress.
+  `config.missed`, `config.quietUntil`, P-256 device keys, removing people. UIs done
+  (`a8d9876` emulator, `fccc5f1` companion). Browser-verified: passkeys via Chromium virtual
+  authenticator, invite join in a separate context, quiet-hours voicemail record → inbox →
+  phone "MISSED GRANDMA" → heard clears it. Not yet: real transcription run (needs
+  TRANSCRIBE_URL or Workers AI login), passkeys on a real phone over HTTPS.
 - M5 CLI + Tauri — not started.
 
 ## Client notes
