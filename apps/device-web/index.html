@@ -46,10 +46,19 @@
             <output data-battery="out">100%</output></label>
           <label><input type="checkbox" checked data-battery="charging" /> Charging</label>
         </fieldset>
+        <fieldset class="devpanel__power">
+          <legend>USB power (<span data-power="variant"></span> phone)</legend>
+          <label>Charger advertises
+            <select data-power="source">
+              <option value="3A" selected>3 A (typical USB-C charger)</option>
+              <option value="1.5A">1.5 A</option>
+              <option value="default">Default / USB-A (500 mA)</option>
+            </select></label>
+        </fieldset>
         <label class="devpanel__brightness">Display brightness
           <input type="range" min="10" max="100" value="100" data-display="brightness" /></label>
         <button type="button" class="devpanel__forget">Forget identity / re-pair</button>
-        <p class="devpanel__keys">Keyboard: <kbd>Space</kbd> lifts or hangs up the handset, <kbd>1</kbd>–<kbd>8</kbd> press keys. Add <code>?profile=name</code> to run another phone, <code>?keys=N</code> for 1–8 keys, <code>?display=segments</code> for an LED character display instead of e-ink.</p>
+        <p class="devpanel__keys">Keyboard: <kbd>Space</kbd> lifts or hangs up the handset, <kbd>1</kbd>–<kbd>8</kbd> press keys. Add <code>?profile=name</code> to run another phone, <code>?keys=N</code> for 1–8 keys, <code>?display=segments</code> for an LED character display instead of e-ink, <code>?variant=lounge</code> for the Lounge phone.</p>
         <ol class="devpanel__log" reversed></ol>
       </details>
     </main>

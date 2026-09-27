@@ -23,6 +23,9 @@ INFO  [check_power_budget] ringing_max: 651 mA through charger (limit ≥1350, h
 INFO  [check_power_budget] worst_case_capped: 970 mA through charger (limit ≥1350, headroom +28%); 1070 mA from USB (source 1500)
 INFO  [check_power_budget] worst_case_uncapped: 1250 mA through charger (limit ≥1350, headroom +7%); 1350 mA from USB (source 1500)
 INFO  [check_power_budget] default_usb_kids: 491 mA through charger (limit ≥1350, headroom +64%); 491 mA from USB (source 500)
-WARN  [check_power_budget] default_usb_lounge: 491 mA through charger (limit ≥1350, headroom +64%); 591 mA from USB (source 500)
+INFO  [check_power_budget] default_usb_lounge_reduced: 491 mA through charger (limit ≥1350, headroom +64%); 491 mA from USB (source 500)
+INFO  [check_power_budget] default_usb_lounge_full: 491 mA through charger (limit ≥1350, headroom +64%); 591 mA from USB (source 500) (advisory)
+INFO  [check_power_budget] kids: requires a ≥500 mA USB source; peak 491 mA
+INFO  [check_power_budget] lounge: requires a ≥1500 mA USB source; peak 1070 mA
 INFO  [check_power_budget] VSYS ≤4.5 V; lowest rating on VSYS 5.25 V
 INFO  [check_power_budget] charger dissipation 0.82 W at 970 mA -> Tj ≈ 77 °C (fold-back at 125 °C)

@@ -41,6 +41,7 @@ const deviceToServer: DeviceToServer[] = [
   { t: "hook", state: "up" },
   { t: "button", index: 3 },
   { t: "status", battery: { pct: 14, charging: false }, rssi: -61, uptimeS: 3600 },
+  { t: "status", power: { source: "default", reduced: true } },
   { t: "status" },
   { t: "call.answer", callId: "c1" },
   { t: "call.hangup", callId: "c1" },

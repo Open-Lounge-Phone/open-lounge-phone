@@ -102,6 +102,15 @@ export const Button = z
   .object({ t: z.literal("button"), ...Ref, index: z.number().int().min(0).max(15) })
   .describe("Speed-dial button pressed (0-based).");
 
+export const PowerStatus = z
+  .object({
+    source: z
+      .enum(["default", "1.5A", "3A"])
+      .describe("Current the USB-C source advertises (USB-A chargers always read `default`)."),
+    reduced: z.boolean().describe("Running with features limited because the source is too weak."),
+  })
+  .describe("USB power source; the Lounge phone needs a ≥1.5 A source for full features.");
+
 export const Status = z
   .object({
     t: z.literal("status"),
@@ -109,6 +118,7 @@ export const Status = z
     battery: z.object({ pct: z.number().int().min(0).max(100), charging: z.boolean() }).optional(),
     rssi: z.number().int().optional().describe("Wi-Fi signal strength in dBm."),
     uptimeS: z.number().int().nonnegative().optional(),
+    power: PowerStatus.optional(),
   })
   .describe("Periodic health report, forwarded to guardians.");
 
@@ -262,6 +272,7 @@ export const DeviceStatus = z
     online: z.boolean(),
     battery: Status.shape.battery,
     rssi: Status.shape.rssi,
+    power: Status.shape.power,
     lastSeen: EpochMs,
   })
   .describe("Presence and health of a device in the guardian's household.");

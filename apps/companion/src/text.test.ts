@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatLastSeen,
   formatWhen,
+  powerWarning,
   transcriptText,
 } from "./text.ts";
 
@@ -55,5 +56,13 @@ describe("voicemail text", () => {
       "Yesterday 11:05 PM",
     );
     expect(formatWhen(new Date(2026, 8, 20, 9, 0).getTime(), now, "en-US")).toBe("Sep 20 9:00 AM");
+  });
+});
+
+describe("powerWarning", () => {
+  it("only warns when the phone reports reduced mode", () => {
+    expect(powerWarning(undefined)).toBeUndefined();
+    expect(powerWarning({ reduced: false })).toBeUndefined();
+    expect(powerWarning({ reduced: true })).toMatch(/1\.5 A/);
   });
 });

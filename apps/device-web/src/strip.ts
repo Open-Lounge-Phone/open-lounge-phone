@@ -14,6 +14,8 @@ export interface StatusInput {
   /** Label of the other party on the current or last call. */
   activeLabel?: string;
   battery?: { pct: number; charging: boolean };
+  /** Lounge on a weak USB source runs with reduced features and asks for a better charger. */
+  power?: { reduced: boolean };
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
   now: number;
@@ -117,8 +119,12 @@ export function statusLines(input: StatusInput): StatusLines {
   }
 
   const first = quiet ?? (battery ? `READY ${battery.pct}%` : "READY");
+  if (input.power?.reduced) return [first, WEAK_CHARGER];
   return lowLine ? [first, lowLine] : [first];
 }
+
+/** Shown on a Default (≤500 mA) USB source when the phone needs more (Lounge). */
+export const WEAK_CHARGER = "USE 1.5A CHARGER";
 
 /** How long each missed caller's name stays on screen when several are cycling. */
 export const MISSED_CYCLE_MS = 3000;

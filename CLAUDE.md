@@ -12,7 +12,12 @@ questions are the owner's to answer — don't decide them silently.
 The main and deck boards are captured as **schematic-as-code in SKiDL** (`hardware/schematic/`,
 `make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`): 3 variants
 (kids, lounge, kids-batt) × 2 boards, ERC + custom checks (pin table, I2C addresses, FFC pinout,
-LCSC/footprint validity). Open questions are parameters in `config.py`. Layout (KiCad) and 5
+LCSC/footprint validity). Open questions are parameters in `config.py`.
+**Power (owner decision 2026-09-27):** the Lounge phone requires a USB-C source advertising
+≥1.5 A (ship a 5 V/3 A adapter); on a Default/USB-A source it runs in *reduced mode* (radar off,
+LEDs ≤10 %, ringer ≤0.5 W, charging off) and reports `status.power {source, reduced}`; the strip
+shows `USE 1.5A CHARGER` and the companion warns. Kids works on any source. Enforced by
+`hardware/schematic/power_budget.yaml` + `check_power_budget`; policy in DESIGN.md §9.2a. Layout (KiCad) and 5
 custom footprints are not done yet.
 
 ## Decisions already made (don't relitigate without the owner)

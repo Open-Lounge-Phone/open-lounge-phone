@@ -38,7 +38,18 @@ scenarios:
   ringing_max:             [730, 79, 1500, policy]
   worst_case_capped:       [1070, 100, 1500, policy]
   worst_case_uncapped:     [1350, 100, 1500, uncapped]
-  # Default-USB source (plain USB 2.0 port, 500 mA): ringer <=0.5 W, LEDs <=10 %, charging off.
+  # Default-USB source (USB-C "Default" Rp, or any USB-A charger via an A-to-C cable: 500 mA):
+  # ringer <=0.5 W, LEDs <=10 %, charging off.
   # ESP32 TX peak 266 + codecs 25 + e-ink 6 + misc 1 + LEDs 67 + amp 0.5 W/(4.4 V*0.9)=126.
   default_usb_kids:        [491, 0, 500, policy]
-  default_usb_lounge:      [591, 100, 500, advisory]
+  # Lounge requires a >=1.5 A USB-C source. On a Default source it runs in *reduced mode*:
+  # radar powered off via LD_PWR_EN (presence falls back to hook/NFC), same caps as above, and
+  # the phone reports power.reduced so the status strip and companion ask for a better charger.
+  default_usb_lounge_reduced: [491, 0, 500, policy]
+  # What Lounge would draw on a Default source if firmware did NOT enter reduced mode.
+  default_usb_lounge_full: [591, 100, 500, advisory]
+
+# Minimum advertised USB-C current per SKU for full-feature operation (see DESIGN.md §9).
+required_source_ma:
+  kids: 500
+  lounge: 1500

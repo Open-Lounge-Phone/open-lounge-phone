@@ -27,6 +27,12 @@ export function formatBattery(b: { pct: number; charging: boolean } | undefined)
   return `${b.pct}%${b.charging ? " ⚡" : ""}`;
 }
 
+/** Warning for a phone that is running reduced because its USB charger is too weak. */
+export function powerWarning(power: { reduced: boolean } | undefined): string | undefined {
+  if (!power?.reduced) return undefined;
+  return "Weak charger: some features are off. Use a USB-C charger rated 1.5 A or more.";
+}
+
 export function formatLastSeen(ts: number | null | undefined, now: number): string {
   if (!ts) return "never";
   const s = Math.max(0, Math.round((now - ts) / 1000));

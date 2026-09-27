@@ -30,6 +30,7 @@ import {
   sign,
 } from "./identity.ts";
 import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
+import { type PowerSource, parseVariant, powerStatus } from "./power.ts";
 import { renderSegments } from "./segments.ts";
 import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
 
@@ -47,6 +48,8 @@ const keyCount = Math.min(8, Math.max(1, Math.trunc(Number(params.get("keys"))) 
 const startedAt = Date.now();
 // The hardware display is undecided: a small e-ink stripe or 14-segment LED characters.
 const displayMode = params.get("display") === "segments" ? "segments" : "eink";
+const variant = parseVariant(params.get("variant"));
+let powerSource: PowerSource = "3A";
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 const handsetEl = $<HTMLButtonElement>(".handset");
@@ -229,6 +232,7 @@ function sendStatus(): void {
     t: "status",
     battery: { pct: battery.pct, charging: battery.charging },
     uptimeS: Math.floor((Date.now() - startedAt) / 1000),
+    power: powerStatus(variant, powerSource),
   });
 }
 setInterval(sendStatus, STATUS_INTERVAL_MS);
@@ -373,6 +377,13 @@ pctEl.addEventListener("input", () => {
   render();
 });
 pctEl.addEventListener("change", sendStatus);
+const sourceEl = $<HTMLSelectElement>('[data-power="source"]');
+sourceEl.addEventListener("change", () => {
+  powerSource = sourceEl.value as PowerSource;
+  sendStatus();
+  render();
+});
+$<HTMLElement>('[data-power="variant"]').textContent = variant === "lounge" ? "Lounge" : "Kids";
 chargingEl.addEventListener("change", () => {
   battery.charging = chargingEl.checked;
   sendStatus();
@@ -459,6 +470,7 @@ function renderDisplay(): void {
     ...(activeLabel ? { activeLabel } : {}),
     ...(callStartedAt !== undefined ? { callStartedAt } : {}),
     battery,
+    power: powerStatus(variant, powerSource),
     now: Date.now(),
   });
   const text = lines.join("\n");

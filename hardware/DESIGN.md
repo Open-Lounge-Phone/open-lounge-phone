@@ -622,6 +622,21 @@ ESP32-S3 Wi-Fi TX peak **355 mA** (802.11b 1 Mbps, 20.5 dBm, datasheet). LD2410C
   ((4.4−3.7) × 0.5 ≈ 0.35 W, thermal regulation at ~110 °C junction). Charging is limited to
   0–45 °C via NTC. Place the charger and amp away from the battery pocket.
 
+### 9.2a USB source policy (Default / 1.5 A / 3 A)
+
+The sink reads the source's Rp advertisement on CC1/CC2 (GPIO1/2, ADC1) with the 5.1 kΩ Rd in
+place: < 0.66 V = Default (500 mA; also what every USB-A→C cable reports), 0.66–1.23 V = 1.5 A,
+> 1.23 V = 3 A. Re-read on attach and every few seconds (sources may change advertisement).
+
+| SKU | Default source | ≥1.5 A source |
+|---|---|---|
+| Kids | full features (491 mA peak) | full features |
+| Lounge | **reduced mode**: radar off, LEDs ≤10 %, ringer ≤0.5 W, charging off; strip "USE 1.5A CHARGER" | full features (1.07 A capped peak) |
+
+USB PD / higher voltages are deliberately not used: everything runs from 5 V, and a 5 V / 3 A
+Type-C advertisement already covers the worst case. Budget numbers and the per-SKU requirement
+are enforced by `hardware/schematic/power_budget.yaml` + `check_power_budget`.
+
 ### 9.3 Battery decision
 
 **Default: no battery (both SKUs).** Rationale: a desk device on USB. In a power cut the home
@@ -1128,7 +1143,11 @@ found while checking datasheets. The r0.1 text above has not been edited.
 - **Input current limit (2026-09-27):** R_ILIM = 1.1 kΩ gives 1.46 A typ / **1.35 A guaranteed**
   (not the 1.5 A written in §9.1; 1.5 A would need a resistor below the 1.1 kΩ minimum). The §9.2
   budget fits under the guaranteed value with 28 % headroom (firmware-capped) and 7 % (uncapped);
-  this is now enforced by `check_power_budget` on every build. Same check flags that the
-  **Lounge** SKU can draw ≈590 mA on a plain 500 mA USB port (radar bypasses the charger), so
-  Lounge should ship with a ≥1.5 A USB-C adapter or have firmware drop radar duty on Default-USB
-  sources.
+  enforced by `check_power_budget` on every build.
+- **USB source requirement (owner decision 2026-09-27):** **Lounge requires a USB-C source that
+  advertises ≥1.5 A** (ship it with a 5 V / 3 A USB-C adapter). Kids works on any source (peak
+  491 mA on Default USB). On a Default-advertising source (incl. every USB-A charger via an
+  A-to-C cable) Lounge runs in **reduced mode**: radar off via LD_PWR_EN (presence falls back to
+  hook + NFC), LEDs ≤10 %, ringer ≤0.5 W, charging off → 491 mA. The phone reports
+  `status.power {source, reduced}`; the strip shows "USE 1.5A CHARGER" and the companion app
+  warns. See §9.2a and `firmware/README.md`.

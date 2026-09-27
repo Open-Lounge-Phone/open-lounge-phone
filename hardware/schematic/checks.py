@@ -328,8 +328,24 @@ def check_power_budget(circuit):
                 out.append(("INFO", line))
         elif kind == "uncapped":
             out.append(("ERROR" if through > i_min else "INFO", line))
-        else:  # advisory: report, don't fail
-            out.append(("WARN" if total > source else "INFO", line))
+        else:  # advisory: documents why a policy exists; reported, never fails
+            out.append(("INFO", line + " (advisory)"))
+
+    # Full-feature scenarios must fit the source each SKU requires; Lounge needs >=1.5 A.
+    need = budget["required_source_ma"]
+    for name, (total, _direct, source, kind) in budget["scenarios"].items():
+        if kind == "policy" and not name.startswith("default_usb") and source < need["lounge"]:
+            out.append(("ERROR", f"{name}: full-feature scenario assumes a {source} mA source, "
+                                 f"below the Lounge requirement of {need['lounge']} mA"))
+    for sku, ma in need.items():
+        full = [t for n, (t, _d, _s, k) in budget["scenarios"].items()
+                if k == "policy" and not n.startswith("default_usb")]
+        if sku == "kids":
+            full = [budget["scenarios"]["default_usb_kids"][0]]
+        if max(full) > ma:
+            out.append(("ERROR", f"{sku}: needs {max(full)} mA but only requires a {ma} mA source"))
+        else:
+            out.append(("INFO", f"{sku}: requires a ≥{ma} mA USB source; peak {max(full)} mA"))
 
     worst_rating = min(budget["vsys_parts_max_v"].values())
     if ch["vsys_max_v"] > worst_rating:

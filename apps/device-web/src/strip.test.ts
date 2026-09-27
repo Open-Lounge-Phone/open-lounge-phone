@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceConfig } from "./leds.ts";
-import { MISSED_CYCLE_MS, STATUS_WIDTH, type StatusInput, statusLines } from "./strip.ts";
+import {
+  MISSED_CYCLE_MS,
+  STATUS_WIDTH,
+  type StatusInput,
+  statusLines,
+  WEAK_CHARGER,
+} from "./strip.ts";
 
 const NOW = 1_000_000;
 const base: StatusInput = {
@@ -161,5 +167,26 @@ describe("quiet hours and missed voicemail", () => {
         expect(line.length).toBeLessThanOrEqual(STATUS_WIDTH);
       }
     }
+  });
+});
+
+describe("weak charger", () => {
+  it("asks for a 1.5 A charger when running reduced, without hiding missed calls", () => {
+    const base = {
+      connection: "online" as const,
+      deviceState: { kind: "idle" as const },
+      now: 0,
+      power: { reduced: true },
+    };
+    expect(statusLines({ ...base, config: { buttons: [], quiet: false } })).toEqual([
+      "READY",
+      WEAK_CHARGER,
+    ]);
+    expect(WEAK_CHARGER.length).toBeLessThanOrEqual(STATUS_WIDTH);
+    const missed = statusLines({
+      ...base,
+      config: { buttons: [], quiet: false, missed: [{ from: "Mom" }] },
+    });
+    expect(missed[0]).toBe("MISSED MOM");
   });
 });

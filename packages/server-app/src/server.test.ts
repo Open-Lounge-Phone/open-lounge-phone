@@ -507,10 +507,20 @@ describe("calls", () => {
 
   it("forwards device status to guardians", async () => {
     const { device, app, deviceId } = await household();
-    device.write({ t: "status", battery: { pct: 14, charging: false }, rssi: -60 });
+    device.write({
+      t: "status",
+      battery: { pct: 14, charging: false },
+      rssi: -60,
+      power: { source: "default", reduced: true },
+    });
     let status = await app.next("device.status");
     while (!status.battery) status = await app.next("device.status");
-    expect(status).toMatchObject({ deviceId, online: true, battery: { pct: 14, charging: false } });
+    expect(status).toMatchObject({
+      deviceId,
+      online: true,
+      battery: { pct: 14, charging: false },
+      power: { source: "default", reduced: true },
+    });
     device.handler.closed();
     expect(await app.next("device.status")).toMatchObject({ deviceId, online: false });
   });

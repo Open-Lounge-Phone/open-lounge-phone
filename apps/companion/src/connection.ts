@@ -19,6 +19,7 @@ export interface DeviceLive {
   online: boolean;
   battery?: { pct: number; charging: boolean };
   rssi?: number;
+  power?: { source: "default" | "1.5A" | "3A"; reduced: boolean };
   lastSeen: number;
 }
 
@@ -184,6 +185,7 @@ export class Connection {
           lastSeen: msg.lastSeen,
           ...(msg.battery ? { battery: msg.battery } : {}),
           ...(msg.rssi !== undefined ? { rssi: msg.rssi } : {}),
+          ...(msg.power ? { power: msg.power } : {}),
         };
         this.set({ live: { ...this.snap.live, [msg.deviceId]: live } });
         return;

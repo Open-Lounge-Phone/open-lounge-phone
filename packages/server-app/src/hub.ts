@@ -572,6 +572,7 @@ export class HouseholdHub {
       lastSeen: peer ? this.env.now() : lastSeen,
       ...(peer?.status?.battery ? { battery: peer.status.battery } : {}),
       ...(peer?.status?.rssi !== undefined ? { rssi: peer.status.rssi } : {}),
+      ...(peer?.status?.power ? { power: peer.status.power } : {}),
     };
   }
 

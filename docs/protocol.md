@@ -80,6 +80,7 @@ Periodic health report, forwarded to guardians.
 | `battery` | { pct: integer (≥0, ≤100), charging: boolean } |  |  |
 | `rssi` | integer |  | Wi-Fi signal strength in dBm. |
 | `uptimeS` | integer (≥0) |  |  |
+| `power` | { source: `"default"` \| `"1.5A"` \| `"3A"`, reduced: boolean } |  | USB power source; the Lounge phone needs a ≥1.5 A source for full features. |
 
 ### `call.answer`
 
@@ -338,6 +339,7 @@ Presence and health of a device in the guardian's household.
 | `online` | boolean | yes |  |
 | `battery` | { pct: integer (≥0, ≤100), charging: boolean } |  |  |
 | `rssi` | integer |  | Wi-Fi signal strength in dBm. |
+| `power` | { source: `"default"` \| `"1.5A"` \| `"3A"`, reduced: boolean } |  | USB power source; the Lounge phone needs a ≥1.5 A source for full features. |
 | `lastSeen` | integer (≥0) | yes |  |
 
 ### `voicemail.new`

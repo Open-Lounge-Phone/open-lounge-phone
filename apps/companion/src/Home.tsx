@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DeviceSummary } from "./api.ts";
 import type { DeviceLive } from "./connection.ts";
-import { formatBattery, formatLastSeen } from "./text.ts";
+import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
   devices: DeviceSummary[];
@@ -58,6 +58,11 @@ export function Home({ devices, live, guardian, userName, onCall, onManage, onPa
                       : `Offline · last seen ${formatLastSeen(l?.lastSeen ?? d.lastSeen, now)}`}
                     {l?.battery && ` · 🔋 ${formatBattery(l.battery)}`}
                   </div>
+                  {online && powerWarning(l?.power) && (
+                    <div className="warning small" role="status">
+                      ⚠ {powerWarning(l?.power)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="device-actions">
