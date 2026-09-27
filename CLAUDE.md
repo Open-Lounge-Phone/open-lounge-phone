@@ -21,6 +21,11 @@ the deck. `hello.display` = eink | seg14 | oled | none. Cost goal (revised): **$
 fine**; it must be **affordable to build one-off** (a hobbyist's minimum JLCPCB order) and
 **cheap at scale**. The hardware build reports both per variant; prefer JLC "basic" parts where
 function allows (extended parts add setup fees that dominate small orders).
+**Manufacturing is fab-agnostic (owner, 2026-09-27):** outputs must work at any PCB/PCBA house
+(JLCPCB, PCBWay, OSH Park, Eurocircuits, Aisler, Epectec, Seeed, NextPCB, MacroFab, …) and for
+bare boards + self-sourced parts + hand assembly: design rules = common 4-layer capability
+(≥0.15 mm trace/space, ≥0.3 mm drill), Gerber X2 + Excellon + IPC-2581, generic BOM (MPN +
+LCSC/DigiKey/Mouser) and pick-and-place, plus a hand-assembly difficulty guide.
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
