@@ -1,7 +1,8 @@
 import type { DeviceState } from "@opentincan/core";
 
 export type LedColor = "white" | "green" | "red" | "blue" | "amber" | "purple";
-export type LedMode = "off" | "dim" | "on" | "pulse" | "blink";
+/** `breathe` is a slow, gentle pulse for notices that can wait (e.g. missed voicemail). */
+export type LedMode = "off" | "dim" | "on" | "pulse" | "breathe" | "blink";
 
 export interface Led {
   color: LedColor;
@@ -13,6 +14,10 @@ export type Connection = "connecting" | "online" | "offline";
 export interface DeviceConfig {
   buttons: { index: number; label: string }[];
   quiet: boolean;
+  /** Local "HH:MM" when current quiet hours end. */
+  quietUntil?: string;
+  /** Callers with unheard voicemail, newest first. */
+  missed?: { from: string }[];
 }
 
 export interface LedInput {
@@ -79,8 +84,23 @@ export function ledsFor(input: LedInput): LedState {
         else for (let i = 0; i < buttons; i++) keys[i] = { color: "red", mode: "blink" };
       }
       break;
+    case "idle": {
+      // Missed voicemail: breathe the newest caller's key, or the status LED if unmapped.
+      const newest = config?.missed?.[0]?.from;
+      if (!newest || connection !== "online") break;
+      const match = config?.buttons.find((b) => b.label === newest);
+      if (match && match.index < buttons) set(match.index, { color: "amber", mode: "breathe" });
+      else status = { ...status, mode: "breathe" };
+      break;
+    }
     default:
       break;
   }
   return { keys, status };
+}
+
+/** True when `next` lists a caller with unheard voicemail that `prev` did not. */
+export function hasNewMissed(prev: DeviceConfig | undefined, next: DeviceConfig): boolean {
+  const before = new Set(prev?.missed?.map((m) => m.from) ?? []);
+  return (next.missed ?? []).some((m) => !before.has(m.from));
 }

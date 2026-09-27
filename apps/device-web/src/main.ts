@@ -21,6 +21,7 @@ import {
   PROTOCOL_VERSION,
   type ServerToDevice,
 } from "@opentincan/protocol";
+import { playChime, unlockChime } from "./chime.ts";
 import {
   forgetIdentity,
   getDeviceId,
@@ -28,9 +29,9 @@ import {
   setDeviceId,
   sign,
 } from "./identity.ts";
-import { type Connection, type DeviceConfig, ledsFor } from "./leds.ts";
+import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
 import { renderSegments } from "./segments.ts";
-import { STATUS_WIDTH, statusLines } from "./strip.ts";
+import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
 
 type Signal = Extract<ServerToDevice, { t: "rtc.sdp" | "rtc.ice" }>;
 
@@ -79,6 +80,7 @@ let announceTimer: ReturnType<typeof setInterval> | undefined;
 let lastStatusText = "";
 let callStartedAt: number | undefined;
 let callTicker: ReturnType<typeof setInterval> | undefined;
+let noticeTicker: ReturnType<typeof setInterval> | undefined;
 
 const tones = new TonePlayer();
 const identity = await loadOrCreateIdentity(profile);
@@ -176,7 +178,21 @@ async function handle(msg: ServerToDevice): Promise<void> {
       socket.reconnect();
       break;
     case "config": {
-      config = { buttons: msg.buttons, quiet: msg.quiet };
+      const next: DeviceConfig = {
+        buttons: msg.buttons,
+        quiet: msg.quiet,
+        ...(msg.quietUntil ? { quietUntil: msg.quietUntil } : {}),
+        ...(msg.missed ? { missed: msg.missed } : {}),
+      };
+      // Chime once for a newly missed caller, but never over a call or a lifted handset.
+      if (authed && hasNewMissed(config, next) && !hookUp && deviceState.kind === "idle") {
+        playChime();
+      }
+      config = next;
+      // Several missed callers cycle their names on the display.
+      clearInterval(noticeTicker);
+      noticeTicker =
+        (next.missed?.length ?? 0) > 1 ? setInterval(render, MISSED_CYCLE_MS) : undefined;
       if (!authed) {
         authed = true;
         unauthorizedStreak = 0;
@@ -302,6 +318,7 @@ function endCall(): void {
 
 function toggleHook(): void {
   tones.unlock();
+  unlockChime();
   hookUp = !hookUp;
   if (hookUp && !micPromise) {
     micPromise = getMicrophone();
@@ -315,6 +332,7 @@ function toggleHook(): void {
 
 function pressKey(index: number): void {
   tones.unlock();
+  unlockChime();
   const el = keysEl.children[index];
   el?.classList.add("is-pressed");
   setTimeout(() => el?.classList.remove("is-pressed"), 140);
@@ -423,7 +441,13 @@ function render(): void {
   fact("deviceId").textContent = getDeviceId(profile) ?? "— (unpaired)";
   fact("pairing").textContent = pairingCode ?? "—";
   fact("state").textContent = JSON.stringify(deviceState);
-  fact("config").textContent = config ? JSON.stringify(config) : "—";
+  fact("config").textContent = config
+    ? JSON.stringify({ buttons: config.buttons, quiet: config.quiet })
+    : "—";
+  fact("quietUntil").textContent = config?.quiet ? (config.quietUntil ?? "(no end)") : "—";
+  fact("missed").textContent = config?.missed?.length
+    ? config.missed.map((m) => m.from).join(", ")
+    : "—";
 }
 
 function renderDisplay(): void {

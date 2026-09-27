@@ -86,6 +86,39 @@ export function statusLines(input: StatusInput): StatusLines {
   }
 
   const low = battery && !battery.charging && battery.pct < 20;
-  const first = config?.quiet ? "QUIET HOURS" : battery ? `READY ${battery.pct}%` : "READY";
-  return low ? [first, `LOW BATTERY ${battery.pct}%`] : [first];
+  const lowLine = low ? `LOW BATTERY ${battery.pct}%` : undefined;
+  const quiet = config?.quiet
+    ? config.quietUntil
+      ? `QUIET TIL ${config.quietUntil}`
+      : "QUIET HOURS"
+    : undefined;
+  const missed = (config?.missed ?? []).map((m) => m.from.trim()).filter(Boolean);
+
+  if (missed.length > 0) {
+    const [newest] = missed as [string];
+    const single = `MISSED ${newest}`;
+    const summary =
+      missed.length === 1
+        ? single.length <= STATUS_WIDTH
+          ? single
+          : "MISSED CALL"
+        : `${missed.length} MISSED CALLS`;
+    if (quiet) return [quiet, clip(summary)];
+    if (missed.length === 1) {
+      const lines: StatusLines =
+        single.length <= STATUS_WIDTH
+          ? [clip(single), "ASK A GROWN-UP"]
+          : ["MISSED CALL", clip(newest)];
+      return lowLine && lines[1] === "ASK A GROWN-UP" ? [lines[0], lowLine] : lines;
+    }
+    // Several callers: cycle their names on the second line every few seconds.
+    const who = missed[Math.floor(input.now / MISSED_CYCLE_MS) % missed.length] as string;
+    return [clip(summary), clip(who)];
+  }
+
+  const first = quiet ?? (battery ? `READY ${battery.pct}%` : "READY");
+  return lowLine ? [first, lowLine] : [first];
 }
+
+/** How long each missed caller's name stays on screen when several are cycling. */
+export const MISSED_CYCLE_MS = 3000;

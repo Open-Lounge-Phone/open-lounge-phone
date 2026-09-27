@@ -334,6 +334,9 @@ body {
 .key[data-mode="pulse"]::before {
   animation: pulse 1.6s ease-in-out infinite;
 }
+.key[data-mode="breathe"]::before {
+  animation: pulse 4s ease-in-out infinite;
+}
 .key[data-mode="blink"]::before {
   animation: blink 0.5s steps(1) infinite;
 }
@@ -374,6 +377,9 @@ body {
 .status-led[data-mode="pulse"] {
   animation: pulse 1.6s ease-in-out infinite;
 }
+.status-led[data-mode="breathe"] {
+  animation: pulse 4s ease-in-out infinite;
+}
 .status-led[data-mode="blink"] {
   animation: blink 0.5s steps(1) infinite;
 }
@@ -401,7 +407,9 @@ body {
     transition: none;
   }
   .key[data-mode="pulse"]::before,
-  .status-led[data-mode="pulse"] {
+  .key[data-mode="breathe"]::before,
+  .status-led[data-mode="pulse"],
+  .status-led[data-mode="breathe"] {
     animation: none;
     opacity: 0.8;
   }

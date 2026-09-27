@@ -1,6 +1,6 @@
 import type { DeviceState } from "@opentincan/core";
 import { describe, expect, it } from "vitest";
-import { type LedInput, ledsFor } from "./leds.ts";
+import { hasNewMissed, type LedInput, ledsFor } from "./leds.ts";
 
 const config = {
   buttons: [
@@ -79,5 +79,45 @@ describe("ledsFor", () => {
 
   it("ignores out-of-range keys", () => {
     expect(ledsFor(input({ deviceState: { kind: "dialing", button: 9 } })).keys).toHaveLength(4);
+  });
+});
+
+describe("missed voicemail", () => {
+  it("breathes the newest caller's key when idle", () => {
+    const leds = ledsFor(
+      input({ config: { ...config, missed: [{ from: "Grandma" }, { from: "Mom" }] } }),
+    );
+    expect(leds.keys[2]).toEqual({ color: "amber", mode: "breathe" });
+    expect(leds.keys[0]).toEqual({ color: "white", mode: "dim" });
+    expect(leds.status).toEqual({ color: "green", mode: "on" });
+  });
+
+  it("breathes the status LED when the caller has no key", () => {
+    const leds = ledsFor(input({ config: { ...config, quiet: true, missed: [{ from: "Aunt" }] } }));
+    expect(leds.status).toEqual({ color: "purple", mode: "breathe" });
+    expect(leds.keys.every((k) => k.mode !== "breathe")).toBe(true);
+  });
+
+  it("stays out of the way of calls, pairing and offline", () => {
+    const missed = { ...config, missed: [{ from: "Grandma" }] };
+    const incoming = ledsFor(
+      input({ config: missed, deviceState: { kind: "incoming", callId: "c", from: "Mom" } }),
+    );
+    expect(incoming.keys[2]).toEqual({ color: "white", mode: "dim" });
+    expect(ledsFor(input({ config: missed, pairing: true })).keys[2]?.color).toBe("blue");
+    const offline = ledsFor(input({ config: missed, connection: "offline" }));
+    expect(offline.keys[2]?.mode).toBe("off");
+    expect(offline.status.mode).toBe("on");
+  });
+});
+
+describe("hasNewMissed", () => {
+  const with_ = (...from: string[]) => ({ ...config, missed: from.map((f) => ({ from: f })) });
+  it("detects newly listed callers only", () => {
+    expect(hasNewMissed(undefined, with_("Mom"))).toBe(true);
+    expect(hasNewMissed(with_("Mom"), with_("Mom"))).toBe(false);
+    expect(hasNewMissed(with_("Mom"), with_("Grandma", "Mom"))).toBe(true);
+    expect(hasNewMissed(with_("Mom", "Grandma"), with_("Mom"))).toBe(false);
+    expect(hasNewMissed(with_("Mom"), config)).toBe(false);
   });
 });
