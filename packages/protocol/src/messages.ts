@@ -56,8 +56,10 @@ export const DeviceHello = z
     fw: z.string().min(1).max(32).describe("Firmware / emulator version."),
     buttons: z.number().int().min(1).max(16).describe("Number of speed-dial buttons."),
     display: z
-      .enum(["eink", "none"])
-      .describe("`eink` = the phone's small e-ink status strip; `none` = LEDs only."),
+      .enum(["eink", "seg14", "oled", "none"])
+      .describe(
+        "Status display fitted: `eink` strip (standard), `seg14`/`oled` I2C modules (cheaper option), `none` (Kids Lite: printed key labels, LEDs and voice).",
+      ),
   })
   .describe("First message on every connection.");
 

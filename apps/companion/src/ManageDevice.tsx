@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Api, ContactEntry, DeviceSummary, User } from "./api.ts";
+import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 
 const KEY_COUNT = 8;
 
@@ -123,6 +124,7 @@ export function ManageDevice({ api, deviceId, device, onBack }: Props) {
           );
         })}
       </div>
+      <KeyLabelSheet buttons={buttons} contacts={contacts} keyCount={KEY_COUNT} />
     </section>
   );
 }

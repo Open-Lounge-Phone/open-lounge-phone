@@ -13,6 +13,12 @@ The main and deck boards are captured as **schematic-as-code in SKiDL** (`hardwa
 `make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`): 3 variants
 (kids, lounge, kids-batt) × 2 boards, ERC + custom checks (pin table, I2C addresses, FFC pinout,
 LCSC/footprint validity). Open questions are parameters in `config.py`.
+**Display & cost (owner decisions 2026-09-27):** Kids ships as **Lite** by default — no display;
+printed relegendable keycap labels (companion: Manage phone → "Print key labels"), LEDs + voice.
+**E-ink 2.9" (GDEY029T94) is the standard option** (Kids Standard, Lounge); cheaper displays
+(0.91" SSD1306 OLED @0x3C, HT16K33 14-seg @0x70) plug into an optional Qwiic/STEMMA-QT I2C port on
+the deck. `hello.display` = eink | seg14 | oled | none. Target **≈$25 electronics per phone at
+1k qty** (some wiggle room); the hardware build reports cost per variant.
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,

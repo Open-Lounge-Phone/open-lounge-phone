@@ -643,3 +643,48 @@ input[type="radio"] {
     color: var(--warning-dark, #f0b35a);
   }
 }
+
+/* Printable keycap labels (Kids Lite). */
+.label-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3mm;
+}
+.key-label {
+  width: var(--label-mm);
+  height: var(--label-mm);
+  border: 1px dashed #888;
+  background: #fff;
+  color: #000;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.05;
+  overflow: hidden;
+  font-weight: 700;
+  word-break: break-word;
+}
+.key-label__num {
+  position: absolute;
+  top: 0.5mm;
+  left: 0.8mm;
+  font-size: 5pt;
+  font-weight: 400;
+  color: #555;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .label-sheet,
+  .label-sheet * {
+    visibility: visible;
+  }
+  .label-sheet {
+    position: absolute;
+    top: 10mm;
+    left: 10mm;
+  }
+}

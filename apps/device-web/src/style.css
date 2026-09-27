@@ -471,3 +471,8 @@ body {
   font-size: 11px;
   word-break: break-all;
 }
+
+/* Kids Lite has no display: the key labels are printed on the keycaps. */
+.display--none {
+  display: none;
+}

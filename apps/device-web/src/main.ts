@@ -47,7 +47,10 @@ const profile = params.get("profile")?.trim() || "default";
 const keyCount = Math.min(8, Math.max(1, Math.trunc(Number(params.get("keys"))) || 4));
 const startedAt = Date.now();
 // The hardware display is undecided: a small e-ink stripe or 14-segment LED characters.
-const displayMode = params.get("display") === "segments" ? "segments" : "eink";
+// `none` = Kids Lite (no display; keys carry printed labels), `segments` = 14-segment module.
+const displayParam = params.get("display");
+const displayMode =
+  displayParam === "segments" ? "segments" : displayParam === "none" ? "none" : "eink";
 const variant = parseVariant(params.get("variant"));
 let powerSource: PowerSource = "3A";
 
@@ -127,7 +130,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
       model: "web-emulator",
       fw: FW,
       buttons: keyCount,
-      display: "eink",
+      display: displayMode === "segments" ? "seg14" : displayMode,
       ...(deviceId ? { deviceId } : {}),
     };
     raw(hello);
@@ -477,6 +480,7 @@ function renderDisplay(): void {
   if (text === lastStatusText) return;
   lastStatusText = text;
   displayEl.setAttribute("aria-label", lines.join(". "));
+  if (displayMode === "none") return; // Kids Lite: no display; status is LEDs + voice
   if (displayMode === "segments") {
     renderSegments(displayEl, lines, STATUS_WIDTH);
     return;

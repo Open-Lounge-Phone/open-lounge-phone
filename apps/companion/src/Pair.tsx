@@ -29,7 +29,8 @@ export function Pair({ api, onDone, onCancel }: { api: Api; onDone(): void; onCa
       <ol className="steps card">
         <li>Plug the phone in and connect it to the internet.</li>
         <li>
-          Lift the phone's handset — it shows a 6-digit code on its status strip and reads it aloud.
+          Lift the phone's handset — it reads a 6-digit code aloud (and shows it on the display, if
+          the phone has one).
         </li>
         <li>Enter the code below within 10 minutes.</li>
       </ol>
