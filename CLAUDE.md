@@ -39,7 +39,8 @@ Deck ≈117 mm; base ≈350 mm long — **accepted by the owner** (both boards f
 handset may be made bigger, which only lengthens the cradle section).
 **Name (owner decision 2026-09-27):** the project is **Open Lounge Phone** (slug/package scope
 `openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
-registered trademark of another phone — never use "tin can", "TinCan", "opentincan" or "ORT" in
+registered trademark of another phone. The owner has confirmed "Open Lounge Phone" is clear
+and unregistered — never use "tin can", "TinCan", "opentincan" or "ORT" in
 code, UI, docs, silkscreen or new commits. (The working-directory folder name `opentincan/` on
 the owner's machine is incidental.) Self-host auto-renames a legacy `opentincan.sqlite`.
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
