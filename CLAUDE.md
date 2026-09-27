@@ -21,7 +21,9 @@ the deck. `hello.display` = eink | seg14 | oled | none. Cost goal (revised): **$
 fine**; it must be **affordable to build one-off** (a hobbyist's minimum JLCPCB order) and
 **cheap at scale**. The hardware build reports both per variant; prefer JLC "basic" parts where
 function allows (extended parts add setup fees that dominate small orders).
-**Manufacturing is fab-agnostic (owner, 2026-09-27):** outputs must work at any PCB/PCBA house
+**Manufacturing: JLCPCB first, portable always (owner, 2026-09-27):** JLCPCB is the primary
+target (cheapest; optimize for its basic parts, formats and stackup), but outputs must also work
+at any other PCB/PCBA house
 (JLCPCB, PCBWay, OSH Park, Eurocircuits, Aisler, Epectec, Seeed, NextPCB, MacroFab, …) and for
 bare boards + self-sourced parts + hand assembly: design rules = common 4-layer capability
 (≥0.15 mm trace/space, ≥0.3 mm drill), Gerber X2 + Excellon + IPC-2581, generic BOM (MPN +
