@@ -102,3 +102,57 @@ export function isQuietAt(schedule: QuietHoursSchedule, instant: Date): boolean 
   const { weekday, minutes } = localClock(instant, schedule.timeZone);
   return schedule.rules.some((rule) => ruleActive(rule, weekday, minutes));
 }
+
+const MINUTE = 60_000;
+const WEEK_MINUTES = 7 * 1440;
+const SEARCH_LIMIT_MS = 8 * 24 * 60 * MINUTE;
+
+/** Minutes-of-week (0 = Sunday 00:00) at which some rule starts or ends. */
+function boundaries(schedule: QuietHoursSchedule): number[] {
+  const out = new Set<number>();
+  for (const rule of schedule.rules) {
+    const start = parseHHMM(rule.start);
+    const end = parseHHMM(rule.end);
+    const length = end > start ? end - start : end - start + 1440;
+    for (const d of rule.days) {
+      out.add(d * 1440 + start);
+      out.add((d * 1440 + start + length) % WEEK_MINUTES);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * The next instant after `now` at which `isQuietAt` flips, or undefined if it never does
+ * (no rules, or quiet around the clock). Lets servers sleep until quiet hours start or end
+ * instead of polling. Handles DST by jumping to the next wall-clock boundary and then
+ * binary-searching the exact minute.
+ */
+export function nextQuietChange(schedule: QuietHoursSchedule, now: Date): Date | undefined {
+  const marks = boundaries(schedule);
+  if (marks.length === 0) return undefined;
+  const current = isQuietAt(schedule, now);
+  const origin = Math.floor(now.getTime() / MINUTE) * MINUTE;
+  let t = origin;
+  while (t - origin <= SEARCH_LIMIT_MS) {
+    const { weekday, minutes } = localClock(new Date(t), schedule.timeZone);
+    const here = weekday * 1440 + minutes;
+    const delta = Math.min(
+      ...marks.map((m) => (m - here + WEEK_MINUTES) % WEEK_MINUTES || WEEK_MINUTES),
+    );
+    const next = t + delta * MINUTE;
+    if (isQuietAt(schedule, new Date(next)) !== current) {
+      // The flip lies in (t, next]; DST can move it off the wall-clock estimate.
+      let lo = t;
+      let hi = next;
+      while (hi - lo > MINUTE) {
+        const mid = lo + Math.floor((hi - lo) / (2 * MINUTE)) * MINUTE;
+        if (isQuietAt(schedule, new Date(mid)) !== current) hi = mid;
+        else lo = mid;
+      }
+      return new Date(hi);
+    }
+    t = next;
+  }
+  return undefined;
+}

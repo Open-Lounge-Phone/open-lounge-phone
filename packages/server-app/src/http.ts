@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
-import type { Gateway } from "./gateway.ts";
+import type { Coordinator } from "./gateway.ts";
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
@@ -63,6 +63,7 @@ async function body<S extends z.ZodType>(req: Request, schema: S): Promise<z.inf
  * token so the host can print a setup link, or undefined if setup is done or already pending.
  */
 export async function ensureSetupToken(env: ServerEnv): Promise<string | undefined> {
+  // Instances without a startup hook (Cloudflare) seed the hash at deploy time instead.
   if ((await env.store.countHouseholds()) > 0) return undefined;
   const token = newToken();
   await env.store.setSetting(SETUP_TOKEN_KEY, await sha256(token));
@@ -70,7 +71,7 @@ export async function ensureSetupToken(env: ServerEnv): Promise<string | undefin
 }
 
 /** REST API mounted at `/api`. Transports add the WebSocket routes and static files. */
-export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
+export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   const { store } = env;
   const api = new Hono<Vars>();
 
@@ -138,14 +139,13 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
 
   api.get("/devices", async (c) => {
     const user = c.get("user");
-    const hub = gateway.hub(user.householdId);
     const devices = await store.listDevices(user.householdId);
     return c.json(
       await Promise.all(
         devices.map(async (d) => ({
           id: d.id,
           name: d.name,
-          online: hub.isOnline(d.id),
+          online: await live.isOnline(user.householdId, d.id),
           lastSeen: d.lastSeen,
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
@@ -171,7 +171,7 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
       bypassQuietHours: true,
     });
     await store.setButton(device.id, 0, user.id);
-    gateway.notifyPaired(b.code, device);
+    await live.notifyPaired(b.code, device);
     return c.json({ id: device.id, name: device.name }, 201);
   });
 
@@ -195,7 +195,7 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
     const b = await body(c.req.raw, ContactBody);
     if (b instanceof Response) return b;
     await store.upsertContact(device.id, { id: target.id, ...b });
-    await gateway.hub(user.householdId).refreshDevice(device.id);
+    await live.refreshDevice(user.householdId, device.id);
     return c.body(null, 204);
   });
 
@@ -204,7 +204,7 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
     const device = await ownDevice(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
     await store.removeContact(device.id, c.req.param("userId"));
-    await gateway.hub(user.householdId).refreshDevice(device.id);
+    await live.refreshDevice(user.householdId, device.id);
     return c.body(null, 204);
   });
 
@@ -222,7 +222,7 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
       return c.json({ error: "add the person to the allow-list first" }, 400);
     }
     await store.setButton(device.id, index, b.userId);
-    await gateway.hub(user.householdId).refreshDevice(device.id);
+    await live.refreshDevice(user.householdId, device.id);
     return c.body(null, 204);
   });
 
@@ -240,8 +240,9 @@ export function createApi(env: ServerEnv, gateway: Gateway): Hono<Vars> {
       return c.json({ error: (e as Error).message }, 400);
     }
     await store.setQuietRules(user.householdId, rules);
-    const hub = gateway.hub(user.householdId);
-    for (const d of await store.listDevices(user.householdId)) await hub.refreshDevice(d.id);
+    for (const d of await store.listDevices(user.householdId)) {
+      await live.refreshDevice(user.householdId, d.id);
+    }
     return c.body(null, 204);
   });
 

@@ -12,8 +12,10 @@ import {
   CloseCode,
   CONNECT_TIMEOUT_MS,
   type Conn,
+  type ConnMemo,
   HELLO_TIMEOUT_MS,
   RING_TIMEOUT_MS,
+  type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
 import { type ConnectionHandler, Gateway } from "./gateway.ts";
@@ -27,6 +29,10 @@ const NOON_MONDAY = Date.UTC(2026, 2, 2, 12);
 class FakeConn implements Conn {
   sent: Msg[] = [];
   closed?: { code: number; reason: string };
+  memo?: ConnMemo;
+  remember(memo: ConnMemo) {
+    this.memo = structuredClone(memo);
+  }
   private cursor = 0;
   handler!: ConnectionHandler;
 
@@ -79,6 +85,7 @@ class ManualTimers {
 
 let store: Store;
 let timers: ManualTimers;
+let savedRooms: Map<string, RoomSnapshot[]>;
 let env: ServerEnv;
 let gateway: Gateway;
 let api: ReturnType<typeof createApi>;
@@ -94,7 +101,9 @@ beforeEach(() => {
     iceServers: async () => [{ urls: "stun:stun.example:3478" }],
     setTimer: timers.set,
     log: () => {},
+    saveRooms: (hh, rooms) => savedRooms.set(hh, structuredClone(rooms)),
   };
+  savedRooms = new Map();
   gateway = new Gateway(env);
   api = createApi(env, gateway);
 });
@@ -487,5 +496,67 @@ describe("calls", () => {
     expect(status).toMatchObject({ deviceId, online: true, battery: { pct: 14, charging: false } });
     device.handler.closed();
     expect(await app.next("device.status")).toMatchObject({ deviceId, online: false });
+  });
+});
+
+describe("resuming after the host sleeps", () => {
+  /** Simulates Durable Object hibernation: a fresh gateway rebuilt from socket memos. */
+  function hibernate(conns: { conn: FakeConn; app: boolean }[]) {
+    gateway = new Gateway(env);
+    api = createApi(env, gateway);
+    const handlers = gateway.resume(
+      conns.map(({ conn, app }) => ({ conn, memo: conn.memo, app })),
+      (hh) => savedRooms.get(hh) ?? [],
+    );
+    conns.forEach(({ conn }, i) => {
+      conn.handler = handlers[i] as ConnectionHandler;
+    });
+  }
+
+  it("keeps an active call and its participants", async () => {
+    const { device, app } = await household();
+    device.write({ t: "hook", state: "up" });
+    device.write({ t: "button", index: 0 });
+    const { callId } = await app.next("call.ringing");
+    app.write({ t: "call.answer", callId });
+    device.write({ t: "rtc.sdp", callId, type: "offer", sdp: "o" });
+    app.write({ t: "rtc.sdp", callId, type: "answer", sdp: "a" });
+    await device.nextState("active");
+    expect(savedRooms.values().next().value).toMatchObject([{ id: callId }]);
+
+    hibernate([
+      { conn: device, app: false },
+      { conn: app, app: true },
+    ]);
+
+    // Signaling and hangup still reach the other side, and hook state was remembered.
+    app.write({ t: "rtc.ice", callId, candidate: "late" });
+    expect((await device.next("rtc.ice")).candidate).toBe("late");
+    device.write({ t: "call.hangup", callId });
+    expect(await app.nextState("ended")).toMatchObject({ callId, reason: "hangup" });
+    expect(savedRooms.values().next().value).toEqual([]);
+    app.write({ t: "call.dial", deviceId: (device.memo as { peer: { id: string } }).peer.id });
+    expect(await app.nextState("ended")).toMatchObject({ reason: "busy" }); // handset still up
+  });
+
+  it("still delivers pair.done to a device that was waiting for a code", async () => {
+    const g = await setup();
+    const conn = openDevice();
+    conn.write(hello());
+    conn.write({ t: "pair.begin", publicKey: (await newKey()).publicKey });
+    const { code } = await conn.next("pair.code");
+    expect(conn.memo).toEqual({ kind: "pairing", code });
+
+    hibernate([{ conn, app: false }]);
+
+    const res = await http("/devices/pair", { token: g.token, body: { code, name: "Kid" } });
+    expect(res.status).toBe(201);
+    expect(await conn.next("pair.done")).toMatchObject({ deviceId: res.json.id });
+  });
+
+  it("asks mid-handshake sockets to reconnect", async () => {
+    const conn = openDevice();
+    hibernate([{ conn, app: false }]);
+    expect(conn.closed?.code).toBe(CloseCode.badHandshake);
   });
 });

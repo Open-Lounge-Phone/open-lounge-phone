@@ -3,6 +3,7 @@ import {
   authorizeOutbound,
   isQuietAt,
   newRoom,
+  nextQuietChange,
   type RoomEvent,
   type RoomState,
   resolveButton,
@@ -12,32 +13,27 @@ import { type Device, newId, type User } from "@opentincan/db";
 import type { AppToServer, DeviceToServer, EndReason, ServerToApp } from "@opentincan/protocol";
 import {
   CloseCode,
-  CONFIG_TICK_MS,
   CONNECT_TIMEOUT_MS,
   type Conn,
+  type PeerInfo,
   RING_TIMEOUT_MS,
+  type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
 
-type Status = Extract<DeviceToServer, { t: "status" }>;
-
 /** A live, authenticated connection: a device or one companion-app session of a user. */
-export interface Peer {
-  kind: "device" | "user";
-  id: string;
+export interface Peer extends PeerInfo {
   /** Party key used in call rooms: `dev:<id>` or `usr:<id>`. */
   key: string;
-  label: string;
   conn: Conn;
-  guardian: boolean;
 }
 
 interface DevicePeer extends Peer {
   kind: "device";
   hook: "up" | "down";
-  status?: Status;
-  lastQuiet?: boolean;
 }
+
+const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
 
 interface Room {
   id: string;
@@ -63,7 +59,8 @@ export class HouseholdHub {
   private readonly apps = new Map<string, Set<Peer>>();
   private readonly rooms = new Map<string, Room>();
   private queue: Promise<unknown> = Promise.resolve();
-  private cancelTick?: () => void;
+  private cancelQuietTimer?: () => void;
+  private roomsDirty = false;
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -75,9 +72,75 @@ export class HouseholdHub {
 
   /** Serializes all state changes so concurrent messages cannot interleave mid-update. */
   private run<T>(fn: () => Promise<T> | T): Promise<T> {
-    const next = this.queue.then(fn, fn);
+    const task = async () => {
+      try {
+        return await fn();
+      } finally {
+        this.flushRooms();
+      }
+    };
+    const next = this.queue.then(task, task);
     this.queue = next.catch((e) => this.env.log("error", "hub task failed", { error: String(e) }));
     return next;
+  }
+
+  private remember(peer: Peer): void {
+    peer.conn.remember?.({ kind: "peer", peer: infoOf(peer) });
+  }
+
+  private flushRooms(): void {
+    if (!this.roomsDirty || !this.env.saveRooms) return;
+    this.roomsDirty = false;
+    this.env.saveRooms(this.householdId, this.snapshotRooms());
+  }
+
+  snapshotRooms(): RoomSnapshot[] {
+    return [...this.rooms.values()].map((r) => ({
+      id: r.id,
+      state: r.state,
+      caller: r.caller.session,
+      ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
+    }));
+  }
+
+  /**
+   * Rebuilds live state after the host slept: re-registers authenticated connections and the
+   * rooms that referenced them. Sends nothing. Returns the peers in input order.
+   */
+  restore(entries: { info: PeerInfo; conn: Conn }[], rooms: RoomSnapshot[]): Peer[] {
+    const peers = entries.map(({ info, conn }) => {
+      const peer: Peer = {
+        ...info,
+        key: info.kind === "device" ? deviceKey(info.id) : userKey(info.id),
+        conn,
+      };
+      if (peer.kind === "device") {
+        const device = peer as DevicePeer;
+        device.hook ??= "down";
+        this.devices.set(peer.id, device);
+      } else {
+        const set = this.apps.get(peer.id) ?? new Set<Peer>();
+        this.apps.set(peer.id, set);
+        set.add(peer);
+      }
+      return peer;
+    });
+    const bySession = new Map(peers.map((p) => [p.session, p]));
+    for (const snap of rooms) {
+      const caller = bySession.get(snap.caller);
+      if (!caller || snap.state.phase === "ended") continue;
+      const calleePeer = snap.callee ? bySession.get(snap.callee) : undefined;
+      if (snap.callee && !calleePeer) continue;
+      this.rooms.set(snap.id, {
+        id: snap.id,
+        state: snap.state,
+        caller,
+        ...(calleePeer ? { calleePeer } : {}),
+      });
+    }
+    this.roomsDirty = true;
+    this.flushRooms();
+    return peers;
   }
 
   // --- connections ----------------------------------------------------------
@@ -90,6 +153,8 @@ export class HouseholdHub {
         old.conn.close(CloseCode.replaced, "replaced by a newer connection");
       }
       const peer: DevicePeer = {
+        session: newId("s"),
+        householdId: this.householdId,
         kind: "device",
         id: device.id,
         key: deviceKey(device.id),
@@ -100,8 +165,9 @@ export class HouseholdHub {
       };
       this.devices.set(device.id, peer);
       await this.sendConfig(peer, true);
+      this.remember(peer);
       this.broadcastStatus(peer, true);
-      this.ensureTicker();
+      await this.scheduleQuietCheck();
       return peer;
     });
   }
@@ -109,6 +175,8 @@ export class HouseholdHub {
   connectApp(user: User, conn: Conn): Promise<Peer> {
     return this.run(async () => {
       const peer: Peer = {
+        session: newId("s"),
+        householdId: this.householdId,
         kind: "user",
         id: user.id,
         key: userKey(user.id),
@@ -119,6 +187,7 @@ export class HouseholdHub {
       const set = this.apps.get(user.id) ?? new Set<Peer>();
       this.apps.set(user.id, set);
       set.add(peer);
+      this.remember(peer);
       conn.send({ t: "app.ready", userId: user.id });
       if (peer.guardian) {
         for (const d of await this.env.store.listDevices(this.householdId)) {
@@ -139,10 +208,7 @@ export class HouseholdHub {
       if (this.devices.get(peer.id) !== peer) return;
       this.devices.delete(peer.id);
       this.broadcastStatus(peer as DevicePeer, false);
-      if (this.devices.size === 0) {
-        this.cancelTick?.();
-        this.cancelTick = undefined;
-      }
+      if (this.devices.size === 0) this.cancelQuietCheck();
     } else {
       const set = this.apps.get(peer.id);
       if (!set?.delete(peer)) return;
@@ -171,11 +237,13 @@ export class HouseholdHub {
       switch (msg.t) {
         case "hook":
           device.hook = msg.state;
+          this.remember(device);
           return;
         case "button":
           return this.deviceDial(device, msg.index);
         case "status":
           device.status = msg;
+          this.remember(device);
           this.broadcastStatus(device, true);
           return;
         case "ping":
@@ -222,11 +290,21 @@ export class HouseholdHub {
     });
   }
 
-  /** Re-send config to a device after guardians change settings. */
+  /** Re-send config to a device after guardians change settings (incl. quiet hours). */
   refreshDevice(deviceId: string): Promise<void> {
     return this.run(async () => {
       const peer = this.devices.get(deviceId);
-      if (peer) await this.sendConfig(peer, true);
+      if (!peer) return;
+      await this.sendConfig(peer, true);
+      await this.scheduleQuietCheck();
+    });
+  }
+
+  /** Called by hosts that implement `wakeAt`, at the requested time. */
+  wake(): Promise<void> {
+    return this.run(async () => {
+      for (const d of this.devices.values()) await this.sendConfig(d, false);
+      if (this.devices.size > 0) await this.scheduleQuietCheck();
     });
   }
 
@@ -294,6 +372,7 @@ export class HouseholdHub {
 
     const room = this.openRoom(user, peer.key);
     room.calleePeer = peer;
+    this.roomsDirty = true;
     user.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     peer.conn.send({ t: "call.ringing", callId: room.id, from: { label: contact.label } });
   }
@@ -301,6 +380,7 @@ export class HouseholdHub {
   private openRoom(caller: Peer, calleeKey: string): Room {
     const room: Room = { id: newId("call"), state: newRoom(caller.key, calleeKey), caller };
     this.rooms.set(room.id, room);
+    this.roomsDirty = true;
     room.cancelTimer = this.env.setTimer(
       () => void this.run(() => this.apply(room, { type: "timeout" })),
       RING_TIMEOUT_MS,
@@ -334,6 +414,7 @@ export class HouseholdHub {
     if (msg.t === "call.answer") {
       if (party !== "callee" || room.state.phase !== "ringing") return;
       room.calleePeer = peer;
+      this.roomsDirty = true;
       // Other sessions of the same user stop ringing.
       for (const other of this.apps.get(peer.id) ?? []) {
         if (other !== peer) {
@@ -367,6 +448,7 @@ export class HouseholdHub {
     }
     if (!r.changed) return;
     room.state = r.state;
+    this.roomsDirty = true;
     const both = [room.caller, room.calleePeer].filter((p): p is Peer => !!p);
 
     switch (r.state.phase) {
@@ -414,7 +496,10 @@ export class HouseholdHub {
     ]);
     const quiet = isQuietAt(schedule, new Date(this.env.now()));
     if (!force && quiet === peer.lastQuiet) return;
-    peer.lastQuiet = quiet;
+    if (quiet !== peer.lastQuiet) {
+      peer.lastQuiet = quiet;
+      this.remember(peer);
+    }
     const byId = new Map(contacts.map((c) => [c.id, c]));
     const mapped = [...buttons]
       .map(([index, userId]) => ({ index, contact: byId.get(userId) }))
@@ -423,19 +508,31 @@ export class HouseholdHub {
     peer.conn.send({ t: "config", buttons: mapped, quiet });
   }
 
-  /** Quiet hours start and end on their own; re-evaluate every minute while devices are online. */
-  private ensureTicker(): void {
-    if (this.cancelTick) return;
-    const tick = () => {
-      this.cancelTick = this.env.setTimer(() => {
-        void this.run(async () => {
-          for (const d of this.devices.values()) await this.sendConfig(d, false);
-        });
-        if (this.devices.size > 0) tick();
-        else this.cancelTick = undefined;
-      }, CONFIG_TICK_MS);
-    };
-    tick();
+  /**
+   * Quiet hours start and end on their own. Sleep until the next change instead of polling, so
+   * a Durable Object host can hibernate in between.
+   */
+  private async scheduleQuietCheck(): Promise<void> {
+    const schedule = await this.env.store.getSchedule(this.householdId);
+    const next = nextQuietChange(schedule, new Date(this.env.now()));
+    this.cancelQuietCheck();
+    if (!next) return;
+    // A second of slack so the check lands after the boundary.
+    const at = next.getTime() + 1000;
+    if (this.env.wakeAt) {
+      this.env.wakeAt(at);
+      return;
+    }
+    this.cancelQuietTimer = this.env.setTimer(
+      () => void this.wake(),
+      Math.max(0, at - this.env.now()),
+    );
+  }
+
+  private cancelQuietCheck(): void {
+    this.cancelQuietTimer?.();
+    this.cancelQuietTimer = undefined;
+    this.env.wakeAt?.(null);
   }
 
   private statusMessage(

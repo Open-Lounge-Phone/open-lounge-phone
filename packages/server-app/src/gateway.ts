@@ -8,13 +8,30 @@ import {
   toBase64Url,
 } from "@opentincan/protocol";
 import { verifyEd25519 } from "./deviceAuth.ts";
-import { CloseCode, type Conn, HELLO_TIMEOUT_MS, type ServerEnv } from "./env.ts";
+import {
+  CloseCode,
+  type Conn,
+  type ConnMemo,
+  HELLO_TIMEOUT_MS,
+  type RoomSnapshot,
+  type ServerEnv,
+} from "./env.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
 
 /** What a transport (Node `ws`, Workers WebSocket) drives for each socket. */
 export interface ConnectionHandler {
   message(raw: string): void;
   closed(): void;
+}
+
+/**
+ * What the HTTP API needs from the live side of the server. The in-process `Gateway` implements
+ * it directly; on Cloudflare it is backed by Durable Object RPC.
+ */
+export interface Coordinator {
+  isOnline(householdId: string, deviceId: string): Promise<boolean>;
+  refreshDevice(householdId: string, deviceId: string): Promise<void>;
+  notifyPaired(code: string, device: Device): Promise<void>;
 }
 
 type DevicePhase =
@@ -29,19 +46,32 @@ type AppPhase =
   | { kind: "ready"; hub: HouseholdHub; peer: Peer }
   | { kind: "closed" };
 
+export interface GatewayOptions {
+  /** Only accept devices and users of this household (a Durable Object serves one). */
+  household?: string;
+}
+
+export interface ResumeEntry {
+  conn: Conn;
+  memo: ConnMemo | undefined;
+  /** True for companion-app sockets, false for devices. */
+  app: boolean;
+}
+
 /**
  * Entry point for every socket: runs the handshake (hello, pairing, signed auth) and then hands
  * the connection to its household hub.
  */
-export class Gateway {
+export class Gateway implements Coordinator {
   private readonly hubs = new Map<string, HouseholdHub>();
   /** Devices currently showing a pairing code, by code. */
   private readonly waitingToPair = new Map<string, Conn>();
-
   private readonly env: ServerEnv;
+  private readonly household?: string;
 
-  constructor(env: ServerEnv) {
+  constructor(env: ServerEnv, options: GatewayOptions = {}) {
     this.env = env;
+    if (options.household) this.household = options.household;
   }
 
   hub(householdId: string): HouseholdHub {
@@ -50,22 +80,95 @@ export class Gateway {
     return hub;
   }
 
+  private allowed(householdId: string): boolean {
+    return this.household === undefined || this.household === householdId;
+  }
+
+  // --- Coordinator ------------------------------------------------------------
+
+  async isOnline(householdId: string, deviceId: string): Promise<boolean> {
+    return this.hubs.get(householdId)?.isOnline(deviceId) ?? false;
+  }
+
+  async refreshDevice(householdId: string, deviceId: string): Promise<void> {
+    await this.hubs.get(householdId)?.refreshDevice(deviceId);
+  }
+
   /** Tells a device waiting on `code` that a guardian claimed it. */
-  notifyPaired(code: string, device: Device): void {
+  async notifyPaired(code: string, device: Device): Promise<void> {
     const conn = this.waitingToPair.get(code);
     if (!conn) return;
     this.waitingToPair.delete(code);
     conn.send({ t: "pair.done", deviceId: device.id, householdId: device.householdId });
   }
 
+  // --- sockets ------------------------------------------------------------------
+
   openDevice(conn: Conn): ConnectionHandler {
-    let phase: DevicePhase = { kind: "hello" };
+    return this.deviceHandler(conn, { kind: "hello" });
+  }
+
+  openApp(conn: Conn): ConnectionHandler {
+    return this.appHandler(conn, { kind: "hello" });
+  }
+
+  /**
+   * Re-attaches sockets after the host slept, from the memos they stored via `Conn.remember`.
+   * Sockets without a usable memo were mid-handshake; they are closed so the client reconnects.
+   * Returns one handler per entry, in order.
+   */
+  resume(
+    entries: ResumeEntry[],
+    rooms: (householdId: string) => RoomSnapshot[],
+  ): ConnectionHandler[] {
+    const handlers: ConnectionHandler[] = [];
+    const restorable = new Map<string, { index: number; entry: ResumeEntry; memo: ConnMemo }[]>();
+    entries.forEach((entry, index) => {
+      const { conn, memo, app } = entry;
+      if (memo?.kind === "peer" && this.allowed(memo.peer.householdId)) {
+        const list = restorable.get(memo.peer.householdId) ?? [];
+        list.push({ index, entry, memo });
+        restorable.set(memo.peer.householdId, list);
+      } else if (memo?.kind === "pairing" && !app) {
+        this.waitingToPair.set(memo.code, conn);
+        handlers[index] = this.deviceHandler(conn, { kind: "unpaired", code: memo.code });
+      } else {
+        conn.close(CloseCode.badHandshake, "please reconnect");
+        handlers[index] = { message() {}, closed() {} };
+      }
+    });
+    for (const [householdId, list] of restorable) {
+      const hub = this.hub(householdId);
+      const peers = hub.restore(
+        list.map(({ entry, memo }) => ({
+          info: (memo as Extract<ConnMemo, { kind: "peer" }>).peer,
+          conn: entry.conn,
+        })),
+        rooms(householdId),
+      );
+      list.forEach(({ index, entry }, k) => {
+        const peer = peers[k] as Peer;
+        handlers[index] = entry.app
+          ? this.appHandler(entry.conn, { kind: "ready", hub, peer })
+          : this.deviceHandler(entry.conn, { kind: "ready", hub, peer });
+      });
+    }
+    return handlers;
+  }
+
+  private deviceHandler(conn: Conn, initial: DevicePhase): ConnectionHandler {
+    let phase: DevicePhase = initial;
     // Re-read after awaits: the socket may have closed meanwhile (TS keeps stale narrowing).
     const closed = () => (phase as DevicePhase).kind === "closed";
     let chain: Promise<void> = Promise.resolve();
-    const cancelHello = this.env.setTimer(() => {
-      if (phase.kind === "hello" || phase.kind === "challenge") fail(CloseCode.timeout, "timeout");
-    }, HELLO_TIMEOUT_MS);
+    const cancelHello =
+      initial.kind === "hello"
+        ? this.env.setTimer(() => {
+            if (phase.kind === "hello" || phase.kind === "challenge") {
+              fail(CloseCode.timeout, "timeout");
+            }
+          }, HELLO_TIMEOUT_MS)
+        : () => {};
 
     const fail = (code: number, reason: string) => {
       const was = phase;
@@ -103,7 +206,7 @@ export class Gateway {
             return;
           }
           const device = await this.env.store.getDevice(msg.deviceId);
-          if (!device) {
+          if (!device || !this.allowed(device.householdId)) {
             conn.send({ t: "error", code: "unauthorized", message: "unknown device; re-pair" });
             return fail(CloseCode.unauthorized, "unknown device");
           }
@@ -124,6 +227,7 @@ export class Gateway {
           phase.code = code;
           this.waitingToPair.set(code, conn);
           cancelHello(); // a device may show its code for as long as the code is valid
+          conn.remember?.({ kind: "pairing", code });
           conn.send({ t: "pair.code", code, expiresAt });
           return;
         }
@@ -174,37 +278,40 @@ export class Gateway {
     };
   }
 
-  openApp(conn: Conn): ConnectionHandler {
-    let phase: AppPhase = { kind: "hello" };
+  private appHandler(conn: Conn, initial: AppPhase): ConnectionHandler {
+    let phase: AppPhase = initial;
     const closed = () => (phase as AppPhase).kind === "closed";
     let chain: Promise<void> = Promise.resolve();
-    const cancelHello = this.env.setTimer(() => {
-      if (phase.kind === "hello") {
-        phase = { kind: "closed" };
-        conn.close(CloseCode.timeout, "timeout");
-      }
-    }, HELLO_TIMEOUT_MS);
+    const cancelHello =
+      initial.kind === "hello"
+        ? this.env.setTimer(() => {
+            if (phase.kind === "hello") {
+              phase = { kind: "closed" };
+              conn.close(CloseCode.timeout, "timeout");
+            }
+          }, HELLO_TIMEOUT_MS)
+        : () => {};
+
+    const refuse = (code: number, reason: string) => {
+      phase = { kind: "closed" };
+      cancelHello();
+      conn.close(code, reason);
+    };
 
     const handle = async (msg: AppToServer): Promise<void> => {
       if (phase.kind === "closed") return;
       if (phase.kind === "ready") return phase.hub.handleApp(phase.peer, msg);
-      if (msg.t !== "app.hello") {
-        phase = { kind: "closed" };
-        cancelHello();
-        return conn.close(CloseCode.badHandshake, "expected app.hello");
-      }
-      cancelHello();
+      if (msg.t !== "app.hello") return refuse(CloseCode.badHandshake, "expected app.hello");
       if (msg.proto !== PROTOCOL_VERSION) {
         conn.send({ t: "error", code: "unsupported_version", message: "please reload the app" });
-        phase = { kind: "closed" };
-        return conn.close(CloseCode.badHandshake, "unsupported protocol version");
+        return refuse(CloseCode.badHandshake, "unsupported protocol version");
       }
       const user = await this.env.store.userForToken(msg.token, this.env.now());
-      if (!user) {
+      if (!user || !this.allowed(user.householdId)) {
         conn.send({ t: "error", code: "unauthorized", message: "session expired" });
-        phase = { kind: "closed" };
-        return conn.close(CloseCode.unauthorized, "unauthorized");
+        return refuse(CloseCode.unauthorized, "unauthorized");
       }
+      cancelHello();
       const hub = this.hub(user.householdId);
       const peer = await hub.connectApp(user, conn);
       if (closed()) return hub.disconnect(peer);
