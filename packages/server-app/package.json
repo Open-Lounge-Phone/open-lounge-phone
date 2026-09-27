@@ -12,6 +12,7 @@
     "@opentincan/core": "0.0.0",
     "@opentincan/db": "0.0.0",
     "@opentincan/protocol": "0.0.0",
+    "@simplewebauthn/server": "^14.0.3",
     "hono": "^4.13.9",
     "zod": "^4.6.5"
   }

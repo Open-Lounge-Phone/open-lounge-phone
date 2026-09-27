@@ -19,6 +19,10 @@
       "migrations_dir": "../../packages/db/migrations"
     }
   ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "opentincan-voicemail" }],
+  // Voicemail transcripts: uncomment to bind Workers AI (billed per audio minute; local
+  // `wrangler dev` then needs `wrangler login` because AI always runs remotely).
+  // "ai": { "binding": "AI" },
   "durable_objects": {
     "bindings": [
       { "name": "HOUSEHOLD", "class_name": "HouseholdObject" },

@@ -36,6 +36,7 @@ const deviceToServer: DeviceToServer[] = [
     display: "none",
   },
   { t: "pair.begin", publicKey: KEY },
+  { t: "pair.begin", alg: "p256", publicKey: "P".repeat(87) },
   { t: "auth.proof", sig: SIG },
   { t: "hook", state: "up" },
   { t: "button", index: 3 },
@@ -54,6 +55,13 @@ const serverToDevice: ServerToDevice[] = [
   { t: "pair.code", code: "042917", expiresAt: 1_700_000_000_000 },
   { t: "pair.done", deviceId: "dev_1", householdId: "hh_1" },
   { t: "config", buttons: [{ index: 0, label: "Mom" }], quiet: false },
+  {
+    t: "config",
+    buttons: [],
+    quiet: true,
+    quietUntil: "07:00",
+    missed: [{ from: "Grandma" }],
+  },
   { t: "call.ringing", callId: "c1", from: { label: "Grandma" } },
   { t: "call.state", callId: "c1", state: "ended", reason: "voicemail" },
   { t: "rtc.config", callId: "c1", iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] },
@@ -78,6 +86,7 @@ const serverToApp: ServerToApp[] = [
     lastSeen: 1,
   },
   { t: "call.state", callId: "c1", state: "active" },
+  { t: "voicemail.new", id: "vm_1", deviceId: "dev_1", from: "Grandma" },
 ];
 
 describe("round trip", () => {
@@ -116,6 +125,23 @@ describe("rejection", () => {
     const res = decodeDeviceToServer(encode({ t: "button", index: 99 }));
     expect(res).toMatchObject({ ok: false, error: "invalid" });
     expect(!res.ok && res.detail).toMatch(/^index:/);
+  });
+
+  it("checks the public key length against its algorithm", () => {
+    expect(decodeDeviceToServer(encode({ t: "pair.begin", publicKey: "P".repeat(87) })).ok).toBe(
+      false,
+    );
+    expect(decodeDeviceToServer(encode({ t: "pair.begin", alg: "p256", publicKey: KEY })).ok).toBe(
+      false,
+    );
+    expect(decodeDeviceToServer(encode({ t: "pair.begin", alg: "rsa", publicKey: KEY })).ok).toBe(
+      false,
+    );
+  });
+
+  it("rejects malformed quietUntil", () => {
+    const raw = encode({ t: "config", buttons: [], quiet: true, quietUntil: "7:00" });
+    expect(decodeServerToDevice(raw).ok).toBe(false);
   });
 
   it("rejects malformed keys, codes and ids", () => {

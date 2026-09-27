@@ -1,8 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { type Device, Store } from "@opentincan/db";
 import { d1Sql } from "@opentincan/db/d1";
-import { encode, type IceServer, Id } from "@opentincan/protocol";
+import { encode, type IceServer, Id, type ServerToApp } from "@opentincan/protocol";
 import {
+  type BlobStore,
   type Conn,
   type ConnectionHandler,
   type ConnMemo,
@@ -13,11 +14,16 @@ import {
   type RoomSnapshot,
   type ServerEnv,
   seedSetupToken,
+  type Transcriber,
 } from "@opentincan/server-app";
 import { Hono } from "hono";
 
 export interface Env {
   DB: D1Database;
+  /** Voicemail audio. */
+  BLOBS: R2Bucket;
+  /** Optional Workers AI binding for voicemail transcripts (see docs/cloudflare.md). */
+  AI?: Ai;
   HOUSEHOLD: DurableObjectNamespace<HouseholdObject>;
   PAIRING: DurableObjectNamespace<PairingObject>;
   ASSETS: Fetcher;
@@ -69,9 +75,53 @@ async function iceServers(env: Env): Promise<IceServer[]> {
   return stun.length ? [{ urls: stun }] : [];
 }
 
-function serverEnv(env: Env, extra: Partial<ServerEnv> = {}): ServerEnv {
+function r2Blobs(bucket: R2Bucket): BlobStore {
+  return {
+    async put(key, data, contentType) {
+      await bucket.put(key, data, { httpMetadata: { contentType } });
+    },
+    async get(key) {
+      const obj = await bucket.get(key);
+      if (!obj) return undefined;
+      return {
+        data: await obj.arrayBuffer(),
+        contentType: obj.httpMetadata?.contentType ?? "application/octet-stream",
+      };
+    },
+    async delete(key) {
+      await bucket.delete(key);
+    },
+  };
+}
+
+/** Workers AI Whisper: https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/ */
+function workersAiTranscriber(ai: Ai): Transcriber {
+  return {
+    async transcribe(audio) {
+      const bytes = new Uint8Array(audio);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      const result = (await ai.run("@cf/openai/whisper-large-v3-turbo", {
+        audio: btoa(bin),
+        vad_filter: true,
+      })) as { text?: string };
+      return result.text ?? "";
+    },
+  };
+}
+
+function serverEnv(
+  env: Env,
+  waitUntil: (p: Promise<unknown>) => void,
+  extra: Partial<ServerEnv> = {},
+): ServerEnv {
   return {
     store: new Store(d1Sql(env.DB)),
+    blobs: r2Blobs(env.BLOBS),
+    ...(env.AI ? { transcriber: workersAiTranscriber(env.AI) } : {}),
+    defer: waitUntil,
     now: () => Date.now(),
     iceServers: () => iceServers(env),
     setTimer: (fn, ms) => {
@@ -104,7 +154,10 @@ abstract class GatewayObject extends DurableObject<Env> {
     extra: Partial<ServerEnv>,
   ) {
     super(ctx, env);
-    this.gateway = new Gateway(serverEnv(env, extra), options);
+    this.gateway = new Gateway(
+      serverEnv(env, (p) => ctx.waitUntil(p), extra),
+      options,
+    );
     // Keep-alives are answered without waking the object.
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair(encode({ t: "ping" }), encode({ t: "pong" })),
@@ -213,6 +266,10 @@ export class HouseholdObject extends GatewayObject {
   refreshDevice(deviceId: string): Promise<void> {
     return this.gateway.refreshDevice(this.householdId, deviceId);
   }
+
+  announce(msg: ServerToApp): Promise<void> {
+    return this.gateway.announce(this.householdId, msg);
+  }
 }
 
 /** Holds unpaired phones while they show a pairing code. */
@@ -234,6 +291,7 @@ function coordinator(env: Env): Coordinator {
     refreshDevice: (hh, deviceId) => env.HOUSEHOLD.getByName(hh).refreshDevice(deviceId),
     notifyPaired: (code, device) =>
       env.PAIRING.getByName(PAIRING_OBJECT).notifyPaired(code, device),
+    announce: (hh, msg) => env.HOUSEHOLD.getByName(hh).announce(msg),
   };
 }
 
@@ -242,12 +300,22 @@ const isId = (s: string | null): s is string => s !== null && Id.safeParse(s).su
 const app = new Hono<{ Bindings: Env }>();
 
 app.use("/api/setup", async (c, next) => {
-  if (c.env.SETUP_TOKEN) await seedSetupToken(serverEnv(c.env), c.env.SETUP_TOKEN);
+  if (c.env.SETUP_TOKEN)
+    await seedSetupToken(
+      serverEnv(c.env, (p) => c.executionCtx.waitUntil(p)),
+      c.env.SETUP_TOKEN,
+    );
   await next();
 });
 
 app.all("/api/*", (c) => {
-  const api = new Hono().route("/api", createApi(serverEnv(c.env), coordinator(c.env)));
+  const api = new Hono().route(
+    "/api",
+    createApi(
+      serverEnv(c.env, (p) => c.executionCtx.waitUntil(p)),
+      coordinator(c.env),
+    ),
+  );
   return api.fetch(c.req.raw, c.env, c.executionCtx);
 });
 

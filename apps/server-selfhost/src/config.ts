@@ -16,6 +16,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     host: env.HOST ?? "0.0.0.0",
     dataDir: resolve(env.DATA_DIR ?? resolve(repoRoot, "data")),
     publicUrl: (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, ""),
+    /** Only an explicit PUBLIC_URL pins passkeys to a host; otherwise the request host is used. */
+    publicUrlExplicit: env.PUBLIC_URL !== undefined,
+    transcribe: env.TRANSCRIBE_URL
+      ? {
+          url: env.TRANSCRIBE_URL,
+          model: env.TRANSCRIBE_MODEL ?? "whisper-1",
+          ...(env.TRANSCRIBE_API_KEY ? { apiKey: env.TRANSCRIBE_API_KEY } : {}),
+        }
+      : undefined,
     companionDir: resolve(env.COMPANION_DIR ?? resolve(repoRoot, "apps/companion/dist")),
     deviceDir: resolve(env.DEVICE_DIR ?? resolve(repoRoot, "apps/device-web/dist")),
     ice: {

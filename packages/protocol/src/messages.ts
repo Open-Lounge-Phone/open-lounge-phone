@@ -61,11 +61,26 @@ export const DeviceHello = z
   })
   .describe("First message on every connection.");
 
+export const KeyAlg = z
+  .enum(["ed25519", "p256"])
+  .describe("`p256` = ECDSA P-256/SHA-256 for hardware whose secure key storage lacks Ed25519.");
+export type KeyAlg = z.infer<typeof KeyAlg>;
+
+/** base64url lengths of a raw public key per algorithm (32-byte Ed25519, 65-byte SEC1 P-256). */
+export const PUBLIC_KEY_LENGTH: Record<KeyAlg, number> = { ed25519: 43, p256: 87 };
+
 export const PairBegin = z
   .object({
     t: z.literal("pair.begin"),
     ...Ref,
-    publicKey: Base64Url.length(43).describe("Ed25519 public key (32 bytes, base64url)."),
+    alg: KeyAlg.optional().describe("Defaults to `ed25519`."),
+    publicKey: Base64Url.describe(
+      "Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes.",
+    ),
+  })
+  .refine((m) => m.publicKey.length === PUBLIC_KEY_LENGTH[m.alg ?? "ed25519"], {
+    message: "publicKey length does not match alg",
+    path: ["publicKey"],
   })
   .describe("Unpaired device asks for a pairing code to show on its display.");
 
@@ -73,7 +88,9 @@ export const AuthProof = z
   .object({
     t: z.literal("auth.proof"),
     ...Ref,
-    sig: Base64Url.length(86).describe("Ed25519 signature (64 bytes) over the challenge nonce."),
+    sig: Base64Url.length(86).describe(
+      "Signature over the raw nonce bytes: Ed25519 (64 bytes) or P-256 ECDSA/SHA-256 as r‖s (64 bytes).",
+    ),
   })
   .describe("Answer to `auth.challenge`.");
 
@@ -142,6 +159,16 @@ export const Config = z
     ...Ref,
     buttons: z.array(ButtonConfig).max(16).describe("Only mapped buttons are listed."),
     quiet: z.boolean().describe("Quiet hours currently in effect."),
+    quietUntil: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .optional()
+      .describe("Local time (HH:MM) when current quiet hours end, if they end."),
+    missed: z
+      .array(z.object({ from: z.string().min(1).max(24) }))
+      .max(8)
+      .optional()
+      .describe("Unheard voicemails, newest first, for the status display."),
   })
   .describe("Sent after authentication and whenever guardians change settings.");
 
@@ -239,9 +266,20 @@ export const DeviceStatus = z
   })
   .describe("Presence and health of a device in the guardian's household.");
 
+export const VoicemailNew = z
+  .object({
+    t: z.literal("voicemail.new"),
+    ...Ref,
+    id: Id,
+    deviceId: Id,
+    from: z.string().min(1).max(24),
+  })
+  .describe("A voicemail was left for a phone in the guardian's household.");
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   DeviceStatus,
+  VoicemailNew,
   CallRinging,
   CallStateMsg,
   RtcConfig,

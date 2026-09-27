@@ -17,6 +17,7 @@ import {
 } from "@opentincan/server-app";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
+import { blobDir, fileBlobStore, openAiTranscriber } from "./adapters.ts";
 import { type Config, loadConfig } from "./config.ts";
 
 const KEEPALIVE_MS = 30_000;
@@ -28,6 +29,12 @@ export async function start(config: Config) {
 
   const env: ServerEnv = {
     store: new Store(sql),
+    blobs: fileBlobStore(blobDir(config.dataDir)),
+    ...(config.transcribe ? { transcriber: openAiTranscriber(config.transcribe) } : {}),
+    defer: (work) => {
+      work.catch((e) => console.error("[error] background task failed", e));
+    },
+    ...(config.publicUrlExplicit ? { publicUrl: config.publicUrl } : {}),
     now: () => Date.now(),
     iceServers: () => buildIceServers(config.ice, Date.now()),
     setTimer: (fn, ms) => {

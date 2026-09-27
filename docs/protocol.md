@@ -40,7 +40,8 @@ Unpaired device asks for a pairing code to show on its display.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `publicKey` | string (len 43) | yes | Ed25519 public key (32 bytes, base64url). |
+| `alg` | `"ed25519"` \| `"p256"` |  | Defaults to `ed25519`. |
+| `publicKey` | string | yes | Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes. |
 
 ### `auth.proof`
 
@@ -49,7 +50,7 @@ Answer to `auth.challenge`.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `sig` | string (len 86) | yes | Ed25519 signature (64 bytes) over the challenge nonce. |
+| `sig` | string (len 86) | yes | Signature over the raw nonce bytes: Ed25519 (64 bytes) or P-256 ECDSA/SHA-256 as r‖s (64 bytes). |
 
 ### `hook`
 
@@ -169,6 +170,8 @@ Sent after authentication and whenever guardians change settings.
 | `id` | string (len ≤64) |  |  |
 | `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24) }[] | yes | Only mapped buttons are listed. |
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
+| `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
+| `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
 
 ### `call.ringing`
 
@@ -336,6 +339,16 @@ Presence and health of a device in the guardian's household.
 | `battery` | { pct: integer (≥0, ≤100), charging: boolean } |  |  |
 | `rssi` | integer |  | Wi-Fi signal strength in dBm. |
 | `lastSeen` | integer (≥0) | yes |  |
+
+### `voicemail.new`
+
+A voicemail was left for a phone in the guardian's household.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+| `deviceId` | string (len ≤64) | yes |  |
+| `from` | string (len ≤24) | yes |  |
 
 ### `call.ringing`
 

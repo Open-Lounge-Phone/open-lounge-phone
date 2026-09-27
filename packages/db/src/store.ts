@@ -24,23 +24,116 @@ export interface User {
   role: Role;
 }
 
+export type KeyAlg = "ed25519" | "p256";
+
 export interface Device {
   id: string;
   householdId: string;
   name: string;
   publicKey: string;
+  keyAlg: KeyAlg;
   createdAt: number;
   lastSeen: number | null;
 }
 
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
+export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+export interface Invite {
+  householdId: string;
+  /** Set for sign-in links for an existing person. */
+  userId: string | null;
+  name: string;
+  role: Role;
+  expiresAt: number;
+}
+
+export interface Passkey {
+  id: string;
+  userId: string;
+  publicKey: string;
+  counter: number;
+  transports: string[];
+  name: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+export type TranscriptStatus = "pending" | "done" | "failed" | "unavailable";
+
+export interface Voicemail {
+  id: string;
+  householdId: string;
+  deviceId: string;
+  fromUser: string | null;
+  fromLabel: string;
+  createdAt: number;
+  durationMs: number;
+  mime: string;
+  blobKey: string;
+  transcript: string | null;
+  transcriptStatus: TranscriptStatus;
+  heardAt: number | null;
+}
+
+type VoicemailRow = {
+  id: string;
+  household_id: string;
+  device_id: string;
+  from_user: string | null;
+  from_label: string;
+  created_at: number;
+  duration_ms: number;
+  mime: string;
+  blob_key: string;
+  transcript: string | null;
+  transcript_status: TranscriptStatus;
+  heard_at: number | null;
+};
+const toVoicemail = (r: VoicemailRow): Voicemail => ({
+  id: r.id,
+  householdId: r.household_id,
+  deviceId: r.device_id,
+  fromUser: r.from_user,
+  fromLabel: r.from_label,
+  createdAt: r.created_at,
+  durationMs: r.duration_ms,
+  mime: r.mime,
+  blobKey: r.blob_key,
+  transcript: r.transcript,
+  transcriptStatus: r.transcript_status,
+  heardAt: r.heard_at,
+});
+
+type PasskeyRow = {
+  id: string;
+  user_id: string;
+  public_key: string;
+  counter: number;
+  transports: string;
+  name: string;
+  created_at: number;
+  last_used_at: number | null;
+};
+const toPasskey = (r: PasskeyRow): Passkey => ({
+  id: r.id,
+  userId: r.user_id,
+  publicKey: r.public_key,
+  counter: r.counter,
+  transports: JSON.parse(r.transports) as string[],
+  name: r.name,
+  createdAt: r.created_at,
+  lastUsedAt: r.last_used_at,
+});
 
 type DeviceRow = {
   id: string;
   household_id: string;
   name: string;
   public_key: string;
+  key_alg: KeyAlg;
   created_at: number;
   last_seen: number | null;
 };
@@ -58,6 +151,7 @@ const toDevice = (r: DeviceRow): Device => ({
   householdId: r.household_id,
   name: r.name,
   publicKey: r.public_key,
+  keyAlg: r.key_alg,
   createdAt: r.created_at,
   lastSeen: r.last_seen,
 });
@@ -173,6 +267,11 @@ export class Store {
     return r && toUser(r);
   }
 
+  /** Removes a person; their sessions, passkeys, allow-list entries and keys go with them. */
+  async deleteUser(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM users WHERE id = ?", id);
+  }
+
   async listUsers(householdId: string): Promise<User[]> {
     const rows = await this.sql.all<UserRow>(
       "SELECT * FROM users WHERE household_id = ? ORDER BY created_at",
@@ -216,6 +315,7 @@ export class Store {
   async createPairing(
     publicKey: string,
     now: number,
+    keyAlg: KeyAlg = "ed25519",
   ): Promise<{ code: string; expiresAt: number }> {
     await this.sql.run(
       "DELETE FROM pairings WHERE expires_at <= ? OR public_key = ?",
@@ -226,10 +326,11 @@ export class Store {
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = newPairingCode();
       const { changes } = await this.sql.run(
-        "INSERT OR IGNORE INTO pairings (code, public_key, expires_at) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO pairings (code, public_key, expires_at, key_alg) VALUES (?, ?, ?, ?)",
         code,
         publicKey,
         expiresAt,
+        keyAlg,
       );
       if (changes === 1) return { code, expiresAt };
     }
@@ -241,8 +342,8 @@ export class Store {
     input: { code: string; householdId: string; name: string },
     now: number,
   ): Promise<Device | undefined> {
-    const pending = await this.sql.first<{ public_key: string }>(
-      "SELECT public_key FROM pairings WHERE code = ? AND expires_at > ?",
+    const pending = await this.sql.first<{ public_key: string; key_alg: KeyAlg }>(
+      "SELECT public_key, key_alg FROM pairings WHERE code = ? AND expires_at > ?",
       input.code,
       now,
     );
@@ -254,6 +355,7 @@ export class Store {
       householdId: input.householdId,
       name: input.name,
       publicKey: pending.public_key,
+      keyAlg: pending.key_alg,
       createdAt: now,
       lastSeen: null,
     };
@@ -262,8 +364,8 @@ export class Store {
       { query: "DELETE FROM devices WHERE public_key = ?", params: [device.publicKey] },
       {
         query:
-          "INSERT INTO devices (id, household_id, name, public_key, created_at) VALUES (?, ?, ?, ?, ?)",
-        params: [device.id, device.householdId, device.name, device.publicKey, now],
+          "INSERT INTO devices (id, household_id, name, public_key, key_alg, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        params: [device.id, device.householdId, device.name, device.publicKey, device.keyAlg, now],
       },
     ]);
     return device;
@@ -385,5 +487,211 @@ export class Store {
         params: [newId("qr"), householdId, JSON.stringify(r.days), r.start, r.end],
       })),
     ]);
+  }
+  // --- invites --------------------------------------------------------------
+
+  /** Returns the invite token; only its hash is stored. */
+  async createInvite(
+    input: { householdId: string; userId?: string; name: string; role: Role; createdBy: string },
+    now: number,
+  ): Promise<{ token: string; expiresAt: number }> {
+    const token = newToken();
+    const expiresAt = now + INVITE_TTL_MS;
+    await this.sql.run(
+      `INSERT INTO invites (token_hash, household_id, user_id, name, role, created_by, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      await sha256(token),
+      input.householdId,
+      input.userId ?? null,
+      input.name,
+      input.role,
+      input.createdBy,
+      now,
+      expiresAt,
+    );
+    return { token, expiresAt };
+  }
+
+  async peekInvite(token: string, now: number): Promise<Invite | undefined> {
+    const r = await this.sql.first<{
+      household_id: string;
+      user_id: string | null;
+      name: string;
+      role: Role;
+      expires_at: number;
+    }>("SELECT * FROM invites WHERE token_hash = ? AND expires_at > ?", await sha256(token), now);
+    return (
+      r && {
+        householdId: r.household_id,
+        userId: r.user_id,
+        name: r.name,
+        role: r.role,
+        expiresAt: r.expires_at,
+      }
+    );
+  }
+
+  /** Consumes an invite (single use) and returns the person it signs in, creating them if new. */
+  async acceptInvite(token: string, now: number): Promise<User | undefined> {
+    const invite = await this.peekInvite(token, now);
+    if (!invite) return undefined;
+    const { changes } = await this.sql.run(
+      "DELETE FROM invites WHERE token_hash = ?",
+      await sha256(token),
+    );
+    if (changes !== 1) return undefined; // accepted concurrently
+    if (invite.userId) return this.getUser(invite.userId);
+    return this.createUser(
+      { householdId: invite.householdId, name: invite.name, role: invite.role },
+      now,
+    );
+  }
+
+  // --- passkeys ---------------------------------------------------------------
+
+  async saveChallenge(
+    input: { kind: "register" | "login"; challenge: string; userId?: string },
+    now: number,
+  ): Promise<string> {
+    const id = newId("ch");
+    await this.sql.batch([
+      { query: "DELETE FROM auth_challenges WHERE expires_at <= ?", params: [now] },
+      {
+        query:
+          "INSERT INTO auth_challenges (id, challenge, kind, user_id, expires_at) VALUES (?, ?, ?, ?, ?)",
+        params: [id, input.challenge, input.kind, input.userId ?? null, now + CHALLENGE_TTL_MS],
+      },
+    ]);
+    return id;
+  }
+
+  /** Single use: the challenge is deleted whether or not verification later succeeds. */
+  async takeChallenge(
+    id: string,
+    kind: "register" | "login",
+    now: number,
+  ): Promise<{ challenge: string; userId: string | null } | undefined> {
+    const r = await this.sql.first<{ challenge: string; user_id: string | null }>(
+      "SELECT challenge, user_id FROM auth_challenges WHERE id = ? AND kind = ? AND expires_at > ?",
+      id,
+      kind,
+      now,
+    );
+    const { changes } = await this.sql.run("DELETE FROM auth_challenges WHERE id = ?", id);
+    return r && changes === 1 ? { challenge: r.challenge, userId: r.user_id } : undefined;
+  }
+
+  async addPasskey(p: Omit<Passkey, "lastUsedAt">): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO passkeys (id, user_id, public_key, counter, transports, name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      p.id,
+      p.userId,
+      p.publicKey,
+      p.counter,
+      JSON.stringify(p.transports),
+      p.name,
+      p.createdAt,
+    );
+  }
+
+  async getPasskey(id: string): Promise<Passkey | undefined> {
+    const r = await this.sql.first<PasskeyRow>("SELECT * FROM passkeys WHERE id = ?", id);
+    return r && toPasskey(r);
+  }
+
+  async listPasskeys(userId: string): Promise<Passkey[]> {
+    const rows = await this.sql.all<PasskeyRow>(
+      "SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at",
+      userId,
+    );
+    return rows.map(toPasskey);
+  }
+
+  async touchPasskey(id: string, counter: number, now: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?",
+      counter,
+      now,
+      id,
+    );
+  }
+
+  async deletePasskey(id: string, userId: string): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      "DELETE FROM passkeys WHERE id = ? AND user_id = ?",
+      id,
+      userId,
+    );
+    return changes === 1;
+  }
+
+  // --- voicemail ----------------------------------------------------------------
+
+  async createVoicemail(v: Omit<Voicemail, "id" | "transcript" | "heardAt">): Promise<Voicemail> {
+    const vm: Voicemail = { ...v, id: newId("vm"), transcript: null, heardAt: null };
+    await this.sql.run(
+      `INSERT INTO voicemails (id, household_id, device_id, from_user, from_label, created_at,
+         duration_ms, mime, blob_key, transcript_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      vm.id,
+      vm.householdId,
+      vm.deviceId,
+      vm.fromUser,
+      vm.fromLabel,
+      vm.createdAt,
+      vm.durationMs,
+      vm.mime,
+      vm.blobKey,
+      vm.transcriptStatus,
+    );
+    return vm;
+  }
+
+  async getVoicemail(id: string): Promise<Voicemail | undefined> {
+    const r = await this.sql.first<VoicemailRow>("SELECT * FROM voicemails WHERE id = ?", id);
+    return r && toVoicemail(r);
+  }
+
+  async listVoicemails(householdId: string, limit = 100): Promise<Voicemail[]> {
+    const rows = await this.sql.all<VoicemailRow>(
+      "SELECT * FROM voicemails WHERE household_id = ? ORDER BY created_at DESC LIMIT ?",
+      householdId,
+      limit,
+    );
+    return rows.map(toVoicemail);
+  }
+
+  /** Callers with unheard voicemail for a device, newest first, one entry per caller. */
+  async unheardFrom(deviceId: string, limit = 8): Promise<string[]> {
+    const rows = await this.sql.all<{ from_label: string }>(
+      `SELECT from_label, MAX(created_at) AS latest FROM voicemails
+       WHERE device_id = ? AND heard_at IS NULL
+       GROUP BY from_label ORDER BY latest DESC LIMIT ?`,
+      deviceId,
+      limit,
+    );
+    return rows.map((r) => r.from_label);
+  }
+
+  async setTranscript(id: string, status: TranscriptStatus, text: string | null): Promise<void> {
+    await this.sql.run(
+      "UPDATE voicemails SET transcript_status = ?, transcript = ? WHERE id = ?",
+      status,
+      text,
+      id,
+    );
+  }
+
+  async markVoicemailHeard(id: string, now: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE voicemails SET heard_at = COALESCE(heard_at, ?) WHERE id = ?",
+      now,
+      id,
+    );
+  }
+
+  async deleteVoicemail(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM voicemails WHERE id = ?", id);
   }
 }

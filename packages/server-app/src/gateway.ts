@@ -5,9 +5,10 @@ import {
   decodeAppToServer,
   decodeDeviceToServer,
   PROTOCOL_VERSION,
+  type ServerToApp,
   toBase64Url,
 } from "@opentincan/protocol";
-import { verifyEd25519 } from "./deviceAuth.ts";
+import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
   CloseCode,
   type Conn,
@@ -32,6 +33,8 @@ export interface Coordinator {
   isOnline(householdId: string, deviceId: string): Promise<boolean>;
   refreshDevice(householdId: string, deviceId: string): Promise<void>;
   notifyPaired(code: string, device: Device): Promise<void>;
+  /** Sends a message to the household's connected guardians. */
+  announce(householdId: string, msg: ServerToApp): Promise<void>;
 }
 
 type DevicePhase =
@@ -97,6 +100,10 @@ export class Gateway implements Coordinator {
 
   async refreshDevice(householdId: string, deviceId: string): Promise<void> {
     await this.hubs.get(householdId)?.refreshDevice(deviceId);
+  }
+
+  async announce(householdId: string, msg: ServerToApp): Promise<void> {
+    await this.hubs.get(householdId)?.announce(msg);
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */
@@ -227,6 +234,7 @@ export class Gateway implements Coordinator {
           const { code, expiresAt } = await this.env.store.createPairing(
             msg.publicKey,
             this.env.now(),
+            msg.alg ?? "ed25519",
           );
           if (closed()) return;
           phase.code = code;
@@ -239,7 +247,7 @@ export class Gateway implements Coordinator {
         case "challenge": {
           if (msg.t !== "auth.proof") return fail(CloseCode.badHandshake, "expected auth.proof");
           const { device, nonce } = phase;
-          if (!(await verifyEd25519(device.publicKey, msg.sig, nonce))) {
+          if (!(await verifyDeviceSignature(device.keyAlg, device.publicKey, msg.sig, nonce))) {
             conn.send({ t: "error", code: "unauthorized", message: "bad signature" });
             return fail(CloseCode.unauthorized, "bad signature");
           }

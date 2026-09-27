@@ -86,6 +86,8 @@ class ManualTimers {
 let store: Store;
 let timers: ManualTimers;
 let savedRooms: Map<string, RoomSnapshot[]>;
+let blobs: Map<string, { data: ArrayBuffer; contentType: string }>;
+let background: Promise<unknown>[];
 let env: ServerEnv;
 let gateway: Gateway;
 let api: ReturnType<typeof createApi>;
@@ -102,20 +104,35 @@ beforeEach(() => {
     setTimer: timers.set,
     log: () => {},
     saveRooms: (hh, rooms) => savedRooms.set(hh, structuredClone(rooms)),
+    blobs: {
+      put: async (key, data, contentType) => void blobs.set(key, { data, contentType }),
+      get: async (key) => blobs.get(key),
+      delete: async (key) => void blobs.delete(key),
+    },
+    transcriber: {
+      transcribe: async (audio) => `heard ${audio.byteLength} bytes`,
+    },
+    defer: (work) => void background.push(work),
   };
+  blobs = new Map();
+  background = [];
   savedRooms = new Map();
   gateway = new Gateway(env);
   api = createApi(env, gateway);
 });
 
-async function http(path: string, init: { method?: string; token?: string; body?: unknown } = {}) {
+async function http(
+  path: string,
+  init: { method?: string; token?: string; body?: unknown; raw?: BodyInit; type?: string } = {},
+) {
   const res = await api.request(path, {
-    method: init.method ?? (init.body ? "POST" : "GET"),
+    method: init.method ?? (init.body || init.raw ? "POST" : "GET"),
     headers: {
-      "content-type": "application/json",
+      "content-type": init.type ?? "application/json",
       ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
     },
     ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+    ...(init.raw ? { body: init.raw } : {}),
   });
   const text = await res.text();
   return { status: res.status, json: text ? JSON.parse(text) : undefined };
@@ -558,5 +575,241 @@ describe("resuming after the host sleeps", () => {
     const conn = openDevice();
     hibernate([{ conn, app: false }]);
     expect(conn.closed?.code).toBe(CloseCode.badHandshake);
+  });
+});
+
+describe("invites", () => {
+  it("brings a new contact in, once", async () => {
+    const g = await setup();
+    const created = await http("/invites", {
+      token: g.token,
+      body: { name: "Grandma", role: "contact" },
+    });
+    expect(created.status).toBe(201);
+    const invite = created.json.token as string;
+    expect((await http(`/invites/${invite}`)).json).toMatchObject({
+      householdName: "Home",
+      name: "Grandma",
+      role: "contact",
+      existing: false,
+    });
+    const accepted = await http("/invites/accept", { body: { token: invite } });
+    expect(accepted.status).toBe(201);
+    expect(accepted.json.user).toMatchObject({ name: "Grandma", role: "contact" });
+    expect((await http("/me", { token: accepted.json.token })).status).toBe(200);
+    expect((await http("/invites/accept", { body: { token: invite } })).status).toBe(404);
+  });
+
+  it("makes sign-in links for existing people and keeps them in the household", async () => {
+    const g = await setup();
+    const link = await http("/invites", { token: g.token, body: { userId: g.user.id } });
+    const accepted = await http("/invites/accept", { body: { token: link.json.token } });
+    expect(accepted.json.user.id).toBe(g.user.id);
+    const other = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Eve" },
+      0,
+    );
+    const stranger = await http("/invites", {
+      token: g.token,
+      body: { userId: other.guardian.id },
+    });
+    expect(stranger.status).toBe(404);
+  });
+
+  it("is guardian-only", async () => {
+    const g = await setup();
+    const kid = await store.createUser(
+      { householdId: g.user.householdId, name: "Kid", role: "contact" },
+      0,
+    );
+    const kidToken = await store.createSession(kid.id, timers.now);
+    const res = await http("/invites", { token: kidToken, body: { name: "X", role: "guardian" } });
+    expect(res.status).toBe(403);
+  });
+
+  it("removing a person revokes their access and allow-list entry", async () => {
+    const { deviceId, token, user } = await household();
+    const grandma = await store.createUser(
+      { householdId: user.householdId, name: "Grandma", role: "contact" },
+      0,
+    );
+    const grandmaToken = await store.createSession(grandma.id, timers.now);
+    await store.upsertContact(deviceId, {
+      id: grandma.id,
+      label: "Grandma",
+      canCallDevice: true,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    });
+    expect((await http(`/users/${user.id}`, { method: "DELETE", token })).status).toBe(400);
+    expect((await http(`/users/${grandma.id}`, { method: "DELETE", token })).status).toBe(204);
+    expect((await http("/me", { token: grandmaToken })).status).toBe(401);
+    expect(await store.getContact(deviceId, grandma.id)).toBeUndefined();
+  });
+});
+
+describe("voicemail", () => {
+  async function quietHousehold() {
+    const h = await household();
+    const grandma = await store.createUser(
+      { householdId: h.user.householdId, name: "Grandma", role: "contact" },
+      0,
+    );
+    const grandmaToken = await store.createSession(grandma.id, timers.now);
+    await store.upsertContact(h.deviceId, {
+      id: grandma.id,
+      label: "Grandma",
+      canCallDevice: true,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    });
+    // Monday 12:00 UTC now; quiet 11:00–13:30 on Mondays.
+    await http("/quiet-hours", {
+      method: "PUT",
+      token: h.token,
+      body: { rules: [{ days: [1], start: "11:00", end: "13:30" }] },
+    });
+    return { ...h, grandma, grandmaToken };
+  }
+
+  it("tells the phone when quiet hours end", async () => {
+    const { device } = await quietHousehold();
+    let config = await device.next("config");
+    while (!config.quiet) config = await device.next("config");
+    expect(config).toMatchObject({ quiet: true, quietUntil: "13:30" });
+  });
+
+  it("records, transcribes, announces, and shows as missed until heard", async () => {
+    const { device, app, deviceId, token, grandmaToken } = await quietHousehold();
+    const audio = new Uint8Array(1234).fill(7);
+    const res = await http(`/devices/${deviceId}/voicemail?durationMs=4200`, {
+      token: grandmaToken,
+      raw: audio,
+      type: "audio/webm;codecs=opus",
+    });
+    expect(res.status).toBe(201);
+    const id = res.json.id as string;
+
+    expect(await app.next("voicemail.new")).toMatchObject({ id, deviceId, from: "Grandma" });
+    let config = await device.next("config");
+    while (!config.missed) config = await device.next("config");
+    expect(config.missed).toEqual([{ from: "Grandma" }]);
+
+    await Promise.all(background);
+    const list = await http("/voicemails", { token });
+    expect(list.json).toMatchObject([
+      {
+        id,
+        fromLabel: "Grandma",
+        durationMs: 4200,
+        mime: "audio/webm",
+        transcript: "heard 1234 bytes",
+        transcriptStatus: "done",
+        heardAt: null,
+      },
+    ]);
+    expect(list.json[0]).not.toHaveProperty("blobKey");
+
+    const audioRes = await api.request(`/voicemails/${id}/audio`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(audioRes.headers.get("content-type")).toBe("audio/webm;codecs=opus");
+    expect(new Uint8Array(await audioRes.arrayBuffer())).toEqual(audio);
+
+    expect((await http(`/voicemails/${id}/heard`, { method: "POST", token })).status).toBe(204);
+    config = await device.next("config");
+    expect(config.missed).toBeUndefined();
+
+    expect((await http(`/voicemails/${id}`, { method: "DELETE", token })).status).toBe(204);
+    expect(blobs.size).toBe(0);
+  });
+
+  it("refuses people who may not call the phone, bad types, and oversized audio", async () => {
+    const { deviceId, token, user, grandmaToken } = await quietHousehold();
+    const stranger = await store.createUser(
+      { householdId: user.householdId, name: "Stranger", role: "contact" },
+      0,
+    );
+    const strangerToken = await store.createSession(stranger.id, timers.now);
+    const upload = (t: string, raw: BodyInit, type = "audio/webm") =>
+      http(`/devices/${deviceId}/voicemail`, { token: t, raw, type });
+    expect((await upload(strangerToken, new Uint8Array(10))).status).toBe(403);
+    expect((await upload(grandmaToken, new Uint8Array(10), "text/plain")).status).toBe(415);
+    expect((await upload(grandmaToken, new Uint8Array(3 * 1024 * 1024))).status).toBe(413);
+    expect((await http("/voicemails", { token: grandmaToken })).status).toBe(403);
+    expect((await http("/voicemails", { token })).json).toEqual([]);
+  });
+
+  it("marks transcripts failed when speech-to-text errors", async () => {
+    env.transcriber = { transcribe: async () => Promise.reject(new Error("boom")) };
+    const { deviceId, token, grandmaToken } = await quietHousehold();
+    await http(`/devices/${deviceId}/voicemail`, {
+      token: grandmaToken,
+      raw: new Uint8Array(10),
+      type: "audio/ogg",
+    });
+    await Promise.all(background);
+    expect((await http("/voicemails", { token })).json[0]).toMatchObject({
+      transcriptStatus: "failed",
+      transcript: null,
+    });
+  });
+});
+
+describe("P-256 devices", () => {
+  it("pair and authenticate with ECDSA", async () => {
+    const g = await setup();
+    const keys = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const publicKey = toBase64Url(
+      new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey)),
+    );
+    const pairing = openDevice();
+    pairing.write(hello());
+    pairing.write({ t: "pair.begin", alg: "p256", publicKey });
+    const { code } = await pairing.next("pair.code");
+    await http("/devices/pair", { token: g.token, body: { code, name: "HW" } });
+    const { deviceId } = await pairing.next("pair.done");
+
+    const conn = openDevice();
+    conn.write(hello(deviceId));
+    const { nonce } = await conn.next("auth.challenge");
+    const sig = await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" },
+      keys.privateKey,
+      fromBase64Url(nonce),
+    );
+    conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+    expect(await conn.next("config")).toMatchObject({ buttons: [{ index: 0, label: "Mom" }] });
+  });
+});
+
+describe("passkeys", () => {
+  it("issues options and rejects forged or replayed responses", async () => {
+    const g = await setup();
+    const reg = await http("/passkeys/register/options", { method: "POST", token: g.token });
+    expect(reg.json.options).toMatchObject({ rp: { name: "OpenTinCan" } });
+    const bogus = { id: "x", rawId: "x", type: "public-key", response: {} };
+    const verify = await http("/passkeys/register/verify", {
+      token: g.token,
+      body: { challengeId: reg.json.challengeId, response: bogus },
+    });
+    expect(verify.status).toBe(400);
+    // The challenge was consumed by the failed attempt.
+    const replay = await http("/passkeys/register/verify", {
+      token: g.token,
+      body: { challengeId: reg.json.challengeId, response: bogus },
+    });
+    expect(replay.status).toBe(400);
+
+    const login = await http("/passkeys/login/options", { method: "POST" });
+    expect(login.json.options.challenge).toEqual(expect.any(String));
+    const bad = await http("/passkeys/login/verify", {
+      body: { challengeId: login.json.challengeId, response: bogus },
+    });
+    expect(bad.status).toBe(401);
+    expect((await http("/passkeys", { token: g.token })).json).toEqual([]);
   });
 });

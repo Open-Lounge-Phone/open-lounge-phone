@@ -2,9 +2,28 @@ import type { RoomState } from "@opentincan/core";
 import type { Store } from "@opentincan/db";
 import type { DeviceToServer, IceServer, ServerToApp, ServerToDevice } from "@opentincan/protocol";
 
+/** Opaque binary storage for voicemail audio (local disk, or R2 on Cloudflare). */
+export interface BlobStore {
+  put(key: string, data: ArrayBuffer, contentType: string): Promise<void>;
+  get(key: string): Promise<{ data: ArrayBuffer; contentType: string } | undefined>;
+  delete(key: string): Promise<void>;
+}
+
+/** Speech-to-text for voicemail (Workers AI Whisper, or an OpenAI-compatible endpoint). */
+export interface Transcriber {
+  transcribe(audio: ArrayBuffer, contentType: string): Promise<string>;
+}
+
 /** Everything the server needs from its host platform. Node and Workers each provide one. */
 export interface ServerEnv {
   store: Store;
+  blobs: BlobStore;
+  /** Absent when no speech-to-text is configured; transcripts are then "unavailable". */
+  transcriber?: Transcriber;
+  /** Keeps background work alive after the response (Workers `waitUntil`). */
+  defer(work: Promise<unknown>): void;
+  /** Canonical public URL (e.g. behind a TLS proxy); passkeys bind to its host. */
+  publicUrl?: string;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;

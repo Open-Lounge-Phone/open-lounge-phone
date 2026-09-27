@@ -2,15 +2,15 @@ import { type QuietHoursRule, validateSchedule, type Weekday } from "@opentincan
 import { newToken, sha256, type User } from "@opentincan/db";
 import { Id } from "@opentincan/protocol";
 import { Hono } from "hono";
-import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
+import { body, guardianOnly, type Vars } from "./httpUtil.ts";
+import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
+import { voicemailRoutes } from "./voicemail.ts";
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
-
-type Vars = { Variables: { user: User } };
 
 const Name = z.string().trim().min(1).max(24);
 
@@ -39,24 +39,6 @@ const QuietBody = z.object({
     )
     .max(32),
 });
-
-async function body<S extends z.ZodType>(req: Request, schema: S): Promise<z.infer<S> | Response> {
-  let json: unknown;
-  try {
-    json = await req.json();
-  } catch {
-    return Response.json({ error: "invalid JSON" }, { status: 400 });
-  }
-  const parsed = schema.safeParse(json);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return Response.json(
-      { error: `${issue?.path.join(".") || "body"}: ${issue?.message}` },
-      { status: 400 },
-    );
-  }
-  return parsed.data;
-}
 
 /**
  * On an instance with no households, makes sure a one-time setup token exists. Returns the new
@@ -113,6 +95,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.json({ token, user: guardian, household }, 201);
   });
 
+  publicPeopleRoutes(api, env);
+
   // --- authenticated --------------------------------------------------------
 
   api.use("/*", async (c, next) => {
@@ -121,11 +105,6 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const user = token ? await store.userForToken(token, env.now()) : undefined;
     if (!user) return c.json({ error: "unauthorized" }, 401);
     c.set("user", user);
-    await next();
-  });
-
-  const guardianOnly = createMiddleware<Vars>(async (c, next) => {
-    if (c.get("user").role !== "guardian") return c.json({ error: "guardians only" }, 403);
     await next();
   });
 
@@ -255,6 +234,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     }
     return c.body(null, 204);
   });
+
+  peopleRoutes(api, env);
+  voicemailRoutes(api, env, live);
 
   return api;
 }

@@ -2,6 +2,7 @@ import {
   authorizeInbound,
   authorizeOutbound,
   isQuietAt,
+  localClock,
   newRoom,
   nextQuietChange,
   type RoomEvent,
@@ -300,6 +301,15 @@ export class HouseholdHub {
     });
   }
 
+  /** Sends a message to every connected guardian session (e.g. `voicemail.new`). */
+  announce(msg: ServerToApp): Promise<void> {
+    return this.run(() => {
+      for (const set of this.apps.values()) {
+        for (const app of set) if (app.guardian) app.conn.send(msg);
+      }
+    });
+  }
+
   /** Called by hosts that implement `wakeAt`, at the requested time. */
   wake(): Promise<void> {
     return this.run(async () => {
@@ -489,12 +499,14 @@ export class HouseholdHub {
 
   private async sendConfig(peer: DevicePeer, force: boolean): Promise<void> {
     const { store } = this.env;
-    const [buttons, contacts, schedule] = await Promise.all([
+    const [buttons, contacts, schedule, missed] = await Promise.all([
       store.listButtons(peer.id),
       store.listContacts(peer.id),
       store.getSchedule(this.householdId),
+      store.unheardFrom(peer.id),
     ]);
-    const quiet = isQuietAt(schedule, new Date(this.env.now()));
+    const now = new Date(this.env.now());
+    const quiet = isQuietAt(schedule, now);
     if (!force && quiet === peer.lastQuiet) return;
     if (quiet !== peer.lastQuiet) {
       peer.lastQuiet = quiet;
@@ -505,7 +517,20 @@ export class HouseholdHub {
       .map(([index, userId]) => ({ index, contact: byId.get(userId) }))
       .filter((b) => b.contact?.deviceCanCall)
       .map((b) => ({ index: b.index, label: b.contact?.label ?? "" }));
-    peer.conn.send({ t: "config", buttons: mapped, quiet });
+    const end = quiet ? nextQuietChange(schedule, now) : undefined;
+    let quietUntil: string | undefined;
+    if (end) {
+      const { minutes } = localClock(end, schedule.timeZone);
+      const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+      quietUntil = `${hh}:${String(minutes % 60).padStart(2, "0")}`;
+    }
+    peer.conn.send({
+      t: "config",
+      buttons: mapped,
+      quiet,
+      ...(quietUntil ? { quietUntil } : {}),
+      ...(missed.length ? { missed: missed.map((from) => ({ from: from.slice(0, 24) })) } : {}),
+    });
   }
 
   /**
