@@ -40,8 +40,8 @@ modified Trimline silhouette where a **G-style handset** (classic dumbbell desk-
 rests on a **raised metal hook rest** (bent rod or folded sheet; printed option for DIY) **above
 the keypad**, with finger clearance so the 12 keys and e-ink strip stay visible and usable while
 hung up. The rest's **hook plunger dips under the handset's weight and carries a magnet over the
-hall sensor** (literal on/off the hook, no wearing contacts; any standard RJ9 G-style handset,
-incl. vintage, works — no magnet needed in the handset). Base ≈ handset footprint (~240 × 110 mm);
+hall sensor** (literal on/off the hook, no wearing contacts; any G-style handset works — no magnet needed
+in the handset). Base ≈ handset footprint (~240 × 110 mm);
 key deck on top, main board stacked beneath via the FFC. Owner references: `hardware/art/reference-base-top.png`
 (top view of the base without the handset: rounded cream slab that is essentially the keypad deck,
 2×6 keys + e-ink strip, framed by a dark metal frame that rises into the hook rest) and
@@ -65,8 +65,14 @@ the owner's machine is incidental.) Self-host auto-renames a legacy `opentincan.
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
 traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text
 "Open Lounge Phone".
+**Handset connection (owner decision 2026-09-27, supersedes RJ9):** **no RJ9/4P4C**. The handset
+connects with a **standard USB-C to USB-C cable** and the base works with **off-the-shelf USB-C
+headsets/handsets**: digital USB Audio Class (UAC 1.0) with the ESP32-S3's native USB as **host**
+on a dedicated handset USB-C port (current-limited VBUS); our own handset has a small USB audio
+chip. Flashing/console moves to a USB-UART bridge on the power USB-C port. Analog audio-accessory
+mode is not used (most C-to-C cables lack the SBU wires it needs).
 **Swappable by design (owner, 2026-09-27):** shells are 3D-printable in any colour
-(`hardware/enclosure/`, code CAD), the handset cord is a **standard RJ9/4P4C coiled cord**, keys
+(`hardware/enclosure/`, code CAD), the handset cord is a **standard USB-C to USB-C cable** (coiled or not), keys
 are standard MX switches + 1u keycaps (12 of them) — all interchangeable/customizable. The
 default look is clean and utilitarian; the site's `/customize/` three.js configurator shows the
 swaps (loads real GLBs from `hardware/enclosure/build/web/` when present).
