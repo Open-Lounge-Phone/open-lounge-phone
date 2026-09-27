@@ -48,7 +48,10 @@ key deck on top, main board stacked beneath via the FFC. Owner references: `hard
 `hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo). Handset: the owner likes the concept stills; the
 handset must match a **real Western Electric G-style handset** in size and shape (faceted/chamfered
 handle, domed angled earpiece and mouthpiece cups) — references `hardware/art/reference-g-handset.jpg`
-(vintage G handset) and `hardware/art/reference-handset-modern.jpg` (modern glossy take). **Construction (owner):** simple
+(vintage G handset) and `hardware/art/reference-handset-modern.jpg` (modern glossy take). **Chosen proportion: A — Compact**
+(base ≈186 × 94 × 33 mm; the G handset overhangs the base ends; main board ≈180 × 88 mm under
+the key deck; hall sensor under one hook post; side buttons on the main board edge; 20 × 40 mm
+rectangular speaker). **Construction (owner):** simple
 and easy to fabricate — base = two printed pieces (top shell + bottom tray, self-aligning lip)
 closed with screws from below into brass heat-set inserts; clean sloped/chamfered edges that print
 without supports; **drop-in metal posts** (off-the-shelf rod/tube, straight cuts) for the hook rest;
