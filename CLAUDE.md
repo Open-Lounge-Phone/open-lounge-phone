@@ -38,8 +38,8 @@ index: digits 1–9 → 0–8, digit 0 → 9 (speed-dial slots); MENU/BACK are h
 Deck ≈117 mm; base ≈350 mm long — **accepted by the owner** (both boards fit the shell; the
 handset may be made bigger, which only lengthens the cradle section).
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
-traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text
-"Open Receiver Tincan: ORT".
+traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text "opentincan".
+The project's official name is **opentincan** — don't use "ORT"/"Open Receiver Tincan".
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
