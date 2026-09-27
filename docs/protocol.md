@@ -193,7 +193,7 @@ Call progress update.
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
-| `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"error"` |  | Present when `state` is `ended`. |
+| `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 
 ### `rtc.config`
 
@@ -268,6 +268,24 @@ Companion app calls a device.
 | `id` | string (len ≤64) |  |  |
 | `deviceId` | string (len ≤64) | yes |  |
 
+### `call.user`
+
+Companion app calls another member of the same server, app to app. Refused unless they're online and available.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `userId` | string (len ≤64) | yes |  |
+
+### `presence.set`
+
+Whether this person is taking app-to-app calls (persisted).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `available` | boolean | yes |  |
+
 ### `call.answer`
 
 Accept an incoming call.
@@ -328,6 +346,17 @@ Companion app authenticated.
 | `id` | string (len ≤64) |  |  |
 | `userId` | string (len ≤64) | yes |  |
 
+### `member.status`
+
+Presence of another member of the server; sent on connect and on every change.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `userId` | string (len ≤64) | yes |  |
+| `online` | boolean | yes | Has at least one open companion session. |
+| `available` | boolean | yes | Taking app-to-app calls. |
+
 ### `device.status`
 
 Presence and health of a device in the guardian's household.
@@ -371,7 +400,7 @@ Call progress update.
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
-| `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"error"` |  | Present when `state` is `ended`. |
+| `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 
 ### `rtc.config`
 

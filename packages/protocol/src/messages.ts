@@ -251,9 +251,21 @@ export const CallDial = z
   .object({ t: z.literal("call.dial"), ...Ref, deviceId: Id })
   .describe("Companion app calls a device.");
 
+export const CallUser = z
+  .object({ t: z.literal("call.user"), ...Ref, userId: Id })
+  .describe(
+    "Companion app calls another member of the same server, app to app. Refused unless they're online and available.",
+  );
+
+export const PresenceSet = z
+  .object({ t: z.literal("presence.set"), ...Ref, available: z.boolean() })
+  .describe("Whether this person is taking app-to-app calls (persisted).");
+
 export const AppToServer = z.discriminatedUnion("t", [
   AppHello,
   CallDial,
+  CallUser,
+  PresenceSet,
   CallAnswer,
   CallHangup,
   RtcSdp,
@@ -289,8 +301,19 @@ export const VoicemailNew = z
   })
   .describe("A voicemail was left for a phone in the guardian's household.");
 
+export const MemberStatus = z
+  .object({
+    t: z.literal("member.status"),
+    ...Ref,
+    userId: Id,
+    online: z.boolean().describe("Has at least one open companion session."),
+    available: z.boolean().describe("Taking app-to-app calls."),
+  })
+  .describe("Presence of another member of the server; sent on connect and on every change.");
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
+  MemberStatus,
   DeviceStatus,
   VoicemailNew,
   CallRinging,

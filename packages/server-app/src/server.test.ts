@@ -823,3 +823,91 @@ describe("passkeys", () => {
     expect((await http("/passkeys", { token: g.token })).json).toEqual([]);
   });
 });
+
+describe("grown-up app-to-app calls", () => {
+  async function twoAdults() {
+    const g = await setup();
+    const dad = await store.createUser(
+      { householdId: g.user.householdId, name: "Dad", role: "guardian" },
+      0,
+    );
+    const dadToken = await store.createSession(dad.id, timers.now);
+    const mom = await connectApp(g.token);
+    return { ...g, mom, dad, dadToken };
+  }
+
+  it("shows presence when someone comes online and goes offline", async () => {
+    const { mom, dad, dadToken } = await twoAdults();
+    expect(await mom.next("member.status")).toEqual({
+      t: "member.status",
+      userId: dad.id,
+      online: false,
+      available: true,
+    });
+    const dadApp = await connectApp(dadToken);
+    expect(await mom.next("member.status")).toMatchObject({ userId: dad.id, online: true });
+    dadApp.handler.closed();
+    expect(await mom.next("member.status")).toMatchObject({ userId: dad.id, online: false });
+  });
+
+  it("rings the other person's open sessions and connects like any call", async () => {
+    const { mom, dad, dadToken, user } = await twoAdults();
+    const dadApp = await connectApp(dadToken);
+    mom.write({ t: "call.user", userId: dad.id });
+    const { callId } = await mom.nextState("ringing");
+    expect(await dadApp.next("call.ringing")).toEqual({
+      t: "call.ringing",
+      callId,
+      from: { label: "Mom" },
+    });
+    dadApp.write({ t: "call.answer", callId });
+    await mom.nextState("connecting");
+    mom.write({ t: "rtc.sdp", callId, type: "offer", sdp: "o" });
+    expect(await dadApp.next("rtc.sdp")).toMatchObject({ type: "offer" });
+    dadApp.write({ t: "rtc.sdp", callId, type: "answer", sdp: "a" });
+    await mom.nextState("active");
+    expect(user.name).toBe("Mom");
+  });
+
+  it("refuses offline, unavailable, busy, self and strangers", async () => {
+    const { mom, dad, dadToken, user } = await twoAdults();
+    mom.write({ t: "call.user", userId: dad.id });
+    expect(await mom.nextState("ended")).toMatchObject({ reason: "unreachable" });
+
+    const dadApp = await connectApp(dadToken);
+    dadApp.write({ t: "presence.set", available: false });
+    expect(await mom.next("member.status")).toMatchObject({ userId: dad.id, online: true });
+    let status = await mom.next("member.status");
+    while (status.available) status = await mom.next("member.status");
+    expect(status).toMatchObject({ userId: dad.id, available: false });
+    mom.write({ t: "call.user", userId: dad.id });
+    expect(await mom.nextState("ended")).toMatchObject({ reason: "unavailable" });
+    expect(dadApp.sent.some((m) => m.t === "call.ringing")).toBe(false);
+    // Availability persists across sessions.
+    expect((await store.availability(user.householdId)).get(dad.id)).toBe(false);
+
+    dadApp.write({ t: "presence.set", available: true });
+    await vi.waitFor(async () =>
+      expect((await store.availability(user.householdId)).get(dad.id)).toBe(true),
+    );
+    const grandma = await store.createUser(
+      { householdId: user.householdId, name: "Grandma", role: "contact" },
+      0,
+    );
+    const grandmaApp = await connectApp(await store.createSession(grandma.id, timers.now));
+    grandmaApp.write({ t: "call.user", userId: dad.id });
+    await dadApp.next("call.ringing");
+    mom.write({ t: "call.user", userId: dad.id });
+    expect(await mom.nextState("ended")).toMatchObject({ reason: "busy" });
+
+    mom.write({ t: "call.user", userId: user.id });
+    expect((await mom.next("error")).message).toMatch(/yourself/);
+
+    const other = await store.createHousehold(
+      { name: "O", timeZone: "UTC", guardianName: "Eve" },
+      0,
+    );
+    mom.write({ t: "call.user", userId: other.guardian.id });
+    expect((await mom.next("error")).code).toBe("not_found");
+  });
+});

@@ -267,6 +267,19 @@ export class Store {
     return r && toUser(r);
   }
 
+  async setAvailable(userId: string, available: boolean): Promise<void> {
+    await this.sql.run("UPDATE users SET available = ? WHERE id = ?", available ? 1 : 0, userId);
+  }
+
+  /** Availability of every member of a household, by user id. */
+  async availability(householdId: string): Promise<Map<string, boolean>> {
+    const rows = await this.sql.all<{ id: string; available: number }>(
+      "SELECT id, available FROM users WHERE household_id = ?",
+      householdId,
+    );
+    return new Map(rows.map((r) => [r.id, r.available === 1]));
+  }
+
   /** Removes a person; their sessions, passkeys, allow-list entries and keys go with them. */
   async deleteUser(id: string): Promise<void> {
     await this.sql.run("DELETE FROM users WHERE id = ?", id);

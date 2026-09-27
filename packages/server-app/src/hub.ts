@@ -191,10 +191,18 @@ export class HouseholdHub {
         guardian: user.role === "guardian",
       };
       const set = this.apps.get(user.id) ?? new Set<Peer>();
+      const cameOnline = set.size === 0;
       this.apps.set(user.id, set);
       set.add(peer);
       this.remember(peer);
       conn.send({ t: "app.ready", userId: user.id });
+      // Everyone's presence for this session, then tell the others this person is online.
+      const available = await this.env.store.availability(this.householdId);
+      for (const [userId, avail] of available) {
+        if (userId === user.id) continue;
+        conn.send({ t: "member.status", userId, online: this.apps.has(userId), available: avail });
+      }
+      if (cameOnline) this.broadcastMember(user.id, true, available.get(user.id) ?? true);
       if (peer.guardian) {
         for (const d of await this.env.store.listDevices(this.householdId)) {
           const live = this.devices.get(d.id);
@@ -218,7 +226,12 @@ export class HouseholdHub {
     } else {
       const set = this.apps.get(peer.id);
       if (!set?.delete(peer)) return;
-      if (set.size === 0) this.apps.delete(peer.id);
+      if (set.size === 0) {
+        this.apps.delete(peer.id);
+        void this.env.store
+          .availability(this.householdId)
+          .then((a) => this.broadcastMember(peer.id, false, a.get(peer.id) ?? true));
+      }
     }
     for (const room of [...this.rooms.values()]) {
       if (room.caller === peer || room.calleePeer === peer) {
@@ -277,6 +290,12 @@ export class HouseholdHub {
       switch (msg.t) {
         case "call.dial":
           return this.appDial(peer, msg.deviceId);
+        case "call.user":
+          return this.userDial(peer, msg.userId);
+        case "presence.set":
+          await this.env.store.setAvailable(peer.id, msg.available);
+          this.broadcastMember(peer.id, this.apps.has(peer.id), msg.available);
+          return;
         case "ping":
           peer.conn.send({ t: "pong" });
           return;
@@ -390,6 +409,41 @@ export class HouseholdHub {
     this.roomsDirty = true;
     user.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     peer.conn.send({ t: "call.ringing", callId: room.id, from: { label: contact.label } });
+  }
+
+  /**
+   * Grown-up, app-to-app call between two members of this server. Refused unless the callee
+   * has an open session and is taking calls; never rings a busy person.
+   */
+  private async userDial(caller: Peer, userId: string): Promise<void> {
+    if (userId === caller.id) {
+      caller.conn.send({ t: "error", code: "bad_message", message: "you can't call yourself" });
+      return;
+    }
+    const callee = await this.env.store.getUser(userId);
+    if (!callee || callee.householdId !== this.householdId) {
+      caller.conn.send({ t: "error", code: "not_found", message: "no such person" });
+      return;
+    }
+    const targets = this.apps.get(userId);
+    if (!targets?.size) return this.refuse(caller, "unreachable");
+    const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
+    if (!available) return this.refuse(caller, "unavailable");
+    if (this.busy(caller.key) || this.busy(userKey(userId))) return this.refuse(caller, "busy");
+
+    const room = this.openRoom(caller, userKey(userId));
+    caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    for (const t of targets) {
+      t.conn.send({ t: "call.ringing", callId: room.id, from: { label: caller.label } });
+    }
+  }
+
+  /** Presence of one member, to every other connected member. */
+  private broadcastMember(userId: string, online: boolean, available: boolean): void {
+    for (const [id, set] of this.apps) {
+      if (id === userId) continue;
+      for (const app of set) app.conn.send({ t: "member.status", userId, online, available });
+    }
   }
 
   private openRoom(caller: Peer, calleeKey: string): Room {

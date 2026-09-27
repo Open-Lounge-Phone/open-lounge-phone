@@ -28,8 +28,20 @@ export const CallState = z
 export type CallState = z.infer<typeof CallState>;
 
 export const EndReason = z
-  .enum(["hangup", "declined", "busy", "denied", "voicemail", "timeout", "unreachable", "error"])
-  .describe("Why a call ended. `denied` = blocked by allow-list or quiet hours.");
+  .enum([
+    "hangup",
+    "declined",
+    "busy",
+    "denied",
+    "voicemail",
+    "timeout",
+    "unreachable",
+    "unavailable",
+    "error",
+  ])
+  .describe(
+    "Why a call ended. `denied` = blocked by allow-list or quiet hours; `unavailable` = the person isn't taking calls.",
+  );
 export type EndReason = z.infer<typeof EndReason>;
 
 export const ErrorCode = z.enum([
