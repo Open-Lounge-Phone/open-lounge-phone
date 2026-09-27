@@ -45,7 +45,11 @@ incl. vintage, works — no magnet needed in the handset). Base ≈ handset foot
 key deck on top, main board stacked beneath via the FFC. Owner references: `hardware/art/reference-base-top.png`
 (top view of the base without the handset: rounded cream slab that is essentially the keypad deck,
 2×6 keys + e-ink strip, framed by a dark metal frame that rises into the hook rest) and
-`hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo).
+`hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo). **Construction (owner):** simple
+and easy to fabricate — base = two printed pieces (top shell + bottom tray, self-aligning lip)
+closed with screws from below into brass heat-set inserts; clean sloped/chamfered edges that print
+without supports; **drop-in metal posts** (off-the-shelf rod/tube, straight cuts) for the hook rest;
+low part count; customizable by shell colour, post finish and keycaps.
 **Name (owner decision 2026-09-27):** the project is **Open Lounge Phone** (slug/package scope
 `openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
 registered trademark of another phone. The owner has confirmed "Open Lounge Phone" is clear
