@@ -45,7 +45,10 @@ incl. vintage, works — no magnet needed in the handset). Base ≈ handset foot
 key deck on top, main board stacked beneath via the FFC. Owner references: `hardware/art/reference-base-top.png`
 (top view of the base without the handset: rounded cream slab that is essentially the keypad deck,
 2×6 keys + e-ink strip, framed by a dark metal frame that rises into the hook rest) and
-`hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo). **Construction (owner):** simple
+`hardware/art/reference-trimline.jpg` (the Trimline silhouette to echo). Handset: the owner likes the concept stills; the
+handset must match a **real Western Electric G-style handset** in size and shape (faceted/chamfered
+handle, domed angled earpiece and mouthpiece cups) — references `hardware/art/reference-g-handset.jpg`
+(vintage G handset) and `hardware/art/reference-handset-modern.jpg` (modern glossy take). **Construction (owner):** simple
 and easy to fabricate — base = two printed pieces (top shell + bottom tray, self-aligning lip)
 closed with screws from below into brass heat-set inserts; clean sloped/chamfered edges that print
 without supports; **drop-in metal posts** (off-the-shelf rod/tube, straight cuts) for the hook rest;
