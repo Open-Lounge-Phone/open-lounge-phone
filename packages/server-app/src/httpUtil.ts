@@ -1,4 +1,4 @@
-import type { User } from "@opentincan/db";
+import type { User } from "@openloungephone/db";
 import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
 

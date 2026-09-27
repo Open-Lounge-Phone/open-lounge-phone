@@ -1,6 +1,6 @@
 // Backend-agnostic end-to-end scenario over real HTTP and WebSockets. Used against the self-host
 // server and against `wrangler dev` / a deployed Worker.
-import { fromBase64Url, toBase64Url } from "@opentincan/protocol";
+import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { expect, vi } from "vitest";
 
 type Msg = { t: string; [k: string]: unknown };

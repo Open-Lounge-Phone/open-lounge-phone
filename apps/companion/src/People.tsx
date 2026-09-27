@@ -182,11 +182,11 @@ function ShareLink({ shared, onDone }: { shared: Shared; onDone(): void }) {
   const share = async () => {
     try {
       await navigator.share({
-        title: "OpenTinCan",
+        title: "Open Lounge Phone",
         text:
           shared.kind === "invite"
-            ? `Join our OpenTinCan phone, ${shared.forName}:`
-            : `Your OpenTinCan sign-in link, ${shared.forName}:`,
+            ? `Join our Open Lounge Phone phone, ${shared.forName}:`
+            : `Your Open Lounge Phone sign-in link, ${shared.forName}:`,
         url: shared.link,
       });
     } catch {

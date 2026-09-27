@@ -1,8 +1,8 @@
 {
-  "name": "@opentincan/db",
+  "name": "@openloungephone/db",
   "version": "0.0.0",
   "private": true,
-  "description": "OpenTinCan storage: SQL migrations shared by Cloudflare D1 and SQLite, plus a typed store.",
+  "description": "Open Lounge Phone storage: SQL migrations shared by Cloudflare D1 and SQLite, plus a typed store.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {
@@ -11,8 +11,8 @@
     "./d1": "./src/d1.ts"
   },
   "dependencies": {
-    "@opentincan/core": "0.0.0",
-    "@opentincan/protocol": "0.0.0"
+    "@openloungephone/core": "0.0.0",
+    "@openloungephone/protocol": "0.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.3"

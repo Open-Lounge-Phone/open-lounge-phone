@@ -1,6 +1,6 @@
 /** Session token persistence and first-run setup link parsing. */
 
-export const TOKEN_KEY = "opentincan.token";
+export const TOKEN_KEY = "openloungephone.token";
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 

@@ -1,17 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OpenTinCan">
-  <title>OpenTinCan</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Open Lounge Phone">
+  <title>Open Lounge Phone</title>
   <rect width="512" height="512" rx="112" fill="#2f6f5e"/>
-  <!-- two tin cans joined by a string -->
-  <g fill="#f6f4ef">
-    <path d="M96 176h96v160H96z"/>
-    <ellipse cx="144" cy="176" rx="48" ry="16"/>
-    <ellipse cx="144" cy="336" rx="48" ry="16"/>
-    <path d="M320 176h96v160h-96z"/>
-    <ellipse cx="368" cy="176" rx="48" ry="16"/>
-    <ellipse cx="368" cy="336" rx="48" ry="16"/>
+  <!-- a classic handset resting over a small keypad -->
+  <path fill="#f6f4ef" d="M112 176c0-26 20-44 48-44h32c14 0 24 10 24 24v20c0 12-8 22-20 24l-14 3c4 20 4 40 0 60l14 3c12 2 20 12 20 24v20c0 14-10 24-24 24h-32c-28 0-48-18-48-44z" transform="rotate(-90 256 256) translate(0 60)"/>
+  <g fill="#f2c14e">
+    <rect x="164" y="316" width="40" height="40" rx="10"/>
+    <rect x="236" y="316" width="40" height="40" rx="10"/>
+    <rect x="308" y="316" width="40" height="40" rx="10"/>
+    <rect x="164" y="376" width="40" height="40" rx="10"/>
+    <rect x="236" y="376" width="40" height="40" rx="10"/>
+    <rect x="308" y="376" width="40" height="40" rx="10"/>
   </g>
-  <g fill="none" stroke="#2f6f5e" stroke-width="8" opacity=".5">
-    <path d="M96 216h96M96 296h96M320 216h96M320 296h96"/>
-  </g>
-  <path d="M192 256c40-56 88 56 128 0" fill="none" stroke="#f2c14e" stroke-width="10" stroke-linecap="round"/>
 </svg>

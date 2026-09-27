@@ -1,4 +1,4 @@
-import type { IceServer } from "@opentincan/protocol";
+import type { IceServer } from "@openloungephone/protocol";
 
 /**
  * Time-limited TURN credentials in the "TURN REST API" scheme understood by coturn's
@@ -9,7 +9,7 @@ export async function turnRestCredentials(
   now: number,
   ttlSeconds = 6 * 60 * 60,
 ): Promise<{ username: string; credential: string }> {
-  const username = `${Math.floor(now / 1000) + ttlSeconds}:opentincan`;
+  const username = `${Math.floor(now / 1000) + ttlSeconds}:openloungephone`;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

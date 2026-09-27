@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Store } from "@opentincan/db";
-import { migrate, openSqlite } from "@opentincan/db/node";
-import { encode, MAX_MESSAGE_BYTES } from "@opentincan/protocol";
+import { Store } from "@openloungephone/db";
+import { migrate, openSqlite } from "@openloungephone/db/node";
+import { encode, MAX_MESSAGE_BYTES } from "@openloungephone/protocol";
 import {
   buildIceServers,
   type Conn,
@@ -14,7 +14,7 @@ import {
   ensureSetupToken,
   Gateway,
   type ServerEnv,
-} from "@opentincan/server-app";
+} from "@openloungephone/server-app";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
 import { blobDir, fileBlobStore, openAiTranscriber } from "./adapters.ts";
@@ -22,9 +22,20 @@ import { type Config, loadConfig } from "./config.ts";
 
 const KEEPALIVE_MS = 30_000;
 
+/** Installs from before the rename to Open Lounge Phone kept their data in opentincan.sqlite. */
+function adoptLegacyDatabase(dataDir: string, dbPath: string): void {
+  const legacy = `${dataDir}/opentincan.sqlite`;
+  if (existsSync(dbPath) || !existsSync(legacy)) return;
+  for (const suffix of ["", "-wal", "-shm"]) {
+    if (existsSync(legacy + suffix)) renameSync(legacy + suffix, dbPath + suffix);
+  }
+}
+
 export async function start(config: Config) {
   mkdirSync(config.dataDir, { recursive: true });
-  const { sql, db } = openSqlite(`${config.dataDir}/opentincan.sqlite`);
+  const dbPath = `${config.dataDir}/openloungephone.sqlite`;
+  adoptLegacyDatabase(config.dataDir, dbPath);
+  const { sql, db } = openSqlite(dbPath);
   const applied = migrate(db);
 
   const env: ServerEnv = {
@@ -114,7 +125,7 @@ export async function start(config: Config) {
   const port = typeof address === "object" && address ? address.port : config.port;
 
   const setupToken = await ensureSetupToken(env);
-  console.log(`OpenTinCan listening on ${config.publicUrl}`);
+  console.log(`Open Lounge Phone listening on ${config.publicUrl}`);
   if (setupToken) {
     console.log(`\n  First run! Open this link to create your household:\n`);
     console.log(`    ${config.publicUrl}/#setup=${setupToken}\n`);

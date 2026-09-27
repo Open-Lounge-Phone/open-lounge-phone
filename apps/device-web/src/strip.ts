@@ -1,5 +1,5 @@
-import type { DeviceState } from "@opentincan/core";
-import type { EndReason } from "@opentincan/protocol";
+import type { DeviceState } from "@openloungephone/core";
+import type { EndReason } from "@openloungephone/protocol";
 import type { Connection, DeviceConfig } from "./leds.ts";
 
 /** Characters per line. Fits both a narrow e-ink stripe and a 16-character segment display. */

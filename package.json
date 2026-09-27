@@ -1,5 +1,5 @@
 {
-  "name": "opentincan",
+  "name": "openloungephone",
   "private": true,
   "description": "Open-source, screen-free intercom phone: device emulator, companion app, and pluggable edge/self-hosted backend.",
   "license": "AGPL-3.0-or-later",
@@ -20,7 +20,7 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "docs:protocol": "node packages/protocol/scripts/gen-docs.ts",
     "build": "npm run build --workspaces --if-present",
-    "start": "npm run build && npm start -w @opentincan/server-selfhost"
+    "start": "npm run build && npm start -w @openloungephone/server-selfhost"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

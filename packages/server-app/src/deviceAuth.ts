@@ -1,5 +1,5 @@
-import type { KeyAlg } from "@opentincan/db";
-import { fromBase64Url } from "@opentincan/protocol";
+import type { KeyAlg } from "@openloungephone/db";
+import { fromBase64Url } from "@openloungephone/protocol";
 
 const ALGORITHMS: Record<
   KeyAlg,

@@ -1,5 +1,5 @@
 {
-  "name": "@opentincan/client",
+  "name": "@openloungephone/client",
   "version": "0.0.0",
   "private": true,
   "description": "Browser helpers shared by the device emulator and companion app: socket, WebRTC call media, tones.",
@@ -9,6 +9,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@opentincan/protocol": "0.0.0"
+    "@openloungephone/protocol": "0.0.0"
   }
 }

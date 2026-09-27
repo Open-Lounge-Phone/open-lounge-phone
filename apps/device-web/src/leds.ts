@@ -1,4 +1,4 @@
-import type { DeviceState } from "@opentincan/core";
+import type { DeviceState } from "@openloungephone/core";
 
 export type LedColor = "white" | "green" | "red" | "blue" | "amber" | "purple";
 /** `breathe` is a slow, gentle pulse for notices that can wait (e.g. missed voicemail). */

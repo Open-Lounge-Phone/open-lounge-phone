@@ -1,8 +1,8 @@
 {
-  "name": "@opentincan/server-cloudflare",
+  "name": "@openloungephone/server-cloudflare",
   "version": "0.0.0",
   "private": true,
-  "description": "OpenTinCan on your own Cloudflare account: Worker + Durable Objects + D1 + TURN.",
+  "description": "Open Lounge Phone on your own Cloudflare account: Worker + Durable Objects + D1 + TURN.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -11,9 +11,9 @@
     "deploy": "npm run assets && wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "dependencies": {
-    "@opentincan/db": "0.0.0",
-    "@opentincan/protocol": "0.0.0",
-    "@opentincan/server-app": "0.0.0",
+    "@openloungephone/db": "0.0.0",
+    "@openloungephone/protocol": "0.0.0",
+    "@openloungephone/server-app": "0.0.0",
     "hono": "^4.13.9"
   },
   "devDependencies": {

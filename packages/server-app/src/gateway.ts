@@ -1,4 +1,4 @@
-import type { Device } from "@opentincan/db";
+import type { Device } from "@openloungephone/db";
 import {
   type AppToServer,
   type DeviceToServer,
@@ -7,7 +7,7 @@ import {
   PROTOCOL_VERSION,
   type ServerToApp,
   toBase64Url,
-} from "@opentincan/protocol";
+} from "@openloungephone/protocol";
 import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
   CloseCode,

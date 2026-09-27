@@ -1,4 +1,4 @@
--- OpenTinCan initial schema. Shared by Cloudflare D1 (wrangler d1 migrations) and self-hosted
+-- Open Lounge Phone initial schema. Shared by Cloudflare D1 (wrangler d1 migrations) and self-hosted
 -- SQLite. Timestamps are Unix epoch milliseconds. Booleans are 0/1.
 
 CREATE TABLE households (

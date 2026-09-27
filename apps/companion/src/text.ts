@@ -1,4 +1,4 @@
-import type { EndReason } from "@opentincan/protocol";
+import type { EndReason } from "@openloungephone/protocol";
 
 /** Human wording for why a call ended. */
 export function endReasonText(reason: EndReason | undefined): string {

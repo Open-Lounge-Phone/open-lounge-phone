@@ -1,8 +1,8 @@
-# Build from the repository root:  docker build -f apps/server-selfhost/Dockerfile -t opentincan .
+# Build from the repository root:  docker build -f apps/server-selfhost/Dockerfile -t openloungephone .
 FROM node:22-slim AS build
 WORKDIR /app
 COPY . .
-RUN npm ci && npm run build -w @opentincan/device-web -w @opentincan/companion \
+RUN npm ci && npm run build -w @openloungephone/device-web -w @openloungephone/companion \
   && npm prune --omit=dev
 
 FROM node:22-slim

@@ -1,8 +1,8 @@
 {
-  "name": "@opentincan/protocol",
+  "name": "@openloungephone/protocol",
   "version": "0.0.0",
   "private": true,
-  "description": "Versioned wire protocol shared by OpenTinCan devices, companion apps, and backends.",
+  "description": "Versioned wire protocol shared by Open Lounge Phone devices, companion apps, and backends.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {

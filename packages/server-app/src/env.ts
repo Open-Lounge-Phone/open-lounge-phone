@@ -1,6 +1,11 @@
-import type { RoomState } from "@opentincan/core";
-import type { Store } from "@opentincan/db";
-import type { DeviceToServer, IceServer, ServerToApp, ServerToDevice } from "@opentincan/protocol";
+import type { RoomState } from "@openloungephone/core";
+import type { Store } from "@openloungephone/db";
+import type {
+  DeviceToServer,
+  IceServer,
+  ServerToApp,
+  ServerToDevice,
+} from "@openloungephone/protocol";
 
 /** Opaque binary storage for voicemail audio (local disk, or R2 on Cloudflare). */
 export interface BlobStore {

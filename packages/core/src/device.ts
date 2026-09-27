@@ -1,7 +1,7 @@
-import type { DeviceToServer, EndReason, ServerToDevice } from "@opentincan/protocol";
+import type { DeviceToServer, EndReason, ServerToDevice } from "@openloungephone/protocol";
 
 /**
- * Handset behaviour shared by every OpenTinCan device. The web emulator runs this directly and
+ * Handset behaviour shared by every Open Lounge Phone device. The web emulator runs this directly and
  * the ESP32 firmware mirrors it, so the phone feels identical everywhere.
  *
  * Only call-related server messages are inputs here; pairing, auth and config are handled by the

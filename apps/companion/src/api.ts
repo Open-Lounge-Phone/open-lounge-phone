@@ -1,4 +1,4 @@
-/** Typed client for the OpenTinCan REST API (`/api/*`). */
+/** Typed client for the Open Lounge Phone REST API (`/api/*`). */
 
 export type Role = "guardian" | "contact";
 

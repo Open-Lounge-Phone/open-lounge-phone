@@ -4,7 +4,7 @@ import type {
   QuietHoursRule,
   QuietHoursSchedule,
   Weekday,
-} from "@opentincan/core";
+} from "@openloungephone/core";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import type { Sql } from "./sql.ts";
 

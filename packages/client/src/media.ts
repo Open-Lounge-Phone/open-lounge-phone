@@ -1,4 +1,4 @@
-import type { IceServer } from "@opentincan/protocol";
+import type { IceServer } from "@openloungephone/protocol";
 
 type Signal =
   | { t: "rtc.sdp"; callId: string; type: "offer" | "answer"; sdp: string }

@@ -1,4 +1,4 @@
-import { newId, type Voicemail } from "@opentincan/db";
+import { newId, type Voicemail } from "@openloungephone/db";
 import type { Hono } from "hono";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";

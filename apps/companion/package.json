@@ -1,8 +1,8 @@
 {
-  "name": "@opentincan/companion",
+  "name": "@openloungephone/companion",
   "version": "0.0.0",
   "private": true,
-  "description": "OpenTinCan companion PWA for guardians and contacts.",
+  "description": "Open Lounge Phone companion PWA for guardians and contacts.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -10,8 +10,8 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@opentincan/client": "0.0.0",
-    "@opentincan/protocol": "0.0.0",
+    "@openloungephone/client": "0.0.0",
+    "@openloungephone/protocol": "0.0.0",
     "@simplewebauthn/browser": "^14.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

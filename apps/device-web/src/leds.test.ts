@@ -1,4 +1,4 @@
-import type { DeviceState } from "@opentincan/core";
+import type { DeviceState } from "@openloungephone/core";
 import { describe, expect, it } from "vitest";
 import { hasNewMissed, type LedInput, ledsFor } from "./leds.ts";
 

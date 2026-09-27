@@ -1,7 +1,7 @@
 {
-  "name": "OpenTinCan",
-  "short_name": "TinCan",
-  "description": "Manage and call your OpenTinCan phone.",
+  "name": "Open Lounge Phone",
+  "short_name": "Lounge Phone",
+  "description": "Manage and call your Open Lounge Phone phone.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

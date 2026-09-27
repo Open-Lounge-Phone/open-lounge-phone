@@ -174,7 +174,7 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
       <header className="topbar">
         <button type="button" className="brand" onClick={() => setRoute({ name: "home" })}>
           <img src="/icon.svg" alt="" width={28} height={28} />
-          <span>{me?.household.name ?? "OpenTinCan"}</span>
+          <span>{me?.household.name ?? "Open Lounge Phone"}</span>
         </button>
         <span className={`conn conn-${snap.status}`} title={`Server: ${snap.status}`} />
         <nav>

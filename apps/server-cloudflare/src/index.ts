@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import { type Device, Store } from "@opentincan/db";
-import { d1Sql } from "@opentincan/db/d1";
-import { encode, type IceServer, Id, type ServerToApp } from "@opentincan/protocol";
+import { type Device, Store } from "@openloungephone/db";
+import { d1Sql } from "@openloungephone/db/d1";
+import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
 import {
   type BlobStore,
   type Conn,
@@ -15,7 +15,7 @@ import {
   type ServerEnv,
   seedSetupToken,
   type Transcriber,
-} from "@opentincan/server-app";
+} from "@openloungephone/server-app";
 import { Hono } from "hono";
 
 export interface Env {

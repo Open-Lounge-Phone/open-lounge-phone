@@ -1,12 +1,12 @@
-import { Store, type User } from "@opentincan/db";
-import { migrate, openSqlite } from "@opentincan/db/node";
+import { Store, type User } from "@openloungephone/db";
+import { migrate, openSqlite } from "@openloungephone/db/node";
 import {
   encode,
   fromBase64Url,
   type ServerToApp,
   type ServerToDevice,
   toBase64Url,
-} from "@opentincan/protocol";
+} from "@openloungephone/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CloseCode,
@@ -800,7 +800,7 @@ describe("passkeys", () => {
   it("issues options and rejects forged or replayed responses", async () => {
     const g = await setup();
     const reg = await http("/passkeys/register/options", { method: "POST", token: g.token });
-    expect(reg.json.options).toMatchObject({ rp: { name: "OpenTinCan" } });
+    expect(reg.json.options).toMatchObject({ rp: { name: "Open Lounge Phone" } });
     const bogus = { id: "x", rawId: "x", type: "public-key", response: {} };
     const verify = await http("/passkeys/register/verify", {
       token: g.token,

@@ -1,4 +1,4 @@
-import { type DecodeResult, encode } from "@opentincan/protocol";
+import { type DecodeResult, encode } from "@openloungephone/protocol";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 

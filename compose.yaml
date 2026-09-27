@@ -1,7 +1,7 @@
-# Self-hosted OpenTinCan. Copy .env.example to .env, edit it, then: docker compose up -d
-# The server prints a one-time setup link on first start: docker compose logs opentincan
+# Self-hosted Open Lounge Phone. Copy .env.example to .env, edit it, then: docker compose up -d
+# The server prints a one-time setup link on first start: docker compose logs openloungephone
 services:
-  opentincan:
+  openloungephone:
     build:
       context: .
       dockerfile: apps/server-selfhost/Dockerfile
@@ -10,7 +10,7 @@ services:
     ports:
       - "8787:8787"
     volumes:
-      - opentincan-data:/data
+      - openloungephone-data:/data
 
   # TURN relay so calls connect across NATs and mobile networks. Uses host networking because
   # TURN needs a wide UDP port range. Remove this service for LAN-only installs.
@@ -21,7 +21,7 @@ services:
     command:
       - --use-auth-secret
       - --static-auth-secret=${TURN_SECRET:?set TURN_SECRET in .env}
-      - --realm=opentincan
+      - --realm=openloungephone
       - --listening-port=3478
       - --min-port=49160
       - --max-port=49200
@@ -31,4 +31,4 @@ services:
       - --fingerprint
 
 volumes:
-  opentincan-data:
+  openloungephone-data:

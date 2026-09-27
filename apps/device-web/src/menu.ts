@@ -120,7 +120,7 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
     case "brightness":
       return `Brightness ${settings.brightness}. Press 1 for dimmer, 2 for brighter.`;
     case "about":
-      return `Open tin can phone, firmware ${ctx.fw}.`;
+      return `Open Lounge Phone, firmware ${ctx.fw}.`;
   }
 }
 

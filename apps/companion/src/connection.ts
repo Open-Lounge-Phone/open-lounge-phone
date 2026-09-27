@@ -5,14 +5,14 @@ import {
   type SocketStatus,
   socketUrl,
   TonePlayer,
-} from "@opentincan/client";
+} from "@openloungephone/client";
 import {
   type AppToServer,
   decodeServerToApp,
   type IceServer,
   PROTOCOL_VERSION,
   type ServerToApp,
-} from "@opentincan/protocol";
+} from "@openloungephone/protocol";
 import { type CallEvent, type CallView, callStep, canLeaveVoicemail, toneFor } from "./calls.ts";
 
 export interface DeviceLive {

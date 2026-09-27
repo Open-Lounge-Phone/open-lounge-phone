@@ -5,14 +5,14 @@ import {
   type SocketStatus,
   socketUrl,
   TonePlayer,
-} from "@opentincan/client";
+} from "@openloungephone/client";
 import {
   type DeviceInput,
   type DeviceState,
   deviceStep,
   initialDeviceState,
   soundFor,
-} from "@opentincan/core";
+} from "@openloungephone/core";
 import {
   type DeviceToServer,
   decodeServerToDevice,
@@ -20,7 +20,7 @@ import {
   type IceServer,
   PROTOCOL_VERSION,
   type ServerToDevice,
-} from "@opentincan/protocol";
+} from "@openloungephone/protocol";
 import { playChime, unlockChime } from "./chime.ts";
 import { keyGrid } from "./grid.ts";
 import {

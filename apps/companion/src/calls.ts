@@ -1,5 +1,5 @@
-import type { Tone } from "@opentincan/client";
-import type { EndReason, ServerToApp } from "@opentincan/protocol";
+import type { Tone } from "@openloungephone/client";
+import type { EndReason, ServerToApp } from "@openloungephone/protocol";
 
 /** What the call UI shows. At most one call at a time. */
 export type CallView =

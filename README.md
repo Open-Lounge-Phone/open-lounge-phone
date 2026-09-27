@@ -1,4 +1,4 @@
-# OpenTinCan
+# Open Lounge Phone
 
 A free, open-source, screen-free phone. Big mechanical buttons, one per person, and nothing else:
 no browser, no games, no strangers.
@@ -12,7 +12,7 @@ no browser, no games, no strangers.
   <img src="docs/images/emulator-ringing.png" alt="The browser phone emulator ringing, with its developer panel" width="640">
 </p>
 
-OpenTinCan is "batteries included": deploy the backend to **your own free Cloudflare account**
+Open Lounge Phone is "batteries included": deploy the backend to **your own free Cloudflare account**
 or **self-host it with Docker** on hardware you control. Nobody — including this project — sits
 in the middle of your calls.
 
@@ -74,4 +74,4 @@ npm run docs:protocol   # regenerate docs/protocol.md after changing packages/pr
 ## License
 
 Software: [AGPL-3.0-or-later](LICENSE). Hardware designs: [CERN-OHL-S-2.0](hardware/LICENSE).
-If you run a modified OpenTinCan server for others, you must share your changes.
+If you run a modified Open Lounge Phone server for others, you must share your changes.

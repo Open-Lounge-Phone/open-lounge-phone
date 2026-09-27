@@ -9,9 +9,14 @@ import {
   type RoomState,
   resolveButton,
   roomStep,
-} from "@opentincan/core";
-import { type Device, newId, type User } from "@opentincan/db";
-import type { AppToServer, DeviceToServer, EndReason, ServerToApp } from "@opentincan/protocol";
+} from "@openloungephone/core";
+import { type Device, newId, type User } from "@openloungephone/db";
+import type {
+  AppToServer,
+  DeviceToServer,
+  EndReason,
+  ServerToApp,
+} from "@openloungephone/protocol";
 import {
   CloseCode,
   CONNECT_TIMEOUT_MS,

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping! A few ground rules keep OpenTinCan dependable enough to hand to a child.
+Thanks for helping! A few ground rules keep Open Lounge Phone dependable enough to hand to a child.
 
 ## Principles
 

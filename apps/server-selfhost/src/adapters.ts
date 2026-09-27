@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { BlobStore, Transcriber } from "@opentincan/server-app";
+import type { BlobStore, Transcriber } from "@openloungephone/server-app";
 
 /** Blobs as files under `root`, with the content type in a sidecar file. */
 export function fileBlobStore(root: string): BlobStore {

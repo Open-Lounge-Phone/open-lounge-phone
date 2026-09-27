@@ -1,5 +1,5 @@
-import type { Household, Role, Store, User } from "@opentincan/db";
-import { fromBase64Url, Id, toBase64Url } from "@opentincan/protocol";
+import type { Household, Role, Store, User } from "@openloungephone/db";
+import { fromBase64Url, Id, toBase64Url } from "@openloungephone/protocol";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -165,9 +165,9 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
     const { rpID } = relyingParty(env, c.req.url);
     const existing = await store.listPasskeys(user.id);
     const options = await generateRegistrationOptions({
-      rpName: "OpenTinCan",
+      rpName: "Open Lounge Phone",
       rpID,
-      userName: `${user.name} (${household?.name ?? "OpenTinCan"})`,
+      userName: `${user.name} (${household?.name ?? "Open Lounge Phone"})`,
       userDisplayName: user.name,
       userID: new TextEncoder().encode(user.id),
       attestationType: "none",

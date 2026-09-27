@@ -1,8 +1,8 @@
 {
-  "name": "@opentincan/server-selfhost",
+  "name": "@openloungephone/server-selfhost",
   "version": "0.0.0",
   "private": true,
-  "description": "Self-hosted OpenTinCan server: Node + SQLite, serves the companion app and device emulator.",
+  "description": "Self-hosted Open Lounge Phone server: Node + SQLite, serves the companion app and device emulator.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
-    "@opentincan/db": "0.0.0",
-    "@opentincan/protocol": "0.0.0",
-    "@opentincan/server-app": "0.0.0",
+    "@openloungephone/db": "0.0.0",
+    "@openloungephone/protocol": "0.0.0",
+    "@openloungephone/server-app": "0.0.0",
     "hono": "^4.13.9",
     "ws": "^8.22.0"
   },

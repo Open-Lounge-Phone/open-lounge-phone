@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "opentincan",
+  "name": "openloungephone",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   // Companion app at /, device emulator at /device/ (assembled by `npm run assets`).
@@ -13,13 +13,13 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "opentincan",
-      // Replaced by `opentincan deploy cloudflare` (M5) or `wrangler d1 create opentincan`.
+      "database_name": "openloungephone",
+      // Replaced by `openloungephone deploy cloudflare` (M5) or `wrangler d1 create openloungephone`.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "../../packages/db/migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "opentincan-voicemail" }],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "openloungephone-voicemail" }],
   // Voicemail transcripts: uncomment to bind Workers AI (billed per audio minute; local
   // `wrangler dev` then needs `wrangler login` because AI always runs remotely).
   // "ai": { "binding": "AI" },

@@ -1,4 +1,4 @@
-import { toBase64Url } from "@opentincan/protocol";
+import { toBase64Url } from "@openloungephone/protocol";
 
 /**
  * The emulated phone's identity: an Ed25519 keypair whose private key never leaves WebCrypto
@@ -16,7 +16,7 @@ const KEY = "ed25519";
 
 function openDb(profile: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(`opentincan-device:${profile}`, 1);
+    const req = indexedDB.open(`openloungephone-device:${profile}`, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -66,7 +66,7 @@ export async function sign(identity: Identity, message: Uint8Array<ArrayBuffer>)
   );
 }
 
-const idKey = (profile: string) => `opentincan:${profile}:deviceId`;
+const idKey = (profile: string) => `openloungephone:${profile}:deviceId`;
 
 export function getDeviceId(profile: string): string | undefined {
   try {

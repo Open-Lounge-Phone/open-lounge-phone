@@ -1,14 +1,14 @@
 {
-  "name": "@opentincan/core",
+  "name": "@openloungephone/core",
   "version": "0.0.0",
   "private": true,
-  "description": "Backend-agnostic OpenTinCan domain logic: access control, quiet hours, call state machines.",
+  "description": "Backend-agnostic Open Lounge Phone domain logic: access control, quiet hours, call state machines.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@opentincan/protocol": "0.0.0"
+    "@openloungephone/protocol": "0.0.0"
   }
 }

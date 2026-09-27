@@ -1,6 +1,6 @@
-import { type QuietHoursRule, validateSchedule, type Weekday } from "@opentincan/core";
-import { newToken, sha256, type User } from "@opentincan/db";
-import { Id } from "@opentincan/protocol";
+import { type QuietHoursRule, validateSchedule, type Weekday } from "@openloungephone/core";
+import { newToken, sha256, type User } from "@openloungephone/db";
+import { Id } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";

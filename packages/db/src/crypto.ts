@@ -1,4 +1,4 @@
-import { toBase64Url } from "@opentincan/protocol";
+import { toBase64Url } from "@openloungephone/protocol";
 
 /** Random URL-safe id with a readable prefix, e.g. `dev_Xk3...`. 96 bits of entropy. */
 export function newId(prefix: string): string {

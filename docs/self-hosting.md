@@ -1,6 +1,6 @@
-# Self-hosting OpenTinCan
+# Self-hosting Open Lounge Phone
 
-OpenTinCan runs on any machine with Docker (a spare PC, NAS, Raspberry Pi 4/5, or a small VPS).
+Open Lounge Phone runs on any machine with Docker (a spare PC, NAS, Raspberry Pi 4/5, or a small VPS).
 Nothing is sent to this project or any third party; calls go directly between your phone and your
 companion app, relayed by your own TURN server only when a direct path is impossible.
 
@@ -9,10 +9,10 @@ companion app, relayed by your own TURN server only when a direct path is imposs
 > The Docker packaging has not been build-tested yet; please report issues.
 
 ```sh
-git clone <this repo> opentincan && cd opentincan
+git clone <this repo> openloungephone && cd openloungephone
 cp .env.example .env        # edit PUBLIC_URL, TURN_URLS, TURN_SECRET
 docker compose up -d
-docker compose logs opentincan   # shows the one-time setup link
+docker compose logs openloungephone   # shows the one-time setup link
 ```
 
 Open the setup link, create your household, then pair a phone: lift its handset, and it shows a
@@ -56,5 +56,5 @@ Until hardware exists, open `/device/` in a browser to get an emulated phone. Ad
 
 ## Backups
 
-Everything lives in `DATA_DIR`: the database `opentincan.sqlite` and voicemail audio under
-`blobs/` (the `opentincan-data` volume with Docker).
+Everything lives in `DATA_DIR`: the database `openloungephone.sqlite` and voicemail audio under
+`blobs/` (the `openloungephone-data` volume with Docker).

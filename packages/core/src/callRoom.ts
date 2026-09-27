@@ -1,4 +1,4 @@
-import type { EndReason } from "@opentincan/protocol";
+import type { EndReason } from "@openloungephone/protocol";
 
 /**
  * Server-side lifecycle of a two-party call. Pure: the backend persists the state and turns

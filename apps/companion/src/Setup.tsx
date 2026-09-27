@@ -32,7 +32,7 @@ export function Setup({ setupToken, onDone }: { setupToken: string; onDone(token
     <div className="centered">
       <form className="card stack" onSubmit={(e) => void submit(e)}>
         <img src="/icon.svg" alt="" width={56} height={56} />
-        <h1>Welcome to OpenTinCan</h1>
+        <h1>Welcome to Open Lounge Phone</h1>
         <p className="muted">
           Set up your household. You'll be its first guardian and can pair phones and choose who
           they can call.
@@ -98,7 +98,7 @@ export function SignedOut({ onToken }: { onToken(token: string): void }) {
     <div className="centered">
       <div className="card stack">
         <img src="/icon.svg" alt="" width={56} height={56} />
-        <h1>OpenTinCan</h1>
+        <h1>Open Lounge Phone</h1>
         {supported && (
           <>
             <button

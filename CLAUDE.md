@@ -1,4 +1,4 @@
-# OpenTinCan — notes for agents
+# Open Lounge Phone — notes for agents
 
 Open-source, screen-free intercom phone. Software phase first (runs on computers), then ESP32-S3
 firmware, then a custom PCB in a Trimline-style corded phone powered by USB-C. Read
@@ -37,9 +37,14 @@ speakerphone is a menu item). Kids Lite uses a voice menu with the same keys. Pr
 index: digits 1–9 → 0–8, digit 0 → 9 (speed-dial slots); MENU/BACK are handled on the device.
 Deck ≈117 mm; base ≈350 mm long — **accepted by the owner** (both boards fit the shell; the
 handset may be made bigger, which only lengthens the cradle section).
+**Name (owner decision 2026-09-27):** the project is **Open Lounge Phone** (slug/package scope
+`openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
+registered trademark of another phone — never use "tin can", "TinCan", "opentincan" or "ORT" in
+code, UI, docs, silkscreen or new commits. (The working-directory folder name `opentincan/` on
+the owner's machine is incidental.) Self-host auto-renames a legacy `opentincan.sqlite`.
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
-traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text "opentincan".
-The project's official name is **opentincan** — don't use "ORT"/"Open Receiver Tincan".
+traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text
+"Open Lounge Phone".
 **Hardware rules:** `hardware/GUIDELINES.md` (child-safe/rugged/KISS: ESD at every
 user-reachable conductor, no user-facing line straight to an ESP32 pin, solid GND plane (no split
 grounds), S3 straps are GPIO0/3/45/46, captive keycaps, drop-in e-ink via ZIF, net-class widths,
@@ -188,7 +193,7 @@ Keep this section current when finishing a milestone.
 - First-run on Cloudflare: `SETUP_TOKEN` secret is seeded as the setup token until a household
   exists (`seedSetupToken`). TURN: `TURN_KEY_ID` + `TURN_KEY_API_TOKEN` secrets, else STUN only.
 - `@cloudflare/vitest-pool-workers` needs Vitest 4 (we use 5), so Worker testing is the shared
-  e2e scenario against `wrangler dev` (`OTC_E2E_URL`, `OTC_E2E_SETUP_TOKEN`).
+  e2e scenario against `wrangler dev` (`OLP_E2E_URL`, `OLP_E2E_SETUP_TOKEN`).
 
 ## Server architecture notes
 - `Gateway` (packages/server-app/src/gateway.ts) owns the per-socket handshake. Devices: `hello`
