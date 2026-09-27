@@ -35,8 +35,14 @@ same order as the keys. Digits 0–9 are essential (dialing, entering codes); pr
 strip shows for it; MENU opens the menu, BACK steps out; no ENTER/SPEAKER/END keys (hang up = hook;
 speakerphone is a menu item). Kids Lite uses a voice menu with the same keys. Protocol `button`
 index: digits 1–9 → 0–8, digit 0 → 9 (speed-dial slots); MENU/BACK are handled on the device.
-Deck ≈117 mm; base ≈350 mm long — **accepted by the owner** (both boards fit the shell; the
-handset may be made bigger, which only lengthens the cradle section).
+**Form factor (owner decision 2026-09-27, supersedes the long 350 mm in-line base):** a
+modified Trimline silhouette where a **G-style handset** (classic dumbbell desk-phone handset)
+rests on a **raised metal hook rest** (bent rod or folded sheet; printed option for DIY) **above
+the keypad**, with finger clearance so the 12 keys and e-ink strip stay visible and usable while
+hung up. The rest's **hook plunger dips under the handset's weight and carries a magnet over the
+hall sensor** (literal on/off the hook, no wearing contacts; any standard RJ9 G-style handset,
+incl. vintage, works — no magnet needed in the handset). Base ≈ handset footprint (~240 × 110 mm);
+key deck on top, main board stacked beneath via the FFC.
 **Name (owner decision 2026-09-27):** the project is **Open Lounge Phone** (slug/package scope
 `openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
 registered trademark of another phone. The owner has confirmed "Open Lounge Phone" is clear
