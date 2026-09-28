@@ -65,7 +65,7 @@ main:
   # Zones: keys at x 42.4 + 19.05 i, rows y 14.8 / 72.8 (switch bodies keep the 14 x 14 squares
   # free on the top side); e-ink panel (at plate level, parts <= 2.8 mm may sit under it) over
   # x 41-120, y 25.45-62.15; left end: audio (codecs, amp, speaker connector, base mic) + NFC
-  # coil (front-left); right end: both USB-C (handset x 153.8, power x 167), power path, hall,
+  # coil (front-left); right end: handset USB-C (rear x 153.8), power USB-C (right wall y 40), power path, hall,
   # CH340C, RESET/BOOT, radar, side controls (bottom side); ESP32 right of the panel.
   size: [180, 88]
   corner_radius: 8.5      # clears the shell's inner corner radius
@@ -120,13 +120,13 @@ main:
     L1: [C9, C10]                  # buck output (at the inductor)
     U4: [C11, C12, C13]            # LP5907 in / out
   testpoints:   # pogo grid on the bottom under the ESP32, 2.54 mm pitch; USB nets stay on top
-    origin: [124.5, 36.5]   # below the module's GND via array
+    origin: [156.0, 9.6]    # bottom, rear right: next to J7, the CH340C and RESET/BOOT
     cols: 6
     pitch: 2.54
     side: bottom
     top_nets: [USB_DP, USB_DN, HS_USB_DP, HS_USB_DN]
-    groups:     # audio pads at the codecs/amp (left end, bottom), the rest under the ESP32
-      - {origin: [32.0, 52.0], cols: 4, nets: [ES8311_ASDOUT, SPK_VOP, SPK_VON, 3V0]}
+    groups:     # the 3V0 pad sits at the codec cluster
+      - {origin: [139.5, 44.5], cols: 1, nets: [3V0]}
   zones:
     # [net, layer, polygon | "board", priority]
     - [GND, In1.Cu, board, 0]
@@ -134,7 +134,12 @@ main:
     - [GND, B.Cu, board, 0]
     - [GND, In2.Cu, board, 0]
     - [3V3, In2.Cu, [[36, 23], [146, 23], [146, 65], [36, 65]], 1]
-    - [VSYS, In2.Cu, [[147.5, 12], [172, 12], [172, 44], [147.5, 44]], 1]
+    - [VSYS, In2.Cu, [[147.5, 26], [172, 26], [172, 62], [147.5, 62]], 1]
+    - [3V0, In2.Cu, [[121.5, 43.5], [141.5, 43.5], [141.5, 60], [121.5, 60]], 2]   # codec cluster
+    # VLED (switched LED supply) as two L3 strips under the key rows: each SK6812 and its cap
+    # drop a via; one neck from the P-FET Q7 feeds both
+    - [VLED, In2.Cu, [[36, 15.5], [146, 15.5], [146, 22.8], [36, 22.8]], 1]
+    - [VLED, In2.Cu, [[36, 74.8], [146, 74.8], [146, 82.2], [36, 82.2]], 1]
   stitch_pitch: 5.0
   logos:   # owner's signature (hardware/art/make_logo.py): [footprint, x, y, side]
     - [openloungephone_logo_B, 15.4, 47.0, bottom]   # inside the LOGO keep-out (NFC coil)
@@ -142,13 +147,13 @@ main:
     - ["Open Lounge Phone", 15.4, 53.8, 1.5, bottom]
     - ["board r0.3", 15.4, 57.0, 1.0, bottom]
     - ["CERN-OHL-S-2.0", 15.4, 59.2, 1.0, bottom]
-    - ["HANDSET", 153.8, 10.0, 0.8, bottom]
-    - ["PWR / PROG", 167.0, 10.0, 0.8, bottom]
+    - ["HANDSET", 149.8, 9.6, 0.8, bottom]
+    - ["PWR / PROG", 170.0, 40.0, 0.8, bottom, 90]
     - ["NFC", 15.5, 66.0, 1.5]
     - ["HOOK", 171.0, 24.0, 0.8, bottom]
-    - ["RST", 157.0, 51.8, 0.8]
-    - ["BOOT", 165.0, 51.8, 0.8]
-    - ["TEST PADS 2.54 mm", 130.85, 47.5, 0.8, bottom]
+    - ["RST", 163.0, 12.5, 0.8]
+    - ["BOOT", 163.4, 20.8, 0.8]
+    - ["TEST PADS 2.54 mm", 162.35, 14.6, 0.8, bottom]
     - ["DNP by variant: e-ink J6+boost, Qwiic J3, radar J5 Q2 Q3, supercap C7, battery J2 U14", 90.0, 86.4, 0.8, bottom]
 
 plate:
@@ -162,6 +167,6 @@ plate:
   # deck hole 5 is screwed before the plate goes on (no plate hole: the web would be 0.4 mm)
   pocket_clearance: 0.2 # e-ink pocket = 79.0 x 36.7 panel outline + 0.2 mm all round
   light_holes:          # [x, y, d] in plate coordinates: status LED, privacy LED, ALS
-    - [96.5, 48.2, 3.2]
-    - [110.0, 51.6, 2.0]
-    - [110.0, 56.0, 2.0]
+    - [95.5, 61.0, 3.2]    # status LED D21 (127.0, 62.8)
+    - [78.5, 62.4, 2.0]    # privacy LED D22 (110.0, 64.2)
+    - [73.5, 62.4, 2.0]    # ALS U18 (105.0, 64.2)

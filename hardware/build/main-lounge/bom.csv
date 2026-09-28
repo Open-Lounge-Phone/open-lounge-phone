@@ -33,13 +33,13 @@ Q2 Q7,2,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_
 Q3 Q4 Q8,3,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,yes,yes
 Q9,1,SI1308EDL-T1-GE3,"N-MOSFET 30 V 1.5 A (e-ink boost switch, Good Display reference part)",SI1308EDL-T1-GE3,C469327,Package_TO_SOT_SMD:SOT-323_SC-70,yes,yes
 R1 R2,2,5.1k,resistor,0603WAF5101T5E,C23186,Resistor_SMD:R_0603_1608Metric,yes,yes
-R3 R4 R47 R48 R49,5,1k,resistor,0603WAF1001T5E,C21190,Resistor_SMD:R_0603_1608Metric,yes,yes
-R5 R6 R41,3,0,resistor,0603WAF0000T5E,C21189,Resistor_SMD:R_0603_1608Metric,yes,yes
+R3 R4 R43 R44 R45,5,1k,resistor,0603WAF1001T5E,C21190,Resistor_SMD:R_0603_1608Metric,yes,yes
+R5 R6,2,0,resistor,0603WAF0000T5E,C21189,Resistor_SMD:R_0603_1608Metric,yes,yes
 R7,1,1.1k,resistor,0603WAF1101T5E,C22764,Resistor_SMD:R_0603_1608Metric,yes,yes
 R8,1,1.8k,resistor,0603WAF1801T5E,C4177,Resistor_SMD:R_0603_1608Metric,yes,yes
-R9 R10 R11 R12 R16 R17 R24 R27 R29 R30 R55 R56 R57 R58 R59 R60 R61 R62 R63 R64 R65 R66 R67 R68 R69 R70 R71 R72,28,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,yes,yes
+R9 R10 R11 R12 R16 R17 R24 R27 R29 R30 R51 R52 R53 R54 R55 R56 R57 R58 R59 R60 R61 R62 R63 R64 R65 R66 R67 R68,28,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,yes,yes
 R13,1,47,resistor,25121WJ0470T4E,C15261,Resistor_SMD:R_2512_6332Metric,yes,yes
-R14 R18 R19 R20 R21 R25 R31 R34 R45 R46 R53 R54 R73 R74,14,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,yes,yes
+R14 R18 R19 R20 R21 R25 R31 R34 R41 R42 R49 R50 R69 R70,14,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,yes,yes
 R15 R33,2,22k,resistor,0603WAF2202T5E,C31850,Resistor_SMD:R_0603_1608Metric,yes,yes
 R22 R23,2,4.7k,resistor,0603WAF4701T5E,C23162,Resistor_SMD:R_0603_1608Metric,yes,yes
 R26,1,330,resistor,0603WAF3300T5E,C23138,Resistor_SMD:R_0603_1608Metric,yes,yes
@@ -49,11 +49,11 @@ R35,1,2.2k,resistor,0603WAF2201T5E,C4190,Resistor_SMD:R_0603_1608Metric,yes,yes
 R36 R37,2,20k,resistor,0603WAF2002T5E,C4184,Resistor_SMD:R_0603_1608Metric,yes,yes
 R38,1,4.3k,resistor,0603WAF4301T5E,C23159,Resistor_SMD:R_0603_1608Metric,yes,yes
 R39 R40,2,150k,resistor,0603WAF1503T5E,C22807,Resistor_SMD:R_0603_1608Metric,yes,yes
-R50 R51,2,33k,resistor,0603WAF3302T5E,C4216,Resistor_SMD:R_0603_1608Metric,yes,yes
-R52,1,15k,resistor,0603WAF1502T5E,C22809,Resistor_SMD:R_0603_1608Metric,yes,yes
-R75,1,470,resistor,0603WAF4700T5E,C23179,Resistor_SMD:R_0603_1608Metric,yes,yes
-R76,1,1M,resistor,0603WAF1004T5E,C22935,Resistor_SMD:R_0603_1608Metric,yes,yes
-R77,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,yes,yes
+R46 R47,2,33k,resistor,0603WAF3302T5E,C4216,Resistor_SMD:R_0603_1608Metric,yes,yes
+R48,1,15k,resistor,0603WAF1502T5E,C22809,Resistor_SMD:R_0603_1608Metric,yes,yes
+R71,1,470,resistor,0603WAF4700T5E,C23179,Resistor_SMD:R_0603_1608Metric,yes,yes
+R72,1,1M,resistor,0603WAF1004T5E,C22935,Resistor_SMD:R_0603_1608Metric,yes,yes
+R73,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,yes,yes
 SW1 SW2,2,TS-1187A-B-A-B,Tactile switch 5.1x5.1 mm (pads 1-1 and 2-2 internally joined),TS-1187A-B-A-B,C318884,Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A,yes,yes
 SW3 SW4,2,SKRTLAE010,Side-push SMD tactile switch (VOL-/VOL+ on the right end face),SKRTLAE010,C110293,Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010,yes,yes
 SW5,1,JS202011AQN,"DPDT slide switch, right-angle through-hole (MUTE, lever out through the edge)",JS202011AQN,C221662,Button_Switch_THT:SW_CK_JS202011AQN_DPDT_Angled,yes,[UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); check against the C&K drawing
@@ -77,9 +77,5 @@ C61 C62,2,100nF 50V X7R,capacitor,CC0603KRX7R9BB104,C14663,Capacitor_SMD:C_0603_
 C87,1,22pF 50V C0G,capacitor,CL10C220JB8NNNC,C1653,Capacitor_SMD:C_0603_1608Metric,DNP,yes
 J2,1,S3B-PH-SM4-TB(LF)(SN),"JST PH 3-pin SMD right-angle (B-option battery: VBAT, NTC, GND)",S3B-PH-SM4-TB(LF)(SN),C265101,Connector_JST:JST_PH_S3B-PH-SM4-TB_1x03-1MP_P2.00mm_Horizontal,DNP,yes
 J3,1,SM04B-SRSS-TB(LF)(SN),"Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module (SSD1306 0.91"" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default",SM04B-SRSS-TB(LF)(SN),C160404,Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal,DNP,yes
-R42,1,330,resistor,0603WAF3300T5E,C23138,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R43,1,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R44,1,0,resistor,0603WAF0000T5E,C21189,Resistor_SMD:R_0603_1608Metric,DNP,yes
-U11,1,ITR8307,IR reflective sensor (hook option for magnet-less handsets),ITR8307,C63451,OptoDevice:Everlight_ITR8307,DNP,[UNVERIFIED] pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant
 U13,1,ATECC608B-SSHDA-T,"Secure element (P-256), DNP footprint; I2C 0x60",ATECC608B-SSHDA-T,C1518769,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,DNP,yes
 U14,1,MAX17048G+T10,1S fuel gauge (B-option only); I2C 0x36,MAX17048G+T10,C2682616,Package_DFN_QFN:DFN-8-1EP_2x2mm_P0.5mm_EP0.8x1.6mm,DNP,[UNVERIFIED] pin map from datasheet text via search (PDF fetch timed out); EP-to-GND assumed; footprint EP size to confirm

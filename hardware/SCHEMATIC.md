@@ -78,7 +78,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
   enclosure. `pin_table.yaml` reserves 0x3C and 0x70 as "optional external" so the I2C
   uniqueness check keeps them free.
 - **Key count** is `Variant.n_keys` = 12 (owner decision 2026-09-27): rear row `1 2 3 4 5 MENU`,
-  front row `6 7 8 9 0 BACK`. AW9523B ports: P0_0–P1_1 = digits 1–9, 0; P1_6/P1_7 = MENU/BACK.
+  front row `6 7 8 9 0 BACK`. AW9523B ports: `ui.AW_PORTS` (chosen from the board geometry).
   The SK6812 chain runs rear row right→left (MENU first, next to the ESP32), front row
   left→right, then the status pixel
   (`ui.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
@@ -87,7 +87,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - **Kids radar** (§15 Q5) is DNP, per DESIGN.md.
 - **Not touched by the schematic:** base length and envelope (§15 Q1) and toy classification
   (§15 Q4).
-- **Always DNP footprints:** ATECC608B, the IR hook sensor and the analog-sidetone links.
+- **Always DNP footprints:** ATECC608B and the analog-sidetone links (the IR hook option left the board on 2026-09-28: the magnet is in the plunger; `ir_hook=True` puts it back).
 
 ## What is captured
 
@@ -127,7 +127,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
   - 100 k bleed and a 100 Ω/10 µF filter, feeding the electret.
   - An MMBT3904 senses the post-switch bias and sinks the privacy-LED cathode. Firmware cannot light a mic without lighting the LED.
 - **Sensors:**
-  - DRV5032**FA** hall hook → GPIO5 (0 Ω link), with a DNP ITR8307 IR alternative.
+  - DRV5032**FA** hall hook → HOOK (RTC GPIO, `pin_table.yaml`), direct.
   - LIS2DH12 at 0x19. INT1 reaches the shared IRQ through an N-FET (see Deviations).
   - ATECC608B DNP. MAX17048 on VBAT (B-option).
 - **Radar (Lounge):** 5-pin right-angle socket. 5 V comes through a P-FET with an N-FET gate driver on LD_PWR_EN (GPIO46 strap pull-down), and the UART/OUT lines have 1 k series resistors.
@@ -142,13 +142,13 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - **Keys:**
   - AW9523B (U17, C148077) at 0x58 = 0x58 + AD1·2 + AD0 with AD0 = AD1 = GND. Per the datasheet
     AD0/AD1 also set the power-on output state; tied low the outputs start low, so LED_PWR_EN
-    (P1_5) keeps the LED chain unpowered until firmware runs. RSTN has an internal 100 k
+    (port 1) keeps the LED chain unpowered until firmware runs. RSTN has an internal 100 k
     pull-*down*: 10 k pull-up + 100 nF. INTN is open-drain: shared IRQ with its 10 k pull-up.
     P0 is open-drain by default and there are no internal pull-ups: every key has a 10 k
-    pull-up (P1_5 drives LED_PWR_EN push-pull). Port map per DESIGN.md §5.
+    pull-up (port 1 drives LED_PWR_EN push-pull). Port map: `ui.AW_PORTS` (follows the board geometry).
   - 12 Kailh hot-swap sockets **CPG151101S11-16** (C5156480, out of stock on 2026-09-27; see
     Deviations 10).
-- **LEDs:** 13 × SK6812MINI-E (12 keys + status) on VLED. VLED is switched from VSYS by a P-FET with an N-FET driver, from LED_PWR_EN (AW9523B P1_5).
+- **LEDs:** 13 × SK6812MINI-E (12 keys + status) on VLED. VLED is switched from VSYS by a P-FET with an N-FET driver, from LED_PWR_EN (AW9523B port 1).
 - **Indicators and sensors:**
   - Red privacy LED.
   - LTR-303ALS-01 (U18, C364577) at 0x29, polled; pins 1 VDD, 2 NC, 3 GND, 4 SCL, 5 INT

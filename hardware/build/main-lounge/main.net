@@ -7286,166 +7286,6 @@
       (tstamps "41c31ee5-198b-5a8d-ad90-051eccd89ff2"))
     (comp
       (ref "R41")
-      (value "0")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF0000T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C21189")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "hall -> HOOK")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R41")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "0eeb2e24-c85a-546d-90d3-6410ab1f1e2f"))
-    (comp
-      (ref "R42")
-      (value "330")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF3300T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C23138")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP") "1")
-        (field
-          (name "Note") "IR LED ~6 mA")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R42")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "3ca913fa-03de-5e92-bfa0-c55208fc4c18"))
-    (comp
-      (ref "R43")
-      (value "10k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF1002T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25804")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP") "1")
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R43")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "0836c388-95b6-56b0-a18e-dc56ff27eb3e"))
-    (comp
-      (ref "R44")
-      (value "0")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF0000T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C21189")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP") "1")
-        (field
-          (name "Note") "IR -> HOOK")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R44")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "f2775a93-0bdc-5c67-ad5c-12fc02c817e1"))
-    (comp
-      (ref "R45")
       (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -7473,7 +7313,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R45")
+          (name "SKiDL Tag") "R41")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -7483,9 +7323,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "84ee33b1-4197-5c39-a549-dcdec6c6a6ba"))
+      (tstamps "0eeb2e24-c85a-546d-90d3-6410ab1f1e2f"))
     (comp
-      (ref "R46")
+      (ref "R42")
       (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -7513,7 +7353,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R46")
+          (name "SKiDL Tag") "R42")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -7523,9 +7363,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "2f0f02a1-69e3-573e-85e4-f4b5a242bfc0"))
+      (tstamps "3ca913fa-03de-5e92-bfa0-c55208fc4c18"))
     (comp
-      (ref "R47")
+      (ref "R43")
       (value "1k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -7544,6 +7384,166 @@
           (name "DNP"))
         (field
           (name "Note"))
+        (field
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Description") "resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R43")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "0836c388-95b6-56b0-a18e-dc56ff27eb3e"))
+    (comp
+      (ref "R44")
+      (value "1k")
+      (description "resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "0603WAF1001T5E")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C21190")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note"))
+        (field
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Description") "resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R44")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "f2775a93-0bdc-5c67-ad5c-12fc02c817e1"))
+    (comp
+      (ref "R45")
+      (value "1k")
+      (description "resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "0603WAF1001T5E")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C21190")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note"))
+        (field
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Description") "resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R45")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "84ee33b1-4197-5c39-a549-dcdec6c6a6ba"))
+    (comp
+      (ref "R46")
+      (value "33k")
+      (description "resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "0603WAF3302T5E")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C4216")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "Rp Default USB (source)")
+        (field
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Description") "resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R46")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "2f0f02a1-69e3-573e-85e4-f4b5a242bfc0"))
+    (comp
+      (ref "R47")
+      (value "33k")
+      (description "resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "0603WAF3302T5E")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C4216")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "Rp Default USB (source)")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7566,16 +7566,16 @@
       (tstamps "018327c3-341b-5fcd-a229-4c1f16ce373d"))
     (comp
       (ref "R48")
-      (value "1k")
+      (value "15k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1001T5E")
+          (name "MPN") "0603WAF1502T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C21190")
+          (name "LCSC") "C22809")
         (field
           (name "Verified") "yes")
         (field
@@ -7583,7 +7583,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "ILIM = 6800/15k = 0.45 A")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7606,16 +7606,16 @@
       (tstamps "2925aeeb-307c-5c8f-9ac6-b671764bdb69"))
     (comp
       (ref "R49")
-      (value "1k")
+      (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1001T5E")
+          (name "MPN") "0603WAF1003T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C21190")
+          (name "LCSC") "C25803")
         (field
           (name "Verified") "yes")
         (field
@@ -7686,16 +7686,16 @@
       (tstamps "29f79588-e279-5ce8-b215-982a9074cc1e"))
     (comp
       (ref "R50")
-      (value "33k")
+      (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF3302T5E")
+          (name "MPN") "0603WAF1003T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C4216")
+          (name "LCSC") "C25803")
         (field
           (name "Verified") "yes")
         (field
@@ -7703,7 +7703,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "Rp Default USB (source)")
+          (name "Note"))
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7726,16 +7726,16 @@
       (tstamps "99ec5074-baca-54ff-b407-26124c2da259"))
     (comp
       (ref "R51")
-      (value "33k")
+      (value "10k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF3302T5E")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C4216")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -7743,7 +7743,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "Rp Default USB (source)")
+          (name "Note"))
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7766,16 +7766,16 @@
       (tstamps "8e415a6e-aaad-549d-afd5-a2b4ab1ff50e"))
     (comp
       (ref "R52")
-      (value "15k")
+      (value "10k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1502T5E")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C22809")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -7783,7 +7783,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "ILIM = 6800/15k = 0.45 A")
+          (name "Note"))
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7806,16 +7806,16 @@
       (tstamps "f4132522-99c4-5f5f-a2a1-4004706e36de"))
     (comp
       (ref "R53")
-      (value "100k")
+      (value "10k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1003T5E")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25803")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -7846,16 +7846,16 @@
       (tstamps "bdf2c8e7-c99c-5e89-8554-640fd00d1b17"))
     (comp
       (ref "R54")
-      (value "100k")
+      (value "10k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1003T5E")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25803")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -7943,7 +7943,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "RSTN has an internal 100k pull-DOWN; must be pulled up")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -7983,7 +7983,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -8023,7 +8023,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -8063,7 +8063,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -8143,7 +8143,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "RSTN has an internal 100k pull-DOWN; must be pulled up")
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -8486,16 +8486,16 @@
       (tstamps "aac71c99-3423-5e49-82c0-3ddf0499fe4a"))
     (comp
       (ref "R69")
-      (value "10k")
+      (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0603WAF1002T5E")
+          (name "MPN") "0603WAF1003T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25804")
+          (name "LCSC") "C25803")
         (field
           (name "Verified") "yes")
         (field
@@ -8503,7 +8503,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "AW9523B has no internal pull-ups")
+          (name "Note") "LEDs off until firmware enables")
         (field
           (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
@@ -8566,166 +8566,6 @@
       (tstamps "45fbc468-780f-56f4-b6ba-53310b6a0e74"))
     (comp
       (ref "R70")
-      (value "10k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF1002T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25804")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "AW9523B has no internal pull-ups")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R70")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "dc79372c-7d59-521c-a570-00285a0d4434"))
-    (comp
-      (ref "R71")
-      (value "10k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF1002T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25804")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "AW9523B has no internal pull-ups")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R71")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "274c2f8a-f4aa-5c2f-9163-7917fcc484f5"))
-    (comp
-      (ref "R72")
-      (value "10k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF1002T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25804")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "AW9523B has no internal pull-ups")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R72")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ed2a4147-4455-51c9-9e34-47e564afaf82"))
-    (comp
-      (ref "R73")
-      (value "100k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0603_1608Metric")
-      (fields
-        (field
-          (name "MPN") "0603WAF1003T5E")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25803")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "LEDs off until firmware enables")
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R73")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0603_1608Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "c97e2dec-54f1-592a-aae0-252ef7d13f2c"))
-    (comp
-      (ref "R74")
       (value "100k")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -8753,7 +8593,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R74")
+          (name "SKiDL Tag") "R70")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -8763,9 +8603,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "90a94760-54a6-5e7f-96c9-76494267409f"))
+      (tstamps "dc79372c-7d59-521c-a570-00285a0d4434"))
     (comp
-      (ref "R75")
+      (ref "R71")
       (value "470")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -8793,7 +8633,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R75")
+          (name "SKiDL Tag") "R71")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -8803,9 +8643,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "8b68d514-7fe0-5730-bc16-fa9ef241138f"))
+      (tstamps "274c2f8a-f4aa-5c2f-9163-7917fcc484f5"))
     (comp
-      (ref "R76")
+      (ref "R72")
       (value "1M")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -8833,7 +8673,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R76")
+          (name "SKiDL Tag") "R72")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -8843,9 +8683,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "776e55cd-f20c-59d3-b391-4d06a33b7436"))
+      (tstamps "ed2a4147-4455-51c9-9e34-47e564afaf82"))
     (comp
-      (ref "R77")
+      (ref "R73")
       (value "2.2")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -8873,7 +8713,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R77")
+          (name "SKiDL Tag") "R73")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -8883,7 +8723,7 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "ba2b1946-a70d-5f4e-b06a-1d35cfe1d829"))
+      (tstamps "c97e2dec-54f1-592a-aae0-252ef7d13f2c"))
     (comp
       (ref "R8")
       (value "1.8k")
@@ -9646,7 +9486,7 @@
       (tstamps "673f4b5b-21b0-519d-a652-7897933950cc"))
     (comp
       (ref "TP1")
-      (value "ES8311_ASDOUT")
+      (value "VBUS")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -9688,7 +9528,7 @@
       (tstamps "ec7b7017-d3a1-52a1-ab31-ef99bc577234"))
     (comp
       (ref "TP10")
-      (value "USB_DP")
+      (value "BOOT")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -9730,7 +9570,7 @@
       (tstamps "96ec807f-2b34-5ae2-8bad-1cdcc5458929"))
     (comp
       (ref "TP11")
-      (value "USB_DN")
+      (value "HS_VBUS")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -9771,344 +9611,8 @@
       (component_classes)
       (tstamps "3265b5e2-52a3-522b-b83b-27c31fe5dc6a"))
     (comp
-      (ref "TP12")
-      (value "U0TXD")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP12")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "625a4a54-4c87-5eaf-acad-993133a498ab"))
-    (comp
-      (ref "TP13")
-      (value "U0RXD")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP13")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "43e73621-8df7-586f-9dd0-4fde0b9213c8"))
-    (comp
-      (ref "TP14")
-      (value "EN")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP14")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "d65c6246-ec18-5b5d-bdaa-42ed9f327646"))
-    (comp
-      (ref "TP15")
-      (value "BOOT")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP15")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "8e3bc712-45e2-5a15-9359-dc14204f8bab"))
-    (comp
-      (ref "TP16")
-      (value "I2S_BCLK")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP16")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "630824d8-a5d4-56fa-a563-f220442a5e69"))
-    (comp
-      (ref "TP17")
-      (value "I2S_WS")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP17")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "a20bbd8b-c563-5e8b-b007-3b84a446bf65"))
-    (comp
-      (ref "TP18")
-      (value "I2S_DIN")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP18")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "63855e58-c23e-56b6-b834-fcd2e877de8d"))
-    (comp
-      (ref "TP19")
-      (value "I2S_DOUT")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP19")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ac336478-ce19-54d5-8353-9f7b6d287790"))
-    (comp
       (ref "TP2")
-      (value "VBUS")
+      (value "VSYS")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10149,302 +9653,8 @@
       (component_classes)
       (tstamps "21c4b62b-8c2d-56ee-9b42-d10ab095f277"))
     (comp
-      (ref "TP20")
-      (value "I2C_SDA")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP20")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "d7fb076b-a0ab-5730-b2ab-f47ce9113d61"))
-    (comp
-      (ref "TP21")
-      (value "I2C_SCL")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP21")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "9301efca-5a62-58a6-8ec9-d3f7b9277cab"))
-    (comp
-      (ref "TP22")
-      (value "HOOK")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP22")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "e766c6f0-e24d-585d-a534-6c3d7f456b7d"))
-    (comp
-      (ref "TP23")
-      (value "PA_EN")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP23")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "c535e947-6e9a-5501-8daa-451830a3c301"))
-    (comp
-      (ref "TP24")
-      (value "SPK_VOP")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP24")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "8b537fdb-fa14-5cc2-919f-f77550e2b9f5"))
-    (comp
-      (ref "TP25")
-      (value "SPK_VON")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP25")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ba62cd7f-cc29-5610-a768-3d5a3f363d3f"))
-    (comp
-      (ref "TP26")
-      (value "HS_VBUS")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP26")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ddac5a84-7612-5b0a-9ce0-520bf6304a8f"))
-    (comp
       (ref "TP3")
-      (value "VSYS")
+      (value "3V3")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10486,7 +9696,7 @@
       (tstamps "a276100e-c6a6-5278-88b4-43d6f23fc86c"))
     (comp
       (ref "TP4")
-      (value "3V3")
+      (value "3V0")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10528,7 +9738,7 @@
       (tstamps "2b772136-9490-52ee-a6b6-3823f884de0d"))
     (comp
       (ref "TP5")
-      (value "3V0")
+      (value "GND")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10612,7 +9822,7 @@
       (tstamps "09741339-fe92-5d8d-9626-685dbcd30d75"))
     (comp
       (ref "TP7")
-      (value "GND")
+      (value "U0TXD")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10654,7 +9864,7 @@
       (tstamps "47117044-94ce-5dd7-abf9-83e3ef59bacb"))
     (comp
       (ref "TP8")
-      (value "GND")
+      (value "U0RXD")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10696,7 +9906,7 @@
       (tstamps "dbebd152-e861-5059-b279-ee96be584c75"))
     (comp
       (ref "TP9")
-      (value "GND")
+      (value "EN")
       (description "test pad, 1.0 mm, bottom side")
       (footprint "TestPoint:TestPoint_Pad_D1.0mm")
       (fields
@@ -10816,46 +10026,6 @@
         (tstamps "/"))
       (component_classes)
       (tstamps "b837a9be-139d-5aa2-acfc-27896a6ee169"))
-    (comp
-      (ref "U11")
-      (value "ITR8307")
-      (description "IR reflective sensor (hook option for magnet-less handsets)")
-      (footprint "OptoDevice:Everlight_ITR8307")
-      (fields
-        (field
-          (name "MPN") "ITR8307")
-        (field
-          (name "Manufacturer") "Everlight")
-        (field
-          (name "LCSC") "C63451")
-        (field
-          (name "Verified") "pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant")
-        (field
-          (name "Datasheet") "https://www.everlight.com/wp-content/plugins/ItemRelationship/product_files/pdf/ITR8307-F43.pdf")
-        (field
-          (name "DNP") "1")
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "ITR8307")
-        (field
-          (name "Description") "IR reflective sensor (hook option for magnet-less handsets)")
-        (field
-          (name "Footprint") "OptoDevice:Everlight_ITR8307")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "U11")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "ITR8307"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "5628e4a6-a160-5f8a-a145-fc60506ebdd3"))
     (comp
       (ref "U12")
       (value "LIS2DH12TR")
@@ -11486,7 +10656,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP5")
+        (ref "TP4")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -11638,19 +10808,27 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R42")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R43")
+        (ref "R46")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R50")
+        (ref "R47")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R51")
+        (ref "R53")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R54")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R55")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R56")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -11702,27 +10880,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R69")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R70")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
         (ref "R71")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R72")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R75")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP4")
+        (ref "TP3")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -11798,7 +10960,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R45")
+        (ref "R41")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -11814,7 +10976,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R60")
+        (ref "R56")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -11874,7 +11036,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP15")
+        (ref "TP10")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -11959,7 +11121,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "39")
+        (pin "18")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 13)
@@ -11995,7 +11157,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "38")
+        (pin "7")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 15)
@@ -12023,7 +11185,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "24")
+        (pin "12")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U2")
@@ -12082,7 +11244,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP14")
+        (ref "TP9")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -12099,7 +11261,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "8")
+        (pin "32")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 21)
@@ -12127,7 +11289,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "18")
+        (pin "34")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 23)
@@ -12139,7 +11301,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "21")
+        (pin "25")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 24)
@@ -12154,7 +11316,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R76")
+        (ref "R72")
         (pin "1")
         (pintype "PASSIVE")))
     (net
@@ -12167,7 +11329,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "19")
+        (pin "24")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 26)
@@ -12214,7 +11376,7 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R77")
+        (ref "R73")
         (pin "1")
         (pintype "PASSIVE")))
     (net
@@ -12227,7 +11389,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "22")
+        (pin "33")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 30)
@@ -12239,7 +11401,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "20")
+        (pin "35")
         (pintype "BIDIRECTIONAL")))
     (net
       (code 31)
@@ -12395,18 +11557,6 @@
         (pintype "PASSIVE")))
     (net
       (code 43)
-      (name "ES8311_ASDOUT")
-      (class "Default")
-      (node
-        (ref "TP1")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U6")
-        (pin "7")
-        (pintype "OUTPUT")))
-    (net
-      (code 44)
       (name "ES8311_DACVREF")
       (class "Default")
       (node
@@ -12418,7 +11568,7 @@
         (pin "14")
         (pintype "PASSIVE")))
     (net
-      (code 45)
+      (code 44)
       (name "ES8311_VMID")
       (class "Default")
       (node
@@ -12430,7 +11580,7 @@
         (pin "16")
         (pintype "PASSIVE")))
     (net
-      (code 46)
+      (code 45)
       (name "GND")
       (class "Default")
       (node
@@ -13006,15 +12156,19 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R45")
+        (ref "R41")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R52")
+        (ref "R48")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R54")
+        (ref "R50")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R69")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -13022,15 +12176,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
+        (ref "R72")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
         (ref "R73")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R76")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R77")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -13118,19 +12268,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
+        (ref "TP5")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
         (ref "TP6")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP7")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP8")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP9")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13149,14 +12291,6 @@
         (ref "U10")
         (pin "3")
         (pintype "POWER-IN"))
-      (node
-        (ref "U11")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U11")
-        (pin "4")
-        (pintype "PASSIVE"))
       (node
         (ref "U12")
         (pin "5")
@@ -13282,39 +12416,19 @@
         (pin "7")
         (pintype "POWER-IN")))
     (net
-      (code 47)
+      (code 46)
       (name "HOOK")
       (class "Default")
       (node
-        (ref "R41")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R44")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP22")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "5")
-        (pintype "BIDIRECTIONAL")))
-    (net
-      (code 48)
-      (name "HOOK_HALL")
-      (class "Default")
-      (node
-        (ref "R41")
-        (pin "1")
-        (pintype "PASSIVE"))
+        (pin "17")
+        (pintype "BIDIRECTIONAL"))
       (node
         (ref "U10")
         (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 49)
+      (code 47)
       (name "HS_CC1")
       (class "Default")
       (node
@@ -13326,11 +12440,11 @@
         (pin "A5")
         (pintype "PASSIVE"))
       (node
-        (ref "R50")
+        (ref "R46")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 50)
+      (code 48)
       (name "HS_CC2")
       (class "Default")
       (node
@@ -13342,11 +12456,11 @@
         (pin "B5")
         (pintype "PASSIVE"))
       (node
-        (ref "R51")
+        (ref "R47")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 51)
+      (code 49)
       (name "HS_USB_DN")
       (class "Default")
       (node
@@ -13366,7 +12480,7 @@
         (pin "13")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 52)
+      (code 50)
       (name "HS_USB_DP")
       (class "Default")
       (node
@@ -13386,7 +12500,7 @@
         (pin "14")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 53)
+      (code 51)
       (name "HS_VBUS")
       (class "Default")
       (node
@@ -13414,11 +12528,11 @@
         (pin "B9")
         (pintype "PASSIVE"))
       (node
-        (ref "R53")
+        (ref "R49")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP26")
+        (ref "TP11")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13426,7 +12540,7 @@
         (pin "1")
         (pintype "POWER-OUT")))
     (net
-      (code 54)
+      (code 52)
       (name "HS_VBUS_EN")
       (class "Default")
       (node
@@ -13442,7 +12556,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 55)
+      (code 53)
       (name "HS_VBUS_SENSE")
       (class "Default")
       (node
@@ -13450,19 +12564,19 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R53")
+        (ref "R49")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R54")
+        (ref "R50")
         (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "4")
+        (pin "38")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 56)
+      (code 54)
       (name "HS_VIN")
       (class "Default")
       (node
@@ -13482,7 +12596,7 @@
         (pin "5")
         (pintype "POWER-IN")))
     (net
-      (code 57)
+      (code 55)
       (name "I2C_SCL")
       (class "Default")
       (node
@@ -13494,12 +12608,8 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP21")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "17")
+        (pin "10")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U12")
@@ -13534,7 +12644,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 58)
+      (code 56)
       (name "I2C_SDA")
       (class "Default")
       (node
@@ -13546,12 +12656,8 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP20")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "12")
+        (pin "19")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U12")
@@ -13586,16 +12692,12 @@
         (pin "3")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 59)
+      (code 57)
       (name "I2S_BCLK")
       (class "Default")
       (node
-        (ref "TP16")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "10")
+        (pin "21")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U6")
@@ -13606,7 +12708,7 @@
         (pin "9")
         (pintype "INPUT")))
     (net
-      (code 60)
+      (code 58)
       (name "I2S_DIN")
       (class "Default")
       (node
@@ -13614,36 +12716,28 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "TP18")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "31")
+        (pin "39")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 61)
+      (code 59)
       (name "I2S_DOUT")
       (class "Default")
       (node
-        (ref "TP19")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "23")
+        (pin "8")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U6")
         (pin "9")
         (pintype "INPUT")))
     (net
-      (code 62)
+      (code 60)
       (name "I2S_MCLK")
       (class "Default")
       (node
         (ref "U1")
-        (pin "9")
+        (pin "20")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U6")
@@ -13654,16 +12748,12 @@
         (pin "5")
         (pintype "INPUT")))
     (net
-      (code 63)
+      (code 61)
       (name "I2S_WS")
       (class "Default")
       (node
-        (ref "TP17")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "11")
+        (pin "22")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U6")
@@ -13674,7 +12764,7 @@
         (pin "10")
         (pintype "INPUT")))
     (net
-      (code 64)
+      (code 62)
       (name "IRQ")
       (class "Default")
       (node
@@ -13687,7 +12777,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "7")
+        (pin "9")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U14")
@@ -13702,39 +12792,11 @@
         (pin "7")
         (pintype "OPEN-COLLECTOR")))
     (net
-      (code 65)
-      (name "IR_LED_A")
-      (class "Default")
-      (node
-        (ref "R42")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U11")
-        (pin "2")
-        (pintype "PASSIVE")))
-    (net
-      (code 66)
-      (name "IR_PT_C")
-      (class "Default")
-      (node
-        (ref "R43")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R44")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U11")
-        (pin "3")
-        (pintype "PASSIVE")))
-    (net
-      (code 67)
+      (code 63)
       (name "KEY_0")
       (class "Default")
       (node
-        (ref "R70")
+        (ref "R66")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13743,14 +12805,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "2")
+        (pin "16")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 68)
+      (code 64)
       (name "KEY_1")
       (class "Default")
       (node
-        (ref "R61")
+        (ref "R57")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13759,14 +12821,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "5")
+        (pin "8")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 69)
+      (code 65)
       (name "KEY_2")
       (class "Default")
       (node
-        (ref "R62")
+        (ref "R58")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13775,14 +12837,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "6")
+        (pin "7")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 70)
+      (code 66)
       (name "KEY_3")
       (class "Default")
       (node
-        (ref "R63")
+        (ref "R59")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13791,14 +12853,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "7")
+        (pin "6")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 71)
+      (code 67)
       (name "KEY_4")
       (class "Default")
       (node
-        (ref "R64")
+        (ref "R60")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13807,14 +12869,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "8")
+        (pin "5")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 72)
+      (code 68)
       (name "KEY_5")
       (class "Default")
       (node
-        (ref "R65")
+        (ref "R61")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13826,11 +12888,11 @@
         (pin "10")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 73)
+      (code 69)
       (name "KEY_6")
       (class "Default")
       (node
-        (ref "R66")
+        (ref "R62")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13842,11 +12904,11 @@
         (pin "11")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 74)
+      (code 70)
       (name "KEY_7")
       (class "Default")
       (node
-        (ref "R67")
+        (ref "R63")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13858,11 +12920,11 @@
         (pin "12")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 75)
+      (code 71)
       (name "KEY_8")
       (class "Default")
       (node
-        (ref "R68")
+        (ref "R64")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13874,11 +12936,11 @@
         (pin "13")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 76)
+      (code 72)
       (name "KEY_9")
       (class "Default")
       (node
-        (ref "R69")
+        (ref "R65")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13887,14 +12949,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "1")
+        (pin "15")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 77)
+      (code 73)
       (name "KEY_BACK")
       (class "Default")
       (node
-        (ref "R72")
+        (ref "R68")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13906,11 +12968,11 @@
         (pin "17")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 78)
+      (code 74)
       (name "KEY_MENU")
       (class "Default")
       (node
-        (ref "R71")
+        (ref "R67")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -13919,10 +12981,10 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "16")
+        (pin "2")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 79)
+      (code 75)
       (name "LD_OUT")
       (class "Default")
       (node
@@ -13930,7 +12992,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R49")
+        (ref "R45")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -13938,7 +13000,7 @@
         (pin "6")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 80)
+      (code 76)
       (name "LD_PFET_G")
       (class "Default")
       (node
@@ -13950,11 +13012,11 @@
         (pin "3")
         (pintype "PASSIVE"))
       (node
-        (ref "R46")
+        (ref "R42")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 81)
+      (code 77)
       (name "LD_PWR_EN")
       (class "Default")
       (node
@@ -13970,31 +13032,31 @@
         (pin "16")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 82)
+      (code 78)
       (name "LD_RX")
       (class "Default")
       (node
-        (ref "R48")
+        (ref "R44")
         (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "32")
+        (pin "4")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 83)
+      (code 79)
       (name "LD_TX")
       (class "Default")
       (node
-        (ref "R47")
+        (ref "R43")
         (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "33")
+        (pin "5")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 84)
+      (code 80)
       (name "LED_D1")
       (class "Default")
       (node
@@ -14006,7 +13068,7 @@
         (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 85)
+      (code 81)
       (name "LED_D10")
       (class "Default")
       (node
@@ -14018,7 +13080,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 86)
+      (code 82)
       (name "LED_D11")
       (class "Default")
       (node
@@ -14030,7 +13092,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 87)
+      (code 83)
       (name "LED_D12")
       (class "Default")
       (node
@@ -14042,7 +13104,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 88)
+      (code 84)
       (name "LED_D2")
       (class "Default")
       (node
@@ -14054,7 +13116,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 89)
+      (code 85)
       (name "LED_D3")
       (class "Default")
       (node
@@ -14066,7 +13128,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 90)
+      (code 86)
       (name "LED_D4")
       (class "Default")
       (node
@@ -14078,7 +13140,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 91)
+      (code 87)
       (name "LED_D5")
       (class "Default")
       (node
@@ -14090,7 +13152,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 92)
+      (code 88)
       (name "LED_D6")
       (class "Default")
       (node
@@ -14102,7 +13164,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 93)
+      (code 89)
       (name "LED_D7")
       (class "Default")
       (node
@@ -14114,7 +13176,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 94)
+      (code 90)
       (name "LED_D8")
       (class "Default")
       (node
@@ -14126,7 +13188,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 95)
+      (code 91)
       (name "LED_D9")
       (class "Default")
       (node
@@ -14138,7 +13200,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 96)
+      (code 92)
       (name "LED_DATA")
       (class "Default")
       (node
@@ -14147,14 +13209,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "35")
+        (pin "23")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U5")
         (pin "2")
         (pintype "INPUT")))
     (net
-      (code 97)
+      (code 93)
       (name "LED_DATA_BUF")
       (class "Default")
       (node
@@ -14166,7 +13228,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 98)
+      (code 94)
       (name "LED_PWR_EN")
       (class "Default")
       (node
@@ -14174,15 +13236,15 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R73")
+        (ref "R69")
         (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "15")
+        (pin "14")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 99)
+      (code 95)
       (name "MICBIAS_F")
       (class "Default")
       (node
@@ -14198,7 +13260,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 100)
+      (code 96)
       (name "MICBIAS_IN")
       (class "Default")
       (node
@@ -14214,7 +13276,7 @@
         (pin "24")
         (pintype "POWER-OUT")))
     (net
-      (code 101)
+      (code 97)
       (name "MICBIAS_OUT")
       (class "Default")
       (node
@@ -14234,7 +13296,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 102)
+      (code 98)
       (name "MUTE_SENSE")
       (class "Default")
       (node
@@ -14242,7 +13304,7 @@
         (pin "4")
         (pintype "PASSIVE"))
       (node
-        (ref "R59")
+        (ref "R55")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14251,10 +13313,10 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "14")
+        (pin "3")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 103)
+      (code 99)
       (name "N$1")
       (class "Default")
       (node
@@ -14266,7 +13328,7 @@
         (pin "12")
         (pintype "PASSIVE")))
     (net
-      (code 104)
+      (code 100)
       (name "N$10")
       (class "Default")
       (node
@@ -14278,7 +13340,7 @@
         (pin "18")
         (pintype "INPUT")))
     (net
-      (code 105)
+      (code 101)
       (name "N$11")
       (class "Default")
       (node
@@ -14290,7 +13352,7 @@
         (pin "17")
         (pintype "INPUT")))
     (net
-      (code 106)
+      (code 102)
       (name "N$12")
       (class "Default")
       (node
@@ -14302,7 +13364,7 @@
         (pin "19")
         (pintype "INPUT")))
     (net
-      (code 107)
+      (code 103)
       (name "N$13")
       (class "Default")
       (node
@@ -14314,7 +13376,7 @@
         (pin "20")
         (pintype "INPUT")))
     (net
-      (code 108)
+      (code 104)
       (name "N$14")
       (class "Default")
       (node
@@ -14326,7 +13388,7 @@
         (pin "31")
         (pintype "INPUT")))
     (net
-      (code 109)
+      (code 105)
       (name "N$15")
       (class "Default")
       (node
@@ -14338,7 +13400,7 @@
         (pin "32")
         (pintype "INPUT")))
     (net
-      (code 110)
+      (code 106)
       (name "N$16")
       (class "Default")
       (node
@@ -14350,7 +13412,7 @@
         (pin "28")
         (pintype "INPUT")))
     (net
-      (code 111)
+      (code 107)
       (name "N$17")
       (class "Default")
       (node
@@ -14362,7 +13424,7 @@
         (pin "27")
         (pintype "INPUT")))
     (net
-      (code 112)
+      (code 108)
       (name "N$18")
       (class "Default")
       (node
@@ -14374,7 +13436,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 113)
+      (code 109)
       (name "N$19")
       (class "Default")
       (node
@@ -14386,7 +13448,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 114)
+      (code 110)
       (name "N$2")
       (class "Default")
       (node
@@ -14398,7 +13460,7 @@
         (pin "16")
         (pintype "PASSIVE")))
     (net
-      (code 115)
+      (code 111)
       (name "N$20")
       (class "Default")
       (node
@@ -14410,7 +13472,7 @@
         (pin "8")
         (pintype "OUTPUT")))
     (net
-      (code 116)
+      (code 112)
       (name "N$21")
       (class "Default")
       (node
@@ -14422,7 +13484,7 @@
         (pin "5")
         (pintype "OUTPUT")))
     (net
-      (code 117)
+      (code 113)
       (name "N$22")
       (class "Default")
       (node
@@ -14430,11 +13492,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R47")
+        (ref "R43")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 118)
+      (code 114)
       (name "N$23")
       (class "Default")
       (node
@@ -14442,11 +13504,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R48")
+        (ref "R44")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 119)
+      (code 115)
       (name "N$24")
       (class "Default")
       (node
@@ -14454,15 +13516,15 @@
         (pin "3")
         (pintype "PASSIVE"))
       (node
-        (ref "R49")
+        (ref "R45")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 120)
+      (code 116)
       (name "N$25")
       (class "Default")
       (node
-        (ref "R52")
+        (ref "R48")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14470,7 +13532,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 121)
+      (code 117)
       (name "N$3")
       (class "Default")
       (node
@@ -14482,7 +13544,7 @@
         (pin "4")
         (pintype "OUTPUT")))
     (net
-      (code 122)
+      (code 118)
       (name "N$4")
       (class "Default")
       (node
@@ -14494,7 +13556,7 @@
         (pin "20")
         (pintype "INPUT")))
     (net
-      (code 123)
+      (code 119)
       (name "N$5")
       (class "Default")
       (node
@@ -14506,7 +13568,7 @@
         (pin "11")
         (pintype "OUTPUT")))
     (net
-      (code 124)
+      (code 120)
       (name "N$6")
       (class "Default")
       (node
@@ -14518,7 +13580,7 @@
         (pin "1")
         (pintype "INPUT")))
     (net
-      (code 125)
+      (code 121)
       (name "N$7")
       (class "Default")
       (node
@@ -14530,7 +13592,7 @@
         (pin "2")
         (pintype "INPUT")))
     (net
-      (code 126)
+      (code 122)
       (name "N$8")
       (class "Default")
       (node
@@ -14542,7 +13604,7 @@
         (pin "16")
         (pintype "INPUT")))
     (net
-      (code 127)
+      (code 123)
       (name "N$9")
       (class "Default")
       (node
@@ -14554,7 +13616,7 @@
         (pin "15")
         (pintype "INPUT")))
     (net
-      (code 128)
+      (code 124)
       (name "NFC_AC0")
       (class "Default")
       (node
@@ -14570,7 +13632,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 129)
+      (code 125)
       (name "NFC_AC1")
       (class "Default")
       (node
@@ -14586,7 +13648,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 130)
+      (code 126)
       (name "PA_BYPASS")
       (class "Default")
       (node
@@ -14598,7 +13660,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 131)
+      (code 127)
       (name "PA_EN")
       (class "Default")
       (node
@@ -14606,19 +13668,15 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP23")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
-        (pin "34")
+        (pin "31")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U9")
         (pin "1")
         (pintype "INPUT")))
     (net
-      (code 132)
+      (code 128)
       (name "PA_IN_INN")
       (class "Default")
       (node
@@ -14630,7 +13688,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 133)
+      (code 129)
       (name "PA_IN_INP")
       (class "Default")
       (node
@@ -14642,7 +13700,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 134)
+      (code 130)
       (name "PGOOD")
       (class "Default")
       (node
@@ -14651,14 +13709,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "25")
+        (pin "11")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U2")
         (pin "7")
         (pintype "OPEN-COLLECTOR")))
     (net
-      (code 135)
+      (code 131)
       (name "PRIV_LED_A")
       (class "Default")
       (node
@@ -14666,11 +13724,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R75")
+        (ref "R71")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 136)
+      (code 132)
       (name "PRIV_LED_K")
       (class "Default")
       (node
@@ -14682,7 +13740,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 137)
+      (code 133)
       (name "PRIV_Q_B")
       (class "Default")
       (node
@@ -14698,7 +13756,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 138)
+      (code 134)
       (name "Q5_B")
       (class "Default")
       (node
@@ -14706,11 +13764,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R55")
+        (ref "R51")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 139)
+      (code 135)
       (name "Q6_B")
       (class "Default")
       (node
@@ -14718,11 +13776,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R56")
+        (ref "R52")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 140)
+      (code 136)
       (name "REF_AC_MIC3N")
       (class "Default")
       (node
@@ -14734,7 +13792,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 141)
+      (code 137)
       (name "REF_AC_MIC3P")
       (class "Default")
       (node
@@ -14746,7 +13804,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 142)
+      (code 138)
       (name "REF_DIV_N")
       (class "Default")
       (node
@@ -14766,7 +13824,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 143)
+      (code 139)
       (name "REF_DIV_P")
       (class "Default")
       (node
@@ -14786,7 +13844,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 144)
+      (code 140)
       (name "SCAP")
       (class "Default")
       (node
@@ -14802,7 +13860,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 145)
+      (code 141)
       (name "SPK_VON")
       (class "Default")
       (node
@@ -14816,13 +13874,9 @@
       (node
         (ref "J4")
         (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP25")
-        (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 146)
+      (code 142)
       (name "SPK_VOP")
       (class "Default")
       (node
@@ -14836,17 +13890,13 @@
       (node
         (ref "J4")
         (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP24")
-        (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 147)
+      (code 143)
       (name "U0RXD")
       (class "Default")
       (node
-        (ref "TP13")
+        (ref "TP8")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14858,11 +13908,11 @@
         (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 148)
+      (code 144)
       (name "U0TXD")
       (class "Default")
       (node
-        (ref "TP12")
+        (ref "TP7")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14874,7 +13924,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 149)
+      (code 145)
       (name "UART_DTR")
       (class "Default")
       (node
@@ -14882,7 +13932,7 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R55")
+        (ref "R51")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14890,7 +13940,7 @@
         (pin "13")
         (pintype "OUTPUT")))
     (net
-      (code 150)
+      (code 146)
       (name "UART_RTS")
       (class "Default")
       (node
@@ -14898,7 +13948,7 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R56")
+        (ref "R52")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -14906,7 +13956,7 @@
         (pin "14")
         (pintype "OUTPUT")))
     (net
-      (code 151)
+      (code 147)
       (name "USB_DN")
       (class "Default")
       (node
@@ -14914,15 +13964,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "TP11")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U16")
         (pin "6")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 152)
+      (code 148)
       (name "USB_DN_C")
       (class "Default")
       (node
@@ -14946,7 +13992,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 153)
+      (code 149)
       (name "USB_DP")
       (class "Default")
       (node
@@ -14954,15 +14000,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "TP10")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U16")
         (pin "5")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 154)
+      (code 150)
       (name "USB_DP_C")
       (class "Default")
       (node
@@ -14986,7 +14028,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 155)
+      (code 151)
       (name "VBAT")
       (class "Default")
       (node
@@ -15018,7 +14060,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 156)
+      (code 152)
       (name "VBUS")
       (class "Default")
       (node
@@ -15046,11 +14088,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R46")
+        (ref "R42")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP2")
+        (ref "TP1")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -15058,7 +14100,7 @@
         (pin "13")
         (pintype "POWER-IN")))
     (net
-      (code 157)
+      (code 153)
       (name "VBUS_C")
       (class "Default")
       (node
@@ -15090,7 +14132,7 @@
         (pin "B9")
         (pintype "PASSIVE")))
     (net
-      (code 158)
+      (code 154)
       (name "VBUS_LD")
       (class "Default")
       (node
@@ -15106,7 +14148,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 159)
+      (code 155)
       (name "VLED")
       (class "Default")
       (node
@@ -15226,7 +14268,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 160)
+      (code 156)
       (name "VLED_PFET_G")
       (class "Default")
       (node
@@ -15238,11 +14280,11 @@
         (pin "3")
         (pintype "PASSIVE"))
       (node
-        (ref "R74")
+        (ref "R70")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 161)
+      (code 157)
       (name "VOL_DN")
       (class "Default")
       (node
@@ -15250,7 +14292,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R57")
+        (ref "R53")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -15259,10 +14301,10 @@
         (pintype "PASSIVE"))
       (node
         (ref "U17")
-        (pin "3")
+        (pin "1")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 162)
+      (code 158)
       (name "VOL_UP")
       (class "Default")
       (node
@@ -15270,7 +14312,7 @@
         (pin "3")
         (pintype "PASSIVE"))
       (node
-        (ref "R58")
+        (ref "R54")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -15282,7 +14324,7 @@
         (pin "4")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 163)
+      (code 159)
       (name "VSYS")
       (class "Default")
       (node
@@ -15338,11 +14380,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R74")
+        (ref "R70")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "TP3")
+        (ref "TP2")
         (pin "1")
         (pintype "PASSIVE"))
       (node

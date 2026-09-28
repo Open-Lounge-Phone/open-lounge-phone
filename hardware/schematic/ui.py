@@ -46,10 +46,16 @@ def led_chain(n_keys: int) -> list[str]:
     return rear[::-1] + front + ["STATUS"]
 
 
-# AW9523B port order (DESIGN.md §5): P0_0-7 = keys 1-8, P1_0-1 = 9, 0; P1_2-3 = VOL-, VOL+;
-# P1_4 = MUTE_SENSE; P1_5 = LED_PWR_EN; P1_6-7 = MENU, BACK
-KEY_PORTS = ["P0_0", "P0_1", "P0_2", "P0_3", "P0_4", "P0_5", "P0_6", "P0_7", "P1_0", "P1_1",
-             "P1_6", "P1_7"]
+# AW9523B port per signal, chosen from the board geometry (layout/pinswap.py, 2026-09-28) so
+# the key lines fan out in order: keys and side controls are plain inputs (any port);
+# LED_PWR_EN must stay on port 1 (push-pull). Firmware reads the key map from this table.
+AW_PORTS = {
+    "KEY_4": "P0_0", "KEY_3": "P0_1", "KEY_2": "P0_2", "KEY_1": "P0_3", "KEY_5": "P0_4",
+    "KEY_6": "P0_5", "KEY_7": "P0_6", "KEY_8": "P0_7", "VOL_DN": "P1_0", "KEY_MENU": "P1_1",
+    "MUTE_SENSE": "P1_2", "VOL_UP": "P1_3", "LED_PWR_EN": "P1_4", "KEY_9": "P1_5", "KEY_0": "P1_6",
+    "KEY_BACK": "P1_7",
+}
+KEY_PORTS = sorted({p for n, p in AW_PORTS.items() if n.startswith("KEY_")})  # 12-key set
 
 
 def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
@@ -57,7 +63,7 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
     MUTE_SENSE)."""
     # ---- AW9523B I/O expander (C148077), I2C 0x58 = 0x58 + AD1<<1 + AD0 with AD0=AD1=0.
     # Datasheet: AD0/AD1 also select the power-on state of the outputs; tied low the outputs
-    # come up low, so LED_PWR_EN (P1_5) is off and nothing is powered before firmware runs.
+    # come up low, so LED_PWR_EN (port 1, AW_PORTS) is off and nothing is powered before firmware runs.
     # RSTN has an internal 100k pull-DOWN (external pull-up below); INTN is open-drain (IRQ
     # pull-up on this board, mcu()); P0 is open-drain by default and there are no internal
     # pull-ups (every key has an external 10k pull-up; P1 drives LED_PWR_EN push-pull).
@@ -78,7 +84,9 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
 
     names = key_names(v.n_keys)
     used = set()
-    for name, port in zip(names, KEY_PORTS):
+    spare = [p for p in KEY_PORTS if p not in {AW_PORTS.get(f"KEY_{n}") for n in names}]
+    for name in names:
+        port = AW_PORTS.get(f"KEY_{name}") or spare.pop(0)
         k = Net(f"KEY_{name}")
         x[port] += k
         used.add(port)
@@ -88,14 +96,15 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
         s[2] += GND
 
     # side controls (VOL-, VOL+, MUTE) at the board edge (pull-ups and ESD in side_controls())
-    for name, port in (("VOL_DN", "P1_2"), ("VOL_UP", "P1_3"), ("MUTE_SENSE", "P1_4")):
+    for name in ("VOL_DN", "VOL_UP", "MUTE_SENSE"):
+        port = AW_PORTS[name]
         x[port] += n[name]
         used.add(port)
 
     # ---- per-key RGB LEDs: SK6812MINI-E x (keys + 1 status) on switched VSYS ----
     led_en = Net("LED_PWR_EN")
-    x["P1_5"] += led_en
-    used.add("P1_5")
+    x[AW_PORTS["LED_PWR_EN"]] += led_en
+    used.add(AW_PORTS["LED_PWR_EN"])
     series(led_en, GND, R("100k", note="LEDs off until firmware enables"))
     vled = rail("VLED")
     g = Net("VLED_PFET_G")
@@ -121,7 +130,7 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
         din = dout
 
     for port in ("P1_6", "P1_7"):
-        if port not in used:
+        if port not in used and port not in AW_PORTS.values():
             x[port] += Net(f"AW_{port}_SPARE")
             TP(Net.get(f"AW_{port}_SPARE"), f"AW_{port}")
             used.add(port)

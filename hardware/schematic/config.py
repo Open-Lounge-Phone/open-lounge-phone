@@ -8,7 +8,7 @@
   (4..12, even; AW9523B has room for 12 keys + VOL/MUTE/LED_EN).
 - ``supercap``: 0.47 F power-fail hold-up, Lounge only (§9.5).
 - ``secure_element``: ATECC608B footprint, DNP until the protocol adopts p256 (§10.1).
-- ``ir_hook``: IR reflective hook sensor for third-party handsets without a magnet, DNP (§6.4).
+- ``ir_hook``: IR reflective hook sensor for magnet-less handsets (§6.4). False = not on the board: the magnet rides in the hook plunger (owner audit 2026-09-28).
 - ``display`` (owner decision 2026-09-27): ``"none"`` (Kids "Lite": printed relegendable keycaps,
   status via key LEDs + audio; the e-ink FPC connector and SSD1680 boost parts are DNP) or
   ``"eink"`` (GDEY029T94 strip populated). One board layout serves every variant (single board,

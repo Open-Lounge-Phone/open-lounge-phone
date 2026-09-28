@@ -25,7 +25,7 @@ Cost roll-up: kids  (prices: lcsc_cache.json; EST = estimate from cost_model.yam
   PCBA setup + stencils   65.80  EST
   extended-part fees      87.00  EST (29 unique extended parts x $3.0)
   joints                   3.64  EST
-  parts for 2 phones      48.81
+  parts for 2 phones      48.80
   off-board (retail)      52.90  EST per phone
   PER PHONE              192.02
 

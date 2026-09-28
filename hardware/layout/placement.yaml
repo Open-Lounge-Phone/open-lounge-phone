@@ -11,70 +11,66 @@ main:
   # they serve (build_board.auto_place); list a ref here to pin it by hand.
   # Proto box rules (enclosure/proto_box.py): top parts <= 3.0 mm (<= 3.8 with a lid pocket),
   # under the e-ink panel <= 2.8 mm; tall parts (JST-PH, supercap, side controls) on the bottom.
-  # Floorplan (owner-approved concept, 2026-09-28): signal flow decides the ends.
-  #   right end = digital + power (both USB-C on the rear wall, ESP32 facing the handset port,
-  #   power chain J1 -> ESD -> PTC -> BQ24074 -> buck top to bottom, USB-UART next to J1);
-  #   left end = audio (codecs, LDO, amp, speaker connector, base mic) + the NFC coil;
-  #   middle band (under the e-ink panel) = AW9523B centred between the key rows, the I2C spine
-  #   and the e-ink ZIF + boost at the panel tail (right end of the panel).
-  # ---- right end, rear: handset USB-C (host) next to the ESP32 ---------------------------------
+  # Floorplan A2 (owner, 2026-09-28): every connection short and direct, blocks as local
+  # clusters, only a few buses between them (LAYOUT.md §5 plan table).
+  #   right end: both USB-C (handset on the rear wall next to the ESP32, power on the right
+  #   wall), power chain, USB-UART, hall; ESP32 right of the panel; codec cluster + amp +
+  #   speaker connector directly below the ESP32; mic and NFC at the left end; AW9523B centred.
+  # ---- ESP32-S3-WROOM-1U right of the e-ink panel, rotated 180: native USB (pins 13/14) at its
+  #      top-right corner facing J7; U.FL at the bottom ---------------------------------------------
+  mcu:
+    U1: [131.5, 32.3, 180]
+    C15: [142.3, 39.4, 90]        # module 3V3 (pin 2): 100 nF at the pin, 22 uF bulk beside it
+    C14: [144.4, 39.4, 90]
+    SW1: [158.5, 12.5, 90]        # RESET pinhole (lid), rear right
+    SW2: [158.5, 20.8, 90]        # BOOT pinhole
+    U5: [128.1, 17.4, 90]         # SN74LV1T125 LED-data buffer, between keys 5 and MENU (chain starts at MENU)
+    R26: [128.1, 20.6, 0]         # LED data series resistor, then down to the MENU LED
+  # ---- handset USB-C (host) on the rear wall next to the ESP32 --------------------------------
   handset:
     J7: [153.8, 3.15, 180]        # handset USB-C (UAC host), rear edge x = 153.8 (clear of hole H2)
     D7: [151.8, 11.9, 270]        # SRV05-4 at the connector, I/O pins facing the pair corridor
     U15: [152.4, 16.3, 0]         # SY6280 handset VBUS switch, beside the pair corridor
     D8: [152.5, 20.5, 0]          # handset supply diode-OR (VBUS / VSYS)
     D9: [152.5, 23.5, 0]
-  # ---- right end, rear: power USB-C + ESD + PTC/TVS + USB-UART ----------------------------------
+  # ---- power USB-C on the right wall + power chain in signal-flow order ----------------------
+  #      J1 -> USBLC6 D1 (D+/D-) / D2 (CC) -> PTC F1 + TVS D3 -> BQ24074 -> buck; CH340C above J1
   usb:
-    J1: [167.0, 3.15, 180]        # power / programming USB-C, rear edge x = 167 (13.2 mm from J7)
-    D1: [164.8, 11.9, 90]         # USBLC6 D+/D- at the connector pins
-    D2: [169.4, 11.9, 90]         # USBLC6 CC1/CC2 at the connector pins
-    U16: [165.0, 28.5, 270]       # CH340C USB-UART under J1, between holes H8/H9 (USB pins on top)
-  # ---- right end: power chain in signal-flow order: J1 -> ESD -> PTC/TVS at the connector, then
-  #      BQ24074 -> buck side by side below the hole row (VBUS runs down past the CH340C) --------
+    J1: [176.85, 40.0, 90]        # power / programming USB-C, right wall at y = 40
+    D1: [168.8, 38.0, 0]          # USBLC6 D+/D- at the connector pins
+    D2: [168.8, 42.3, 0]          # USBLC6 CC1/CC2
+    U16: [165.0, 28.5, 90]        # CH340C between holes H8/H9, USB pins on its bottom edge (toward J1)
   power:
-    F1: [174.4, 12.4, 90]         # PTC at the VBUS entry
-    D3: [177.5, 12.4, 90]         # SMF5.0A TVS
-    U2: [155.8, 38.0, 0]          # BQ24074 (power path), buck to its right
-    U3: [162.4, 37.4, 0]          # TLV62569 buck
-    L1: [167.9, 37.4, 0]
+    F1: [168.0, 34.4, 0]          # PTC at the VBUS entry
+    D3: [163.0, 34.4, 0]          # SMF5.0A TVS
+    U2: [162.0, 40.0, 0]          # BQ24074 (power path)
+    U3: [157.5, 47.0, 0]          # TLV62569 buck + inductor below the charger
+    L1: [163.0, 47.0, 0]
     U14: [149.4, 38.2, 0]         # MAX17048 (B-option) beside the charger and battery connector
     J2: [150.0, 46.0, 90, bottom] # B-option battery JST-PH-3 (bottom: 7 mm under the board)
     C7: [164.0, 55.0, 180, bottom] # supercap hold-up (Lounge), bottom side; THT pins clear of top parts
-    R13: [172.2, 45.2, 90]        # supercap charge resistor + diode on top (fewer bottom parts)
-    D4: [176.0, 45.2, 90]
-  # ---- ESP32-S3-WROOM-1U right of the e-ink panel, rotated 180: native USB (pins 13/14) at its
-  #      top-right corner facing J7; U.FL at the bottom ---------------------------------------------
-  mcu:
-    U1: [131.5, 32.3, 180]
-    SW1: [157.0, 46.8, 90]        # RESET pinhole (enclosure position)
-    SW2: [165.0, 46.8, 90]        # BOOT pinhole
-    Q5: [150.6, 44.2, 0]          # auto-reset (UART RTS -> EN) next to RESET
-    Q6: [150.6, 48.6, 0]          # auto-reset (UART DTR -> BOOT)
-    TP10: [158.3, 30.6, 0]        # USB_DP / USB_DN test pads on top beside the CH340C (no via stubs)
-    TP11: [158.3, 27.9, 0]
-    U5: [128.1, 17.4, 90]         # SN74LV1T125 LED-data buffer, between keys 5 and MENU (chain starts at MENU)
-    R26: [128.1, 20.6, 0]         # LED data series resistor, then down to the MENU LED
-    C15: [142.3, 39.4, 90]        # module 3V3 (pin 2): 100 nF at the pin, 22 uF bulk beside it
-    C14: [144.4, 39.4, 90]
-    U13: [70.0, 57.0, 0]          # ATECC608B (DNP) on the I2C spine
-  # ---- left end: audio -------------------------------------------------------------------------
+    R13: [149.6, 55.6, 0]         # supercap charge resistor + diode on top (fewer bottom parts)
+    D4: [150.5, 60.0, 0]
+  # ---- audio: codec cluster + amp + speaker connector below the ESP32 (I2S short); only the
+  #      mic pair and MICBIAS run to the mic at the left end --------------------------------------
   audio:
-    MK1: [19.5, 25.0, 0]          # base electret (lid pinhole), next to the ES7210
-    U7: [22.0, 13.5, 180]         # ES7210: analog pins face the mic (left) and the DAC (below), I2S/I2C face right/rear
-    U4: [10.5, 13.0, 0]           # LP5907 3V0 for the codecs
-    U6: [31.5, 24.5, 180]         # ES8311: DAC outputs face left/down to the amp, I2S/I2C face right/rear
-    C18: [35.3, 24.9, 0]          # ES8311 PVDD / DVDD 100 nF, one per pin (pins 3/4)
-    C19: [35.3, 23.2, 0]
-    C25: [26.2, 13.2, 0]          # ES7210 VDDP / VDDD 100 nF, one per pin (pins 6/7)
-    C26: [26.2, 11.5, 0]
-    U9: [31.5, 35.2, 0]           # NS4150B below the DAC (inputs left), outputs right to the connector
-    J4: [36.0, 44.5, 90, bottom]  # speaker JST-PH-2 (bottom, left of the speaker)
-    C56: [34.4, 47.0, 90]         # speaker EMI caps on top over the connector
-    C57: [37.6, 47.0, 90]
+    U7: [126.0, 48.5, 180]        # ES7210: mic/AEC inputs face left (mic) and down, I2S/I2C up
+    U6: [135.0, 48.0, 270]        # ES8311: I2S toward U7 and the module, DAC outputs down to the amp
+    U4: [130.5, 57.0, 0]          # LP5907 3V0 for the codecs
+    C25: [130.2, 48.2, 0]         # ES7210 VDDP / VDDD 100 nF, one per pin (pins 6/7)
+    C26: [130.2, 46.5, 0]
+    C18: [135.6, 44.3, 90]        # ES8311 PVDD / DVDD 100 nF, one per pin (pins 3/4)
+    C19: [133.9, 44.3, 90]
+    U9: [116.0, 57.8, 0]          # NS4150B under the panel end: DAC in from the right, outputs to J4
+    J4: [113.5, 58.0, 90, bottom] # speaker JST-PH-2 (bottom), right next to the speaker
+    C56: [110.4, 55.2, 90]        # speaker EMI caps on top over the connector
+    C57: [110.4, 58.8, 90]
+    MK1: [19.5, 25.0, 0]          # base electret (lid pinhole) at the left end
     R35: [17.0, 30.2, 0]          # mic bias feed (MICBIAS_F -> BASEMIC_P) + RC filter at the mic
     R32: [21.4, 30.2, 0]
     C35: [19.2, 32.2, 0]
+    C40: [19.2, 34.2, 0]          # 33 pF RF cap at the capsule
+    NT1: [14.5, 25.0, 0]          # mic return tied to GND at the capsule
   # ---- middle band: keys / LEDs / display / NFC -------------------------------------------------
   ui:
     U17: [90.0, 43.8, 270]        # AW9523B centred between the key rows (I2C side faces the ESP32)
@@ -82,11 +78,12 @@ main:
     Q7: [84.0, 55.0, 0]           # VLED P-FET
     C70: [79.6, 55.0, 90]         # VLED bulk on top beside the FET
     C71: [79.6, 58.6, 90]
-    D21: [128.0, 50.0, 0, bottom] # status SK6812MINI-E (reverse mount, light hole in the lid)
-    D22: [141.5, 53.4, 0]         # privacy LED
-    U18: [141.5, 57.8, 0]         # LTR-303ALS
-    U12: [122.8, 47.0, 0]         # LIS2DH12 on the I2C spine below the module
-    J3: [131.0, 60.0, 180]        # Qwiic display port (DNP)
+    U13: [70.0, 57.0, 0]          # ATECC608B (DNP) on the I2C spine
+    U12: [100.0, 58.0, 0]         # LIS2DH12 on the I2C spine
+    D21: [127.0, 62.8, 0, bottom] # status SK6812MINI-E (reverse mount, light hole in the lid)
+    D22: [110.0, 64.2, 0]         # privacy LED on the front band, on MICBIAS_OUT's way to the mic
+    U18: [105.0, 64.2, 0]         # LTR-303ALS on the I2C spine (front band, lid light hole)
+    J3: [37.0, 52.0, 180]         # Qwiic display port (DNP), on the I2C spine at its left end
     J6: [119.4, 43.8, 270]        # e-ink FPC at the panel tail (panel right end, tail folds under)
     L3: [110.6, 31.0, 0]          # e-ink boost next to the ZIF
     Q9: [110.6, 36.0, 0]
@@ -98,7 +95,6 @@ main:
   # ---- hook sensing under the right-hand plunger ------------------------------------------------
   sensors:
     U10: [171.0, 18.8, 0]         # DRV5032 hall
-    U11: [177.0, 19.0, 0]         # ITR8307 IR option (DNP)
   # ---- side controls on the right edge, bottom side (enclosure: y 70.8 / 62.8 / 53.8) ---------
   side:
     SW3: [177.6, 70.8, 270, bottom]  # VOL- (270 on the bottom = actuator at the edge)

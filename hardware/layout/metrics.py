@@ -4,6 +4,9 @@
 
 - Ratsnest = per net, the minimum spanning tree over its pad centres (Euclidean, ignoring
   copper), summed. Reported with and without GND (GND joins through the pours and vias).
+- Signal wiring = every net without a pour (plane nets drop a via into their plane), each in
+  bus / daisy-chain order (from the ESP32 pad, nearest neighbour + 2-opt); `crossings` counts
+  pairwise crossings of those segments (shared endpoints do not count). The image shows these.
 - USB pairs: MST length of HS_USB_DP/DN (handset) and USB_DP/DN + USB_DP_C/DN_C (power port).
 - Bottom parts: fitted footprints on B.Cu (mounting holes/logos excluded).
 - Courtyard overlaps: pairs of same-side footprints whose courtyard polygons intersect.
@@ -71,6 +74,46 @@ def mst(pts):
     return total, edges
 
 
+def _cross(p, q, r, s):
+    def o(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    return o(p, q, r) * o(p, q, s) < 0 and o(r, s, p) * o(r, s, q) < 0
+
+
+def crossings(edges) -> int:
+    """Pairwise crossings between the ratsnest (MST) segments of all non-GND nets; segments
+    that share an endpoint do not count. Grid-bucketed so it stays fast."""
+    segs = []
+    for n, es in edges.items():
+        if n == "GND":
+            continue
+        for a, b in es:
+            segs.append((a, b))
+    cell = 10.0
+    grid = {}
+    for i, (a, b) in enumerate(segs):
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        for gx in range(int(x0 // cell), int(x1 // cell) + 1):
+            for gy in range(int(y0 // cell), int(y1 // cell) + 1):
+                grid.setdefault((gx, gy), []).append(i)
+    seen = set()
+    for ids in grid.values():
+        for k, i in enumerate(ids):
+            for j in ids[k + 1:]:
+                if (i, j) in seen:
+                    continue
+                seen.add((i, j))
+    n = 0
+    for i, j in seen:
+        (a, b), (c, d) = segs[i], segs[j]
+        if {a, b} & {c, d}:
+            continue
+        if _cross(a, b, c, d):
+            n += 1
+    return n
+
+
 def courtyard_overlaps(board):
     fps = [fp for fp in board.GetFootprints() if not fp.GetReference().startswith(("H", "G"))]
     polys = []
@@ -128,6 +171,52 @@ def netclass(board, name):
     return ni.GetNetClassName() if ni else "Default"
 
 
+def plane_nets(board) -> set:
+    """Nets that have a copper pour (GND on L2, 3V3/VSYS/3V0 on L3): their pins just drop a
+    via into the plane, so they are not wiring and stay out of the chain metrics/image."""
+    return {z.GetNetname() for z in board.Zones() if not z.GetIsRuleArea() and z.GetNetname()}
+
+
+def chain(pts):
+    """Bus / daisy-chain order: start at the ESP32 pad if the net has one (the driver), else
+    at the pad farthest from the net's centroid, then nearest neighbour, then 2-opt."""
+    if len(pts) < 2:
+        return 0.0, []
+    start = next((i for i, p in enumerate(pts) if p[2] == "U1"), None)
+    if start is None:
+        cx = sum(p[0] for p in pts) / len(pts)
+        cy = sum(p[1] for p in pts) / len(pts)
+        start = max(range(len(pts)), key=lambda i: math.hypot(pts[i][0] - cx, pts[i][1] - cy))
+    order, left = [start], set(range(len(pts))) - {start}
+    while left:
+        a = pts[order[-1]]
+        nxt = min(left, key=lambda i: math.hypot(pts[i][0] - a[0], pts[i][1] - a[1]))
+        order.append(nxt)
+        left.discard(nxt)
+    d = lambda i, j: math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1])  # noqa: E731
+    improved = len(order) > 3
+    while improved:
+        improved = False
+        for i in range(1, len(order) - 2):
+            for j in range(i + 1, len(order) - 1):
+                a, b, c, e = order[i - 1], order[i], order[j], order[j + 1]
+                if d(a, c) + d(b, e) < d(a, b) + d(c, e) - 1e-6:
+                    order[i:j + 1] = reversed(order[i:j + 1])
+                    improved = True
+    segs = [((pts[a][0], pts[a][1]), (pts[b][0], pts[b][1])) for a, b in zip(order, order[1:])]
+    return sum(math.hypot(q[0] - p_[0], q[1] - p_[1]) for p_, q in segs), segs
+
+
+def signal_chains(board, by=None):
+    by = by or pads_by_net(board)
+    planes = plane_nets(board)
+    out = {}
+    for n, pts in by.items():
+        if n not in planes:
+            out[n] = chain(pts)
+    return out
+
+
 def metrics(board):
     by = pads_by_net(board)
     per, edges = {}, {}
@@ -135,20 +224,25 @@ def metrics(board):
         per[n], edges[n] = mst([(x, y) for x, y, _ in pts])
     total = sum(per.values())
     no_gnd = total - per.get("GND", 0.0)
+    sig = signal_chains(board, by)
+    sig_edges = {n: e for n, (_, e) in sig.items()}
     bottom = sorted(fp.GetReference() for fp in board.GetFootprints() if fp.IsFlipped()
                     and not fp.GetReference().startswith(("H", "G", "FID")))
     return {
         "ratsnest_mm": round(total, 1),
         "ratsnest_no_gnd_mm": round(no_gnd, 1),
+        "signal_mm": round(sum(v for v, _ in sig.values()), 1),
+        "crossings": crossings(sig_edges),
+        "planes": sorted(plane_nets(board)),
+        "net_mm": {k: round(v, 1) for k, v in per.items()},
         "hs_usb_mm": {n: round(per.get(n, 0), 1) for n in USB_HS},
         "pwr_usb_mm": {n: round(per.get(n, 0), 1) for n in USB_PWR if n in per},
         "bottom_parts": len(bottom),
         "bottom_refs": bottom,
         "courtyard_overlaps": courtyard_overlaps(board),
         "decoupling_over_2mm": [d for d in decoupling(board) if d[2] > 2.0],
-        "top_nets": sorted(((round(v, 1), k) for k, v in per.items() if k != "GND"),
-                           reverse=True)[:25],
-    }, edges
+        "top_nets": sorted(((round(v, 1), k) for k, (v, _) in sig.items()), reverse=True)[:25],
+    }, sig_edges
 
 
 GROUPS = [  # (User layer, colour, label)
@@ -210,7 +304,8 @@ def placement_png(board, edges, m, out: Path) -> None:
             f'<text x="{9 + 30 * k}" y="{h + 5.6}" font-family="Helvetica" font-size="3" '
             f'fill="#222">{lab}</text>' for k, (_, c, lab) in enumerate(GROUPS))
         usb = m["hs_usb_mm"]
-        info = (f"ratsnest (MST, no GND) {m['ratsnest_no_gnd_mm']:.0f} mm; handset USB D+ "
+        info = (f"signal wiring (bus/daisy-chain order, planes {'/'.join(m['planes'])} "
+                f"omitted) {m['signal_mm']:.0f} mm, {m['crossings']} crossings; handset USB D+ "
                 f"{usb['HS_USB_DP']:.1f} / D- {usb['HS_USB_DN']:.1f} mm; bottom parts "
                 f"{m['bottom_parts']}; courtyard overlaps {len(m['courtyard_overlaps'])}. "
                 "Top parts dark grey, bottom parts light blue (Fab outlines).")
@@ -249,7 +344,8 @@ def main():
     a = ap.parse_args()
     board = pcbnew.LoadBoard(a.pcb)
     m, edges = metrics(board)
-    print(json.dumps({k: v for k, v in m.items() if k not in ("bottom_refs", "top_nets")}, indent=1))
+    print(json.dumps({k: v for k, v in m.items() if k not in ("bottom_refs", "top_nets", "net_mm")},
+                     indent=1))
     if a.json:
         Path(a.json).write_text(json.dumps(m, indent=1))
     if a.png:

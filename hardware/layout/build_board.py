@@ -684,7 +684,7 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
         cx, cy = unP(afp.GetPosition())
         base = math.atan2(ay - cy, ax - cx)
         done = False
-        for rad in [1.6 + 0.6 * i for i in range(32)]:
+        for rad in [1.6 + 0.6 * i for i in range(56)]:
             for kk in range(16):
                 ang = base + (1 if kk % 2 else -1) * ((kk + 1) // 2) * math.pi / 8
                 x, y = ax + rad * math.cos(ang), ay + rad * math.sin(ang)

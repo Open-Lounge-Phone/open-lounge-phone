@@ -59,8 +59,8 @@ DECK_ORIGIN = (31.5, 1.8)      # old deck origin in board coordinates (key grid 
 KEY_X0, KEY_PITCH, KEY_ROWS = 10.9, 19.05, (13.0, 71.0)
 EINK_PANEL = (9.5, 23.65, 88.5, 60.35)   # deck coords, GDEY029T94 outline 79.0 x 36.7
 EINK_VIEW, EINK_CHAMFER, EINK_PANEL_T = (68.0, 30.0), 0.5, 1.0
-LIGHT_HOLES = [(128.0, 50.0, 3.2), (141.5, 53.4, 2.0), (141.5, 57.8, 2.0)]   # board coords
-PINHOLES = [(157.0, 46.8, 1.6, "RESET SW1"), (165.0, 46.8, 1.6, "BOOT SW2"),
+LIGHT_HOLES = [(127.0, 62.8, 3.2), (110.0, 64.2, 2.0), (105.0, 64.2, 2.0)]   # board coords
+PINHOLES = [(158.5, 12.5, 1.6, "RESET SW1"), (158.5, 20.8, 1.6, "BOOT SW2"),
             (19.5, 25.0, 1.6, "mic MK1")]     # base mic at the audio end (left)
 
 # fastening: 4 shell-bolt holes clamp lid + board + tray (M2.5x10 countersunk into inserts)
@@ -72,7 +72,7 @@ SCREW_CLEAR, CSK_D = 2.8, 5.0  # M2.5 countersunk (ISO 10642: head 5.0, 90 deg)
 INSERT_D, INSERT_DEPTH = 3.2, 5.0   # M2.5 x 4 heat-set insert (OD 3.5)
 
 # rear wall USB-C (top-mount HRO TYPE-C-31-M-12, body 3.26 tall)
-USB = [(153.8, "J7 handset"), (167.0, "J1 power")]   # both at the right end (2026-09-28)
+USB = [(153.8, "J7 handset", "rear"), (40.0, "J1 power", "right")]   # (x | y, label, wall), 2026-09-28
 USB_BODY_H = 3.26
 USB_CUT, USB_CUT_R = (12.8, 7.2), 3.4
 USB_RECESS, USB_RECESS_D = (14.5, 9.0), 1.0
@@ -215,8 +215,16 @@ def lid_pockets(parts) -> list[tuple]:
 # ---------------------------------------------------------------- parts
 def usb_cutters():
     cut = []
-    for bx, _ in USB:
-        x = bx2x(bx)
+    for pos, _, wall in USB:
+        if wall == "right":   # power port on the right wall (board y = pos)
+            y = by2y(pos)
+            cut.append(stadium_x(y, Z_USB, *USB_CUT, USB_CUT_R, OUT_W - WALL - 0.5, OUT_W + 1))
+            cut.append(box(OUT_W - USB_RECESS_D, OUT_W + 1, y - USB_RECESS[0] / 2,
+                           y + USB_RECESS[0] / 2, Z_USB - USB_RECESS[1] / 2, Z_LT + 1))
+            cut.append(box(OUT_W - WALL - 0.5, OUT_W + 1, y - USB_CUT[0] / 2, y + USB_CUT[0] / 2,
+                           Z_USB, Z_LT + 1))
+            continue
+        x = bx2x(pos)
         cut.append(stadium_y(x, Z_USB, *USB_CUT, USB_CUT_R, OUT_H - WALL - 0.5, OUT_H + 1))
         # outside recess (1.0 deep), open to the top like the cut-out (the plug overmold
         # reaches the lid top: a top-mount receptacle's centre is only 5.0 - 1.63 below it)
@@ -462,12 +470,15 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
             if d < 0 and Z_BT + p["h"] > Z_TIP_PRESSED - 1.0:
                 add(False, f"plunger vs {p['ref']}", f"h {p['h']} under the Ø10 bore")
     # connectors and controls vs cut-outs
-    for bx, label in USB:
+    for pos, label, wall in USB:
         ref = label.split()[0]
         p = by_ref.get(ref)
         if p:
-            add(abs(p["at"][0] - bx) < 0.3 and p["side"] == "top", f"USB-C {label}",
-                f"{ref} at x {p['at'][0]} ({p['side']}), cut-out x {bx}, z {Z_USB:.2f}")
+            k = 1 if wall == "right" else 0
+            edge = p["crt"][2] > BOARD_W - 1.0 if wall == "right" else p["crt"][1] < 1.0
+            add(abs(p["at"][k] - pos) < 0.3 and p["side"] == "top" and edge, f"USB-C {label}",
+                f"{ref} at {'y' if k else 'x'} {p['at'][k]} ({p['side']}), {wall} wall cut-out "
+                f"{pos}, z {Z_USB:.2f}")
     for by, kind, _, label in SIDE:
         ref = label.split()[1]
         p = by_ref.get(ref)

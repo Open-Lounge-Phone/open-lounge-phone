@@ -173,15 +173,15 @@ def power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT):
 
 # ---------------------------------------------------------------------------------------------
 PIN_TABLE = {
-    # GPIO -> net (must match pin_table.yaml; checks.py enforces it)
-    "IO0": "BOOT", "IO1": "CC1_SENSE", "IO2": "CC2_SENSE", "IO3": "HS_VBUS_EN",
-    "IO4": "HS_VBUS_SENSE",
-    "IO5": "HOOK", "IO6": "LD_OUT", "IO7": "IRQ", "IO8": "I2C_SDA", "IO9": "I2C_SCL",
-    "IO10": "EPD_CS", "IO11": "EPD_MOSI", "IO12": "EPD_SCK", "IO13": "EPD_DC", "IO14": "EPD_RST",
-    "IO15": "EPD_BUSY", "IO16": "I2S_MCLK", "IO17": "I2S_BCLK", "IO18": "I2S_WS",
-    "IO19": "HS_USB_DN", "IO20": "HS_USB_DP", "IO21": "I2S_DOUT", "IO38": "I2S_DIN", "IO39": "LD_RX",
-    "IO40": "LD_TX", "IO41": "PA_EN", "IO42": "LED_DATA", "TXD0": "U0TXD", "RXD0": "U0RXD",
-    "IO45": "CHG_CE", "IO46": "LD_PWR_EN", "IO47": "CHG_STAT", "IO48": "PGOOD",
+    # GPIO -> net (must match pin_table.yaml; checks.py enforces it). Assignment follows the
+    # board geometry (layout/pinswap.py, 2026-09-28).
+    "IO0": "BOOT", "IO1": "I2S_DIN", "IO2": "HS_VBUS_SENSE", "IO3": "HS_VBUS_EN", "IO4": "LD_RX",
+    "IO5": "LD_TX", "IO6": "LD_OUT", "IO7": "CC2_SENSE", "IO8": "CHG_STAT", "IO9": "HOOK",
+    "IO10": "CC1_SENSE", "IO11": "I2C_SDA", "IO12": "I2S_MCLK", "IO13": "I2S_BCLK",
+    "IO14": "I2S_WS", "IO15": "I2S_DOUT", "IO16": "IRQ", "IO17": "I2C_SCL", "IO18": "PGOOD",
+    "IO19": "HS_USB_DN", "IO20": "HS_USB_DP", "IO21": "LED_DATA", "IO38": "PA_EN",
+    "IO39": "EPD_BUSY", "IO40": "EPD_RST", "IO41": "EPD_CS", "IO42": "EPD_SCK", "IO45": "CHG_CE",
+    "IO46": "LD_PWR_EN", "IO47": "EPD_MOSI", "IO48": "EPD_DC", "RXD0": "U0RXD", "TXD0": "U0TXD",
 }
 
 
@@ -237,9 +237,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
     for pin, net in I2S.items():
         dac[pin] += net
     dac["DSDIN"] += n["I2S_DOUT"]
-    asd = Net("ES8311_ASDOUT")  # ES8311 ADC unused (not on the I2S bus); test pad only
-    dac["ASDOUT"] += asd
-    TP(asd)
+    dac["ASDOUT"] += NC  # ES8311 ADC unused (the ES7210 records); no test pad (2026-09-28)
     dac["CCLK"] += n["I2C_SCL"]
     dac["CDATA"] += n["I2C_SDA"]
     series(dac["CE"], GND, R("10k", note="CE low -> I2C 0x18"))
@@ -367,20 +365,25 @@ def sensors(v, n, GND, V3V3, VBAT):
     h = make("DRV5032FA", ref="U10", note="under one hook-rest post (boards.yaml hook_post_x)")
     h["VCC"] += V3V3
     h["GND"] += GND
-    hall = Net("HOOK_HALL")
-    h["OUT"] += hall
     decouple(V3V3, GND, "100n", note="DRV5032")
-    series(hall, n["HOOK"], R("0", dnp=v.ir_hook, note="hall -> HOOK"))
-    # IR reflective option for magnet-less third-party handsets (DNP), §6.4
-    ir = make("ITR8307", ref="U11", dnp=not v.ir_hook)
-    ir_a, ir_c = Net("IR_LED_A"), Net("IR_PT_C")
-    series(V3V3, ir_a, R("330", dnp=not v.ir_hook, note="IR LED ~6 mA"))
-    ir["A"] += ir_a
-    ir["K"] += GND
-    ir["C"] += ir_c
-    ir["E"] += GND
-    series(ir_c, V3V3, R("10k", dnp=not v.ir_hook))
-    series(ir_c, n["HOOK"], R("0", dnp=not v.ir_hook, note="IR -> HOOK"))
+    if not v.ir_hook:
+        # the magnet rides in the hook plunger, so every handset works: the IR option and its
+        # 0R selector links are off the board (owner audit 2026-09-28)
+        h["OUT"] += n["HOOK"]
+    else:
+        hall = Net("HOOK_HALL")
+        h["OUT"] += hall
+        series(hall, n["HOOK"], R("0", note="hall -> HOOK (DNP to use the IR option)"))
+        # IR reflective option for magnet-less third-party handsets, §6.4
+        ir = make("ITR8307", ref="U11")
+        ir_a, ir_c = Net("IR_LED_A"), Net("IR_PT_C")
+        series(V3V3, ir_a, R("330", note="IR LED ~6 mA"))
+        ir["A"] += ir_a
+        ir["K"] += GND
+        ir["C"] += ir_c
+        ir["E"] += GND
+        series(ir_c, V3V3, R("10k"))
+        series(ir_c, n["HOOK"], R("0", note="IR -> HOOK"))
 
     # LIS2DH12 accelerometer, I2C 0x19 (SA0=1), INT1 -> shared IRQ (open-drain mode in FW)
     a = make("LIS2DH12", ref="U12")
@@ -558,11 +561,10 @@ def side_controls(n, GND, V3V3):
 
 
 def test_points(n, GND, VBUS, VSYS, V3V3, V3V0):
-    for net in (VBUS, VSYS, V3V3, V3V0, GND, GND, GND, GND):
+    """Essential pads only (owner audit 2026-09-28): rails, GND, UART + EN/BOOT for
+    programming/recovery. Programming USB is the connector itself; buses are probed on parts."""
+    for net in (VBUS, VSYS, V3V3, V3V0, GND, GND):
         TP(net)
-    for name in ("USB_DP", "USB_DN", "U0TXD", "U0RXD", "EN", "BOOT", "I2S_BCLK", "I2S_WS",
-                 "I2S_DIN", "I2S_DOUT", "I2C_SDA", "I2C_SCL", "HOOK", "PA_EN"):
+    for name in ("U0TXD", "U0RXD", "EN", "BOOT"):
         TP(n[name])
-    # no test pads on HS_USB_DP/DN: the matched pair is hand-routed on L1 without vias or stubs
-    for name in ("SPK_VOP", "SPK_VON", "HS_VBUS"):
-        TP(Net.get(name), name)
+    TP(Net.get("HS_VBUS"), "HS_VBUS")

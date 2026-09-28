@@ -1,10 +1,8 @@
-WARN  [check_nets] net ES8311_ASDOUT only reaches U6.ASDOUT and test points
 WARN  [check_sourcing] C7 SE-5R5-D474VYV: [UNVERIFIED] no LCSC/JLCPCB listing found for 0.47 F 5.5 V (C150565 did not resolve); part, lead pitch and footprint to choose; ESR ~40 ohm is fine for 0.9 W hold-up
 WARN  [check_sourcing] C7 SE-5R5-D474VYV: no LCSC code
 WARN  [check_sourcing] U7 ES7210: [UNVERIFIED] pins 3/4 (CDATA/CCLK) follow the datasheet pinout drawing and Korvo-2 schematic; the datasheet pin table lists them swapped
 WARN  [check_sourcing] Q1, Q5, Q6 MMBT3904: [UNVERIFIED] standard SOT-23 B/E/C order; JSCJ datasheet text not readable
 WARN  [check_sourcing] MK1 GMI6027-2C42DB: [UNVERIFIED] ground (can) pad identification not checked against drawing
-WARN  [check_sourcing] U11 ITR8307: [UNVERIFIED] pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant
 WARN  [check_sourcing] U12 LIS2DH12TR: C110926 showed zero JLCPCB stock on 2026-09-27 (LCSC stock 0)
 WARN  [check_sourcing] U14 MAX17048G+T10: [UNVERIFIED] pin map from datasheet text via search (PDF fetch timed out); EP-to-GND assumed; footprint EP size to confirm
 WARN  [check_sourcing] SW5 JS202011AQN: [UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); check against the C&K drawing

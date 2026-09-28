@@ -14,11 +14,11 @@ Cost roll-up: kids-batt  (prices: lcsc_cache.json; EST = estimate from cost_mode
       2.50  off-board: lipo_1200mah EST
 
 == At scale, 10000 phones (USD per phone) ==
-  board parts             15.37
+  board parts             15.36
   PCBs board/plate         1.41  EST (1.17/0.24)
   assembly                 1.40  EST
   off-board electronics   17.68  EST (mx_switches_x12, keycaps_kids, speaker_20x40_4ohm, handset_usbc_uac, antenna_fpc_ufl, lipo_1200mah)
-  TOTAL                   35.86
+  TOTAL                   35.85
 
 == One-off, JLCPCB PCBA reference quote (5 boards each, 2 assembled) ==
   bare PCBs + shipping    73.00  EST

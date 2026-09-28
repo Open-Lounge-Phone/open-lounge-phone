@@ -25,7 +25,7 @@ Cost roll-up: lounge  (prices: lcsc_cache.json; EST = estimate from cost_model.y
   PCBA setup + stencils   65.80  EST
   extended-part fees     105.00  EST (35 unique extended parts x $3.0)
   joints                   3.64  EST
-  parts for 2 phones      53.30
+  parts for 2 phones      53.29
   off-board (retail)      55.00  EST per phone
   PER PHONE              205.37
 

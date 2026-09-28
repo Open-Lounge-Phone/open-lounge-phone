@@ -7,43 +7,46 @@
 # strap:  required resistor at reset: pullup | pulldown (value checked loosely)
 # board:  where the signal ends up (main | tp); one board since 2026-09-27
 
+# GPIO assignment follows the board geometry (layout/pinswap.py, 2026-09-28): each signal
+# leaves the module on the side facing what it connects to. Fixed: straps 0/3/45/46, PSRAM
+# 35-37, native USB 19/20, UART0 43/44, CC sense on ADC1 1/2.
 gpio:
   0:  {net: BOOT, strap: pullup, board: main, note: "10k pull-up + BOOT button; runtime long-press = factory reset"}
-  1:  {net: CC1_SENSE, adc1: true, board: main}
-  2:  {net: CC2_SENSE, adc1: true, board: main}
+  1:  {net: I2S_DIN, board: main}
+  2:  {net: HS_VBUS_SENSE, adc1: true, board: main, note: "handset VBUS via 100k/100k"}
   3:  {net: HS_VBUS_EN, strap: pulldown, board: main, note: "handset port VBUS switch; strap only if EFUSE_STRAP_JTAG_SEL burned; 100k pull-down (off at boot)"}
-  4:  {net: HS_VBUS_SENSE, adc1: true, board: main, note: "handset VBUS via 100k/100k"}
-  5:  {net: HOOK, rtc: true, board: main}
+  4:  {net: LD_RX, board: main}
+  5:  {net: LD_TX, board: main}
   6:  {net: LD_OUT, rtc: true, board: main}
-  7:  {net: IRQ, rtc: true, board: main, pull: up}
-  8:  {net: I2C_SDA, board: main, pull: up}
-  9:  {net: I2C_SCL, board: main, pull: up}
-  10: {net: EPD_CS, board: main}
-  11: {net: EPD_MOSI, board: main}
-  12: {net: EPD_SCK, board: main}
-  13: {net: EPD_DC, board: main}
-  14: {net: EPD_RST, board: main}
-  15: {net: EPD_BUSY, board: main}
-  16: {net: I2S_MCLK, board: main}
-  17: {net: I2S_BCLK, board: main}
-  18: {net: I2S_WS, board: main}
+  7:  {net: CC2_SENSE, adc1: true, board: main}
+  8:  {net: CHG_STAT, board: main, pull: up}
+  9:  {net: HOOK, rtc: true, board: main}
+  10: {net: CC1_SENSE, adc1: true, board: main}
+  11: {net: I2C_SDA, board: main, pull: up}
+  12: {net: I2S_MCLK, board: main}
+  13: {net: I2S_BCLK, board: main}
+  14: {net: I2S_WS, board: main}
+  15: {net: I2S_DOUT, board: main}
+  16: {net: IRQ, rtc: true, board: main, pull: up}
+  17: {net: I2C_SCL, board: main, pull: up}
+  18: {net: PGOOD, board: main, pull: up}
   19: {net: HS_USB_DN, board: main, note: "native USB OTG = host for the USB-C (UAC) handset port"}
   20: {net: HS_USB_DP, board: main}
-  21: {net: I2S_DOUT, board: main}
+  21: {net: LED_DATA, board: main, note: "via SN74LV1T125 buffer on main"}
   35: {net: null, note: "reserved: octal PSRAM"}
   36: {net: null, note: "reserved: octal PSRAM"}
   37: {net: null, note: "reserved: octal PSRAM"}
-  38: {net: I2S_DIN, board: main}
-  39: {net: LD_RX, board: main}
-  40: {net: LD_TX, board: main}
-  41: {net: PA_EN, strap_like: pulldown, board: main, note: "100k pull-down: amp off at boot"}
-  42: {net: LED_DATA, board: main, note: "via SN74LV1T125 buffer on main"}
+  38: {net: PA_EN, pulldown: true, board: main, note: "100k pull-down: amp off at boot"}
+  39: {net: EPD_BUSY, board: main}
+  40: {net: EPD_RST, board: main}
+  41: {net: EPD_CS, board: main}
+  42: {net: EPD_SCK, board: main}
   43: {net: U0TXD, board: tp}
   44: {net: U0RXD, board: tp}
   45: {net: CHG_CE, strap: pulldown, board: main, note: "must be low at reset (3.3 V flash)"}
   46: {net: LD_PWR_EN, strap: pulldown, board: main}
-  47: {net: CHG_STAT, board: main, pull: up}
-  48: {net: PGOOD, board: main, pull: up}
+  47: {net: EPD_MOSI, board: main}
+  48: {net: EPD_DC, board: main}
 
 # I2C devices (7-bit). checks.py verifies no two parts on one bus share an address.
 i2c_expected:

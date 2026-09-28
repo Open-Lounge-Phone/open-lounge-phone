@@ -355,48 +355,65 @@ rules); GPIO19/20 = native USB; ADC2 unusable with Wi-Fi, so all analog inputs g
 | 1 | CC1_SENSE | ADC1_CH0 | main | Reads USB-C Rp advertisement: default / 1.5 A / 3 A |
 | 2 | CC2_SENSE | ADC1_CH1 | main | 〃 |
 | 3 | HS_VBUS_EN | out | main | Handset-port VBUS switch. Strap only if EFUSE_STRAP_JTAG_SEL burned (we don't). 100 k pull-down: off at boot. |
-| 4 | HS_VBUS_SENSE | ADC1_CH3 | main | Handset-port VBUS via 100 k/100 k (overload = sagging VBUS) |
-| 5 | HOOK | in, RTC wake | main | DRV5032 push-pull output |
+| 4 | LD_RX (UART1) | in | main | UART1 through the GPIO matrix |
+| 5 | LD_TX (UART1) | out | main | 256000 baud |
 | 6 | LD_OUT | in, RTC wake | main | LD2410C presence pin |
-| 7 | IRQ (shared) | in, RTC wake | both | Wired-OR open-drain: AW9523B INTN, ST25DV GPO, LIS2DH12 INT1 (open-drain mode **[UNVERIFIED]**). 10 k pull-up. |
-| 8 | I2C_SDA | io | both | 4.7 k pull-ups; 400 kHz |
-| 9 | I2C_SCL | out | both | |
-| 10 | EPD_CS | out | deck | FSPI IO_MUX group (CS0) |
-| 11 | EPD_MOSI | out | deck | FSPID |
-| 12 | EPD_SCK | out | deck | FSPICLK, ≤10 MHz over FFC |
-| 13 | EPD_DC | out | deck | |
-| 14 | EPD_RST | out | deck | |
-| 15 | EPD_BUSY | in | deck | |
-| 16 | I2S_MCLK | out | main | 256·fs to ES8311/ES7210 |
-| 17 | I2S_BCLK | out | main | |
-| 18 | I2S_WS | out | main | |
+| 7 | PA_EN (NS4150B CTRL) | out | main | 100 k pull-down, so no pop at boot |
+| 8 | CHG_STAT (/CHG) | in | main |  |
+| 9 | HOOK | in, RTC wake | main | DRV5032 push-pull output |
+| 10 | HS_VBUS_SENSE | ADC1_CH3 | main | Handset-port VBUS via 100 k/100 k (overload = sagging VBUS) |
+| 11 | I2C_SDA | io | both | 4.7 k pull-ups; 400 kHz |
+| 12 | I2S_MCLK | out | main | 256·fs to ES8311/ES7210 |
+| 13 | I2S_BCLK | out | main |  |
+| 14 | I2S_WS | out | main |  |
+| 15 | I2S_DOUT → ES8311 | out | main |  |
+| 16 | IRQ (shared) | in, RTC wake | both | Wired-OR open-drain: AW9523B INTN, ST25DV GPO, LIS2DH12 INT1 (open-drain mode **[UNVERIFIED]**). 10 k pull-up. |
+| 17 | I2C_SCL | out | both |  |
+| 18 | PGOOD (/PGOOD) | in, IRQ | main | Power-fail interrupt → lounge wipe (§9.5) |
 | 19 | HS_USB_D− | io | main | Native USB OTG = **host** for the USB-C (UAC) handset port. Flashing/console via the CH340C on the power port. |
-| 20 | HS_USB_D+ | io | main | |
-| 21 | I2S_DOUT → ES8311 | out | main | |
+| 20 | HS_USB_D+ | io | main |  |
+| 21 | LED_DATA (RMT) | out | →deck | Through 74AHCT1G125 (VSYS-powered) to the SK6812 chain |
 | 35–37 | — | — | — | **Reserved (octal PSRAM)** |
-| 38 | I2S_DIN ← ES7210 (TDM) | in | main | |
-| 39 | LD_RX (UART1) | in | main | JTAG pins are free because JTAG is over USB |
-| 40 | LD_TX (UART1) | out | main | 256000 baud |
-| 41 | PA_EN (NS4150B CTRL) | out | main | 100 k pull-down, so no pop at boot |
-| 42 | LED_DATA (RMT) | out | →deck | Through 74AHCT1G125 (VSYS-powered) to the SK6812 chain |
+| 38 | EPD_BUSY | in | deck |  |
+| 39 | EPD_RST | out | deck |  |
+| 40 | EPD_DC | out | deck |  |
+| 41 | EPD_SCK | out | deck | ≤10 MHz |
+| 42 | I2S_DIN ← ES7210 (TDM) | in | main |  |
 | 43 | U0TXD | out | TP | Console/factory test pad |
-| 44 | U0RXD | in | TP | |
+| 44 | U0RXD | in | TP |  |
 | 45 | CHG_CE (BQ24074 /CE) | out | main | Strap: 10 k pull-down keeps flash at 3.3 V and charging enabled by default |
 | 46 | LD_PWR_EN | out | main | Strap: pull-down, so the radar is off at boot |
-| 47 | CHG_STAT (/CHG) | in | main | |
-| 48 | PGOOD (/PGOOD) | in, IRQ | main | Power-fail interrupt → lounge wipe (§9.5) |
+| 47 | EPD_MOSI | out | deck |  |
+| 48 | EPD_CS | out | deck | GPIO matrix (≤10 MHz is fine) |
+
+The GPIO numbers follow the board geometry since 2026-09-28 (`layout/pinswap.py`: each signal leaves
+the module on the side facing what it connects to); `schematic/pin_table.yaml` is the source of
+truth and the build checks it.
 
 All usable GPIOs are allocated. Expansion is on the **AW9523B** (deck, I2C 0x58, LCSC C148077,
 $0.17):
 
 | AW9523B pin | Signal |
 |---|---|
-| P0_0–P0_7 | KEY 1–8 (active-low to GND; **external 10 k pull-ups** — AW9523B has no configurable pull-ups **[UNVERIFIED]**) |
-| P1_0–P1_1 | KEY 9, KEY 0 |
-| P1_2–P1_3 | VOL−, VOL+ (side tact) |
-| P1_4 | MUTE_SENSE (2nd pole of slide switch) |
-| P1_5 | LED_PWR_EN (P-FET cuts SK6812 quiescent ~1 mA each) |
-| P1_6–P1_7 | KEY MENU, KEY BACK |
+| P0_0 | KEY 4 |
+| P0_1 | KEY 3 |
+| P0_2 | KEY 2 |
+| P0_3 | KEY 1 |
+| P0_4 | KEY 5 |
+| P0_5 | KEY 6 |
+| P0_6 | KEY 7 |
+| P0_7 | KEY 8 |
+| P1_0 | VOL− (side tact) |
+| P1_1 | KEY MENU |
+| P1_2 | MUTE_SENSE (2nd pole of slide switch) |
+| P1_3 | VOL+ (side tact) |
+| P1_4 | LED_PWR_EN (P-FET cuts SK6812 quiescent ~1 mA each; port 1 = push-pull) |
+| P1_5 | KEY 9 |
+| P1_6 | KEY 0 |
+| P1_7 | KEY BACK |
+
+Keys are active-low to GND with **external 10 k pull-ups**; the port order follows the board
+geometry (`schematic/ui.py AW_PORTS`, 2026-09-28) so the key lines fan out without crossing.
 
 **I2C map (no conflicts):** ES8311 0x18, **LIS2DH12 0x19** (SA0=1, avoids ES8311),
 LTR-303ALS 0x29, MAX17048 0x36 (B-option), ES7210 0x40, ST25DV04K 0x53/0x57 (+0x2D system),
@@ -849,9 +866,9 @@ FR-4 TG155 if impedance is ordered. **ENIG** finish (QFN-20/32 and FPC fine pitc
   header with a 3D-printed/molded locating bracket.
 - **NFC coil (deck):** 3–4 turns around the strip band, no copper pour inside the loop on any layer,
   tuning caps next to the ST25DV, ≥5 mm from switch sockets where possible.
-- **Test points (bottom side, 1.0 mm pads, 2.54 mm grid for pogo fixture):** VBUS, VSYS, 3V3,
-  3V0, GND ×4, USB D+/D−, U0TX/U0RX, EN, GPIO0, I2S BCLK/WS/DIN/DOUT, I2C, HOOK, PA_EN, speaker ±,
-  EAR ±, MIC ±. Factory audio test = loopback plug in the RJ9 (EAR→MIC through an attenuator).
+- **Test points (bottom side, 1.0 mm pads, 2.54 mm grid for pogo fixture):** essentials only
+  (owner audit 2026-09-28): VBUS, VSYS, 3V3, 3V0, HS_VBUS, GND ×2, U0TX/U0RX, EN, GPIO0. Buses and
+  audio are probed on the parts; programming USB is the connector. Factory audio test = loopback plug in the RJ9 (EAR→MIC through an attenuator).
 - **Debug/programming:** native USB-C only (USB-Serial/JTAG). No separate header. EN + GPIO0
   pads let a bricked board be forced into download mode.
 
