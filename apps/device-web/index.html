@@ -2,9 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>Open Lounge Phone Phone</title>
+    <meta name="theme-color" content="#3b352c" />
+    <meta name="description" content="An Open Lounge Phone in your browser: add it to the home screen of an old phone or tablet." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Phone" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Open Lounge Phone — phone</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -15,6 +24,7 @@
             <span class="handset__cup handset__cup--ear"></span>
             <span class="handset__grip"></span>
             <span class="handset__cup handset__cup--mouth"></span>
+            <span class="handset__label" aria-hidden="true">Lift</span>
           </button>
           <span class="cord" aria-hidden="true"></span>
         </div>
@@ -29,7 +39,30 @@
         </div>
       </section>
 
-      <details class="devpanel">
+      <div class="start" hidden>
+        <div class="start__card" role="dialog" aria-modal="true" aria-labelledby="start-title">
+          <img src="/icon.svg" alt="" width="72" height="72" />
+          <div class="start__choose">
+            <h1 id="start-title">Set up this phone</h1>
+            <p>What will this phone be?</p>
+            <button type="button" class="start__kind" data-kind="kids">
+              <strong>Kids phone</strong>
+              <span>Speed-dial keys for the people a grown-up allows.</span>
+            </button>
+            <button type="button" class="start__kind" data-kind="lounge">
+              <strong>Lounge phone</strong>
+              <span>A shared phone: anyone in the household scans its code to use it as themselves.</span>
+            </button>
+          </div>
+          <div class="start__tap">
+            <h1>Open Lounge Phone</h1>
+            <button type="button" class="start__go">Tap to start</button>
+          </div>
+          <p class="start__note">Allow the microphone when asked — the phone needs it for calls. The screen stays on while this is open.</p>
+        </div>
+      </div>
+
+      <details class="devpanel" hidden>
         <summary>Developer panel <span class="devpanel__hint">(not part of the phone)</span></summary>
         <dl class="devpanel__facts">
           <dt>Profile</dt><dd data-fact="profile"></dd>

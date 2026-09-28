@@ -27,8 +27,10 @@ offers to add a passkey so you can sign in again later without a password.
 
 ## 3. Open an emulated phone
 
-Open `http://localhost:8787/device/` in another tab. That's the phone: twelve keys
-(`1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`), a handset, key lights and a small status display.
+Open `http://localhost:8787/device/` in another tab. The first time, it asks what the phone will
+be — choose **Kids phone** — then one tap starts it (that tap lets it make sound and use the
+microphone). That's the phone: twelve keys (`1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`), a handset, key
+lights and a small status display.
 
 | Keyboard | Phone |
 |---|---|
@@ -37,8 +39,16 @@ Open `http://localhost:8787/device/` in another tab. That's the phone: twelve ke
 | <kbd>M</kbd> | MENU |
 | <kbd>Esc</kbd> | BACK |
 
-Add `?display=none` for the Kids Lite phone (no display) or `?display=segments` for a
+Add `?dev=1` for the developer panel (log, battery and power controls),
+`?display=none` for the Kids Lite phone (no display) or `?display=segments` for a
 14-segment display. Add `?profile=kitchen` to run a second phone in the same browser.
+
+:::tip[Any device can be a phone]
+An old phone, tablet or laptop on a stand makes a real phone: open `<your server>/device/` on it
+and choose **Add to Home Screen** (or **Install app**). It opens full screen with the keys, the
+status strip and a big **Lift handset** button, keeps the screen on, and reconnects by itself
+after Wi-Fi hiccups. Leave it plugged in.
+:::
 
 ## 4. Pair it
 

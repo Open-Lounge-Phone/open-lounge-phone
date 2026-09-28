@@ -1,0 +1,18 @@
+{
+  "name": "Open Lounge Phone — phone",
+  "short_name": "Phone",
+  "description": "Turn an old phone, tablet or laptop into an Open Lounge Phone: keys, status strip and handset.",
+  "id": "/device/",
+  "start_url": "/device/",
+  "scope": "/device/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#e9e4da",
+  "theme_color": "#3b352c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

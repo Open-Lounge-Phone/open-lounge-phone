@@ -19,6 +19,8 @@ export class ProtocolSocket<In, Out extends { t: string }> {
   private ws?: WebSocket;
   private attempt = 0;
   private stopped = false;
+  /** The last close was one `shouldReconnect` refused (e.g. replaced by another tab). */
+  private gaveUp = false;
   private retryTimer?: ReturnType<typeof setTimeout>;
   private pingTimer?: ReturnType<typeof setInterval>;
   private readonly opts: SocketOptions<In, Out>;
@@ -44,7 +46,23 @@ export class ProtocolSocket<In, Out extends { t: string }> {
   /** Drop the current connection and dial again immediately (e.g. after pairing). */
   reconnect(): void {
     this.attempt = 0;
-    this.ws?.close(1000, "reconnect");
+    if (this.ws && this.ws.readyState <= WebSocket.OPEN) {
+      this.ws.close(1000, "reconnect");
+      return;
+    }
+    this.retryNow();
+  }
+
+  /**
+   * If the socket is down and waiting out its backoff, dial now (e.g. the page became visible
+   * again or the network came back). Does nothing while connected or connecting.
+   */
+  retryNow(): void {
+    if (this.stopped || this.gaveUp) return;
+    if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
+    clearTimeout(this.retryTimer);
+    this.attempt = 0;
+    this.connect();
   }
 
   private connect(): void {
@@ -68,7 +86,9 @@ export class ProtocolSocket<In, Out extends { t: string }> {
       clearInterval(this.pingTimer);
       if (this.ws !== ws) return;
       this.opts.onStatus?.("closed", { code: e.code, reason: e.reason });
-      if (this.stopped || this.opts.shouldReconnect?.(e.code) === false) return;
+      if (this.stopped) return;
+      this.gaveUp = this.opts.shouldReconnect?.(e.code) === false;
+      if (this.gaveUp) return;
       const delay = Math.min(30_000, 500 * 2 ** this.attempt++) * (0.75 + Math.random() / 2);
       this.retryTimer = setTimeout(() => this.connect(), delay);
     };

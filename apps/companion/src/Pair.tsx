@@ -49,6 +49,7 @@ export function Pair({
         </li>
         <li>Enter the code below within 10 minutes.</li>
       </ol>
+      <UseOldDeviceHint />
       <form className="card stack" onSubmit={(e) => void submit(e)}>
         <label>
           Pairing code
@@ -105,5 +106,16 @@ export function Pair({
         </button>
       </form>
     </section>
+  );
+}
+
+/** Any phone, tablet or laptop can be the phone: the browser phone installs as an app. */
+export function UseOldDeviceHint() {
+  const url = `${location.origin}/device/`;
+  return (
+    <p className="hint old-device-hint">
+      Use an old phone or tablet as the phone: open <a href={url}>{url}</a> on it and choose{" "}
+      <strong>Add to Home Screen</strong>. It shows a pairing code to enter here.
+    </p>
   );
 }

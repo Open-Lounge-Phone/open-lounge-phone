@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Open Lounge Phone — phone">
+  <title>Open Lounge Phone — phone</title>
+  <rect width="512" height="512" rx="112" fill="#f3efe6"/>
+  <!-- the base: handset on its rest above the keys -->
+  <path d="M148 186 C 190 124, 322 124, 364 186" fill="none" stroke="#3b352c" stroke-width="40" stroke-linecap="round"/>
+  <rect x="96" y="170" width="112" height="64" rx="32" fill="#3b352c"/>
+  <rect x="304" y="170" width="112" height="64" rx="32" fill="#3b352c"/>
+  <rect x="96" y="262" width="320" height="26" rx="6" fill="#d8d1c3"/>
+  <g fill="#3b352c">
+    <rect x="96" y="304" width="44" height="44" rx="10"/>
+    <rect x="150" y="304" width="44" height="44" rx="10"/>
+    <rect x="204" y="304" width="44" height="44" rx="10"/>
+    <rect x="258" y="304" width="44" height="44" rx="10"/>
+    <rect x="312" y="304" width="44" height="44" rx="10"/>
+    <rect x="366" y="304" width="50" height="44" rx="10" opacity=".55"/>
+    <rect x="96" y="358" width="44" height="44" rx="10"/>
+    <rect x="150" y="358" width="44" height="44" rx="10"/>
+    <rect x="204" y="358" width="44" height="44" rx="10"/>
+    <rect x="258" y="358" width="44" height="44" rx="10"/>
+    <rect x="312" y="358" width="44" height="44" rx="10"/>
+    <rect x="366" y="358" width="50" height="44" rx="10" opacity=".55"/>
+  </g>
+  <circle cx="117" cy="326" r="7" fill="#3ddc84"/>
+</svg>

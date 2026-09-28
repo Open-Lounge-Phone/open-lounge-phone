@@ -56,9 +56,11 @@ import {
   menuView,
   type Settings,
 } from "./menu.ts";
-import { type PowerSource, parseVariant, powerStatus } from "./power.ts";
+import { type PowerSource, powerStatus, type Variant } from "./power.ts";
 import { renderSegments } from "./segments.ts";
+import { loadKind, saveKind, startScreen } from "./setup.ts";
 import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
+import { ScreenAwake, type WakeLockLike } from "./wake.ts";
 
 type Signal = Extract<ServerToDevice, { t: "rtc.sdp" | "rtc.ice" }>;
 
@@ -76,7 +78,17 @@ const startedAt = Date.now();
 const displayParam = params.get("display");
 const displayMode =
   displayParam === "segments" ? "segments" : displayParam === "none" ? "none" : "eink";
-const variant = parseVariant(params.get("variant"));
+const storage = (() => {
+  try {
+    return localStorage;
+  } catch {
+    return undefined;
+  }
+})();
+// Kids or Lounge: chosen on the first-run screen (or `?variant=`), remembered per profile.
+let chosenKind: Variant | undefined = loadKind(storage, profile, params.get("variant"));
+let variant: Variant = chosenKind ?? "kids";
+const devMode = params.get("dev") === "1";
 let powerSource: PowerSource = "3A";
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
@@ -84,6 +96,8 @@ const handsetEl = $<HTMLButtonElement>(".handset");
 const keyRowEls = [$<HTMLDivElement>(".keys--top"), $<HTMLDivElement>(".keys--bottom")];
 const displayEl = $<HTMLDivElement>(".display");
 const statusLedEl = $<HTMLSpanElement>(".status-led");
+const handsetLabelEl = $<HTMLSpanElement>(".handset__label");
+const startEl = $<HTMLDivElement>(".start");
 // Live call audio (no captions possible), so it is created here rather than in the markup.
 const audioEl = document.createElement("audio");
 audioEl.autoplay = true;
@@ -167,7 +181,8 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
     };
     raw(hello);
     log("→", hello);
-    if (!deviceId) send({ t: "pair.begin", publicKey: identity.publicKey });
+    // A new phone asks for a pairing code once it knows what kind of phone it is.
+    if (!deviceId && chosenKind) beginPairing();
   },
   onMessage: (msg) => {
     if (msg.t !== "pong") log("←", msg);
@@ -188,6 +203,10 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
   // Stop after repeated auth failures or when another tab owns this identity.
   shouldReconnect: (code) => code !== CLOSE_REPLACED && unauthorizedStreak <= 3,
 });
+
+function beginPairing(): void {
+  send({ t: "pair.begin", publicKey: identity.publicKey });
+}
 
 function forgetDeviceId(): void {
   unauthorizedStreak++;
@@ -222,10 +241,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
       pairingCode = msg.code;
       clearTimeout(pairingTimer);
       // Codes expire; ask for a fresh one shortly before that happens.
-      pairingTimer = setTimeout(
-        () => send({ t: "pair.begin", publicKey: identity.publicKey }),
-        Math.max(5_000, msg.expiresAt - Date.now() - 5_000),
-      );
+      pairingTimer = setTimeout(beginPairing, Math.max(5_000, msg.expiresAt - Date.now() - 5_000));
       void tryAutopair(msg.code);
       break;
     case "pair.done":
@@ -519,6 +535,69 @@ $<HTMLButtonElement>(".devpanel__forget").addEventListener("click", async () => 
   location.reload();
 });
 
+// --- device mode: first-run choice, one tap to start, screen kept on -------------------
+
+const awake = new ScreenAwake(
+  (navigator as Navigator & { wakeLock?: WakeLockLike }).wakeLock,
+  () => document.visibilityState === "visible",
+);
+let started = false;
+
+function showStart(): void {
+  const screen = startScreen({ kind: chosenKind, paired: !!getDeviceId(profile), started });
+  startEl.hidden = screen === "none";
+  startEl.dataset.screen = screen;
+}
+
+/** The first tap: allows sound, asks for the microphone once, keeps the screen on. */
+function start(kind?: Variant): void {
+  if (kind) {
+    chosenKind = kind;
+    variant = kind;
+    saveKind(storage, profile, kind);
+    $<HTMLElement>('[data-power="variant"]').textContent = kind === "lounge" ? "Lounge" : "Kids";
+    if (authed || getDeviceId(profile)) sendStatus();
+    else beginPairing();
+  }
+  started = true;
+  showStart();
+  tones.unlock();
+  unlockChime();
+  void awake.enable();
+  // Ask for the microphone now, so the first call doesn't stop at a permission prompt. The
+  // stream is closed again right away; lifting the handset opens it for real.
+  if (!micPromise && "mediaDevices" in navigator) {
+    void getMicrophone().then(
+      (s) => {
+        for (const t of s.getTracks()) t.stop();
+      },
+      (e) => log("•", `microphone unavailable: ${e}`),
+    );
+  }
+  // Fill the screen on phones and tablets (ignored where not allowed, e.g. iOS Safari).
+  if (matchMedia("(pointer: coarse)").matches && !document.fullscreenElement) {
+    void document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+  render();
+}
+
+for (const el of startEl.querySelectorAll<HTMLButtonElement>(".start__kind")) {
+  el.addEventListener("click", () => start(el.dataset.kind as Variant));
+}
+$<HTMLButtonElement>(".start__go").addEventListener("click", () => start());
+document.addEventListener("visibilitychange", () => {
+  void awake.onVisibilityChange();
+  // Back from the background (or a sleeping tablet): reconnect now instead of after backoff.
+  if (document.visibilityState === "visible") socket.retryNow();
+});
+// The network changed (Wi-Fi ↔ cellular, router restart): the old socket is probably dead.
+addEventListener("online", () => socket.reconnect());
+if (devMode) $<HTMLElement>(".devpanel").hidden = false;
+if ("serviceWorker" in navigator && !import.meta.env.DEV) {
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+}
+showStart();
+
 // --- pairing announcement (no screen needed) ---------------------------------------
 
 /** Speaks through the handset (on hardware: pre-recorded prompts). Replaces anything playing. */
@@ -549,6 +628,11 @@ function updateAnnouncement(): void {
 
 function render(): void {
   handsetEl.setAttribute("aria-pressed", String(hookUp));
+  handsetLabelEl.textContent = hookUp
+    ? "Hang up"
+    : deviceState.kind === "incoming"
+      ? "Answer"
+      : "Lift handset";
 
   const view = menu ? menuView(menu, settings, menuContext()) : undefined;
   const leds = ledsFor({

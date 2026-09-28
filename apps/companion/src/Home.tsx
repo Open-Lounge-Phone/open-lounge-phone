@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
 import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
+import { UseOldDeviceHint } from "./Pair.tsx";
 import { OFFLINE_HINT, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
@@ -164,6 +165,7 @@ function MyPhone({
           Add my virtual phone here
         </button>
         <OpenElsewhere meId={meId} userName={userName} />
+        <UseOldDeviceHint />
       </div>
     );
   }
