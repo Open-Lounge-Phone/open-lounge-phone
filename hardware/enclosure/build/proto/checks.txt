@@ -4,21 +4,17 @@ PASS  bed fit plunger: 9.6 x 9.6 x 20.0 mm (bed 220)
 PASS  bed fit sleeve: 12.0 x 12.0 x 19.2 mm (bed 220)
 PASS  walls: wall 2.5, floor 2.0, lid 2.0; thinnest lid: key clip 1.5, e-ink rim 1.0
 PASS  MX stack: board top z 10.6, plate top z 15.6 (+5.0), space under the lid 3.0, under the board 7.0
-PASS  lid pocket U1: ESP32-S3-WROOM-1U h 3.30 > 3.0: pocket 0.50 deep (lid left 1.50)
-PASS  lid pocket J1: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
-PASS  lid pocket SW5: SW_CK_JS202011AQN_DPDT_Angled h 3.80 > 3.0: pocket 1.00 deep (lid left 1.00)
-PASS  lid pocket J7: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
 PASS  lid pocket J5: PinSocket_1x05_P2.54mm_Horizontal h 3.00 > 3.0: pocket 0.20 deep (lid left 1.80)
-FAIL  lid pocket J4: JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal h 6.00 > 3.0: pocket 3.20 deep (lid left -1.20) -> too tall for the lid
-PASS  lid pocket SW4: SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010 h 3.50 > 3.0: pocket 0.70 deep (lid left 1.30)
-PASS  lid pocket SW3: SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010 h 3.50 > 3.0: pocket 0.70 deep (lid left 1.30)
-FAIL  lid pocket C7: Supercap_D11.5mm_P5.0mm h 6.00 > 3.0: pocket 3.20 deep (lid left -1.20) -> too tall for the lid
-FAIL  lid pocket J2: JST_PH_S3B-PH-SM4-TB_1x03-1MP_P2.00mm_Horizontal h 6.00 > 3.0: pocket 3.20 deep (lid left -1.20) -> too tall for the lid
-PASS  bosses / spacers: no part courtyard inside a Ø6 boss/spacer
-PASS  speaker keep-out: speaker 20x40x5.0 under board (4.7..27.3, 40.7..83.3), 2.0 mm to the board bottom
+PASS  lid pocket U1: ESP32-S3-WROOM-1U h 3.30 > 3.0: pocket 0.50 deep (lid left 1.50)
+PASS  lid pocket J7: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
+PASS  lid pocket J3: JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal h 2.95 > 3.0: pocket 0.15 deep (lid left 1.85)
+PASS  lid pocket J1: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
+PASS  bosses / spacers: no part courtyard inside a boss/spacer (bolts Ø6.0, supports Ø4.6)
+PASS  speaker keep-out: speaker 40x20x5.0 under board (59.2..101.8, 32.5..55.1), 2.0 mm to the board bottom
 PASS  hall under plunger: U10 at [171.0, 18.8], socket (171.0,18.8), off 0.00
 PASS  USB-C J7 handset: J7 at x 24.0 (top), cut-out x 24.0, z 12.23
 PASS  USB-C J1 power: J1 at x 159.0 (top), cut-out x 159.0, z 12.23
-FAIL  side VOL- SW3: SW3 at [177.6, 70.8] top (need bottom, y 70.8, at edge)
-FAIL  side VOL+ SW4: SW4 at [177.6, 62.8] top (need bottom, y 62.8, at edge)
-FAIL  side MUTE SW5: SW5 at [174.5, 53.8] top (need bottom, y 53.8, at edge)
+PASS  side VOL- SW3: SW3 at [177.6, 70.8] bottom (need bottom, y 70.8, at edge)
+PASS  side VOL+ SW4: SW4 at [177.6, 62.8] bottom (need bottom, y 62.8, at edge)
+PASS  side MUTE SW5: SW5 at [174.5, 51.3] bottom (need bottom, y 53.8, at edge)
+PASS  key grid: 12 switch sockets vs lid cut-outs

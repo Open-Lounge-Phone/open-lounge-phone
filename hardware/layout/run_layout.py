@@ -1,6 +1,6 @@
 """`make layout`: footprints -> boards (place + route, cached) -> plate -> checks -> exports.
 
-    python run_layout.py [--force] [--boards main,deck] [--variants kids,lounge,...]
+    python run_layout.py [--force] [--boards main] [--variants kids,lounge,...]
 
 Routing (layout/router.py, a deterministic grid router) takes minutes, so a board is only re-placed and re-routed when its inputs
 change: the SHA-256 of the netlist, boards.yaml, placement.yaml, the project footprints and the
@@ -52,7 +52,7 @@ def run(*args) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="re-place and re-route every board")
-    ap.add_argument("--boards", default="main,deck")
+    ap.add_argument("--boards", default="main")
     ap.add_argument("--variants", default=",".join(VARIANTS))
     ap.add_argument("--passes", default="100")
     a = ap.parse_args()

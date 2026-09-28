@@ -56,34 +56,56 @@ stackup:
     - [B.Cu, copper, 0.035]
 
 main:
-  title: "Open Lounge Phone main board"
+  title: "Open Lounge Phone board"
   netlist: main
-  # Compact base A (owner decision 2026-09-27; base 186 x 94 x 33 mm). Geometry from
-  # hardware/enclosure/params.yaml main_intent / ENCLOSURE.md s8 (board coordinates).
-  # The key deck (117 x 84, on 7 mm hex standoffs) covers x 31.5-148.5, y 1.8-85.8: parts
-  # there must be <= 4.7 mm tall. Tall parts live in the end regions.
+  # Single board (owner decision 2026-09-27): one 180 x 88 mm 4-layer board with the keys on
+  # it (the former deck is merged in; no FFC/standoffs). Compact base A (base 186 x 94 x 33 mm);
+  # prototype box: enclosure/proto_box.py (lid = MX plate at board top + 5.0, 3.0 mm under the
+  # lid, 7.0 mm under the board).
+  # Zones: keys at x 42.4 + 19.05 i, rows y 14.8 / 72.8 (switch bodies keep the 14 x 14 squares
+  # free on the top side); e-ink panel (at plate level, parts <= 2.8 mm may sit under it) over
+  # x 41-120, y 25.45-62.15; left end: handset USB-C, NFC coil (front-left); right end: power
+  # USB-C, power path, hall, CH340C, RESET/BOOT, mic, radar, side controls (bottom side).
   size: [180, 88]
   corner_radius: 8.5      # clears the shell's inner corner radius
-  deck_footprint: [31.5, 1.8, 148.5, 85.8]
   hook_post_x: 171.0      # hall U10 at (171.0, 18.8) under the right-hand plunger
   holes:   # M2.5 plated, GND; [x, y]
-    - [34.7, 5.0]     # deck standoffs (under the 5 deck holes)
+    - [34.7, 5.0]     # support / plate screws (the old deck standoff positions)
     - [145.3, 5.0]
     - [34.7, 82.6]
     - [145.3, 82.6]
     - [145.1, 29.4]
-    - [5.0, 29.8]     # shell bolts: tray -> board -> top-shell insert
+    - [5.0, 29.8]     # shell bolts: tray -> board -> lid/top shell
     - [26.0, 29.8]
     - [154.0, 29.8]
     - [176.0, 29.8]
   hole_keepout_d: 6.0
   place_gap: 0.25        # auto-placed passives: courtyard gap to each other (routing channels)
   fine_pitch_gap: 0.8    # ... and to fine-pitch ICs (QFN pins need escape room)
-  # plunger bores (not a keep-out, a height limit): Ø12 around the hall U10 at (171, 18.8)
-  # <= 3 mm parts, Ø10 around (9, 18.8) <= 4 mm (all SMD parts there are < 3 mm)
-  keepouts: []
+  # 12 keys in two rows of six (owner decision 2026-09-27): rear 1 2 3 4 5 MENU, front
+  # 6 7 8 9 0 BACK; the old deck origin (31.5, 1.8) is kept, so the key grid is unchanged.
+  keys:
+    pitch: 19.05
+    x0: 42.4
+    y_rear: 14.8
+    y_front: 72.8
+    led_offset: [0, 5.08]   # SK6812MINI-E centre relative to the switch centre (top view)
+    body: 13.5              # MX switch bottom housing (~13.8): no top-side parts inside this square
+  # e-ink panel outline (GDEY029T94 79.0 x 36.7) at plate level, centred over the digit columns
+  panel: [41.0, 25.45, 120.0, 62.15]
+  keepouts:
+    # NFC loop (front-left end region): no pours on any layer (a plane inside the loop is a
+    # shorted turn); nothing on L1 (the coil) and L2 (plane cut-out). L3/L4 may carry signal
+    # tracks straight across (no vias, no GND/supply nets: router.py NO_SUPPLY_AREAS).
+    - {name: NFC_LOOP, rect: [2.2, 37.7, 28.8, 80.3], tracks: false, vias: false, pours: false,
+       footprints: false, layers: [F.Cu, In1.Cu]}
+    - {name: NFC_LOOP_SIG, rect: [2.2, 37.7, 28.8, 80.3], tracks: true, vias: false,
+       pours: false, footprints: false, layers: [In2.Cu, B.Cu]}
+    # slit from the loop to the left board edge on every layer: the pours around the coil must
+    # not form a closed (shorted) turn around it
+    - {name: NFC_SLIT, rect: [-0.5, 58.5, 2.5, 59.5], tracks: true, vias: false, pours: false}
   testpoints:   # pogo grid on the bottom, 2.54 mm pitch; USB nets stay on top (no stubs)
-    origin: [96.52, 60.96]
+    origin: [104.0, 24.5]
     cols: 6
     pitch: 2.54
     side: bottom
@@ -94,95 +116,34 @@ main:
     - [GND, F.Cu, board, 0]
     - [GND, B.Cu, board, 0]
     - [GND, In2.Cu, board, 0]
-    - [3V3, In2.Cu, [[40, 30], [140, 30], [140, 70], [40, 70]], 1]
-    - [VSYS, In2.Cu, [[100, 2], [142, 2], [142, 26], [100, 26]], 1]
+    - [3V3, In2.Cu, [[36, 23], [146, 23], [146, 65], [36, 65]], 1]
+    - [VSYS, In2.Cu, [[147.5, 12], [172, 12], [172, 44], [147.5, 44]], 1]
   stitch_pitch: 5.0
   logos:   # owner's signature (hardware/art/make_logo.py): [footprint, x, y, side]
     - [openloungephone_logo_B, 60.0, 44.0, bottom]
   texts:
     - ["Open Lounge Phone", 60.0, 50.6, 1.5, bottom]
-    - ["main board r0.1  CERN-OHL-S-2.0", 60.0, 53.6, 1.0, bottom]
-    - ["HANDSET", 24.0, 9.6, 0.8]
-    - ["PWR / PROG", 159.0, 9.6, 0.8]
-    - ["BATT (B-opt)", 6.0, 43.0, 0.8]
-    - ["SPK", 17.0, 32.4, 1.0]
-    - ["DECK FFC", 20.0, 36.0, 0.8]
-    - ["RADAR (Lounge)", 162.0, 79.5, 0.8]
-    - ["HOOK", 171.0, 13.6, 0.8]
+    - ["board r0.2  CERN-OHL-S-2.0", 60.0, 53.6, 1.0, bottom]
+    - ["HANDSET", 24.0, 9.0, 0.8, bottom]
+    - ["PWR / PROG", 159.0, 9.0, 0.8, bottom]
+    - ["NFC", 15.5, 59.0, 1.5]
+    - ["HOOK", 171.0, 24.0, 0.8, bottom]
     - ["RST", 157.0, 51.8, 0.8]
     - ["BOOT", 165.0, 51.8, 0.8]
-    - ["MUTE VOL+ VOL-", 170.0, 76.0, 0.8]
-    - ["TEST PADS 2.54 mm", 103.0, 58.4, 0.8, bottom]
-    - ["DNP by variant: J5 Q2 Q3 C7 R13 D4 (lounge), J2 U14 (kids-batt), U13 U11", 90.0, 86.2, 0.8, bottom]
-    - ["U.FL: antenna on the shell wall", 68.0, 3.0, 0.8]
-
-deck:
-  title: "Open Lounge Phone deck board"
-  netlist: deck
-  # 12 keys in two rows of six (owner decision 2026-09-27): rear 1 2 3 4 5 MENU,
-  # front 6 7 8 9 0 BACK. Width follows the key count: 6 x 19.05 + margins.
-  size: [117, 84]
-  corner_radius: 1.5
-  holes:
-    - [3.2, 3.2]
-    - [113.8, 3.2]
-    - [3.2, 80.8]
-    - [113.8, 80.8]
-    - [113.6, 27.6]   # right band (e-ink ZIF / status LED)
-  hole_keepout_d: 6.0
-  place_gap: 0.2
-  fine_pitch_gap: 0.9
-  # key grid: columns at x = x0 + i*pitch, rear row y_rear, front row y_front; digits fill the
-  # first columns (dialling order), MENU/BACK the last column.
-  keys:
-    pitch: 19.05
-    x0: 10.9
-    y_rear: 13.0
-    y_front: 71.0
-    led_offset: [0, 5.08]   # SK6812MINI-E centre relative to the switch centre (top view)
-  # e-ink panel pocket (GDEY029T94 outline 79.0 x 36.7), centred over the five digit columns
-  panel: [9.5, 23.65, 88.5, 60.35]
-  slots:
-    - [89.2, 34.5, 90.7, 49.5]   # FPC tail + Qwiic cable pass-through, 1.5 x 15 mm
-  keepouts:
-    # NFC loop: coil ring + interior: no pours on any layer (a plane inside the loop is a
-    # shorted turn); nothing on L1 (the coil) and L2 (plane cut-out). L3 and L4 may carry
-    # signal tracks straight across (no vias inside, no GND/supply nets: router.py
-    # NO_SUPPLY_AREAS, checks.py); otherwise the deck middle is a wall between the front key row
-    # and the expander.
-    - {name: NFC_LOOP, rect: [13.7, 23.35, 84.3, 60.65], tracks: false, vias: false, pours: false,
-       layers: [F.Cu, In1.Cu]}
-    - {name: NFC_LOOP_SIG, rect: [13.7, 23.35, 84.3, 60.65], tracks: true, vias: false,
-       pours: false, layers: [In2.Cu, B.Cu]}
-    # Slit from the loop to the board edge on every layer: the pours around the coil must not
-    # form a closed (shorted) turn around it. Signal tracks may cross it; GND and supply nets
-    # may not (they would close the turn at 13.56 MHz through the decoupling caps; checks.py).
-    - {name: NFC_SLIT, rect: [84.0, 23.1, 117.5, 24.1], tracks: true, vias: false, pours: false}
-  zones:
-    # L3 is a slow-signal routing layer with GND fill on the deck (power is routed: <0.5 A)
-    - [GND, In1.Cu, board, 0]
-    - [GND, F.Cu, board, 0]
-    - [GND, B.Cu, board, 0]
-    - [GND, In2.Cu, board, 0]
-  stitch_pitch: 5.0
-  logos:
-    - [openloungephone_logo_B, 49.0, 36.0, bottom]
-  texts:
-    - ["Open Lounge Phone", 49.0, 42.4, 1.5, bottom]
-    - ["deck board r0.1  CERN-OHL-S-2.0", 49.0, 45.4, 1.0, bottom]
-    - ["J1 FFC to main", 6.0, 62.0, 0.8, bottom]
-    - ["J2: e-ink FPC", 96.0, 30.6, 0.8, bottom]
-    - ["DNP by variant: J2+boost (kids, kids-batt), J3 Qwiic (all)", 58.5, 1.4, 0.8, bottom]
+    - ["TEST PADS 2.54 mm", 110.0, 23.2, 0.8, bottom]
+    - ["DNP by variant: e-ink J6+boost, Qwiic J3, radar J5 Q2 Q3, supercap C7, battery J2 U14", 90.0, 86.4, 0.8, bottom]
 
 plate:
   title: "Open Lounge Phone key plate (FR4 1.5 mm, no copper)"
   size: [117, 84]
   corner_radius: 1.5
   cutout: 14.0          # MX plate cutout
+  origin: [31.5, 1.8]   # plate (0,0) in board coordinates; keys/panel/holes follow the board
+  holes: [[3.2, 3.2], [113.8, 3.2], [3.2, 80.8], [113.8, 80.8]]
   holes_d: 2.7          # M2.5 clearance at deck holes 1-4 (countersink for flush heads)
   # deck hole 5 is screwed before the plate goes on (no plate hole: the web would be 0.4 mm)
   pocket_clearance: 0.2 # e-ink pocket = 79.0 x 36.7 panel outline + 0.2 mm all round
-  light_holes:          # [x, y, d]: status LED, privacy LED, ambient-light sensor
-    - [106.0, 27.0, 3.2]
+  light_holes:          # [x, y, d] in plate coordinates: status LED, privacy LED, ALS
+    - [96.5, 48.2, 3.2]
     - [110.0, 51.6, 2.0]
     - [110.0, 56.0, 2.0]

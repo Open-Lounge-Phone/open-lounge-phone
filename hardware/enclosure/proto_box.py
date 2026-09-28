@@ -59,7 +59,7 @@ DECK_ORIGIN = (31.5, 1.8)      # old deck origin in board coordinates (key grid 
 KEY_X0, KEY_PITCH, KEY_ROWS = 10.9, 19.05, (13.0, 71.0)
 EINK_PANEL = (9.5, 23.65, 88.5, 60.35)   # deck coords, GDEY029T94 outline 79.0 x 36.7
 EINK_VIEW, EINK_CHAMFER, EINK_PANEL_T = (68.0, 30.0), 0.5, 1.0
-LIGHT_HOLES = [(106.0, 27.0, 3.2), (110.0, 51.6, 2.0), (110.0, 56.0, 2.0)]   # deck coords
+LIGHT_HOLES = [(128.0, 50.0, 3.2), (141.5, 53.4, 2.0), (141.5, 57.8, 2.0)]   # board coords
 PINHOLES = [(157.0, 46.8, 1.6, "RESET SW1"), (165.0, 46.8, 1.6, "BOOT SW2"),
             (155.0, 58.8, 1.6, "mic MK1")]
 
@@ -67,6 +67,7 @@ PINHOLES = [(157.0, 46.8, 1.6, "RESET SW1"), (165.0, 46.8, 1.6, "BOOT SW2"),
 BOLTS = [(5.0, 29.8), (26.0, 29.8), (154.0, 29.8), (176.0, 29.8)]
 SUPPORTS = [(34.7, 5.0), (145.3, 5.0), (34.7, 82.6), (145.3, 82.6), (145.1, 29.4)]
 BOSS_D = 6.0                   # = the board's hole keep-out diameter
+SUPPORT_D = 4.6                # plain supports: clear of the hot-swap sockets next to them
 SCREW_CLEAR, CSK_D = 2.8, 5.0  # M2.5 countersunk (ISO 10642: head 5.0, 90 deg)
 INSERT_D, INSERT_DEPTH = 3.2, 5.0   # M2.5 x 4 heat-set insert (OD 3.5)
 
@@ -101,12 +102,12 @@ Z_BODY_BOT = Z_GUIDE_TOP + SPRING_PRESSED
 Z_SLEEVE_TOP = Z_BODY_BOT + BODY_H             # pressed: body flush with the sleeve top
 
 # speaker 20 x 40 under the board, firing down through the floor
-SPK_C, SPK_SIZE, SPK_T = (16.0, 62.0), (20.0, 40.0), 5.0
+SPK_C, SPK_SIZE, SPK_T = (80.5, 43.8), (40.0, 20.0), 5.0   # board coords, centre bottom
 SPK_RIM_T, SPK_RIM_H = 1.2, 3.0
 GRILLE_D, GRILLE_PITCH = 2.0, 3.5
 
 # underside
-FEET = [(40.0, 10.0), (172.0, 10.0), (12.0, 85.0), (172.0, 85.0)]   # base frame
+FEET = [(14.0, 10.0), (172.0, 10.0), (14.0, 85.0), (172.0, 85.0)]   # base frame
 FOOT_D, FOOT_DEPTH = 13.0, 1.0
 TEXT, TEXT_SIZE, TEXT_DEPTH = "Open Lounge Phone · proto", 6.0, 0.6
 
@@ -232,8 +233,10 @@ def tray(parts) -> Part:
     t = shell - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * WALL, OUT_H - 2 * WALL,
                       OUT_R - WALL, Z_FLOOR, Z_LU + 1)
     add = []
-    for bx, by in BOLTS + SUPPORTS:
+    for bx, by in BOLTS:
         add.append(cyl(bx2x(bx), by2y(by), Z_FLOOR - 0.01, Z_BB, BOSS_D))
+    for bx, by in SUPPORTS:
+        add.append(cyl(bx2x(bx), by2y(by), Z_FLOOR - 0.01, Z_BB, SUPPORT_D))
     # speaker retaining rim on the floor
     sx, sy = bx2x(SPK_C[0]), by2y(SPK_C[1])
     w, h = SPK_SIZE[0] + 2 * FIT, SPK_SIZE[1] + 2 * FIT
@@ -269,7 +272,7 @@ def tray(parts) -> Part:
             cut.append(stadium_x(y, Z_SIDE, size[0], size[1], size[1] / 2, OUT_W - WALL - 1,
                                  OUT_W + 1))
     txt = Text(TEXT, font_size=TEXT_SIZE, align=(Align.CENTER, Align.CENTER))
-    txt = Pos(OUT_W / 2 + 12, OUT_H / 2, 0) * Rot(0, 180, 0) * extrude(txt, amount=-TEXT_DEPTH)
+    txt = Pos(OUT_W / 2 + 12, 22.0, 0) * Rot(0, 180, 0) * extrude(txt, amount=-TEXT_DEPTH)
     cut.append(txt)
     return t - union(cut)
 
@@ -309,8 +312,7 @@ def lid(parts) -> Part:
     c = EINK_CHAMFER   # 45 deg chamfer on the window's top edge
     cut.append(extrude(Pos(ex, ey, Z_LT - c) * RectangleRounded(EINK_VIEW[0], EINK_VIEW[1], 0.01),
                        amount=c + 0.01, taper=-45))
-    for dx, dy, d in LIGHT_HOLES:
-        bx, by = deck(dx, dy)
+    for bx, by, d in LIGHT_HOLES:
         cut.append(cyl(bx2x(bx), by2y(by), Z_LU - 1, Z_LT + 1, d))
     for bx, by, d, _ in PINHOLES:
         cut.append(cyl(bx2x(bx), by2y(by), Z_LU - 1, Z_LT + 1, d))
@@ -412,19 +414,21 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
     # bosses / spacers vs parts (Ø BOSS_D at every hole; bottom = tray boss, top = lid spacer)
     holes_ok = True
     for bx, by in BOLTS + SUPPORTS:
+        dia = BOSS_D if (bx, by) in BOLTS else SUPPORT_D
         for p in parts:
             if p["fp"].startswith("MountingHole") or p["ref"].startswith("H"):
                 continue
             side_hit = p["side"] == "bottom" or p["tht"] or ((bx, by) in BOLTS)
             if not side_hit:
                 continue
-            d = circle_rect_dist(bx, by, BOSS_D / 2, p["crt"])
+            d = circle_rect_dist(bx, by, dia / 2, p["crt"])
             if d < 0:
                 holes_ok = False
                 add(False, f"boss ({bx},{by}) vs {p['ref']}",
-                    f"{p['side']} {p['fp']} courtyard overlaps the Ø{BOSS_D} boss by {-d:.2f} mm")
+                    f"{p['side']} {p['fp']} courtyard overlaps the Ø{dia} boss by {-d:.2f} mm")
     if holes_ok:
-        add(True, "bosses / spacers", "no part courtyard inside a Ø6 boss/spacer")
+        add(True, "bosses / spacers", f"no part courtyard inside a boss/spacer (bolts Ø{BOSS_D}, "
+            f"supports Ø{SUPPORT_D})")
     # speaker under the board
     sx0 = SPK_C[0] - SPK_SIZE[0] / 2 - SPK_RIM_T - FIT
     sx1 = SPK_C[0] + SPK_SIZE[0] / 2 + SPK_RIM_T + FIT
@@ -468,7 +472,8 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
         ref = label.split()[1]
         p = by_ref.get(ref)
         if p:
-            ok = abs(p["at"][1] - by) < 0.5 and p["side"] == "bottom" and p["crt"][2] > BOARD_W - 1.5
+            cy = (p["crt"][1] + p["crt"][3]) / 2
+            ok = abs(cy - by) < 0.6 and p["side"] == "bottom" and p["crt"][2] > BOARD_W - 1.5
             add(ok, f"side {label}", f"{ref} at {p['at']} {p['side']} (need bottom, y {by}, at edge)")
     sw = [p for p in parts if "CPG151101S11" in p["fp"] or "Kailh" in p["fp"] or "MX" in p["fp"]]
     if sw:

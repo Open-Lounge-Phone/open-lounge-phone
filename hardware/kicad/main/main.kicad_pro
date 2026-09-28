@@ -538,6 +538,54 @@
       },
       {
         "netclass": "Bus",
+        "pattern": "LED_D1"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D10"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D11"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D12"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D2"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D3"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D4"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D5"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D6"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D7"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D8"
+      },
+      {
+        "netclass": "Bus",
+        "pattern": "LED_D9"
+      },
+      {
+        "netclass": "Bus",
         "pattern": "LED_DATA"
       },
       {
@@ -691,6 +739,10 @@
       {
         "netclass": "Power",
         "pattern": "VBUS_LD"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "VLED"
       },
       {
         "netclass": "Power",

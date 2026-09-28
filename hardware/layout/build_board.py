@@ -453,7 +453,7 @@ NOTE_HINTS = [  # decoupling-cap note keyword -> reference of the part it belong
     ("module 3V3", "U1"), ("buck input", "U3"), ("NS4150B", "U9"), ("SN74LV1T125", "U5"),
     ("ES8311", "U6"), ("ES7210", "U7"), ("DRV5032", "U10"), ("LIS2DH12", "U12"),
     ("ATECC608B", "U13"), ("MAX17048", "U14"), ("CH340C", "U16"), ("handset VBUS", "U15"),
-    ("AW9523B", "U1"), ("LTR-303", "U2"), ("ST25DV", "U3"), ("EPD", "J2"), ("boost", "L2"),
+    ("AW9523B", "U17"), ("LTR-303", "U18"), ("ST25DV", "U19"), ("EPD", "J6"), ("boost", "L3"),
 ]
 
 
@@ -688,6 +688,12 @@ def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, o
                      net=gnd, value="M2.5")
         add_rule_area(board, circle_poly(x, y, cfg["hole_keepout_d"] / 2), f"HOLE_H{i + 1}",
                       tracks=False, vias=True, pours=True, pads=True, footprints=True)
+    if "keys" in cfg:  # MX switch bodies sit on the top side: no top parts under them
+        half = cfg["keys"].get("body", 14.0) / 2
+        for name, (x, y) in key_labels.items():
+            add_rule_area(board, rect_poly(x - half, y - half, x + half, y + half),
+                          f"KEYBODY_{name}", tracks=True, vias=True, pours=True, pads=True,
+                          footprints=False, layers=["F.Cu"])
     for k in cfg.get("keepouts", []):
         poly = rect_poly(*k["rect"]) if "rect" in k else k["poly"]
         add_rule_area(board, poly, k.get("name", "KEEPOUT"), tracks=k.get("tracks", False),
@@ -797,7 +803,8 @@ def autoroute(board_name: str, cfg_all: dict, variant: str, passes: int = 100,
 def build_plate(cfg_all: dict, variant: str) -> Path:
     """FR4 key plate (no copper): MX cut-outs at the deck key grid, the e-ink pocket, screw
     clearance holes and light-pipe holes. Written as its own 2-layer KiCad board + DXF."""
-    deck, pc = cfg_all["deck"], cfg_all["plate"]
+    main, pc = cfg_all["main"], cfg_all["plate"]
+    ox, oy = pc.get("origin", [0.0, 0.0])
     out = KICAD_OUT / "plate"
     out.mkdir(parents=True, exist_ok=True)
     board = pcbnew.BOARD()
@@ -808,22 +815,24 @@ def build_plate(cfg_all: dict, variant: str) -> Path:
     tb.SetCompany("Open Lounge Phone - CERN-OHL-S-2.0")
     w, h = pc["size"]
     rounded_outline(board, w, h, pc["corner_radius"])
-    net = nl.read(BUILD / f"deck-{variant}" / "deck.net")
+    net = nl.read(BUILD / f"main-{variant}" / "main.net")
     names = [re.fullmatch(r"key (\w+)", c.fields.get("Note", "")).group(1)
              for c in net.comps.values() if c.fields.get("SpecKey") == "HOTSWAP"]
     half = pc["cutout"] / 2
-    for x, y in key_positions(deck["keys"], names).values():
+    for x, y in key_positions(main["keys"], names).values():
+        x, y = x - ox, y - oy
         for a_, b_ in zip([(x - half, y - half), (x + half, y - half), (x + half, y + half),
                            (x - half, y + half)],
                           [(x + half, y - half), (x + half, y + half), (x - half, y + half),
                            (x - half, y - half)]):
             add_shape(board, pcbnew.Edge_Cuts, "seg", [a_, b_])
-    x0, y0, x1, y1 = deck["panel"]
+    x0, y0, x1, y1 = main["panel"]
+    x0, y0, x1, y1 = x0 - ox, y0 - oy, x1 - ox, y1 - oy
     c = pc["pocket_clearance"]
     for a_, b_ in zip([(x0 - c, y0 - c), (x1 + c, y0 - c), (x1 + c, y1 + c), (x0 - c, y1 + c)],
                       [(x1 + c, y0 - c), (x1 + c, y1 + c), (x0 - c, y1 + c), (x0 - c, y0 - c)]):
         add_shape(board, pcbnew.Edge_Cuts, "seg", [a_, b_])
-    for x, y in deck["holes"][:4]:
+    for x, y in pc["holes"]:
         add_shape(board, pcbnew.Edge_Cuts, "circle", [(x, y), pc["holes_d"] / 2])
     for x, y, d in pc.get("light_holes", []):
         add_shape(board, pcbnew.Edge_Cuts, "circle", [(x, y), d / 2])
@@ -1273,7 +1282,7 @@ def nl_sort(ref: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("board", choices=["main", "deck", "plate"])
+    ap.add_argument("board", choices=["main", "plate"])
     ap.add_argument("--variant", default="kids")
     ap.add_argument("--passes", type=int, default=100)
     ap.add_argument("--threads", type=int, default=1)
