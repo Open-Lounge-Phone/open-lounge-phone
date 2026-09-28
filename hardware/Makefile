@@ -1,7 +1,7 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build lcsc footprints clean layout tools freerouting enclosure
+.PHONY: all venv build lcsc footprints clean layout tools freerouting enclosure review
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
@@ -58,3 +58,7 @@ layout: tools
 # Enclosure (code CAD in enclosure/, see enclosure/ENCLOSURE.md)
 enclosure:
 	$(MAKE) -C enclosure enclosure
+
+# Review pack (build/review/): schematic sheets, per-layer board PDF, 3D renders, DRC summary
+review: venv
+	layout/review_pack.sh

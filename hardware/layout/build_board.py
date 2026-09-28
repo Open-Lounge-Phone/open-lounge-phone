@@ -1,6 +1,6 @@
 """Build a KiCad board from the SKiDL netlist + boards.yaml + placement.yaml (KiCad Python).
 
-    python build_board.py main|deck [--variant kids] [--stage place|route|all]
+    python build_board.py main|plate [--variant kids] [--stage place|route|all]
 
 Stages (all by default):
   place  project files, outline, holes, keep-outs, footprints (all variants' footprints placed,
@@ -255,7 +255,8 @@ def add_zone(board, net, layer, poly, priority, name=""):
     z.SetLocalClearance(MM(0.25))
     z.SetThermalReliefGap(MM(0.3))
     z.SetThermalReliefSpokeWidth(MM(0.35))
-    z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
+    # SMD pads solid (short, low-inductance returns); through-hole pads thermal (hand soldering)
+    z.SetPadConnection(pcbnew.ZONE_CONNECTION_THT_THERMAL)
     z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
     if name:
         z.SetZoneName(name)
@@ -385,7 +386,7 @@ def add_board_fp(board, fpid, ref, x, y, rot=0.0, side="top", net=None, value=No
 
 
 # ---------------------------------------------------------------------------------------------
-# key grid (deck)
+# key grid
 
 
 def key_positions(cfg_keys: dict, names: list[str]) -> dict:
@@ -423,7 +424,7 @@ def key_placements(cfg: dict, net: nl.Netlist) -> dict:
     pos = key_positions(keys, names)
     width = cfg["size"][0]
     if max(p[0] for p in pos.values()) + keys["pitch"] / 2 > width:
-        raise SystemExit(f"{len(names)} keys do not fit the {width} mm deck (config n_keys)")
+        raise SystemExit(f"{len(names)} keys do not fit the {width} mm board (config n_keys)")
     out = {}
     key_labels.clear()
     key_labels.update(pos)
@@ -801,7 +802,7 @@ def autoroute(board_name: str, cfg_all: dict, variant: str, passes: int = 100,
 
 
 def build_plate(cfg_all: dict, variant: str) -> Path:
-    """FR4 key plate (no copper): MX cut-outs at the deck key grid, the e-ink pocket, screw
+    """FR4 key plate (no copper): MX cut-outs at the board key grid, the e-ink pocket, screw
     clearance holes and light-pipe holes. Written as its own 2-layer KiCad board + DXF."""
     main, pc = cfg_all["main"], cfg_all["plate"]
     ox, oy = pc.get("origin", [0.0, 0.0])
@@ -1275,6 +1276,54 @@ def grid_route(board_name: str, cfg_all: dict, variant: str) -> list:
     return unrouted
 
 
+def strip_finish(board) -> tuple[int, int]:
+    """Undo finish(): remove the L1/L3/L4 pours (the L2 plane stays) and the GND stitching
+    vias (GND vias that are neither in a GND pad nor at the end of a GND track), so the
+    router can work on a routed board again."""
+    zones = [z for z in board.Zones() if not z.GetIsRuleArea() and z.GetLayer() != pcbnew.In1_Cu]
+    for z in zones:
+        board.Remove(z)
+    gnd = board.FindNet("GND").GetNetCode()
+    ends = set()
+    for t in board.GetTracks():
+        if t.GetNetCode() == gnd and t.Type() != pcbnew.PCB_VIA_T:
+            ends.add((t.GetStart().x, t.GetStart().y))
+            ends.add((t.GetEnd().x, t.GetEnd().y))
+    pads = [p for fp in board.GetFootprints() for p in fp.Pads() if p.GetNetCode() == gnd]
+    vias = []
+    for t in board.GetTracks():
+        if t.Type() != pcbnew.PCB_VIA_T or t.GetNetCode() != gnd:
+            continue
+        pos = t.GetPosition()
+        if (pos.x, pos.y) in ends or any(p.HitTest(pos) for p in pads):
+            continue
+        vias.append(t)
+    for v in vias:
+        board.Remove(v)
+    return len(zones), len(vias)
+
+
+def reroute(board_name: str, cfg_all: dict, variant: str) -> list:
+    """Incremental pass on a routed board after `--stage strip` (run as its own process:
+    pcbnew item proxies go stale after removals): route what is missing (existing router
+    copper stays but may be ripped up), then finish() again."""
+    import time
+
+    import router as rt
+
+    board, pcb, _ = load(board_name, cfg_all, variant)
+    t0 = time.time()
+    r = rt.Router(board, ORIGIN, cfg_all[board_name]["size"], cfg_all["netclasses"])
+    unrouted = r.route_all(skip_nets=("GND",))
+    print(f"reroute: {time.time() - t0:.0f} s, unrouted: {unrouted or 'none'}", flush=True)
+    for line in r.fail_log[-40:]:
+        print("  fail:", line)
+    pcbnew.SaveBoard(str(pcb), board)
+    (KICAD_OUT / board_name / "unrouted.txt").write_text(
+        "".join(f"{n}\t{k}\n" for n, k in unrouted))
+    return unrouted
+
+
 def nl_sort(ref: str):
     m = re.match(r"([A-Z]+)(\d+)", ref)
     return (m.group(1), int(m.group(2))) if m else (ref, 0)
@@ -1287,7 +1336,8 @@ def main():
     ap.add_argument("--passes", type=int, default=100)
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--router", default="grid", choices=["grid", "freerouting"])
-    ap.add_argument("--stage", default="place", choices=["place", "route", "all", "sync"])
+    ap.add_argument("--stage", default="place",
+                    choices=["place", "route", "all", "sync", "strip", "reroute", "finish"])
     ap.add_argument("--stage-unplaced", action="store_true",
                     help="park unplaced parts beside the board instead of failing (debug)")
     a = ap.parse_args()
@@ -1303,6 +1353,17 @@ def main():
     if a.stage in ("place", "all"):
         pcb = build_place(a.board, a.variant, cfg, placement, out, a.stage_unplaced)
         print(f"wrote {pcb}")
+    if a.stage == "strip":
+        board, pcb, _ = load(a.board, cfg, a.variant)
+        print("stripped %d pours, %d stitching vias" % strip_finish(board))
+        pcbnew.SaveBoard(str(pcb), board)
+        return
+    if a.stage == "reroute":   # then run --stage finish in a new process
+        reroute(a.board, cfg, a.variant)
+        return
+    if a.stage == "finish":
+        finish(a.board, cfg, a.variant)
+        return
     if a.stage in ("route", "all"):
         if a.router == "freerouting":
             autoroute(a.board, cfg, a.variant, passes=a.passes, threads=a.threads)

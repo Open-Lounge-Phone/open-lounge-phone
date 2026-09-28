@@ -69,31 +69,34 @@ PCBA, hybrid and hand assembly.
 
 ## 2. Boards
 
+**Single board (owner decision 2026-09-27):** two stacked boards were carried over from the old
+long base; one board is cheaper one-off (one fab/assembly setup, no FFC/connectors/standoffs).
+The former deck board (keys, LEDs, e-ink, NFC, ALS) is merged into the main board.
+
 | Board | Size | Layers | Parts on | Notes |
 |---|---|---|---|---|
-| main | 180 × 88 mm, R8.5 corners, 9 × M2.5 holes | 4 | top only (test pads bottom) | under the key deck; rear edge: handset USB-C (x 24) and power USB-C (x 159); right edge: VOL−/VOL+/MUTE |
-| deck | 117 × 84 mm | 4 | both | 12 MX hot-swap sockets + 13 SK6812MINI-E on the bottom, e-ink pocket in the key plate above |
-| plate | 117 × 84 mm, 1.6 mm FR4 | 2 (no copper) | none | 12 × 14.0 mm switch cut-outs, e-ink window, light holes for ALS/status/privacy LEDs |
+| main | 180 × 88 mm, R8.5 corners, 9 × M2.5 holes | 4 | both | 12 MX hot-swap sockets + 13 SK6812MINI-E on the bottom (keys on top); rear edge: handset USB-C (x 24), power USB-C (x 159); right edge: VOL−/VOL+/MUTE (bottom side) |
+| plate | 117 × 84 mm, 1.6 mm FR4 | 2 (no copper) | none | 12 × 14.0 mm switch cut-outs, e-ink window, light holes; screws to the holes at (34.7, 5) (145.3, 5) (34.7, 82.6) (145.3, 82.6). The prototype box's lid is the plate instead (enclosure/PROTO_BOX.md). |
 
-Base A (owner decision 2026-09-27): ≈186 × 94 × 33 mm. The main-board geometry is taken from
-`enclosure/params.yaml → main_intent` / ENCLOSURE.md §8 (board coordinates, x right, y down
-from the rear edge): outline 180 × 88 R8.5; deck stand-off holes (34.7, 5.0) (145.3, 5.0)
-(34.7, 82.6) (145.3, 82.6) (145.1, 29.4) under the five deck holes (7 mm hex standoffs); shell
-bolt holes (5.0, 29.8) (26.0, 29.8) (154.0, 29.8) (176.0, 29.8); hall U10 at (171.0, 18.8)
-under the right plunger; handset USB-C J7 at x 24 and power USB-C J1 at x 159 on the rear
-edge; LD2410C socket J5 at (162.0, 66.4); mic MK1 at (155.0, 58.8); RESET/BOOT at (157, 46.8)
-/ (165, 46.8); VOL−/VOL+/MUTE on the right edge at y 70.8 / 62.8 / 53.8. The deck sits over
-x 31.5-148.5, y 1.8-85.8, joined by a 24-pin 0.5 mm FFC (Hirose FH12: J6 on the main board at
-(26, 44), J1 on the deck's left edge, board position (36.1, 43.8), so the cable is ≈ 15 mm).
-Parts under the deck are ≤ 4.7 mm (tallest there: the WROOM-1U, 3.2 mm). Tall parts
-(USB-C, supercap, radar socket, battery/speaker connectors, side switches) are in the end
-regions.
+Geometry (board coordinates, x right, y down from the rear edge): outline 180 × 88 R8.5;
+mounting holes (34.7, 5.0) (145.3, 5.0) (34.7, 82.6) (145.3, 82.6) (145.1, 29.4) (supports /
+plate screws) and the shell bolts (5.0, 29.8) (26.0, 29.8) (154.0, 29.8) (176.0, 29.8); keys at
+x 42.4 + 19.05 i, rows y 14.8 (1 2 3 4 5 MENU) and 72.8 (6 7 8 9 0 BACK), the 13.5 mm switch
+bodies are top-side part keep-outs; e-ink panel outline (at plate level, parts ≤ 2.8 mm may sit
+under it) x 41-120, y 25.45-62.15; hall U10 at (171.0, 18.8) under the right plunger; RESET/BOOT
+at (157, 46.8) / (165, 46.8); mic MK1 at (155, 58.8); status LED (128, 50), privacy LED
+(141.5, 53.4), ALS (141.5, 57.8) under the plate's light holes.
+
+Height rules from the prototype box (enclosure/proto_box.py checks them against the placed
+board): top parts ≤ 3.0 mm (≤ 3.8 mm where the lid gets a pocket: USB-C, WROOM-1U, Qwiic);
+bottom parts ≤ 6 mm (JST-PH J2/J4, supercap C7, side controls SW3-SW5 are on the bottom);
+nothing taller than 1 mm on the bottom under the speaker (x 59-102, y 32.5-55).
 
 ## 3. Stackup and impedance
 
 Generic 1.6 mm 4-layer, 7628 prepreg (JLC04161H-7628 / PCBWay standard), ENIG:
 
-| Layer | Use (main) | Use (deck) |
+| Layer | Use |
 |---|---|---|
 | L1 F.Cu 35 µm | parts, signals, GND fill | e-ink boost, sensors, GND fill, signals |
 | prepreg 0.21 mm εr 4.4 | | |
@@ -139,54 +142,35 @@ rules for auto-named nets) and written into the board and the `.kicad_pro`.
 
 ## 5. Placement rationale
 
-**Main board** (top view, rear edge at y = 0):
+Top view, rear edge at y = 0:
 
-- **Left end (x < 31.5):** handset USB-C J7 (source, x 24) with the SRV05-4 D7 at its pins;
-  the SY6280 VBUS switch and B5819W diode-OR just inside the deck edge; battery JST-PH J2
-  (B-option) plugging from the left; speaker JST-PH J4 and the NS4150B amp under the speaker
-  box (the box floor is at z ≥ 15, so parts may sit under it); deck FFC J6; Lounge supercap C7
-  at the front-left (see gaps: it must stay under the speaker box floor).
-- **Under the deck, left/centre:** ESP32-S3-WROOM-1U (U1) near the handset port, so the
-  native-USB pair to GPIO19/20 is ≈ 50 mm, on L1 only; ATECC608B (DNP) beside it; the codecs
-  ES7210 (U7) and ES8311 (U6) with the LP5907 3.0 V (U4) in the middle, ≥ 40 mm from the
-  class-D amp and ≥ 25 mm from the buck, over the unbroken L2 plane and the L3 3V3 pour;
-  LIS2DH12 right of them.
-- **Under the deck, rear right:** the power path: BQ24074 (U2), TLV62569 buck (U3 + L1),
-  MAX17048 (B-option), over the L3 VSYS pour, next to the power inlet.
-- **Right end (x > 148.5):** power USB-C J1 (sink, x 159) with USBLC6 ESD, CC resistors, PTC
-  and TVS right behind it; hall U10 under the plunger (Ø12 kept to ≤ 3 mm parts); CH340C
-  (U16) with its auto-reset transistors between the bolt holes; RESET/BOOT pinholes, mic
-  MK1, radar socket J5 at the enclosure positions; VOL−/VOL+ right-angle tacts and the
-  right-angle MUTE slide on the right edge with the SRV05-4 D5 beside them.
-- **Bottom:** 2.54 mm pogo test-pad grid (USB pads stay on top, no stubs); signature logo and
-  board text.
-- M2.5 holes near every connector/switch cluster: J7 is 11 mm from the standoff at (34.7, 5),
-  J1 14 mm from (145.3, 5), the side switches 24 mm from the bolt at (176, 29.8). These
-  positions are the enclosure's, slightly beyond GUIDELINES' 10 mm; the USB-C shells are
-  through-hole and the side switches push against the board edge, not away from it.
-
-**Deck board** (top view, rear row at y = 13):
-
-- Keys `1 2 3 4 5 MENU` (rear) and `6 7 8 9 0 BACK` (front) on a 19.05 mm grid; the e-ink
-  window (79.0 × 36.7) centred over the five digit columns between the rows, framed by the NFC
-  coil (6 turns, 70 × 36.8 mm, ≈ 4.6 µH estimated) on a keep-out with a pour slit so the GND
-  fills do not form a shorted turn.
-- Bottom side: hot-swap sockets, SK6812MINI-E LEDs (reverse mount, 5.08 mm above each switch
-  centre, lens through the board cut-out), their 100 nF caps, key pull-ups, AW9523B, deck FFC
-  J1 at the left edge (short cable to the main board's J6), e-ink ZIF J2 at the right of the
-  panel with its FPC through the slot, ST25DV NFC tag.
-- Top side (under the plate, < 2.1 mm): e-ink boost (L2/Q3/diodes), LTR-303 ALS and privacy LED
-  behind light holes in the plate, DNP Qwiic JST-SH J3 on the I2C bus (SSD1306 0x3C /
-  HT16K33 0x70 reserved in `pin_table.yaml`).
-- The status LED (13th SK6812) sits at the top-right under a 3.2 mm light hole in the plate.
-- Legends 1-9, 0, MENU, BACK are on the top silk next to each socket (hidden under the plate,
-  for assembly); the keycaps carry the real legends.
+- **Left end (x < 35):** handset USB-C J7 (x 24) with the SRV05-4 D7 at its pins, the SY6280
+  VBUS switch U15 and the B5819W diode-OR D8/D9; battery JST-PH J2 on the bottom; the NFC coil
+  L2 (26 × 42 mm, 9 turns) in the front-left region with a pour slit to the left edge and no
+  copper inside on any layer; its ST25DV04K U19 beside the coil terminals; e-ink FPC J6 at the
+  panel's left end (the panel tail folds down).
+- **Between the key rows (y 22-65):** under the e-ink panel the codecs ES7210 (U7) and ES8311
+  (U6), LP5907 3V0 (U4), NS4150B (U9), AW9523B (U17), the LED-data buffer U5, LIS2DH12 (U12),
+  ATECC608B (U13, DNP) and the e-ink boost (L3, Q9, D23-D25); right of the panel the
+  ESP32-S3-WROOM-1U (U1; U.FL cable to the antenna on the shell wall), status/privacy LEDs,
+  ALS and the Qwiic port. On the bottom: speaker JST J4 and the Lounge supercap C7, the pogo
+  test-pad grid, the speaker keep-out (proto box speaker under the board centre).
+- **Right end (x > 147):** power USB-C J1 (x 159) with USBLC6 ESD, CC resistors, PTC and TVS
+  behind it; BQ24074 (U2), TLV62569 buck (U3 + L1) over the L3 VSYS pour; MAX17048 (U14,
+  B-option); hall U10 under the plunger (IR option U11 beside it); CH340C (U16); RESET/BOOT;
+  mic MK1; radar socket J5; VOL−/VOL+/MUTE on the bottom at the right edge with the SRV05-4 D5.
+- **Keys:** hot-swap sockets, SK6812MINI-E (reverse mount, 5.08 mm above each switch centre,
+  lens through the board cut-out), their 100 nF caps and key pull-ups on the bottom; legends
+  on the top silk (under the plate).
 
 ## 6. Routing
 
 - **Hand routes** (`placement.yaml` → `routes`): the handset USB pair HS_USB_DP/DN from the
-  SRV05-4 at J7 to ESP32 GPIO19/20, on L1 only, no vias, length-matched (≈ 51.7 mm each,
-  a small bump on D−), over the solid L2 plane.
+  SRV05-4 at J7 to ESP32 GPIO19/20, on L1 only, no vias, over the solid L2 plane: out of D7,
+  up between J7 and hole H1, along the rear edge above the key bodies, down between key
+  columns 3 and 4, along y 23 to the module's left pads; 161.3 mm each (a bump on D−
+  matches them). Full-speed USB (12 Mb/s) does not care about the length; the match keeps
+  the pair coupled.
 - **Escape stubs** leave every fine-pitch (< 0.8 mm) pad in its own direction at pad width;
   **GND fan-out** puts a GND via at every SMD GND pad (in-pad for exposed pads).
 - **Grid router** (`layout/router.py`, deterministic): 0.1 mm grid, three routing layers
@@ -218,7 +202,7 @@ One layout per board; variants differ only by DNP (fields synced from each varia
 The NFC coil L1 is PCB copper (always "DNP" for the assembler) and its tuning cap C23 is
 DNP until EVT tuning:
 
-| Variant | Display | Power | Radar | DNP on the deck | DNP on the main board |
+| Variant | Display | Power | Radar | DNP (UI parts) | DNP (other) |
 |---|---|---|---|---|---|
 | `kids` (Kids Lite) | none (voice menu) | USB | no | e-ink ZIF J2 + boost, Qwiic J3 | radar J5 + gate Q2/Q3, supercap C7 + D4/R13, battery J2, fuel gauge U14, ATECC608B U13, IR hook option U11 |
 | `kids-eink` (Kids Standard) | e-ink 2.9" | USB | no | Qwiic J3 | as kids |
@@ -236,10 +220,13 @@ From `make build` (`schematic/cost.py`, `cost_model.yaml`; LCSC/JLC price ladder
 
 | Variant | 1k units | 10k units | one-off, JLC PCBA (5 PCBs, 2 assembled) | one-off, OSH Park bare boards + hand assembly |
 |---|---|---|---|---|
-| kids | 34.26 | 32.21 | 215.50 | 485.72 |
-| kids-eink | 39.92 | 37.77 | 228.27 | 494.23 |
-| lounge | **40.96 (WARN > $40)** | 38.79 | 227.75 | 491.74 |
-| kids-batt | 38.30 | 36.23 | 226.96 | 494.18 |
+| kids | 33.59 | 31.84 | 192.02 | 401.52 |
+| kids-eink | 38.93 | 37.07 | 205.89 | 409.66 |
+| lounge | 39.96 | 38.09 | 205.37 | 407.17 |
+| kids-batt | 37.63 | 35.86 | 203.48 | 409.98 |
+
+(Single board since 2026-09-27: one PCB/PCBA setup instead of two and no FFC; the one-off
+builds are ≈ $23 and ≈ $85 cheaper per phone than with the stacked pair.)
 
 Top drivers: the off-the-shelf USB-C UAC handset (≈ $7 at scale, a guess until a vendor quotes;
 ≈ $30 retail), keycaps, e-ink panel ($4.50), ESP32-S3-WROOM-1-N16R8 ($3.44), radar ($3.00),
@@ -247,7 +234,7 @@ Top drivers: the off-the-shelf USB-C UAC handset (≈ $7 at scale, a guess until
 earlier passive custom handset was ≈ $1.52. Without the handset the at-scale totals are ≈ $7
 lower (kids ≈ $27).
 
-JLC extended-library parts (≈ $3 setup each on small orders): main 25-27, deck 6-9 per variant
+JLC extended-library parts (≈ $3 setup each on small orders): 29-35 per variant (one board)
 (listed in `build/<variant>/cost.txt`). KISS basic-part swaps already applied: ferrite beads to
 BLM18 (basic), 220 pF X7R to basic. Candidate flagged, not applied (it changes a value):
 R38 4.3 kΩ → 4.7 kΩ (AEC-reference divider, tuned in EVT anyway). Not a candidate: R7 1.1 kΩ

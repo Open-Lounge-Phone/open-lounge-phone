@@ -32,6 +32,7 @@ MARGIN = 0.02
 SMALL_W = 0.15            # neck-down width near own pads
 NEAR_PAD = 1.0            # mm from own pads where the neck-down is allowed
 EDGE = 0.3
+AUDIO_SPEAKER = 0.5      # rule file: "audio to speaker 0.5 mm"
 HOLE_CLR = 0.25
 HOLE_TO_HOLE = 0.5
 VIA_D, VIA_DRILL = 0.6, 0.3
@@ -135,10 +136,29 @@ class Router:
         return it
 
     def _fp_copper_graphics(self):
-        """Copper drawn in footprints (NFC coil turns, net-tie bridges) - no net, obstacle."""
+        """Copper drawn in footprints (NFC coil turns, net-tie bridges) - no net, obstacle;
+        footprint Edge.Cuts (cut-outs such as the ITR8307 window) - edge clearance."""
         for fp in self.b.GetFootprints():
             for g in fp.GraphicalItems():
-                if g.GetClass() != "PCB_SHAPE" or g.GetLayer() not in LAYERS:
+                if g.GetClass() != "PCB_SHAPE":
+                    continue
+                if g.GetLayer() == pcbnew.Edge_Cuts and g.GetShape() == pcbnew.SHAPE_T_SEGMENT:
+                    a, b = self.mm(g.GetStart()), self.mm(g.GetEnd())
+                    self.items.append(dict(kind="graphic", layers=(0, 1, 2),
+                                           geom=("seg", a[0], a[1], b[0], b[1], 0.0),
+                                           net=-2, clr=EDGE + MARGIN, drill=0.0, routed=False,
+                                           obj=None))
+                    continue
+                if g.GetLayer() not in LAYERS:
+                    continue
+                if g.GetShape() == pcbnew.SHAPE_T_POLY:   # net-tie pad polygons: bbox
+                    bb = g.GetBoundingBox()
+                    x0, y0 = self.mm(bb.GetOrigin())
+                    x1, y1 = self.mm(bb.GetEnd())
+                    self.items.append(dict(kind="graphic", layers=(LAYERS.index(g.GetLayer()),),
+                                           geom=("rect", x0, y0, x1, y1), net=-2,
+                                           clr=HOLE_CLR + MARGIN, drill=0.0, routed=False,
+                                           obj=None))
                     continue
                 if g.GetShape() != pcbnew.SHAPE_T_SEGMENT:
                     continue
@@ -270,6 +290,13 @@ class Router:
             out = e
         return out
 
+    def pair_clr(self, cls, it, c):
+        """Class-pair rules from the rule file: analog audio vs speaker outputs 0.5 mm."""
+        other = self.netcls.get(it["net"], "Default") if it["net"] > 0 else None
+        if {cls, other} == {"Audio", "Speaker"}:
+            return max(c, AUDIO_SPEAKER)
+        return c
+
     def masks(self, net, width, locked=()):
         """(passable, full, via_bad, routed_cost_cells). Obstacles from nets that the router
         itself laid (and that are not in `locked`) are kept apart so a failed connection can
@@ -292,7 +319,7 @@ class Router:
                 continue
             soft = it["routed"] and it["net"] not in locked
             F, S, V = (rfull, rsmall, rvia) if soft else (full, small, None)
-            c = max(clr, it["clr"])
+            c = self.pair_clr(cls, it, max(clr, it["clr"]))
             g = it["geom"]
             for L in it["layers"]:
                 self.stamp(F[L], g, c + width / 2 + MARGIN)
@@ -659,7 +686,7 @@ class Router:
                 continue
             if it["net"] in hit:
                 continue
-            c_ = max(clr, it["clr"])
+            c_ = self.pair_clr(self.netcls.get(code, "Default"), it, max(clr, it["clr"]))
             for L in it["layers"]:
                 if L not in cells:
                     continue

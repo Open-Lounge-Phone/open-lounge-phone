@@ -1,11 +1,11 @@
 """Layout checks as code (KiCad Python). Fails (exit 1) on any ERROR.
 
-    python checks.py main|deck [--variant kids] [--out DIR]
+    python checks.py main [--variant kids] [--out DIR]
 
 - KiCad DRC (kicad-cli, project rules + fab-common.kicad_dru): 0 errors, 0 unconnected items
   (courtyard overlaps, clearances, edge, holes, keep-outs are all DRC errors in the project).
 - Antenna keep-out: nothing but the module itself inside the ESP32 keep-out, on any layer.
-- NFC loop: no zone fill inside the loop and nothing crossing the pour slit (deck).
+- NFC loop: no zone fill inside the loop and nothing crossing the pour slit (front-left end region).
 - USB D+/D-: no vias, length mismatch <= 0.15 mm, 0.27 mm width.
 - Decoupling: each IC supply pin has a capacitor on the same net within 2.5 mm (pad to pad),
   and that capacitor's GND pad has a GND via within 1.0 mm.
@@ -215,7 +215,7 @@ def check_power_widths(board, results):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("board", choices=["main", "deck"])
+    ap.add_argument("board", choices=["main"])
     ap.add_argument("--variant", default="kids")
     ap.add_argument("--out")
     a = ap.parse_args()

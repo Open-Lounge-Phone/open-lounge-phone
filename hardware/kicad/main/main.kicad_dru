@@ -38,6 +38,11 @@
 # 3V3/3V0). checks.py enforces them on every track except the <= 1 mm neck-down stubs that
 # leave fine-pitch (0.4-0.65 mm) IC pins at the pad's own width.
 
+# through-hole GND pads keep thermal reliefs for hand soldering; one resolved spoke is enough
+# where neighbouring copper blocks the others (USB-C shell tabs, supercap)
+(rule "thermal: min 1 spoke"
+	(constraint min_resolved_spokes 1))
+
 # analog audio vs the class-D speaker outputs: keep 0.5 mm (GUIDELINES §3 isolation)
 (rule "audio to speaker 0.5 mm"
 	(condition "A.NetClass == 'Audio' && B.NetClass == 'Speaker'")

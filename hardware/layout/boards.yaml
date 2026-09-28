@@ -27,7 +27,7 @@ netclasses:
   Audio: {track: 0.2, clearance: 0.2, via: [0.6, 0.3]}
   Power3V: {track: 0.4, clearance: 0.2, via: [0.6, 0.3]}
   Power: {track: 0.6, clearance: 0.25, via: [0.6, 0.3]}
-  Speaker: {track: 0.5, clearance: 0.25, via: [0.6, 0.3]}
+  Speaker: {track: 0.5, clearance: 0.25, via: [0.6, 0.3]}   # + 0.5 to Audio (rule file, router.py)
   GND: {track: 0.4, clearance: 0.15, via: [0.6, 0.3]}
 
 netclass_rules:
@@ -81,7 +81,7 @@ main:
     - [176.0, 29.8]
   hole_keepout_d: 6.0
   place_gap: 0.25        # auto-placed passives: courtyard gap to each other (routing channels)
-  fine_pitch_gap: 0.8    # ... and to fine-pitch ICs (QFN pins need escape room)
+  fine_pitch_gap: 1.0    # ... and to fine-pitch ICs (QFN pins need escape room)
   # 12 keys in two rows of six (owner decision 2026-09-27): rear 1 2 3 4 5 MENU, front
   # 6 7 8 9 0 BACK; the old deck origin (31.5, 1.8) is kept, so the key grid is unchanged.
   keys:

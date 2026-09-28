@@ -1,6 +1,6 @@
 """Fab + review outputs per board and variant (KiCad Python + kicad-cli).
 
-    python export.py main|deck|plate [--variant kids]
+    python export.py main|plate [--variant kids]
 
 Writes build/<board>-<variant>/layout/ (plate: build/plate/):
   gerbers/  Gerber X2 + Excellon (PTH/NPTH) + job file, and <board>-<variant>-gerbers.zip
@@ -225,7 +225,7 @@ def export_plate() -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("board", choices=["main", "deck", "plate"])
+    ap.add_argument("board", choices=["main", "plate"])
     ap.add_argument("--variant", default="kids")
     a = ap.parse_args()
     if a.board == "plate":
