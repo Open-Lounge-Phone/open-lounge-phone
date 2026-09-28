@@ -18,9 +18,9 @@
  "17": "I2C_SDA",
  "18": "IRQ",
  "19": "PRIV_LED_K",
- "20": "FFC_SPARE",
+ "20": "MUTE_SENSE",
  "21": "GND",
- "22": "MICBIAS_IN",
- "23": "MICBIAS_OUT",
+ "22": "VOL_DN",
+ "23": "VOL_UP",
  "24": "GND"
 }

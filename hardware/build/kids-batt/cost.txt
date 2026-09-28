@@ -1,0 +1,42 @@
+Cost roll-up: kids-batt  (prices: lcsc_cache.json; EST = estimate from cost_model.yaml dated 2026-09-27)
+
+== At scale, 1000 phones (USD per phone) ==
+  main parts              13.09
+  deck parts               3.13
+  PCBs main/deck/plate     2.51  EST (1.2/0.95/0.36)
+  assembly                 2.20  EST
+  off-board electronics   17.80  EST (mx_switches_x12, keycaps_kids, speaker_20x40_4ohm, handset_usbc_uac, antenna_fpc_ufl, ffc_cable_24p_60mm, lipo_1200mah)
+  TOTAL                   38.73
+  top 5 cost drivers:
+      7.00  off-board: handset_usbc_uac EST
+      4.13  off-board: keycaps_kids EST
+      3.42  main: U1                           ESP32-S3-WROOM-1U-N16R8    JLC
+      3.00  off-board: mx_switches_x12 EST
+      2.50  off-board: lipo_1200mah EST
+
+== At scale, 10000 phones (USD per phone) ==
+  main parts              12.58
+  deck parts               3.03
+  PCBs main/deck/plate     1.75  EST (0.85/0.66/0.24)
+  assembly                 1.50  EST
+  off-board electronics   17.80  EST (mx_switches_x12, keycaps_kids, speaker_20x40_4ohm, handset_usbc_uac, antenna_fpc_ufl, ffc_cable_24p_60mm, lipo_1200mah)
+  TOTAL                   36.66
+
+== One-off, JLCPCB PCBA reference quote (5 boards each, 2 assembled) ==
+  bare PCBs + shipping    84.00  EST
+  PCBA setup + stencils   98.70  EST
+  extended-part fees      99.00  EST (27 main + 6 deck unique extended parts x $3.0)
+  joints                   3.64  EST
+  parts for 2 phones      53.46
+  off-board (retail)      59.90  EST per phone
+  PER PHONE              229.30
+
+== One-off, bare boards (OSH Park formula, 3 copies) + self-sourced parts + hand assembly, 1 phone ==
+  OSH Park boards        407.06  ($10.0/in^2 4L main 17.9 + deck 15.2 in^2; plate 2L $5.0/in^2)
+  parts, qty 1            29.56  (each BOM line >= $0.10 for cut-tape minimums)
+  off-board (retail)      59.90  EST
+  TOTAL (1 phone)        496.52
+
+== JLCPCB extended-library parts (each ~$3 setup on small orders) ==
+  main (27): 0603WAF1101T5E, 0603WAF4301T5E, BQ24074RGTR, CH340C, DRV5032FADBZR, ES7210, ES8311, ESP32-S3-WROOM-1U-N16R8, FH12-24S-0.5SH(55), GMI6027-2C42DB, JS202011AQN, LIS2DH12TR, LP5907MFX-3.0/NOPB, MAX17048G+T10, NS4150B, S2B-PH-SM4-TB(LF)(SN), S3B-PH-SM4-TB(LF)(SN), SKRTLAE010, SMD1206P150TFT, SMF5.0A, SN74LV1T125DBVR, SRV05-4.TCT, SWPA4020S2R2MT, SY6280AAC, TLV62569DBVR, TYPE-C-31-M-12, USBLC6-2SC6
+  deck (6): AW9523BTQR, CPG151101S11-2, FH12-24S-0.5SH(55), LTR-303ALS-01, SK6812MINI-E, ST25DV04K-IER6S3

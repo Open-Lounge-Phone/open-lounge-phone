@@ -1,30 +1,28 @@
 Refs,Qty,Value,Description,MPN,LCSC,Footprint,Fitted,Verified
 C1 C3,2,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C2 C4 C5 C8 C9 C10 C11 C12 C13 C14 C15 C16 C17 C18 C20,15,100nF 16V X7R,capacitor,CL05B104KO5NNNC,C1525,Capacitor_SMD:C_0402_1005Metric,yes,yes
+C2 C4 C5 C8 C9 C10 C11 C12 C13 C14 C15 C16 C17 C18 C19 C20 C22,17,100nF 50V X7R,capacitor,CC0603KRX7R9BB104,C14663,Capacitor_SMD:C_0603_1608Metric,yes,yes
 C6 C7,2,22uF 25V X5R,capacitor,CL21A226MAQNNNE,C45783,Capacitor_SMD:C_0805_2012Metric,yes,yes
-C19,1,1uF 25V X5R,capacitor,CL05A105KA5NQNC,C52923,Capacitor_SMD:C_0402_1005Metric,yes,yes
-C22 C23 C24 C25 C26 C27 C28 C29,8,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C30 C31,2,4.7uF 25V X5R,capacitor,CL21A475KAQNNNE,C1779,Capacitor_SMD:C_0805_2012Metric,yes,yes
-D1,1,SRV05-4.TCT,"4-line ESD array (REF1=GND, REF2=VCC or float)",SRV05-4.TCT,C13612,Package_TO_SOT_SMD:SOT-23-6,yes,yes
-D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 D12,11,SK6812MINI-E,"RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)",SK6812MINI-E,C5149201,LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount,yes,yes
-D13,1,KT-0603R,Red LED 0603 (privacy indicator),KT-0603R,C2286,LED_SMD:LED_0603_1608Metric,yes,[UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
-D14 D15 D16,3,MBR0530T1G,Schottky 30 V 0.5 A (e-ink boost),MBR0530T1G,C82046,Diode_SMD:D_SOD-123,yes,yes
+C21,1,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,yes,yes
+D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 D12 D13,13,SK6812MINI-E,"RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)",SK6812MINI-E,C5149201,LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount,yes,yes
+D14,1,KT-0603R,Red LED 0603 (privacy indicator),KT-0603R,C2286,LED_SMD:LED_0603_1608Metric,yes,[UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
 J1,1,FH12-24S-0.5SH(55),"24P 0.5 mm FFC/FPC connector, bottom contact, flip lock (main <-> deck FFC)",FH12-24S-0.5SH(55),C202112,Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal,yes,yes
-J2,1,FH12-24S-0.5SH(55),24P 0.5 mm FPC connector for the GDEY029T94 tail (pin names per panel datasheet),FH12-24S-0.5SH(55),C202112,Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal,yes,[UNVERIFIED] panel pin table checked; which pins get caps read from a small reference drawing; FPC contact side vs connector (bottom contact) to confirm with a sample
-L1,1,PCB coil (copper),"13.56 MHz PCB antenna, target ~4.8 uH (ST25DV CTUN 28.5 pF), 3-4 turns",PCB coil (copper),,OpenTinCan:NFC_Coil_Strip_4T,yes,[UNVERIFIED] coil geometry to be designed/simulated (ST eDesignSuite) and tuned in EVT
-L2,1,SWPA4020S470MT,"47 uH 440 mA power inductor 4x4 mm (e-ink boost, GD reference 47 uH/500 mA)",SWPA4020S470MT,C83427,Inductor_SMD:L_Sunlord_SWPA4020S,yes,yes
+L1,1,PCB coil (copper),"13.56 MHz PCB antenna around the strip band: 6 turns 0.40/0.35 mm, 70 x 36.8 mm, ~4.6 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)",PCB coil (copper),,OpenLoungePhone:NFC_Coil_Strip,yes,[UNVERIFIED] inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)
 Q1,1,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_SMD:SOT-23,yes,yes
 Q2,1,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,yes,yes
-Q3,1,SI1308EDL-T1-GE3,"N-MOSFET 30 V 1.5 A (e-ink boost switch, Good Display reference part)",SI1308EDL-T1-GE3,C469327,Package_TO_SOT_SMD:SOT-323_SC-70,yes,yes
-R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14,14,10k,resistor,0402WGF1002TCE,C25744,Resistor_SMD:R_0402_1005Metric,yes,yes
-R15 R16,2,100k,resistor,0402WGF1003TCE,C25741,Resistor_SMD:R_0402_1005Metric,yes,yes
-R17,1,470,resistor,0402WGF4700TCE,C25117,Resistor_SMD:R_0402_1005Metric,yes,yes
-R18,1,1M,resistor,0402WGF1004TCE,C26083,Resistor_SMD:R_0402_1005Metric,yes,yes
-R19,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,yes,yes
-SW1 SW2 SW3 SW4 SW5 SW6 SW7 SW8 SW9 SW10,10,CPG151101S11-2,MX hot-swap socket (switch plugs in; 2 pads),CPG151101S11-2,C49352235,OpenTinCan:Kailh_MX_Hotswap_CPG151101S11,yes,"[UNVERIFIED] C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing"
-SW11 SW12,2,SKRTLAE010,Side-push SMD tactile switch (VOL-/VOL+ on the right end face),SKRTLAE010,C110293,Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010,yes,yes
-SW13,1,JS202011JAQN,"DPDT slide switch, SMD J-lead (MUTE)",JS202011JAQN,C221664,Button_Switch_SMD:SW_DPDT_CK_JS202011JCQN,yes,[UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); JAQN assumed to share the JS202011JCQN land pattern (JCQN had no stock)
+R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13,13,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,yes,yes
+R14 R15,2,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,yes,yes
+R16,1,470,resistor,0603WAF4700T5E,C23179,Resistor_SMD:R_0603_1608Metric,yes,yes
+SW1 SW2 SW3 SW4 SW5 SW6 SW7 SW8 SW9 SW10 SW11 SW12,12,CPG151101S11-2,MX hot-swap socket (switch plugs in; 2 pads),CPG151101S11-2,C49352235,OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11,yes,"[UNVERIFIED] C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing"
 U1,1,AW9523BTQR,"16-bit I2C I/O expander (keys, side controls, LED power enable); I2C 0x58",AW9523BTQR,C148077,Package_DFN_QFN:TQFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm,yes,[UNVERIFIED] pin map checked (datasheet V1.1.1 + V2.4); exposed-pad size of the land pattern not checked against the package drawing
 U2,1,LTR-303ALS-01,Ambient light sensor; I2C 0x29,LTR-303ALS-01,C364577,OptoDevice:Lite-On_LTR-303ALS-01,yes,yes
 U3,1,ST25DV04K-IER6S3,"NFC dynamic tag 4 kbit, I2C 0x53 (user) / 0x57 (system), GPO open-drain",ST25DV04K-IER6S3,C155601,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,yes,yes
-C21,1,22pF 50V C0G,capacitor,0402CG220J500NT,C1555,Capacitor_SMD:C_0402_1005Metric,DNP,yes
+C23,1,22pF 50V C0G,capacitor,CL10C220JB8NNNC,C1653,Capacitor_SMD:C_0603_1608Metric,DNP,yes
+C24 C25 C26 C27 C28 C29 C30 C31,8,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,DNP,yes
+C32 C33,2,4.7uF 25V X5R,capacitor,CL21A475KAQNNNE,C1779,Capacitor_SMD:C_0805_2012Metric,DNP,yes
+D15 D16 D17,3,MBR0530T1G,Schottky 30 V 0.5 A (e-ink boost),MBR0530T1G,C82046,Diode_SMD:D_SOD-123,DNP,yes
+J2,1,FH12-24S-0.5SH(55),24P 0.5 mm FPC connector for the GDEY029T94 tail (pin names per panel datasheet),FH12-24S-0.5SH(55),C202112,Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal,DNP,[UNVERIFIED] panel pin table checked; which pins get caps read from a small reference drawing; FPC contact side vs connector (bottom contact) to confirm with a sample
+J3,1,SM04B-SRSS-TB(LF)(SN),"Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module (SSD1306 0.91"" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default",SM04B-SRSS-TB(LF)(SN),C160404,Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal,DNP,yes
+L2,1,SWPA4020S470MT,"47 uH 440 mA power inductor 4x4 mm (e-ink boost, GD reference 47 uH/500 mA)",SWPA4020S470MT,C83427,Inductor_SMD:L_Sunlord_SWPA4020S,DNP,yes
+Q3,1,SI1308EDL-T1-GE3,"N-MOSFET 30 V 1.5 A (e-ink boost switch, Good Display reference part)",SI1308EDL-T1-GE3,C469327,Package_TO_SOT_SMD:SOT-323_SC-70,DNP,yes
+R17,1,1M,resistor,0603WAF1004T5E,C22935,Resistor_SMD:R_0603_1608Metric,DNP,yes
+R18,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,DNP,yes

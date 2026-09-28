@@ -46,7 +46,7 @@ def one(board: str, variant_name: str) -> int:
 
     circuit = builtins.default_circuit
     ERC()
-    results = checks.run_all(circuit, board)
+    results = checks.run_all(circuit, board, variant)
     (out / "ffc.json").write_text(json.dumps(ffc_map, indent=1) + "\n")
     (out / "i2c.json").write_text(json.dumps(checks.i2c_devices(circuit), indent=1) + "\n")
 
@@ -149,6 +149,13 @@ def main() -> int:
                        + ("OK" if not ffc else "; ".join(m for _, m in ffc)))
         if any(lvl == "ERROR" for lvl, _ in ffc):
             rc = 1
+    try:  # cost roll-up (never fails the build; WARNs are in the text)
+        import cost
+
+        summary.append(cost.main().rstrip("\n"))
+    except Exception as exc:
+        summary.append(f"cost roll-up crashed: {exc!r}")
+        rc = 1
     text = "\n".join(summary) + "\n"
     (BUILD / "summary.txt").write_text(text)
     print(text, end="")

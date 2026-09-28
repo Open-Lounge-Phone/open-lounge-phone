@@ -4,9 +4,13 @@ DESIGN.md §5 lists 3V3 x2, VSYS x2, GND x6, EPD x6, I2C x2, IRQ, LED_DATA, MICB
 MICBIAS_OUT, PRIV_LED_K and "spare x2" - that is 25 signals for a 24-pin cable, so one spare
 is dropped (see SCHEMATIC.md "Deviations").
 
+Since the stacked form factor (owner decision 2026-09-27) VOL-/VOL+/MUTE sit on the MAIN
+board edge: the MUTE switch breaks the mic bias locally on the main board, so the two mic-bias
+pins and the spare now carry MUTE_SENSE, VOL_DN and VOL_UP to the AW9523B on the deck.
+
 Ordering rules used here:
 - the fast edges (EPD_SCK, LED_DATA) each sit between GND pins;
-- the two DC mic-bias lines sit at the far end, fenced by GND, away from LED_DATA/SCK;
+- the slow side-switch lines sit at the far end, fenced by GND;
 - power pins are paired for current (VSYS carries up to ~0.4 A of LED current).
 
 Pin n on the main connector is pin n on the deck connector. Choose the FFC type (same-side vs
@@ -33,9 +37,9 @@ FFC_PINS = {
     17: "I2C_SDA",
     18: "IRQ",
     19: "PRIV_LED_K",
-    20: "FFC_SPARE",
+    20: "MUTE_SENSE",
     21: "GND",
-    22: "MICBIAS_IN",
-    23: "MICBIAS_OUT",
+    22: "VOL_DN",
+    23: "VOL_UP",
     24: "GND",
 }

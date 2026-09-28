@@ -30,12 +30,13 @@ def build(v: Variant) -> dict:
     V3V0 = rail("3V0")  # analog: ES8311/ES7210 AVDD, mic bias source
     VBAT = rail("VBAT")
     n = {name: Net(name) for name in (
-        "BOOT", "EN", "CC1", "CC2", "CC1_SENSE", "CC2_SENSE", "EAR_EN", "HANDSET_DET", "HOOK",
+        "BOOT", "EN", "CC1", "CC2", "CC1_SENSE", "CC2_SENSE", "HS_VBUS_EN", "HS_VBUS_SENSE",
+        "HOOK", "HS_USB_DP", "HS_USB_DN",
         "LD_OUT", "IRQ", "I2C_SDA", "I2C_SCL", "EPD_CS", "EPD_MOSI", "EPD_SCK", "EPD_DC",
         "EPD_RST", "EPD_BUSY", "I2S_MCLK", "I2S_BCLK", "I2S_WS", "USB_DN", "USB_DP",
         "USB_DN_C", "USB_DP_C", "I2S_DOUT", "I2S_DIN", "LD_RX", "LD_TX", "PA_EN", "LED_DATA",
         "U0TXD", "U0RXD", "CHG_CE", "LD_PWR_EN", "CHG_STAT", "PGOOD", "LED_DATA_BUF",
-        "MICBIAS_IN", "MICBIAS_OUT", "PRIV_LED_K",
+        "MICBIAS_IN", "MICBIAS_OUT", "PRIV_LED_K", "VOL_DN", "VOL_UP", "MUTE_SENSE",
     )}
 
     power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT)
@@ -43,6 +44,9 @@ def build(v: Variant) -> dict:
     audio(n, GND, V3V3, V3V0, VSYS)
     sensors(v, n, GND, V3V3, VBAT)
     radar(v, n, GND, VBUS)
+    handset_port(n, GND, VBUS, VSYS, V3V3)
+    usb_uart(n, GND, V3V3)
+    side_controls(n, GND, V3V3)
     ffc_map = ffc(n, GND, V3V3, VSYS)
     test_points(n, GND, VBUS, VSYS, V3V3, V3V0)
     return ffc_map
@@ -167,11 +171,12 @@ def power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT):
 # ---------------------------------------------------------------------------------------------
 PIN_TABLE = {
     # GPIO -> net (must match pin_table.yaml; checks.py enforces it)
-    "IO0": "BOOT", "IO1": "CC1_SENSE", "IO2": "CC2_SENSE", "IO3": "EAR_EN", "IO4": "HANDSET_DET",
+    "IO0": "BOOT", "IO1": "CC1_SENSE", "IO2": "CC2_SENSE", "IO3": "HS_VBUS_EN",
+    "IO4": "HS_VBUS_SENSE",
     "IO5": "HOOK", "IO6": "LD_OUT", "IO7": "IRQ", "IO8": "I2C_SDA", "IO9": "I2C_SCL",
     "IO10": "EPD_CS", "IO11": "EPD_MOSI", "IO12": "EPD_SCK", "IO13": "EPD_DC", "IO14": "EPD_RST",
     "IO15": "EPD_BUSY", "IO16": "I2S_MCLK", "IO17": "I2S_BCLK", "IO18": "I2S_WS",
-    "IO19": "USB_DN", "IO20": "USB_DP", "IO21": "I2S_DOUT", "IO38": "I2S_DIN", "IO39": "LD_RX",
+    "IO19": "HS_USB_DN", "IO20": "HS_USB_DP", "IO21": "I2S_DOUT", "IO38": "I2S_DIN", "IO39": "LD_RX",
     "IO40": "LD_TX", "IO41": "PA_EN", "IO42": "LED_DATA", "TXD0": "U0TXD", "RXD0": "U0RXD",
     "IO45": "CHG_CE", "IO46": "LD_PWR_EN", "IO47": "CHG_STAT", "IO48": "PGOOD",
 }
@@ -200,7 +205,7 @@ def mcu(n, GND, V3V3, VSYS):
     boot["A"] += n["BOOT"]
     boot["B"] += GND
     # strapping / default-off pulls (§5)
-    series(n["EAR_EN"], GND, R("100k", note="GPIO3: earpiece off at boot"))
+    series(n["HS_VBUS_EN"], GND, R("100k", note="GPIO3: handset VBUS off at boot"))
     series(n["PA_EN"], GND, R("100k", note="GPIO41: amp off at boot (no pop)"))
     series(n["LD_PWR_EN"], GND, R("100k", note="GPIO46 strap: radar off at boot"))
     series(n["LD_OUT"], GND, R("100k", note="defined level when radar is DNP/unpowered"))
@@ -294,57 +299,13 @@ def audio(n, GND, V3V3, V3V0, VSYS):
     q["E"] += GND
     q["C"] += n["PRIV_LED_K"]
 
-    # ---- handset RJ9: TVS at the jack, 4 x 3-pad pair-swap jumpers, FB + 100 pF per line ----
-    jack = make("RJ9", ref="J3", note="pin1 MIC+, 2 EAR+, 3 EAR-, 4 MIC- (default jumpers)")
-    tvs = make("SRV05-4", ref="D5", note="RJ9 ESD at the jack")
-    tvs["REF1"] += GND
-    tvs["REF2"] += NC  # floating REF2 per Semtech app note
-    jp = [Net(f"RJ9_P{i}") for i in range(1, 5)]
-    for i, net in enumerate(jp, start=1):
-        jack[str(i)] += net
-    for io, net in zip(("IO1", "IO2", "IO3", "IO4"), jp):
-        tvs[io] += net
-    cord = {k: Net(f"CORD_{k}") for k in ("MIC_P", "EAR_P", "EAR_N", "MIC_N")}
-    # default (A side): p1 MIC+, p2 EAR+, p3 EAR-, p4 MIC- ; alternate (B): inner pair = mic
-    swap = [(jp[0], "MIC_P", "EAR_P"), (jp[1], "EAR_P", "MIC_P"),
-            (jp[2], "EAR_N", "MIC_N"), (jp[3], "MIC_N", "EAR_N")]
-    for jnet, a, b in swap:
-        sj = SJ(f"RJ9 {jnet.name}", three=True, default=f"{a}", note="pair-swap jumper")
-        sj["C"] += jnet
-        sj["A"] += cord[a]
-        sj["B"] += cord[b]
-    hs = {k: Net(f"HS_{k}") for k in cord}
-    for k in cord:
-        fb = make("FB600", note=f"cord {k}")
-        fb[1] += cord[k]
-        fb[2] += hs[k]
-        series(hs[k], GND, C("100p", note="RF shunt at jack"))
-
-    # handset mic: bias 2.2k from filtered MICBIAS, pseudo-differential into ES7210 CH1
-    series(mb_f, hs["MIC_P"], R("2.2k", note="handset electret bias"))
-    NetTie(hs["MIC_N"], GND, note="handset mic return tied to GND at the jack")
-    series(hs["MIC_P"], adc["MIC1P"], C("1u"))
-    series(hs["MIC_N"], adc["MIC1N"], C("1u"))
-    # option: analog sidetone experiment into ES8311 MIC1 (DNP 0R), §3.4
-    s_p, s_n = Net("SIDETONE_P"), Net("SIDETONE_N")
-    series(hs["MIC_P"], s_p, R("0", dnp=True, note="sidetone option"))
-    series(hs["MIC_N"], s_n, R("0", dnp=True, note="sidetone option"))
-    series(s_p, dac["MIC1P"], C("1u", dnp=True))
-    series(s_n, dac["MIC1N"], C("1u", dnp=True))
-    # handset detect: MIC+ via 100k/100k to ADC1 (GPIO4), 100 nF keeps ADC kickback out of mic
-    series(hs["MIC_P"], n["HANDSET_DET"], R("100k"))
-    series(n["HANDSET_DET"], GND, R("100k"))
-    series(n["HANDSET_DET"], GND, C("100n"))
-
-    # earpiece: ES8311 OUTP -> EAR_EN analog switch -> EAR+, OUTN -> EAR- (DC-coupled BTL)
-    sw = make("TS5A3166", ref="U8")
-    sw["VCC"] += V3V0
-    sw["GND"] += GND
-    sw["IN"] += n["EAR_EN"]
-    sw["COM"] += OUTP
-    sw["NO"] += hs["EAR_P"]
-    series(OUTN, hs["EAR_N"], R("0", note="EAR- link (0R; place for series R if needed)"))
-    decouple(V3V0, GND, "100n", note="TS5A3166")
+    # ---- handset: off-the-shelf USB-C (UAC) handset on its own USB-C host port (see
+    # handset_port()); the codecs serve the base speaker, base mic and the AEC reference.
+    # ES7210 CH1 (was the analog handset mic) is unused: inputs AC-grounded like CH4.
+    series(adc["MIC1P"], GND, C("1u"))
+    series(adc["MIC1N"], GND, C("1u"))
+    series(dac["MIC1P"], GND, C("1u"))  # ES8311 ADC input unused: AC-grounded
+    series(dac["MIC1N"], GND, C("1u"))
 
     # ---- base (speakerphone) electret -> ES7210 CH2 ----
     mk = make("ELECTRET", ref="MK1", note="front wall, rubber boot")
@@ -390,7 +351,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
     spk["MP"] += GND
     for pin, jpin in (("VOP", 1), ("VON", 2)):
         o = Net(f"SPK_{pin}")
-        fb = make("FB220_2A", note="speaker EMI; 2.2 A (3 W into 4 ohm = 0.87 A rms)")
+        fb = make("FB220_2A", note="speaker EMI; 2 A (3 W into 4 ohm = 0.87 A rms)")
         fb[1] += pa[pin]
         fb[2] += o
         series(o, GND, C("220p", note="EMI"))
@@ -400,7 +361,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
 # ---------------------------------------------------------------------------------------------
 def sensors(v, n, GND, V3V3, VBAT):
     # DRV5032 omnipolar hall hook switch (push-pull out) -> HOOK via 0R (IR option alternative)
-    h = make("DRV5032FA", ref="U10", note="under trough floor at the magnet, x=113")
+    h = make("DRV5032FA", ref="U10", note="under one hook-rest post (boards.yaml hook_post_x)")
     h["VCC"] += V3V3
     h["GND"] += GND
     hall = Net("HOOK_HALL")
@@ -489,6 +450,110 @@ def radar(v, n, GND, VBUS):
 
 
 # ---------------------------------------------------------------------------------------------
+def handset_port(n, GND, VBUS, VSYS, V3V3):
+    """USB-C receptacle for an off-the-shelf USB Audio Class handset/headset (owner decision
+    2026-09-27; replaces the RJ9 analog handset). The ESP32-S3 native USB OTG is the host
+    (GPIO19/20). Source role: Rp 33 k to 3V3 on CC1/CC2 (Default-USB advertisement, 36 k
+    nominal -8 %), VBUS through a current-limited switch (SY6280, 6800/15k = 0.45 A) fed from
+    VBUS or VSYS (diode-OR, so the handset also works on the B-option battery), GPIO3 enables it
+    (off at boot), GPIO4 reads VBUS through 100k/100k (overload shows as a sagging VBUS).
+    SRV05-4 at the connector on D+/D-/CC1/CC2."""
+    j = make("USB-C", ref="J7", note="handset port (USB host, UAC)")
+    hs_vbus = Net("HS_VBUS")
+    j["VBUS"] += hs_vbus
+    j["GND"] += GND
+    j["SHIELD"] += GND
+    cc1, cc2 = Net("HS_CC1"), Net("HS_CC2")
+    j["CC1"] += cc1
+    j["CC2"] += cc2
+    j["DP"] += n["HS_USB_DP"]
+    j["DN"] += n["HS_USB_DN"]
+    series(cc1, V3V3, R("33k", note="Rp Default USB (source)"))
+    series(cc2, V3V3, R("33k", note="Rp Default USB (source)"))
+    tvs = make("SRV05-4", ref="D7", note="handset port ESD at the connector")
+    tvs["IO1"] += n["HS_USB_DP"]
+    tvs["IO2"] += n["HS_USB_DN"]
+    tvs["IO3"] += cc1
+    tvs["IO4"] += cc2
+    tvs["REF1"] += GND
+    tvs["REF2"] += hs_vbus
+    hs_vin = rail("HS_VIN")  # diode-OR supply node
+    d = make("B5819W", ref="D8", note="handset supply from VBUS (USB)")
+    d["A"] += VBUS
+    d["K"] += hs_vin
+    d = make("B5819W", ref="D9", note="handset supply from VSYS (battery option)")
+    d["A"] += VSYS
+    d["K"] += hs_vin
+    sw = make("SY6280AAC", ref="U15", note="handset VBUS switch, 0.45 A limit")
+    sw["IN"] += hs_vin
+    sw["OUT"] += hs_vbus
+    sw["GND"] += GND
+    sw["EN"] += n["HS_VBUS_EN"]
+    series(sw["ISET"], GND, R("15k", note="ILIM = 6800/15k = 0.45 A"))
+    decouple(hs_vin, GND, "1u")
+    decouple(hs_vbus, GND, "10u", note="handset VBUS bulk")
+    series(hs_vbus, n["HS_VBUS_SENSE"], R("100k"))
+    series(n["HS_VBUS_SENSE"], GND, R("100k"))
+    series(n["HS_VBUS_SENSE"], GND, C("100n"))
+
+
+def usb_uart(n, GND, V3V3):
+    """The native USB PHY now serves the handset port, so the power/programming USB-C port
+    gets a CH340C USB-UART bridge to UART0 (GPIO43/44) with the usual DTR/RTS auto-reset
+    (two NPNs to EN and GPIO0) for flashing and the console. Powered from 3V3 (V3 = VCC)."""
+    u = make("CH340C", ref="U16", note="USB-UART on the power port (flash + console)")
+    u["VCC"] += V3V3
+    u["V3"] += V3V3
+    u["GND"] += GND
+    u["UD+"] += n["USB_DP"]
+    u["UD-"] += n["USB_DN"]
+    u["TXD"] += n["U0RXD"]
+    u["RXD"] += n["U0TXD"]
+    dtr, rts = Net("UART_DTR"), Net("UART_RTS")
+    u["DTR"] += dtr
+    u["RTS"] += rts
+    for pin in ("CTS", "DSR", "RI", "DCD", "R232", "NC7", "OUT"):
+        u[pin] += NC
+    decouple(V3V3, GND, "100n", note="CH340C")
+    # auto-reset: DTR low & RTS high -> EN low; RTS low & DTR high -> GPIO0 low
+    for q_ref, base_sig, emit_sig, target in (("Q5", dtr, rts, n["EN"]),
+                                              ("Q6", rts, dtr, n["BOOT"])):
+        q = make("MMBT3904", ref=q_ref, note="auto-reset")
+        b_ = Net(f"{q_ref}_B")
+        series(base_sig, b_, R("10k"))
+        q["B"] += b_
+        q["E"] += emit_sig
+        q["C"] += target
+
+
+def side_controls(n, GND, V3V3):
+    """VOL-, VOL+ (right-angle tacts) and MUTE (right-angle DPDT slide, lever outward) at the
+    main board edge (owner decision 2026-09-27, stacked form factor). MUTE pole A breaks the
+    ES7210 mic bias (MICBIAS_IN -> MICBIAS_OUT) in hardware; pole B reports to the deck's
+    AW9523B over the FFC. SRV05-4 at the switches: they are user-reachable."""
+    for name in ("VOL_DN", "VOL_UP"):
+        series(n[name], V3V3, R("10k"))
+        t = make("SIDE_TACT", note=name)
+        t["A"] += n[name]
+        t["B"] += GND
+        t["MP"] += GND
+    series(n["MUTE_SENSE"], V3V3, R("10k"))
+    sw = make("SLIDE_DPDT", note="MUTE: pole A breaks mic bias, pole B reports")
+    sw["1COM"] += n["MICBIAS_IN"]
+    sw["1A"] += n["MICBIAS_OUT"]  # position A = unmuted
+    sw["1B"] += NC
+    sw["2COM"] += GND
+    sw["2A"] += NC
+    sw["2B"] += n["MUTE_SENSE"]  # position B = muted -> MUTE_SENSE low
+    tvs = make("SRV05-4", note="side-switch ESD at the board edge")
+    tvs["IO1"] += n["VOL_DN"]
+    tvs["IO2"] += n["VOL_UP"]
+    tvs["IO3"] += n["MUTE_SENSE"]
+    tvs["IO4"] += NC
+    tvs["REF1"] += GND
+    tvs["REF2"] += V3V3
+
+
 def ffc(n, GND, V3V3, VSYS) -> dict:
     j = make("FFC24", ref="J6", note="main <-> deck, 24P 0.5 mm, ~60 mm cable")
     nets = {"GND": GND, "3V3": V3V3, "VSYS": VSYS}
@@ -497,7 +562,6 @@ def ffc(n, GND, V3V3, VSYS) -> dict:
         j[str(pin)] += net
     j["MP"] += GND
     ffc_map = {str(p): j[str(p)].net.name for p in FFC_PINS}
-    TP(Net.get("FFC_SPARE"), "FFC_SPARE")
     return ffc_map
 
 
@@ -507,5 +571,5 @@ def test_points(n, GND, VBUS, VSYS, V3V3, V3V0):
     for name in ("USB_DP", "USB_DN", "U0TXD", "U0RXD", "EN", "BOOT", "I2S_BCLK", "I2S_WS",
                  "I2S_DIN", "I2S_DOUT", "I2C_SDA", "I2C_SCL", "HOOK", "PA_EN"):
         TP(n[name])
-    for name in ("SPK_VOP", "SPK_VON", "HS_EAR_P", "HS_EAR_N", "HS_MIC_P", "HS_MIC_N"):
+    for name in ("SPK_VOP", "SPK_VON", "HS_VBUS", "HS_USB_DP", "HS_USB_DN"):
         TP(Net.get(name), name)

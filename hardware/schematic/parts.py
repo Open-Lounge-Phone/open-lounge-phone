@@ -3,7 +3,7 @@
 Pin maps were checked against the cited datasheet unless ``verified`` says otherwise.
 LCSC codes are checked against lcsc.com by ``lcsc.py`` (MPN must match; see lcsc_cache.json).
 Footprints are checked against the official KiCad library by ``fpcheck.py``; names in the
-``OpenTinCan:`` library still have to be drawn.
+``OpenLoungePhone:`` library still have to be drawn.
 """
 
 from __future__ import annotations
@@ -14,9 +14,13 @@ from lib import CAP_EXTRA, RES_EXTRA, SPECS, spec
 # MCU
 
 spec(
-    "ESP32-S3-WROOM-1", ref="U", mpn="ESP32-S3-WROOM-1-N16R8", manufacturer="Espressif",
-    lcsc="C2913202", footprint="RF_Module:ESP32-S3-WROOM-1",
-    desc="ESP32-S3 module, 16 MB flash, 8 MB octal PSRAM, PCB antenna",
+    # WROOM-1U (U.FL, external antenna), not WROOM-1 (PCB antenna): in the compact base no
+    # board edge is >= 15 mm from the metal hook tubes, standoffs and inserts (ENCLOSURE.md s8),
+    # so the antenna goes on a cable to the shell wall. Same pinout; the module then sits under
+    # the key deck. Owner can revert to C2913202 / RF_Module:ESP32-S3-WROOM-1 (LAYOUT.md).
+    "ESP32-S3-WROOM-1", ref="U", mpn="ESP32-S3-WROOM-1U-N16R8", manufacturer="Espressif",
+    lcsc="C3013946", footprint="RF_Module:ESP32-S3-WROOM-1U",
+    desc="ESP32-S3 module, 16 MB flash, 8 MB octal PSRAM, U.FL for an external 2.4 GHz antenna",
     datasheet="https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
     pins=[
         (1, "GND", "pwr_in"), (2, "3V3", "pwr_in"), (3, "EN", "in"),
@@ -104,25 +108,27 @@ spec(
 
 spec(
     "RJ9", ref="J", mpn="5301-4P4C", manufacturer="EVERCOM", lcsc="C3097715",
-    footprint="OpenTinCan:RJ9_4P4C_EVERCOM_5301-4P4C",
+    footprint="Connector_RJ:RJ9_Evercom_5301-440xxx_Horizontal",
     desc="4P4C handset jack, right-angle THT",
-    verified="pin order and body width not checked (datasheet not reachable); the 4 solder "
-             "jumpers cover either pair assignment",
+    datasheet="https://datasheet.lcsc.com/lcsc/2207051802_EVERCOM-5301-4P4C_C3097715.pdf",
+    verified="official KiCad footprint drawn from this exact part (C3097715); contact order vs "
+             "handset cord not checked on a sample - the 4 solder jumpers cover either pair "
+             "assignment",
     pins=[(1, "1", "pas"), (2, "2", "pas"), (3, "3", "pas"), (4, "4", "pas")],
 )
 
 spec(
     "ELECTRET", ref="MK", mpn="GMI6027-2C42DB", manufacturer="INGHAi", lcsc="C233885",
-    footprint="OpenTinCan:Electret_6mm_SMD_pads",
+    footprint="OpenLoungePhone:Electret_6mm_SMD_pads",
     desc="6 mm electret capsule, -42 dB, 2.2k load (base speakerphone mic, in rubber boot)",
     verified="ground (can) pad identification not checked against drawing",
     pins=[(1, "OUT", "pas"), (2, "GND", "pas")],
 )
 
 spec(
-    "FB600", ref="FB", mpn="BLM15AG601SN1D", manufacturer="Murata", lcsc="C76884",
-    footprint="Inductor_SMD:L_0402_1005Metric", desc="Ferrite bead 600R@100MHz 300mA 0402",
-    datasheet="https://www.murata.com/en-us/products/productdetail?partno=BLM15AG601SN1D",
+    "FB600", ref="FB", mpn="BLM18AG601SN1D", manufacturer="Murata", lcsc="C19330",
+    footprint="Inductor_SMD:L_0603_1608Metric", desc="Ferrite bead 600R@100MHz 500mA 0603",
+    datasheet="https://www.murata.com/en-us/products/productdetail?partno=BLM18AG601SN1D",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
@@ -226,7 +232,7 @@ spec(
 
 spec(
     "SUPERCAP", ref="C", mpn="SE-5R5-D474VYV", manufacturer="Kamcap", lcsc=None,
-    footprint="OpenTinCan:Supercap_D11.5mm_P5.0mm",
+    footprint="OpenLoungePhone:Supercap_D11.5mm_P5.0mm",
     desc="0.47 F 5.5 V supercap, power-fail hold-up (Lounge)",
     verified="no LCSC/JLCPCB listing found for 0.47 F 5.5 V (C150565 did not resolve); part, "
              "lead pitch and footprint to choose; ESR ~40 ohm is fine for 0.9 W hold-up",
@@ -324,6 +330,27 @@ spec(
 )
 
 spec(
+    "SY6280AAC", ref="U", mpn="SY6280AAC", manufacturer="Silergy", lcsc="C55136",
+    footprint="Package_TO_SOT_SMD:SOT-23-5",
+    desc="Current-limited power switch 2.4-5.5 V, ILIM = 6800/Rset, reverse blocking",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/0271e5b2ca2a46b8bb16f65855f12fe2.pdf",
+    pins=[(1, "OUT", "pwr_out"), (2, "GND", "pwr_in"), (3, "ISET", "pas"), (4, "EN", "in"),
+          (5, "IN", "pwr_in")],
+)
+
+spec(
+    "CH340C", ref="U", mpn="CH340C", manufacturer="WCH", lcsc="C84681",
+    footprint="Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
+    desc="USB 2.0 full-speed to UART bridge, internal oscillator",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/e2f14e51aaa60c793f1f0cbc8a5d5faa.pdf",
+    pins=[(1, "GND", "pwr_in"), (2, "TXD", "out"), (3, "RXD", "in"), (4, "V3", "pwr_in"),
+          (5, "UD+", "io"), (6, "UD-", "io"), (7, "NC7", "nc"), (8, "OUT", "out"),
+          # modem inputs have built-in pull-ups, R232 a built-in pull-down: may stay open
+          (9, "CTS", "pas"), (10, "DSR", "pas"), (11, "RI", "pas"), (12, "DCD", "pas"),
+          (13, "DTR", "out"), (14, "RTS", "out"), (15, "R232", "pas"), (16, "VCC", "pwr_in")],
+)
+
+spec(
     "MMBT3904", ref="Q", mpn="MMBT3904", manufacturer="JSCJ", lcsc="C20526",
     footprint="Package_TO_SOT_SMD:SOT-23", desc="NPN 40 V 200 mA",
     verified="standard SOT-23 B/E/C order; JSCJ datasheet text not readable",
@@ -377,6 +404,16 @@ spec(
 )
 
 spec(
+    "QWIIC", ref="J", mpn="SM04B-SRSS-TB(LF)(SN)", manufacturer="JST", lcsc="C160404",
+    footprint="Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal",
+    desc="Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module "
+         "(SSD1306 0.91\" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default",
+    datasheet="https://www.sparkfun.com/qwiic",
+    pins=[(1, "GND", "pas"), (2, "3V3", "pas"), (3, "SDA", "pas"), (4, "SCL", "pas"),
+          ("MP", "MP", "pas")],
+)
+
+spec(
     "LTR-303ALS", ref="U", mpn="LTR-303ALS-01", manufacturer="Lite-On", lcsc="C364577",
     footprint="OptoDevice:Lite-On_LTR-303ALS-01", desc="Ambient light sensor; I2C 0x29",
     datasheet="https://datasheet.lcsc.com/datasheet/pdf/e082d25eee9d8954f5ed8e86defb8a71.pdf",
@@ -397,15 +434,17 @@ spec(
 
 spec(
     "NFC_COIL", ref="L", mpn="PCB coil (copper)", manufacturer="", lcsc=None,
-    footprint="OpenTinCan:NFC_Coil_Strip_4T",
-    desc="13.56 MHz PCB antenna, target ~4.8 uH (ST25DV CTUN 28.5 pF), 3-4 turns",
-    verified="coil geometry to be designed/simulated (ST eDesignSuite) and tuned in EVT",
+    footprint="OpenLoungePhone:NFC_Coil_Strip",
+    desc="13.56 MHz PCB antenna around the strip band: 6 turns 0.40/0.35 mm, 70 x 36.8 mm, "
+         "~4.6 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)",
+    verified="inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT "
+             "(DNP tuning cap trims it)",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
 spec(
     "HOTSWAP", ref="SW", mpn="CPG151101S11-2", manufacturer="Kailh", lcsc="C49352235",
-    footprint="OpenTinCan:Kailh_MX_Hotswap_CPG151101S11",
+    footprint="OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11",
     desc="MX hot-swap socket (switch plugs in; 2 pads)",
     verified="C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's "
              "C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing",
@@ -421,11 +460,11 @@ spec(
 )
 
 spec(
-    "SLIDE_DPDT", ref="SW", mpn="JS202011JAQN", manufacturer="C&K", lcsc="C221664",
-    footprint="Button_Switch_SMD:SW_DPDT_CK_JS202011JCQN",
-    desc="DPDT slide switch, SMD J-lead (MUTE)",
-    verified="pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); JAQN "
-             "assumed to share the JS202011JCQN land pattern (JCQN had no stock)",
+    "SLIDE_DPDT", ref="SW", mpn="JS202011AQN", manufacturer="C&K", lcsc="C221662",
+    footprint="Button_Switch_THT:SW_CK_JS202011AQN_DPDT_Angled",
+    desc="DPDT slide switch, right-angle through-hole (MUTE, lever out through the edge)",
+    verified="pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); check "
+             "against the C&K drawing",
     pins=[(1, "1A", "pas"), (2, "1COM", "pas"), (3, "1B", "pas"), (4, "2A", "pas"),
           (5, "2COM", "pas"), (6, "2B", "pas")],
 )
@@ -475,37 +514,38 @@ spec(
 
 # Non-basic passive values (JLC "extended"; codes found via JLCPCB search, checked by lcsc.py)
 RES_EXTRA.update({
-    ("1.1k", "0402"): ("C25860", "0402WGF1101TCE"),
-    ("1.8k", "0402"): ("C25871", "0402WGF1801TCE"),
-    ("20k", "0402"): ("C25765", "0402WGF2002TCE"),
-    ("4.3k", "0402"): ("C25899", "0402WGF4301TCE"),
-    ("150k", "0402"): ("C25755", "0402WGF1503TCE"),
-    ("3.3k", "0402"): ("C25890", "0402WGF3301TCE"),
+    ("1.1k", "0603"): ("C22764", "0603WAF1101T5E"),
+    ("1.8k", "0603"): ("C4177", "0603WAF1801T5E"),
+    ("20k", "0603"): ("C4184", "0603WAF2002T5E"),
+    ("4.3k", "0603"): ("C23159", "0603WAF4301T5E"),
+    ("150k", "0603"): ("C22807", "0603WAF1503T5E"),
+    ("3.3k", "0603"): ("C22978", "0603WAF3301T5E"),
     ("2.2", "0603"): ("C22939", "0603WAF220KT5E"),
     ("47", "2512"): ("C15261", "25121WJ0470T4E"),
 })
 CAP_EXTRA.update({
     "1u@50V": ("C15849", "0603", "50V X5R", "CL10A105KB8NNNC"),
-    "470n": ("C92361", "0402", "25V X5R", "CL05A474KA5NNNC"),
-    "220n": ("C47129", "0402", "25V X5R", "CL05A224KA5NNNC"),
-    "220p": ("C39122", "0402", "50V C0G", "0402CG221J500NT"),
+    "470n": ("C1623", "0603", "25V X7R", "CL10B474KA8NNNC"),
+    "220n": ("C21120", "0603", "25V X7R", "CL10B224KA8NNNC"),
+    "220p": ("C1603", "0603", "50V X7R", "CL10B221KB8NNNC"),  # JLC basic (EMI shunt: X7R ok)
     "100u": ("C15008", "1206", "6.3V X5R", "CL31A107MQHNNNE"),
     "4.7u@25V": ("C1779", "0805", "25V X5R", "CL21A475KAQNNNE"),
 })
 
 
 spec(
-    "FB220_2A", ref="FB", mpn="BLM18KG221SN1D", manufacturer="Murata", lcsc="C88980",
+    "FB220_2A", ref="FB", mpn="BLM18PG121SN1D", manufacturer="Murata", lcsc="C14709",
     footprint="Inductor_SMD:L_0603_1608Metric",
-    desc="Ferrite bead 220R@100MHz 2.2 A 50 mOhm 0603 (speaker outputs)",
+    desc="Ferrite bead 120R@100MHz 2 A 50 mOhm 0603 (speaker outputs; JLC basic part, was "
+         "BLM18KG221SN1D extended)",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
 
 def all_lcsc_codes() -> set[str]:
-    from lib import CAP, RES_0402
+    from lib import CAP, RES_0402, RES_0603
 
     codes = {s.lcsc for s in SPECS.values() if s.lcsc}
-    codes |= set(RES_0402.values()) | {v[0] for v in CAP.values()}
+    codes |= set(RES_0402.values()) | set(RES_0603.values()) | {v[0] for v in CAP.values()}
     codes |= {v[0] for v in RES_EXTRA.values()} | {v[0] for v in CAP_EXTRA.values()}
     return codes

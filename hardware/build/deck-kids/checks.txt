@@ -1,12 +1,6 @@
-WARN  [check_nets] net FFC_SPARE only reaches J1.20 and test points
-WARN  [check_nets] net AW_P1_6_SPARE only reaches U1.P1_6 and test points
-WARN  [check_nets] net AW_P1_7_SPARE only reaches U1.P1_7 and test points
 WARN  [check_sourcing] U1 AW9523BTQR: [UNVERIFIED] pin map checked (datasheet V1.1.1 + V2.4); exposed-pad size of the land pattern not checked against the package drawing
 WARN  [check_sourcing] SW1, SW2, SW3, SW4, SW5, SW6 ... CPG151101S11-2: [UNVERIFIED] C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing
-WARN  [check_sourcing] SW13 JS202011JAQN: [UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); JAQN assumed to share the JS202011JCQN land pattern (JCQN had no stock)
-WARN  [check_sourcing] D13 KT-0603R: [UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
-WARN  [check_sourcing] L1 PCB coil (copper): [UNVERIFIED] coil geometry to be designed/simulated (ST eDesignSuite) and tuned in EVT
+WARN  [check_sourcing] D14 KT-0603R: [UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
+WARN  [check_sourcing] L1 PCB coil (copper): [UNVERIFIED] inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)
 WARN  [check_sourcing] L1 PCB coil (copper): no LCSC code
 WARN  [check_sourcing] J2 FH12-24S-0.5SH(55): [UNVERIFIED] panel pin table checked; which pins get caps read from a small reference drawing; FPC contact side vs connector (bottom contact) to confirm with a sample
-TODO  [check_footprints] footprint OpenTinCan:Kailh_MX_Hotswap_CPG151101S11 must be drawn in OpenTinCan.pretty (SW1, SW2, SW3, SW4)
-TODO  [check_footprints] footprint OpenTinCan:NFC_Coil_Strip_4T must be drawn in OpenTinCan.pretty (L1)

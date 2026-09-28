@@ -84,16 +84,16 @@
       (tstamps "b514d237-c153-5f6d-afe2-53badf97a864"))
     (comp
       (ref "C10")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -103,11 +103,11 @@
         (field
           (name "Note") "LED 3")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -116,7 +116,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -124,16 +124,16 @@
       (tstamps "9ac3af44-dacb-5cab-9570-74696fc5614f"))
     (comp
       (ref "C11")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -143,11 +143,11 @@
         (field
           (name "Note") "LED 4")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -156,7 +156,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -164,16 +164,16 @@
       (tstamps "d4017ae0-ca40-581e-bf8a-e168323602ea"))
     (comp
       (ref "C12")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -183,11 +183,11 @@
         (field
           (name "Note") "LED 5")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -196,7 +196,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -204,16 +204,16 @@
       (tstamps "2932345d-4f49-56ea-874e-6a87a258356f"))
     (comp
       (ref "C13")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -223,11 +223,11 @@
         (field
           (name "Note") "LED 6")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -236,7 +236,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -244,16 +244,16 @@
       (tstamps "f1d7b8fb-84cd-50f9-836b-638468521141"))
     (comp
       (ref "C14")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -263,11 +263,11 @@
         (field
           (name "Note") "LED 7")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -276,7 +276,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -284,16 +284,16 @@
       (tstamps "c946931e-80a5-5ed6-b53a-66445bf5e1a2"))
     (comp
       (ref "C15")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -303,11 +303,11 @@
         (field
           (name "Note") "LED 8")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -316,7 +316,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -324,16 +324,16 @@
       (tstamps "81f7537e-5712-5826-a661-cfd597efb63e"))
     (comp
       (ref "C16")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -343,11 +343,11 @@
         (field
           (name "Note") "LED 9")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -356,7 +356,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -364,16 +364,16 @@
       (tstamps "4b26d887-351e-555f-a3fe-11622a5d6521"))
     (comp
       (ref "C17")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -383,11 +383,11 @@
         (field
           (name "Note") "LED 10")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -396,7 +396,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -404,16 +404,16 @@
       (tstamps "d451fe6b-cc1e-51ff-abd9-a1c674370629"))
     (comp
       (ref "C18")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -423,11 +423,11 @@
         (field
           (name "Note") "LED 11")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -436,7 +436,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -444,16 +444,16 @@
       (tstamps "65617007-c8f1-5598-9446-09da65da9bfc"))
     (comp
       (ref "C19")
-      (value "1uF 25V X5R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05A105KA5NQNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C52923")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -461,13 +461,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LTR-303")
+          (name "Note") "LED 12")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -476,7 +476,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -484,16 +484,16 @@
       (tstamps "89c18bff-9d0a-560d-9afc-db5208f57a70"))
     (comp
       (ref "C2")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -503,11 +503,11 @@
         (field
           (name "Note"))
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -516,7 +516,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -524,16 +524,16 @@
       (tstamps "507fddd0-e494-5270-a7e4-2511aa140519"))
     (comp
       (ref "C20")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -541,13 +541,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "ST25DV")
+          (name "Note") "LED 13")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -556,7 +556,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -564,46 +564,6 @@
       (tstamps "de69f183-3e24-5ca0-bc14-716aaad4df38"))
     (comp
       (ref "C21")
-      (value "22pF 50V C0G")
-      (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
-      (fields
-        (field
-          (name "MPN") "0402CG220J500NT")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C1555")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP") "1")
-        (field
-          (name "Note") "tuning cap, fit only if coil L falls short")
-        (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
-        (field
-          (name "Description") "capacitor")
-        (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "C21")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ea3a15b0-5646-5a4b-ba8f-ee6aa1cf1128"))
-    (comp
-      (ref "C22")
       (value "1uF 50V X5R")
       (description "capacitor")
       (footprint "Capacitor_SMD:C_0603_1608Metric")
@@ -621,7 +581,47 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD VCI/VDDIO (GD C6)")
+          (name "Note") "LTR-303")
+        (field
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Description") "capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C21")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "ea3a15b0-5646-5a4b-ba8f-ee6aa1cf1128"))
+    (comp
+      (ref "C22")
+      (value "100nF 50V X7R")
+      (description "capacitor")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "CC0603KRX7R9BB104")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C14663")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "ST25DV")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -644,24 +644,24 @@
       (tstamps "424c71f2-6ef1-5cf5-8bb2-ac922033ba2a"))
     (comp
       (ref "C23")
-      (value "1uF 50V X5R")
+      (value "22pF 50V C0G")
       (description "capacitor")
       (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL10A105KB8NNNC")
+          (name "MPN") "CL10C220JB8NNNC")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C15849")
+          (name "LCSC") "C1653")
         (field
           (name "Verified") "yes")
         (field
           (name "Datasheet"))
         (field
-          (name "DNP"))
+          (name "DNP") "1")
         (field
-          (name "Note") "EPD VSH2")
+          (name "Note") "tuning cap placeholder: value set in EVT from the measured coil L")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -701,7 +701,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD VDD")
+          (name "Note") "EPD VCI/VDDIO (GD C6)")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -741,7 +741,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD VSH1")
+          (name "Note") "EPD VSH2")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -781,7 +781,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD VSL")
+          (name "Note") "EPD VDD")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -821,7 +821,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD PREVGL")
+          (name "Note") "EPD VSH1")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -861,7 +861,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD VCOM")
+          (name "Note") "EPD VSL")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -901,7 +901,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "EPD PREVGH (GD C5)")
+          (name "Note") "EPD PREVGL")
         (field
           (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
@@ -964,6 +964,86 @@
       (tstamps "299afff0-b6cf-50c0-a677-db76bcc001ee"))
     (comp
       (ref "C30")
+      (value "1uF 50V X5R")
+      (description "capacitor")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "CL10A105KB8NNNC")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C15849")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "EPD VCOM")
+        (field
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Description") "capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C30")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "0f47fd7b-2a97-5852-b486-b8f30dff5b1c"))
+    (comp
+      (ref "C31")
+      (value "1uF 50V X5R")
+      (description "capacitor")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (fields
+        (field
+          (name "MPN") "CL10A105KB8NNNC")
+        (field
+          (name "Manufacturer"))
+        (field
+          (name "LCSC") "C15849")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "EPD PREVGH (GD C5)")
+        (field
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Description") "capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C31")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "5289590a-ce55-5ced-a9b8-bd07edd97a7b"))
+    (comp
+      (ref "C32")
       (value "4.7uF 25V X5R")
       (description "capacitor")
       (footprint "Capacitor_SMD:C_0805_2012Metric")
@@ -991,7 +1071,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "C30")
+          (name "SKiDL Tag") "C32")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -1001,9 +1081,9 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "0f47fd7b-2a97-5852-b486-b8f30dff5b1c"))
+      (tstamps "56cf75c2-48b9-5db5-aa55-062694a38170"))
     (comp
-      (ref "C31")
+      (ref "C33")
       (value "4.7uF 25V X5R")
       (description "capacitor")
       (footprint "Capacitor_SMD:C_0805_2012Metric")
@@ -1031,7 +1111,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "C31")
+          (name "SKiDL Tag") "C33")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -1041,19 +1121,19 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "5289590a-ce55-5ced-a9b8-bd07edd97a7b"))
+      (tstamps "f19d6a13-c73e-5ab6-acdc-db7f4f94afcf"))
     (comp
       (ref "C4")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -1063,11 +1143,11 @@
         (field
           (name "Note"))
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -1076,7 +1156,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1084,16 +1164,16 @@
       (tstamps "6f9a1813-19d4-5d20-adea-8868e7232e30"))
     (comp
       (ref "C5")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -1103,11 +1183,11 @@
         (field
           (name "Note") "AW9523B")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -1116,7 +1196,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1204,16 +1284,16 @@
       (tstamps "16338a68-8eed-55bf-a491-963475c6f7f3"))
     (comp
       (ref "C8")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -1223,11 +1303,11 @@
         (field
           (name "Note") "LED 1")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -1236,7 +1316,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1244,16 +1324,16 @@
       (tstamps "5745235a-c3ad-560a-9498-c294be8e78c3"))
     (comp
       (ref "C9")
-      (value "100nF 16V X7R")
+      (value "100nF 50V X7R")
       (description "capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "CL05B104KO5NNNC")
+          (name "MPN") "CC0603KRX7R9BB104")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C1525")
+          (name "LCSC") "C14663")
         (field
           (name "Verified") "yes")
         (field
@@ -1263,11 +1343,11 @@
         (field
           (name "Note") "LED 2")
         (field
-          (name "SpecKey") "_C_Capacitor_SMD:C_0402_1005Metric")
+          (name "SpecKey") "_C_Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Description") "capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -1276,7 +1356,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_C_Capacitor_SMD:C_0402_1005Metric"))
+        (part "_C_Capacitor_SMD:C_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1284,30 +1364,30 @@
       (tstamps "9ccc330f-2a4c-575c-9353-ad8096a286cf"))
     (comp
       (ref "D1")
-      (value "SRV05-4.TCT")
-      (description "4-line ESD array (REF1=GND, REF2=VCC or float)")
-      (footprint "Package_TO_SOT_SMD:SOT-23-6")
+      (value "SK6812MINI-E")
+      (description "RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)")
+      (footprint "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount")
       (fields
         (field
-          (name "MPN") "SRV05-4.TCT")
+          (name "MPN") "SK6812MINI-E")
         (field
-          (name "Manufacturer") "Semtech")
+          (name "Manufacturer") "OPSCO")
         (field
-          (name "LCSC") "C13612")
+          (name "LCSC") "C5149201")
         (field
           (name "Verified") "yes")
         (field
-          (name "Datasheet") "https://www.semtech.com/products/circuit-protection/low-capacitance/srv05-4")
+          (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4960/4960_SK6812MINI-E_REV02_EN.pdf")
         (field
           (name "DNP"))
         (field
-          (name "Note") "side-switch ESD")
+          (name "Note") "LED 1: 1")
         (field
-          (name "SpecKey") "SRV05-4")
+          (name "SpecKey") "SK6812MINI-E")
         (field
-          (name "Description") "4-line ESD array (REF1=GND, REF2=VCC or float)")
+          (name "Description") "RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)")
         (field
-          (name "Footprint") "Package_TO_SOT_SMD:SOT-23-6")
+          (name "Footprint") "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount")
         (field
           (name "Datasheet"))
         (field
@@ -1316,7 +1396,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "SRV05-4"))
+        (part "SK6812MINI-E"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1341,7 +1421,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 9: SPEAKER")
+          (name "Note") "LED 10: 8")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1381,7 +1461,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 10: END")
+          (name "Note") "LED 11: 7")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1421,7 +1501,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 11: STATUS")
+          (name "Note") "LED 12: 6")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1444,6 +1524,46 @@
       (tstamps "e310289a-ea3a-553d-ba82-ed4fc4870b06"))
     (comp
       (ref "D13")
+      (value "SK6812MINI-E")
+      (description "RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)")
+      (footprint "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount")
+      (fields
+        (field
+          (name "MPN") "SK6812MINI-E")
+        (field
+          (name "Manufacturer") "OPSCO")
+        (field
+          (name "LCSC") "C5149201")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4960/4960_SK6812MINI-E_REV02_EN.pdf")
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "LED 13: STATUS")
+        (field
+          (name "SpecKey") "SK6812MINI-E")
+        (field
+          (name "Description") "RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)")
+        (field
+          (name "Footprint") "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "D13")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "SK6812MINI-E"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "507b7430-687a-5904-b8e8-f8bf08324b21"))
+    (comp
+      (ref "D14")
       (value "KT-0603R")
       (description "Red LED 0603 (privacy indicator)")
       (footprint "LED_SMD:LED_0603_1608Metric")
@@ -1471,52 +1591,12 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "D13")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "LED_RED"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "507b7430-687a-5904-b8e8-f8bf08324b21"))
-    (comp
-      (ref "D14")
-      (value "MBR0530T1G")
-      (description "Schottky 30 V 0.5 A (e-ink boost)")
-      (footprint "Diode_SMD:D_SOD-123")
-      (fields
-        (field
-          (name "MPN") "MBR0530T1G")
-        (field
-          (name "Manufacturer") "onsemi")
-        (field
-          (name "LCSC") "C82046")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet") "https://www.onsemi.com/pdf/datasheet/mbr0530t1-d.pdf")
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "MBR0530")
-        (field
-          (name "Description") "Schottky 30 V 0.5 A (e-ink boost)")
-        (field
-          (name "Footprint") "Diode_SMD:D_SOD-123")
-        (field
-          (name "Datasheet"))
-        (field
           (name "SKiDL Tag") "D14")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "MBR0530"))
+        (part "LED_RED"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -1603,6 +1683,46 @@
       (component_classes)
       (tstamps "5a5d2a51-5bfa-520d-a1b8-37f3c1900bdc"))
     (comp
+      (ref "D17")
+      (value "MBR0530T1G")
+      (description "Schottky 30 V 0.5 A (e-ink boost)")
+      (footprint "Diode_SMD:D_SOD-123")
+      (fields
+        (field
+          (name "MPN") "MBR0530T1G")
+        (field
+          (name "Manufacturer") "onsemi")
+        (field
+          (name "LCSC") "C82046")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet") "https://www.onsemi.com/pdf/datasheet/mbr0530t1-d.pdf")
+        (field
+          (name "DNP"))
+        (field
+          (name "Note"))
+        (field
+          (name "SpecKey") "MBR0530")
+        (field
+          (name "Description") "Schottky 30 V 0.5 A (e-ink boost)")
+        (field
+          (name "Footprint") "Diode_SMD:D_SOD-123")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "D17")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "MBR0530"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "d0916f14-3d2f-52d6-8b7c-720c2866c73c"))
+    (comp
       (ref "D2")
       (value "SK6812MINI-E")
       (description "RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)")
@@ -1621,7 +1741,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 1: F1")
+          (name "Note") "LED 2: 2")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1661,7 +1781,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 2: F2")
+          (name "Note") "LED 3: 3")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1701,7 +1821,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 3: F3")
+          (name "Note") "LED 4: 4")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1741,7 +1861,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 4: F4")
+          (name "Note") "LED 5: 5")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1781,7 +1901,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 5: R1")
+          (name "Note") "LED 6: MENU")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1821,7 +1941,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 6: R2")
+          (name "Note") "LED 7: BACK")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1861,7 +1981,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 7: R3")
+          (name "Note") "LED 8: 0")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -1901,7 +2021,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 8: R4")
+          (name "Note") "LED 9: 9")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -2003,10 +2123,50 @@
       (component_classes)
       (tstamps "5e0b731b-c654-5cf6-8847-00f2f042255c"))
     (comp
+      (ref "J3")
+      (value "SM04B-SRSS-TB(LF)(SN)")
+      (description "Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module (SSD1306 0.91\" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default")
+      (footprint "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal")
+      (fields
+        (field
+          (name "MPN") "SM04B-SRSS-TB(LF)(SN)")
+        (field
+          (name "Manufacturer") "JST")
+        (field
+          (name "LCSC") "C160404")
+        (field
+          (name "Verified") "yes")
+        (field
+          (name "Datasheet") "https://www.sparkfun.com/qwiic")
+        (field
+          (name "DNP") "1")
+        (field
+          (name "Note") "optional display module port (internal)")
+        (field
+          (name "SpecKey") "QWIIC")
+        (field
+          (name "Description") "Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module (SSD1306 0.91\" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default")
+        (field
+          (name "Footprint") "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "J3")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "QWIIC"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "feeefe1a-2e42-5bb8-adfa-cd7486f50a6d"))
+    (comp
       (ref "L1")
       (value "PCB coil (copper)")
-      (description "13.56 MHz PCB antenna, target ~4.8 uH (ST25DV CTUN 28.5 pF), 3-4 turns")
-      (footprint "OpenTinCan:NFC_Coil_Strip_4T")
+      (description "13.56 MHz PCB antenna around the strip band: 6 turns 0.40/0.35 mm, 70 x 36.8 mm, ~4.6 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)")
+      (footprint "OpenLoungePhone:NFC_Coil_Strip")
       (fields
         (field
           (name "MPN") "PCB coil (copper)")
@@ -2015,19 +2175,19 @@
         (field
           (name "LCSC"))
         (field
-          (name "Verified") "coil geometry to be designed/simulated (ST eDesignSuite) and tuned in EVT")
+          (name "Verified") "inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)")
         (field
           (name "Datasheet"))
         (field
           (name "DNP"))
         (field
-          (name "Note") "PCB coil ~4.7 uH target, 3-4 turns around strip")
+          (name "Note") "PCB coil ~4.6 uH (est.), 6 turns around the strip band")
         (field
           (name "SpecKey") "NFC_COIL")
         (field
-          (name "Description") "13.56 MHz PCB antenna, target ~4.8 uH (ST25DV CTUN 28.5 pF), 3-4 turns")
+          (name "Description") "13.56 MHz PCB antenna around the strip band: 6 turns 0.40/0.35 mm, 70 x 36.8 mm, ~4.6 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)")
         (field
-          (name "Footprint") "OpenTinCan:NFC_Coil_Strip_4T")
+          (name "Footprint") "OpenLoungePhone:NFC_Coil_Strip")
         (field
           (name "Datasheet"))
         (field
@@ -2206,14 +2366,14 @@
       (ref "R1")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2223,11 +2383,11 @@
         (field
           (name "Note") "RSTN has an internal 100k pull-DOWN; must be pulled up")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2236,7 +2396,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2246,14 +2406,14 @@
       (ref "R10")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2263,11 +2423,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2276,7 +2436,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2286,14 +2446,14 @@
       (ref "R11")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2303,11 +2463,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2316,7 +2476,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2326,14 +2486,14 @@
       (ref "R12")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2341,13 +2501,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2356,7 +2516,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2366,14 +2526,14 @@
       (ref "R13")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2381,13 +2541,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note"))
+          (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2396,7 +2556,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2404,56 +2564,16 @@
       (tstamps "2e9cb324-63c9-5ad4-ba1a-b618f4020bea"))
     (comp
       (ref "R14")
-      (value "10k")
-      (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
-      (fields
-        (field
-          (name "MPN") "0402WGF1002TCE")
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC") "C25744")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
-        (field
-          (name "Description") "resistor")
-        (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "R14")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "fc87fb8d-6ec9-5f6a-ba62-fc9d37c462e7"))
-    (comp
-      (ref "R15")
       (value "100k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1003TCE")
+          (name "MPN") "0603WAF1003T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25741")
+          (name "LCSC") "C25803")
         (field
           (name "Verified") "yes")
         (field
@@ -2463,37 +2583,37 @@
         (field
           (name "Note") "LEDs off until firmware enables")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R15")
+          (name "SKiDL Tag") "R14")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "17eaf0a6-9932-5348-b523-0122128974c2"))
+      (tstamps "fc87fb8d-6ec9-5f6a-ba62-fc9d37c462e7"))
     (comp
-      (ref "R16")
+      (ref "R15")
       (value "100k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1003TCE")
+          (name "MPN") "0603WAF1003T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25741")
+          (name "LCSC") "C25803")
         (field
           (name "Verified") "yes")
         (field
@@ -2503,37 +2623,37 @@
         (field
           (name "Note"))
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R16")
+          (name "SKiDL Tag") "R15")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "0ffe9dd6-18d7-5bd8-8f5c-a4cd816c10e4"))
+      (tstamps "17eaf0a6-9932-5348-b523-0122128974c2"))
     (comp
-      (ref "R17")
+      (ref "R16")
       (value "470")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF4700TCE")
+          (name "MPN") "0603WAF4700T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25117")
+          (name "LCSC") "C23179")
         (field
           (name "Verified") "yes")
         (field
@@ -2543,37 +2663,37 @@
         (field
           (name "Note") "~2.5 mA")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R17")
+          (name "SKiDL Tag") "R16")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "47689824-ff01-5dd6-9338-a42dda36a2ce"))
+      (tstamps "0ffe9dd6-18d7-5bd8-8f5c-a4cd816c10e4"))
     (comp
-      (ref "R18")
+      (ref "R17")
       (value "1M")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1004TCE")
+          (name "MPN") "0603WAF1004T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C26083")
+          (name "LCSC") "C22935")
         (field
           (name "Verified") "yes")
         (field
@@ -2583,27 +2703,27 @@
         (field
           (name "Note") "GDR pull-down (GD R1)")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R18")
+          (name "SKiDL Tag") "R17")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "e4735f31-c71b-5536-824e-0b76945c5495"))
+      (tstamps "47689824-ff01-5dd6-9338-a42dda36a2ce"))
     (comp
-      (ref "R19")
+      (ref "R18")
       (value "2.2")
       (description "resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
@@ -2631,7 +2751,7 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "R19")
+          (name "SKiDL Tag") "R18")
         (field
           (name "SKiDL Line") "lib.py:94"))
       (libsource
@@ -2641,19 +2761,19 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "0ead03f1-50b6-599b-864c-cf54dd0f7185"))
+      (tstamps "e4735f31-c71b-5536-824e-0b76945c5495"))
     (comp
       (ref "R2")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2663,11 +2783,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2676,7 +2796,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2686,14 +2806,14 @@
       (ref "R3")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2703,11 +2823,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2716,7 +2836,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2726,14 +2846,14 @@
       (ref "R4")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2743,11 +2863,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2756,7 +2876,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2766,14 +2886,14 @@
       (ref "R5")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2783,11 +2903,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2796,7 +2916,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2806,14 +2926,14 @@
       (ref "R6")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2823,11 +2943,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2836,7 +2956,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2846,14 +2966,14 @@
       (ref "R7")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2863,11 +2983,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2876,7 +2996,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2886,14 +3006,14 @@
       (ref "R8")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2903,11 +3023,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2916,7 +3036,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2926,14 +3046,14 @@
       (ref "R9")
       (value "10k")
       (description "resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
-          (name "MPN") "0402WGF1002TCE")
+          (name "MPN") "0603WAF1002T5E")
         (field
           (name "Manufacturer"))
         (field
-          (name "LCSC") "C25744")
+          (name "LCSC") "C25804")
         (field
           (name "Verified") "yes")
         (field
@@ -2943,11 +3063,11 @@
         (field
           (name "Note") "AW9523B has no internal pull-ups")
         (field
-          (name "SpecKey") "_R_Resistor_SMD:R_0402_1005Metric")
+          (name "SpecKey") "_R_Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Description") "resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
@@ -2956,7 +3076,7 @@
           (name "SKiDL Line") "lib.py:94"))
       (libsource
         (lib "NO_LIB")
-        (part "_R_Resistor_SMD:R_0402_1005Metric"))
+        (part "_R_Resistor_SMD:R_0603_1608Metric"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2966,7 +3086,7 @@
       (ref "SW1")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -2981,13 +3101,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key F1")
+          (name "Note") "key 1")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3006,7 +3126,7 @@
       (ref "SW10")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3021,13 +3141,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key END")
+          (name "Note") "key 0")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3044,129 +3164,9 @@
       (tstamps "a5c7c3e1-d485-53b4-8802-a4437acbae5e"))
     (comp
       (ref "SW11")
-      (value "SKRTLAE010")
-      (description "Side-push SMD tactile switch (VOL-/VOL+ on the right end face)")
-      (footprint "Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010")
-      (fields
-        (field
-          (name "MPN") "SKRTLAE010")
-        (field
-          (name "Manufacturer") "Alps Alpine")
-        (field
-          (name "LCSC") "C110293")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "VOL_DN")
-        (field
-          (name "SpecKey") "SIDE_TACT")
-        (field
-          (name "Description") "Side-push SMD tactile switch (VOL-/VOL+ on the right end face)")
-        (field
-          (name "Footprint") "Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "SW11")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "SIDE_TACT"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ed82e66b-307c-575e-977f-40907a101702"))
-    (comp
-      (ref "SW12")
-      (value "SKRTLAE010")
-      (description "Side-push SMD tactile switch (VOL-/VOL+ on the right end face)")
-      (footprint "Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010")
-      (fields
-        (field
-          (name "MPN") "SKRTLAE010")
-        (field
-          (name "Manufacturer") "Alps Alpine")
-        (field
-          (name "LCSC") "C110293")
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "VOL_UP")
-        (field
-          (name "SpecKey") "SIDE_TACT")
-        (field
-          (name "Description") "Side-push SMD tactile switch (VOL-/VOL+ on the right end face)")
-        (field
-          (name "Footprint") "Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "SW12")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "SIDE_TACT"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "176f3ad0-1a71-57ba-aaca-e62d66ba2130"))
-    (comp
-      (ref "SW13")
-      (value "JS202011JAQN")
-      (description "DPDT slide switch, SMD J-lead (MUTE)")
-      (footprint "Button_Switch_SMD:SW_DPDT_CK_JS202011JCQN")
-      (fields
-        (field
-          (name "MPN") "JS202011JAQN")
-        (field
-          (name "Manufacturer") "C&K")
-        (field
-          (name "LCSC") "C221664")
-        (field
-          (name "Verified") "pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); JAQN assumed to share the JS202011JCQN land pattern (JCQN had no stock)")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note") "MUTE: pole A breaks mic bias, pole B reports")
-        (field
-          (name "SpecKey") "SLIDE_DPDT")
-        (field
-          (name "Description") "DPDT slide switch, SMD J-lead (MUTE)")
-        (field
-          (name "Footprint") "Button_Switch_SMD:SW_DPDT_CK_JS202011JCQN")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "SW13")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "SLIDE_DPDT"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "96acffdb-5da3-5768-8a8c-bea411c6b8a9"))
-    (comp
-      (ref "SW2")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3181,13 +3181,93 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key F2")
+          (name "Note") "key MENU")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "SW11")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "HOTSWAP"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "ed82e66b-307c-575e-977f-40907a101702"))
+    (comp
+      (ref "SW12")
+      (value "CPG151101S11-2")
+      (description "MX hot-swap socket (switch plugs in; 2 pads)")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
+      (fields
+        (field
+          (name "MPN") "CPG151101S11-2")
+        (field
+          (name "Manufacturer") "Kailh")
+        (field
+          (name "LCSC") "C49352235")
+        (field
+          (name "Verified") "C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing")
+        (field
+          (name "Datasheet") "https://datasheet.lcsc.com/datasheet/pdf/5ea75d84e431b4d0c68ab6e4e17d332c.pdf")
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "key BACK")
+        (field
+          (name "SpecKey") "HOTSWAP")
+        (field
+          (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
+        (field
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "SW12")
+        (field
+          (name "SKiDL Line") "lib.py:94"))
+      (libsource
+        (lib "NO_LIB")
+        (part "HOTSWAP"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "176f3ad0-1a71-57ba-aaca-e62d66ba2130"))
+    (comp
+      (ref "SW2")
+      (value "CPG151101S11-2")
+      (description "MX hot-swap socket (switch plugs in; 2 pads)")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
+      (fields
+        (field
+          (name "MPN") "CPG151101S11-2")
+        (field
+          (name "Manufacturer") "Kailh")
+        (field
+          (name "LCSC") "C49352235")
+        (field
+          (name "Verified") "C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing")
+        (field
+          (name "Datasheet") "https://datasheet.lcsc.com/datasheet/pdf/5ea75d84e431b4d0c68ab6e4e17d332c.pdf")
+        (field
+          (name "DNP"))
+        (field
+          (name "Note") "key 2")
+        (field
+          (name "SpecKey") "HOTSWAP")
+        (field
+          (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
+        (field
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3206,7 +3286,7 @@
       (ref "SW3")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3221,13 +3301,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key F3")
+          (name "Note") "key 3")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3246,7 +3326,7 @@
       (ref "SW4")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3261,13 +3341,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key F4")
+          (name "Note") "key 4")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3286,7 +3366,7 @@
       (ref "SW5")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3301,13 +3381,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key R1")
+          (name "Note") "key 5")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3326,7 +3406,7 @@
       (ref "SW6")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3341,13 +3421,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key R2")
+          (name "Note") "key 6")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3366,7 +3446,7 @@
       (ref "SW7")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3381,13 +3461,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key R3")
+          (name "Note") "key 7")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3406,7 +3486,7 @@
       (ref "SW8")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3421,13 +3501,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key R4")
+          (name "Note") "key 8")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3446,7 +3526,7 @@
       (ref "SW9")
       (value "CPG151101S11-2")
       (description "MX hot-swap socket (switch plugs in; 2 pads)")
-      (footprint "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+      (footprint "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
       (fields
         (field
           (name "MPN") "CPG151101S11-2")
@@ -3461,13 +3541,13 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "key SPEAKER")
+          (name "Note") "key 9")
         (field
           (name "SpecKey") "HOTSWAP")
         (field
           (name "Description") "MX hot-swap socket (switch plugs in; 2 pads)")
         (field
-          (name "Footprint") "OpenTinCan:Kailh_MX_Hotswap_CPG151101S11")
+          (name "Footprint") "OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11")
         (field
           (name "Datasheet"))
         (field
@@ -3482,132 +3562,6 @@
         (tstamps "/"))
       (component_classes)
       (tstamps "673f4b5b-21b0-519d-a652-7897933950cc"))
-    (comp
-      (ref "TP1")
-      (value "FFC_SPARE")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP1")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "ec7b7017-d3a1-52a1-ab31-ef99bc577234"))
-    (comp
-      (ref "TP2")
-      (value "AW_P1_6")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP2")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "21c4b62b-8c2d-56ee-9b42-d10ab095f277"))
-    (comp
-      (ref "TP3")
-      (value "AW_P1_7")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP3")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "a276100e-c6a6-5278-88b4-43d6f23fc86c"))
     (comp
       (ref "U1")
       (value "AW9523BTQR")
@@ -3738,15 +3692,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "C19")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "C2")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "C20")
+        (ref "C21")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -3754,16 +3704,16 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "C30")
+        (ref "C24")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C32")
         (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "C5")
         (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "D1")
-        (pin "5")
         (pintype "PASSIVE"))
       (node
         (ref "J1")
@@ -3780,6 +3730,10 @@
       (node
         (ref "J2")
         (pin "16")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J3")
+        (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "L2")
@@ -3806,11 +3760,7 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R14")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R17")
+        (ref "R16")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -3859,30 +3809,6 @@
         (pintype "POWER-IN")))
     (net
       (code 2)
-      (name "AW_P1_6_SPARE")
-      (class "Default")
-      (node
-        (ref "TP2")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U1")
-        (pin "16")
-        (pintype "BIDIRECTIONAL")))
-    (net
-      (code 3)
-      (name "AW_P1_7_SPARE")
-      (class "Default")
-      (node
-        (ref "TP3")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U1")
-        (pin "17")
-        (pintype "BIDIRECTIONAL")))
-    (net
-      (code 4)
       (name "AW_RSTN")
       (class "Default")
       (node
@@ -3898,7 +3824,7 @@
         (pin "23")
         (pintype "INPUT")))
     (net
-      (code 5)
+      (code 3)
       (name "EPD_BUSY")
       (class "Default")
       (node
@@ -3910,23 +3836,23 @@
         (pin "9")
         (pintype "PASSIVE")))
     (net
-      (code 6)
+      (code 4)
       (name "EPD_CP")
       (class "Default")
       (node
-        (ref "C31")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "D15")
+        (ref "C33")
         (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "D16")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "D17")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 7)
+      (code 5)
       (name "EPD_CS")
       (class "Default")
       (node
@@ -3938,7 +3864,7 @@
         (pin "12")
         (pintype "PASSIVE")))
     (net
-      (code 8)
+      (code 6)
       (name "EPD_DC")
       (class "Default")
       (node
@@ -3950,7 +3876,7 @@
         (pin "11")
         (pintype "PASSIVE")))
     (net
-      (code 9)
+      (code 7)
       (name "EPD_GDR")
       (class "Default")
       (node
@@ -3962,11 +3888,11 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R18")
+        (ref "R17")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 10)
+      (code 8)
       (name "EPD_MOSI")
       (class "Default")
       (node
@@ -3978,15 +3904,15 @@
         (pin "14")
         (pintype "PASSIVE")))
     (net
-      (code 11)
+      (code 9)
       (name "EPD_PREVGH")
       (class "Default")
       (node
-        (ref "C29")
+        (ref "C31")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "D14")
+        (ref "D15")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -3994,15 +3920,15 @@
         (pin "21")
         (pintype "PASSIVE")))
     (net
-      (code 12)
+      (code 10)
       (name "EPD_PREVGL")
       (class "Default")
       (node
-        (ref "C27")
+        (ref "C29")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "D16")
+        (ref "D17")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4010,7 +3936,7 @@
         (pin "23")
         (pintype "PASSIVE")))
     (net
-      (code 13)
+      (code 11)
       (name "EPD_RESE")
       (class "Default")
       (node
@@ -4022,11 +3948,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R19")
+        (ref "R18")
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 14)
+      (code 12)
       (name "EPD_RST")
       (class "Default")
       (node
@@ -4038,7 +3964,7 @@
         (pin "10")
         (pintype "PASSIVE")))
     (net
-      (code 15)
+      (code 13)
       (name "EPD_SCK")
       (class "Default")
       (node
@@ -4050,15 +3976,15 @@
         (pin "13")
         (pintype "PASSIVE")))
     (net
-      (code 16)
+      (code 14)
       (name "EPD_SW")
       (class "Default")
       (node
-        (ref "C31")
+        (ref "C33")
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "D14")
+        (ref "D15")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4070,11 +3996,11 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 17)
+      (code 15)
       (name "EPD_VCOM")
       (class "Default")
       (node
-        (ref "C28")
+        (ref "C30")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -4082,44 +4008,8 @@
         (pin "24")
         (pintype "PASSIVE")))
     (net
-      (code 18)
+      (code 16)
       (name "EPD_VDD")
-      (class "Default")
-      (node
-        (ref "C24")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J2")
-        (pin "18")
-        (pintype "PASSIVE")))
-    (net
-      (code 19)
-      (name "EPD_VSH1")
-      (class "Default")
-      (node
-        (ref "C25")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J2")
-        (pin "20")
-        (pintype "PASSIVE")))
-    (net
-      (code 20)
-      (name "EPD_VSH2")
-      (class "Default")
-      (node
-        (ref "C23")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J2")
-        (pin "5")
-        (pintype "PASSIVE")))
-    (net
-      (code 21)
-      (name "EPD_VSL")
       (class "Default")
       (node
         (ref "C26")
@@ -4127,22 +4017,46 @@
         (pintype "PASSIVE"))
       (node
         (ref "J2")
+        (pin "18")
+        (pintype "PASSIVE")))
+    (net
+      (code 17)
+      (name "EPD_VSH1")
+      (class "Default")
+      (node
+        (ref "C27")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J2")
+        (pin "20")
+        (pintype "PASSIVE")))
+    (net
+      (code 18)
+      (name "EPD_VSH2")
+      (class "Default")
+      (node
+        (ref "C25")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J2")
+        (pin "5")
+        (pintype "PASSIVE")))
+    (net
+      (code 19)
+      (name "EPD_VSL")
+      (class "Default")
+      (node
+        (ref "C28")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J2")
         (pin "22")
         (pintype "PASSIVE")))
     (net
-      (code 22)
-      (name "FFC_SPARE")
-      (class "Default")
-      (node
-        (ref "J1")
-        (pin "20")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP1")
-        (pin "1")
-        (pintype "PASSIVE")))
-    (net
-      (code 23)
+      (code 20)
       (name "GND")
       (class "Default")
       (node
@@ -4198,11 +4112,11 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "C22")
+        (ref "C21")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "C23")
+        (ref "C22")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4238,6 +4152,14 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
+        (ref "C31")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C32")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
         (ref "C4")
         (pin "2")
         (pintype "PASSIVE"))
@@ -4263,8 +4185,8 @@
         (pintype "PASSIVE"))
       (node
         (ref "D1")
-        (pin "2")
-        (pintype "PASSIVE"))
+        (pin "3")
+        (pintype "POWER-IN"))
       (node
         (ref "D10")
         (pin "3")
@@ -4278,7 +4200,11 @@
         (pin "3")
         (pintype "POWER-IN"))
       (node
-        (ref "D15")
+        (ref "D13")
+        (pin "3")
+        (pintype "POWER-IN"))
+      (node
+        (ref "D16")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -4354,19 +4280,27 @@
         (pin "MP")
         (pintype "PASSIVE"))
       (node
+        (ref "J3")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J3")
+        (pin "MP")
+        (pintype "PASSIVE"))
+      (node
         (ref "Q2")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R15")
+        (ref "R14")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R17")
         (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "R18")
-        (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R19")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4382,20 +4316,8 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "SW11")
-        (pin "MP")
-        (pintype "PASSIVE"))
-      (node
         (ref "SW12")
         (pin "2")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW12")
-        (pin "MP")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW13")
-        (pin "5")
         (pintype "PASSIVE"))
       (node
         (ref "SW2")
@@ -4454,12 +4376,16 @@
         (pin "4")
         (pintype "POWER-IN")))
     (net
-      (code 24)
+      (code 21)
       (name "I2C_SCL")
       (class "Default")
       (node
         (ref "J1")
         (pin "16")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J3")
+        (pin "4")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
@@ -4474,12 +4400,16 @@
         (pin "6")
         (pintype "INPUT")))
     (net
-      (code 25)
+      (code 22)
       (name "I2C_SDA")
       (class "Default")
       (node
         (ref "J1")
         (pin "17")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J3")
+        (pin "3")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
@@ -4494,7 +4424,7 @@
         (pin "5")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 26)
+      (code 23)
       (name "IRQ")
       (class "Default")
       (node
@@ -4510,8 +4440,8 @@
         (pin "7")
         (pintype "OPEN-COLLECTOR")))
     (net
-      (code 27)
-      (name "KEY_END")
+      (code 24)
+      (name "KEY_0")
       (class "Default")
       (node
         (ref "R11")
@@ -4526,8 +4456,8 @@
         (pin "2")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 28)
-      (name "KEY_F1")
+      (code 25)
+      (name "KEY_1")
       (class "Default")
       (node
         (ref "R2")
@@ -4542,8 +4472,8 @@
         (pin "5")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 29)
-      (name "KEY_F2")
+      (code 26)
+      (name "KEY_2")
       (class "Default")
       (node
         (ref "R3")
@@ -4558,8 +4488,8 @@
         (pin "6")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 30)
-      (name "KEY_F3")
+      (code 27)
+      (name "KEY_3")
       (class "Default")
       (node
         (ref "R4")
@@ -4574,8 +4504,8 @@
         (pin "7")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 31)
-      (name "KEY_F4")
+      (code 28)
+      (name "KEY_4")
       (class "Default")
       (node
         (ref "R5")
@@ -4590,8 +4520,8 @@
         (pin "8")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 32)
-      (name "KEY_R1")
+      (code 29)
+      (name "KEY_5")
       (class "Default")
       (node
         (ref "R6")
@@ -4606,8 +4536,8 @@
         (pin "10")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 33)
-      (name "KEY_R2")
+      (code 30)
+      (name "KEY_6")
       (class "Default")
       (node
         (ref "R7")
@@ -4622,8 +4552,8 @@
         (pin "11")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 34)
-      (name "KEY_R3")
+      (code 31)
+      (name "KEY_7")
       (class "Default")
       (node
         (ref "R8")
@@ -4638,8 +4568,8 @@
         (pin "12")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 35)
-      (name "KEY_R4")
+      (code 32)
+      (name "KEY_8")
       (class "Default")
       (node
         (ref "R9")
@@ -4654,8 +4584,8 @@
         (pin "13")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 36)
-      (name "KEY_SPEAKER")
+      (code 33)
+      (name "KEY_9")
       (class "Default")
       (node
         (ref "R10")
@@ -4670,20 +4600,64 @@
         (pin "1")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 37)
+      (code 34)
+      (name "KEY_BACK")
+      (class "Default")
+      (node
+        (ref "R13")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "SW12")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "17")
+        (pintype "BIDIRECTIONAL")))
+    (net
+      (code 35)
+      (name "KEY_MENU")
+      (class "Default")
+      (node
+        (ref "R12")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "SW11")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "16")
+        (pintype "BIDIRECTIONAL")))
+    (net
+      (code 36)
       (name "LED_D1")
       (class "Default")
       (node
-        (ref "D2")
+        (ref "D1")
         (pin "2")
         (pintype "OUTPUT"))
       (node
-        (ref "D3")
+        (ref "D2")
+        (pin "4")
+        (pintype "INPUT")))
+    (net
+      (code 37)
+      (name "LED_D10")
+      (class "Default")
+      (node
+        (ref "D10")
+        (pin "2")
+        (pintype "OUTPUT"))
+      (node
+        (ref "D11")
         (pin "4")
         (pintype "INPUT")))
     (net
       (code 38)
-      (name "LED_D10")
+      (name "LED_D11")
       (class "Default")
       (node
         (ref "D11")
@@ -4695,7 +4669,31 @@
         (pintype "INPUT")))
     (net
       (code 39)
+      (name "LED_D12")
+      (class "Default")
+      (node
+        (ref "D12")
+        (pin "2")
+        (pintype "OUTPUT"))
+      (node
+        (ref "D13")
+        (pin "4")
+        (pintype "INPUT")))
+    (net
+      (code 40)
       (name "LED_D2")
+      (class "Default")
+      (node
+        (ref "D2")
+        (pin "2")
+        (pintype "OUTPUT"))
+      (node
+        (ref "D3")
+        (pin "4")
+        (pintype "INPUT")))
+    (net
+      (code 41)
+      (name "LED_D3")
       (class "Default")
       (node
         (ref "D3")
@@ -4706,8 +4704,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 40)
-      (name "LED_D3")
+      (code 42)
+      (name "LED_D4")
       (class "Default")
       (node
         (ref "D4")
@@ -4718,8 +4716,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 41)
-      (name "LED_D4")
+      (code 43)
+      (name "LED_D5")
       (class "Default")
       (node
         (ref "D5")
@@ -4730,8 +4728,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 42)
-      (name "LED_D5")
+      (code 44)
+      (name "LED_D6")
       (class "Default")
       (node
         (ref "D6")
@@ -4742,8 +4740,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 43)
-      (name "LED_D6")
+      (code 45)
+      (name "LED_D7")
       (class "Default")
       (node
         (ref "D7")
@@ -4754,8 +4752,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 44)
-      (name "LED_D7")
+      (code 46)
+      (name "LED_D8")
       (class "Default")
       (node
         (ref "D8")
@@ -4766,8 +4764,8 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 45)
-      (name "LED_D8")
+      (code 47)
+      (name "LED_D9")
       (class "Default")
       (node
         (ref "D10")
@@ -4778,23 +4776,11 @@
         (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 46)
-      (name "LED_D9")
-      (class "Default")
-      (node
-        (ref "D10")
-        (pin "2")
-        (pintype "OUTPUT"))
-      (node
-        (ref "D11")
-        (pin "4")
-        (pintype "INPUT")))
-    (net
-      (code 47)
+      (code 48)
       (name "LED_DATA_BUF")
       (class "Default")
       (node
-        (ref "D2")
+        (ref "D1")
         (pin "4")
         (pintype "INPUT"))
       (node
@@ -4802,7 +4788,7 @@
         (pin "4")
         (pintype "PASSIVE")))
     (net
-      (code 48)
+      (code 49)
       (name "LED_PWR_EN")
       (class "Default")
       (node
@@ -4810,7 +4796,7 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
-        (ref "R15")
+        (ref "R14")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -4818,55 +4804,23 @@
         (pin "15")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 49)
-      (name "MICBIAS_IN")
-      (class "Default")
-      (node
-        (ref "J1")
-        (pin "22")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW13")
-        (pin "2")
-        (pintype "PASSIVE")))
-    (net
       (code 50)
-      (name "MICBIAS_OUT")
-      (class "Default")
-      (node
-        (ref "J1")
-        (pin "23")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW13")
-        (pin "1")
-        (pintype "PASSIVE")))
-    (net
-      (code 51)
       (name "MUTE_SENSE")
       (class "Default")
       (node
-        (ref "D1")
-        (pin "4")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R14")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW13")
-        (pin "6")
+        (ref "J1")
+        (pin "20")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
         (pin "14")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 52)
+      (code 51)
       (name "NFC_AC0")
       (class "Default")
       (node
-        (ref "C21")
+        (ref "C23")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -4878,11 +4832,11 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 53)
+      (code 52)
       (name "NFC_AC1")
       (class "Default")
       (node
-        (ref "C21")
+        (ref "C23")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4894,23 +4848,23 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 54)
+      (code 53)
       (name "PRIV_LED_A")
       (class "Default")
       (node
-        (ref "D13")
+        (ref "D14")
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R17")
+        (ref "R16")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 55)
+      (code 54)
       (name "PRIV_LED_K")
       (class "Default")
       (node
-        (ref "D13")
+        (ref "D14")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -4918,7 +4872,7 @@
         (pin "19")
         (pintype "PASSIVE")))
     (net
-      (code 56)
+      (code 55)
       (name "VLED")
       (class "Default")
       (node
@@ -4958,6 +4912,14 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
+        (ref "C19")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C20")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
         (ref "C6")
         (pin "1")
         (pintype "PASSIVE"))
@@ -4974,6 +4936,10 @@
         (pin "1")
         (pintype "PASSIVE"))
       (node
+        (ref "D1")
+        (pin "1")
+        (pintype "POWER-IN"))
+      (node
         (ref "D10")
         (pin "1")
         (pintype "POWER-IN"))
@@ -4983,6 +4949,10 @@
         (pintype "POWER-IN"))
       (node
         (ref "D12")
+        (pin "1")
+        (pintype "POWER-IN"))
+      (node
+        (ref "D13")
         (pin "1")
         (pintype "POWER-IN"))
       (node
@@ -5022,7 +4992,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 57)
+      (code 56)
       (name "VLED_PFET_G")
       (class "Default")
       (node
@@ -5034,51 +5004,35 @@
         (pin "3")
         (pintype "PASSIVE"))
       (node
-        (ref "R16")
+        (ref "R15")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 58)
+      (code 57)
       (name "VOL_DN")
       (class "Default")
       (node
-        (ref "D1")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R12")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW11")
-        (pin "1")
+        (ref "J1")
+        (pin "22")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
         (pin "3")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 59)
+      (code 58)
       (name "VOL_UP")
       (class "Default")
       (node
-        (ref "D1")
-        (pin "3")
-        (pintype "PASSIVE"))
-      (node
-        (ref "R13")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "SW12")
-        (pin "1")
+        (ref "J1")
+        (pin "23")
         (pintype "PASSIVE"))
       (node
         (ref "U1")
         (pin "4")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 60)
+      (code 59)
       (name "VSYS")
       (class "Default")
       (node
@@ -5098,6 +5052,6 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
-        (ref "R16")
+        (ref "R15")
         (pin "1")
         (pintype "PASSIVE")))))

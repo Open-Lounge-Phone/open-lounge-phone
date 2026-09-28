@@ -1,12 +1,20 @@
-main-kids: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
-deck-kids: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
-I2C bus (kids): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+main-kids: 200 parts, 122 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-kids: 91 parts, 60 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (kids): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
 FFC main<->deck (kids): OK
-main-lounge: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
-deck-lounge: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
-I2C bus (lounge): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+main-kids-eink: 200 parts, 122 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-kids-eink: 91 parts, 60 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (kids-eink): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
+FFC main<->deck (kids-eink): OK
+main-lounge: 200 parts, 122 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-lounge: 91 parts, 60 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (lounge): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
 FFC main<->deck (lounge): OK
-main-kids-batt: 200 parts, 123 nets, 0 check errors; ERC 0 errors / 3 warnings
-deck-kids-batt: 92 parts, 61 nets, 0 check errors; ERC 0 errors / 0 warnings
-I2C bus (kids-batt): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP)
+main-kids-batt: 200 parts, 122 nets, 0 check errors; ERC 0 errors / 3 warnings
+deck-kids-batt: 91 parts, 60 nets, 0 check errors; ERC 0 errors / 0 warnings
+I2C bus (kids-batt): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 deck:U2(LTR-303ALS), 0x36 main:U14(MAX17048), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 deck:U3(ST25DV04K), 0x57 deck:U3(ST25DV04K), 0x58 deck:U1(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
 FFC main<->deck (kids-batt): OK
+cost (kids): $34.69 @1k, $32.64 @10k; one-off $217.84/phone (JLC PCBA, 2 built), $488.06 (OSH Park bare + hand); extended parts main 25 / deck 6
+cost (kids-eink): $40.35 @1k, $38.20 @10k; one-off $230.61/phone (JLC PCBA, 2 built), $496.57 (OSH Park bare + hand); extended parts main 25 / deck 9; WARN kids-eink: $40.35 at 1000 exceeds $40
+cost (lounge): $41.39 @1k, $39.22 @10k; one-off $230.09/phone (JLC PCBA, 2 built), $494.07 (OSH Park bare + hand); extended parts main 27 / deck 9; WARN lounge: $41.39 at 1000 exceeds $40
+cost (kids-batt): $38.73 @1k, $36.66 @10k; one-off $229.30/phone (JLC PCBA, 2 built), $496.52 (OSH Park bare + hand); extended parts main 27 / deck 6

@@ -1,10 +1,10 @@
-# OpenTinCan Hardware Design — "Trimline" r0.1
+# Open Lounge Phone Hardware Design — "Trimline" r0.1
 
 Status: **proposal / pre-EVT**. Owner: hardware. License: CERN-OHL-S-2.0 (this document and all
 derived KiCad/enclosure files).
 
 This document picks the parts, board partitioning, envelope, pin map, power, BOM and staging for the
-first custom OpenTinCan phone: a **Trimline-style corded phone** (slim base + handset on a coiled
+first custom Open Lounge Phone: a **Trimline-style corded phone** (slim base + handset on a coiled
 cord), USB-C powered, running the **same PCBA** for the **Kids'** and **Lounge** variants.
 
 Product-owner constraints incorporated (revision of 2026-09-27):
@@ -13,6 +13,44 @@ Product-owner constraints incorporated (revision of 2026-09-27):
   **per-key RGB LEDs** plus **audio prompts/earcons** from flash.
 - **Passive handset.** Earpiece + mic + magnet only. All electronics live in the base.
 - **Keys are keyboard switches.** MX-compatible, hot-swap sockets, plate-mounted, standard keycaps.
+
+> **Current architecture — owner decisions of 2026-09-27 (supersede conflicting text below;
+> the older sections are kept for their reasoning and are being brought in line):**
+>
+> - **Form factor:** compact stacked base ≈ 186 × 94 × 33 mm with a G-style handset resting on a
+>   raised hook rest **above** the keypad (keys and e-ink stay visible). Boards stack: the key
+>   **deck (117 × 84 mm)** on top, the **main board (180 × 88 mm)** underneath, joined by the
+>   24-pin FFC. Hook sensing: DRV5032 on the main board under one hook-rest post (plunger magnet,
+>   post at ≈ +80 mm from the base centre, a layout parameter until the enclosure confirms it).
+> - **Keys:** 12 MX keys, `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK` (§6.1); 13 SK6812MINI-E.
+> - **Handset:** **off-the-shelf USB-C (UAC 1.0) handset/headset** — e.g. a G-style retro USB-C
+>   handset of the Native Union POP class, or any USB-C headset — plugged into a **USB-C
+>   receptacle on the rear edge** (a short right-angle or coiled C-to-C extension also works).
+>   The ESP32-S3 native USB OTG (GPIO19/20) is the **USB host** (ESP-IDF `usb_host_uac` class
+>   driver, full-speed, isochronous; one device, no hub; firmware must accept the device's fixed
+>   formats, typically 16/48 kHz mono/stereo). The port is a **source**: Rp 33 k to 3V3 on CC1/CC2
+>   (Default USB), VBUS through a 0.45 A current-limited switch (SY6280) fed from VBUS or VSYS
+>   (diode-OR, so it works on the battery option), enabled by GPIO3 (off at boot), sensed on GPIO4;
+>   SRV05-4 at the connector. **Rejected:** USB-C analog audio-accessory mode (needs SBU wires most
+>   C-to-C cables lack, and Ra on both CC), and the RJ9/4P4C cord (few new products, hard to
+>   customise). A DIY handset (USB-C + CM108-class UAC codec) stays a possible future option.
+>   The AEC reference for handset calls is the digital stream the firmware sends to the handset;
+>   the ES8311→ES7210 CH3 loopback remains the reference for the base speaker.
+> - **Programming/console:** the power USB-C (sink) now has a **CH340C** USB-UART bridge to UART0
+>   with DTR/RTS auto-reset (the native PHY belongs to the handset port).
+> - **Side controls:** VOL−/VOL+ (right-angle tacts) and MUTE (right-angle DPDT, lever outward)
+>   on the **main board's right edge** with ESD; MUTE breaks the mic bias locally; their states go
+>   to the deck's AW9523B over the FFC (pins 20/22/23).
+> - **Speaker:** 20 × 40 mm rectangular top-firing speaker beside the deck (keep-out on the main
+>   board's left zone).
+> - **Display variants:** Kids Lite (no display, voice menu) / Kids Standard and Lounge (e-ink);
+>   a DNP Qwiic port allows a cheaper OLED/segment module. See SCHEMATIC.md.
+> - **ESP32 module: WROOM-1U (U.FL + external FPC antenna on the shell wall)** instead of the
+>   PCB-antenna WROOM-1 (layout, 2026-09-27): in base A no main-board edge is ≥ 15 mm from the
+>   hook tubes, standoffs and inserts. Same pinout and firmware; +≈$0.45 at scale for the antenna.
+> - Main-board geometry follows `enclosure/params.yaml → main_intent` (180 × 88, R8.5, 9 M2.5
+>   holes, hall U10 at (171.0, 18.8), handset USB-C at x = 24, power USB-C at x = 159).
+> - Layout, fab outputs, costs: [LAYOUT.md](LAYOUT.md), [ASSEMBLY.md](ASSEMBLY.md).
 
 Anything marked **[UNVERIFIED]** is an estimate or a datasheet detail I could not confirm online;
 see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC list price is cited.
@@ -23,19 +61,19 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 
 | # | Decision | Why (one line) |
 |---|---|---|
-| 1 | **Envelope: Trimline width (92 mm), stretched to ~330 mm long.** Handset cradle (224 mm) + in-line "key deck" (~104 mm). Height 36 mm body, ~50 mm with handset. | A real Trimline base is completely covered by its handset, so keys and a status strip have to sit beside it. Going longer keeps the Trimline's slim profile. |
+| 1 | **Envelope: compact stacked base ≈186 L × 94 D × 33 H mm** (owner decision 2026-09-27, supersedes the ≈350 mm Trimline stretch). Key deck 117 × 84 on top, main board 180 × 88 underneath, G-style USB-C handset on a raised hook rest above the keypad. | Smallest base that holds both boards; keys and e-ink stay visible under the handset bridge. The earlier ≈350 mm in-line layout is superseded. |
 | 2 | **Handset is fully passive.** Dynamic receiver + electret capsule + N52 magnet, on a standard **4P4C (RJ9/RJ22) coiled cord**, analog to the base. | Any $3 replacement coiled cord (and most landline handsets) works. There is nothing to break, charge or flash in the part kids throw. |
 | 3 | **MCU: ESP32-S3-WROOM-1-N16R8** (pre-certified module, 16 MB flash, 8 MB octal PSRAM). | Espressif's AFE/AEC (ESP-SR) and esp-webrtc both target the S3. The C5 lacks AFE support and the P4 costs too much. |
 | 4 | **Audio: ES8311 (DAC/earpiece driver) + ES7210 (4-ch ADC) + NS4150B (3 W class-D)**, the same chipset as ESP32-S3-Korvo-2 / S3-BOX-3. ES7210 ch3 records the **analog AEC reference**. | This is Espressif's known-good AEC topology, so the dev kit matches the product. INMP441/MAX98357A can't serve a passive handset and give no hardware reference. |
-| 5 | **Keys: 10 × MX-compatible switches** in **Kailh CPG151101S11 hot-swap sockets**, on a **1.6 mm FR4 plate**, DSA/relegendable 1u keycaps: 8 contact keys (2 rows × 4) + SPEAKER + END. | This follows the owner's direction. Relegendable caps let kids' phones carry photos, and hot-swap means a parent can fix a key in 30 s. |
-| 6 | **Per-key LEDs: 11 × SK6812MINI-E** (10 keys + 1 status), reverse-mounted, on one RMT GPIO. A **hardwired red privacy LED** lights whenever mic bias is present. | With no screen, the keys are the status surface. The privacy LED can't be overridden by firmware. |
+| 5 | **Keys: 12 × MX-compatible switches** (owner decision 2026-09-27) in **Kailh CPG151101S11 hot-swap sockets**, on a **1.6 mm FR4 plate**, DSA/relegendable 1u keycaps, two rows of six: `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`. No SPEAKER/END keys: hang up = handset on hook, speakerphone is a menu item. | This follows the owner's direction. Relegendable caps let kids' phones carry photos, and hot-swap means a parent can fix a key in 30 s. |
+| 6 | **Per-key LEDs: 13 × SK6812MINI-E** (12 keys + 1 status), reverse-mounted, on one RMT GPIO. A **hardwired red privacy LED** lights whenever mic bias is present. | With no screen, the keys are the status surface. The privacy LED can't be overridden by firmware. |
 | 7 | **E-ink strip: Good Display GDEY029T94** (2.9", 296 × 128, SSD1680, active 66.9 × 29.1 mm), placed **between the two key rows** so every contact key has its label directly above or below it. I compared 7/14-segment LED arrays (HT16K33), dot-matrix, a single 0.91" SSD1306 OLED and per-key OLEDs (§7.2). | 4 key columns at 19.05 mm = 76.2 mm, which matches the 79 mm panel. It's the only option with per-key labels, zero light emission at night and no burn-in. It renders a QR at 22 mm, which is only enough at ~20–25 cm (§7.1). Cost-down "Lite" = 14-seg HT16K33 array (−$2.66). |
 | 8 | **Lounge takeover = printed QR / NFC tap + proof of presence** (mmWave occupied **and** press-the-glowing-key challenge). The strip QR (rotating token) is a secondary path. | A photographed sticker is useless without someone physically at the phone. |
 | 9 | **Hook: TI DRV5032 omnipolar Hall switch** (µA-class) + **12 × 4 mm N52 disc** in the handset. Footprint for an IR reflective sensor (DNP) covers third-party handsets. | Works with the magnet in either orientation, uses almost no power, has no mechanics to wear out. |
 | 10 | **Power: USB-C sink (5.1 kΩ Rd, no PD) → BQ24074 power-path** (always fitted: OVP, input current limit, optional battery) **→ 3.3 V buck + 3.0 V low-noise analog LDO.** No battery by default. The **LiPo 1S 1200 mAh "B-option"** is footprint-ready. A **0.47 F supercap hold-up** on Lounge enables power-pull wipe. | Mains-powered desk device; a USB power bank *is* the UPS. The Wi-Fi router dies in an outage anyway. Lounge needs a few seconds after unplug to wipe the screen and log the user out. |
 | 11 | **Radar: HLK-LD2410C** (Lounge only; DNP on Kids) behind a 0.9 mm radome window, **its BLE disabled** at boot. **NFC: ST25DV04K dynamic tag** (both SKUs) with a PCB coil around the strip. | Presence for the dead-man logout. NFC tap covers setup, pairing and lounge takeover. |
 | 12 | **Security:** Secure Boot v2 + flash encryption (release) + HMAC-protected NVS encryption. The **Ed25519 seed is derived at boot by the eFuse-keyed HMAC peripheral and never stored in flash.** Protocol should add **alg negotiation (ed25519 \| p256)** now. | The S3's DS peripheral is RSA-only and ATECC608B is P-256-only. P-256 opens the door to ESP32-C5/P4 on-chip ECDSA keys later. |
-| 13 | **PCBs: 3 boards.** Main (4-layer, 144 × 80 mm) under the cradle; Deck (4-layer, 98 × 84 mm) under the keys; FR4 key plate. Connected by one 24-pin 0.5 mm FFC. The handset optionally gets a *passive* 20 × 14 mm jack carrier. One family panel at JLCPCB. | One stencil and one SMT run. Keeps the antenna and analog audio on the main board, away from key-switch ESD. |
+| 13 | **PCBs: 3 boards.** Main (4-layer, 144 × 80 mm) under the cradle; Deck (4-layer, 117 × 84 mm) under the keys; FR4 key plate. Connected by one 24-pin 0.5 mm FFC. The handset optionally gets a *passive* 20 × 14 mm jack carrier. One family panel at JLCPCB. | One stencil and one SMT run. Keeps the antenna and analog audio on the main board, away from key-switch ESD. |
 | 14 | **Cost:** core PCBA (main + deck, assembled) **≈ $15.4** (meets the <$20 goal). All electronics incl. strip, switches, caps, speaker, handset parts: **Kids ≈ $28, Lounge ≈ $29**. Landed COGS with enclosure ≈ **$36–38**. | The <$20 target holds for the PCBA only. The whole phone doesn't make it (§12). |
 
 **Top risks:** (1) speakerphone AEC and **RF buzz from Wi-Fi bursts into the 2 m analog handset
@@ -76,7 +114,7 @@ Target mass 110–140 g. Contents: Ø28–32 mm dynamic receiver (32 Ω), Ø6 ×
 RF caps, 12 × 4 mm N52 disc magnet at the neck centre (x ≈ 113 mm from mouth end), 4P4C jack
 (either a bare panel jack or a 20 × 14 mm passive carrier, §2.3).
 
-**Base:** 330 L × 92 D × 36 H mm body; handset top at ~50 mm when docked.
+**Base:** ≈186 L × 94 D × 33 H mm (owner decision 2026-09-27; supersedes the earlier ≈350 mm in-line layout). The handset rests on a raised hook rest above the keypad; the DRV5032 sits on the main board under one hook-rest post (≈ +80 mm from the base centre, a layout parameter `hook_post_x` in layout/boards.yaml).
 Wall-mount: two keyhole slots on the bottom (83 mm US wall-plate spacing is **not** needed — this
 is not a line-powered phone — so use 100 mm spacing), firmware rotates strip content 180° if hung
 key-deck-down.
@@ -86,24 +124,24 @@ key-deck-down.
 Coordinate system: x = left→right along base length (user faces the front long side),
 y = front→rear, z = up from base floor.
 
-**Top view (handset removed)**
+**Top view (handset removed) — compact stacked base (2026-09-27)**
 
 ```
- x=0                                                              224  228                     330
- ┌───────────────────────────────────────────────────────────────────┬──────────────────────────┐ y=92
- │ rear wall  [USB-C]x70 [RJ9]x90            [ESP32-S3 ant]x150-168   │  KEY DECK (skin z=28)    │
- │ ┌──────────┐ ┌──────────────────────────────────────────────────┐  │ ┌────┬────┬────┬────┬────┐│
- │ │ SPEAKER  │ │ MAIN BOARD 144 x 80  (under trough, z=6)          │  │ │ R1 │ R2 │ R3 │ R4 │SPKR││ rear row
- │ │ Ø40 4Ω   │ │                                                    │  │ ├────┴────┴────┴────┼────┤│
- │ │ sealed   │ │   codecs   BQ24074   [DRV5032]x113   ES8311/7210   │  │ │ E-INK STRIP 2.9"   │ALS ││
- │ │ 14cc box │ │                                                    │  │ │ 79 x 36.7 (window  │stat││
- │ │ fires ↓  │ │                    [LD2410C]x170-192 [MIC]x200     │  │ │  67 x 29.1)  [NFC] │priv││
- │ └──────────┘ └──────────────────────────────────────────────────┘  │ ├────┬────┬────┬────┼────┤│
- │  x=6..56        x=62 ............................... x=206          │ │ F1 │ F2 │ F3 │ F4 │END ││ front row
- │       ════════ HANDSET TROUGH 222 x 56, floor z=22 ════════         │ └────┴────┴────┴────┴────┘│
- └───────────────────────────────────────────────────────────────────┴──────────────────────────┘ y=0
-   front wall: radar window (0.9 mm) at x=170-192, mic port x=200        right end face: VOL-/VOL+/MUTE
+ x=0                                                                   186
+ ┌──────────────────────────────────────────────────────────────────────┐ y=94 rear:
+ │ [USB-C power]x≈10  [USB-C handset]x≈24                  ESP32 ant ►  │ USB-C x2
+ │ ┌────────┐  ┌────┬────┬────┬────┬────┬────┐                 ┌──┐     │
+ │ │SPEAKER │  │ 1  │ 2  │ 3  │ 4  │ 5  │MENU│   hook-rest post│H │     │
+ │ │20 x 40 │  ├────┴────┴────┴────┴────┼────┤   (DRV5032 on   │  │ VOL-│
+ │ │top-    │  │ E-INK STRIP 79 x 36.7   │ALS │    main below)  └──┘ VOL+│ right edge
+ │ │firing  │  │ [NFC coil around it]    │priv│                      MUTE│
+ │ └────────┘  ├────┬────┬────┬────┬────┼────┤                          │
+ │             │ 6  │ 7  │ 8  │ 9  │ 0  │BACK│   KEY DECK 117 x 84      │
+ │             └────┴────┴────┴────┴────┴────┘   over MAIN 180 x 88     │
+ └──────────────────────────────────────────────────────────────────────┘ y=0
 ```
+
+The older in-line sketches below (Trimline stretch, RJ9) are kept for their reasoning only.
 
 **Front view (y = 0 face)**
 
@@ -160,7 +198,7 @@ firing down through a bottom grille (4 mm feet) + left-end slots.
 
 Standard **4P4C (RJ9/RJ10/RJ22) coiled handset cord**, fully analog, two balanced pairs:
 
-| Pin | Common handset convention [UNVERIFIED, not universal] | OpenTinCan signal |
+| Pin | Common handset convention [UNVERIFIED, not universal] | Open Lounge Phone signal |
 |---|---|---|
 | 1 | Transmitter (mic) | MIC+ (electret drain, biased from MICBIAS via 2.2 kΩ) |
 | 2 | Receiver | EAR+ (ES8311 OUTP, via EAR_EN switch) |
@@ -242,7 +280,7 @@ carrier** (jack + 3 caps + pads). No active parts either way.
 
 - **Handset mode:** EAR_EN=1, PA_EN=0. AFE input = CH1 (handset) + CH3 (ref). AEC still runs
   because it removes receiver→capsule acoustic leak and linear cord crosstalk.
-- **Speakerphone (SPEAKER key / Lounge hands-free):** EAR_EN=0 (so the docked receiver doesn't
+- **Speakerphone (MENU → speaker / Lounge hands-free):** EAR_EN=0 (so the docked receiver doesn't
   buzz), PA_EN=1. AFE = CH2 (base mic) + CH3 (ref) + NS.
 - **Ringer:** PA_EN=1, EAR_EN=0. Kids' quiet hours: the server routes callers to voicemail and the
   phone never rings.
@@ -314,8 +352,8 @@ rules); GPIO19/20 = native USB; ADC2 unusable with Wi-Fi, so all analog inputs g
 | 0 | BOOT / service button | in | main | Strap. 10 k pull-up, pinhole button. Long-press at runtime = factory reset. |
 | 1 | CC1_SENSE | ADC1_CH0 | main | Reads USB-C Rp advertisement: default / 1.5 A / 3 A |
 | 2 | CC2_SENSE | ADC1_CH1 | main | 〃 |
-| 3 | EAR_EN | out | main | Strap only if EFUSE_STRAP_JTAG_SEL burned (we don't). 100 k pull-down, so the earpiece is off at boot. |
-| 4 | HANDSET_DET | ADC1_CH3 | main | MIC+ bias via 100 k/100 k: missing / present / short |
+| 3 | HS_VBUS_EN | out | main | Handset-port VBUS switch. Strap only if EFUSE_STRAP_JTAG_SEL burned (we don't). 100 k pull-down: off at boot. |
+| 4 | HS_VBUS_SENSE | ADC1_CH3 | main | Handset-port VBUS via 100 k/100 k (overload = sagging VBUS) |
 | 5 | HOOK | in, RTC wake | main | DRV5032 push-pull output |
 | 6 | LD_OUT | in, RTC wake | main | LD2410C presence pin |
 | 7 | IRQ (shared) | in, RTC wake | both | Wired-OR open-drain: AW9523B INTN, ST25DV GPO, LIS2DH12 INT1 (open-drain mode **[UNVERIFIED]**). 10 k pull-up. |
@@ -330,8 +368,8 @@ rules); GPIO19/20 = native USB; ADC2 unusable with Wi-Fi, so all analog inputs g
 | 16 | I2S_MCLK | out | main | 256·fs to ES8311/ES7210 |
 | 17 | I2S_BCLK | out | main | |
 | 18 | I2S_WS | out | main | |
-| 19 | USB_D− | io | main | Native USB Serial/JTAG: flashing, console, DFU |
-| 20 | USB_D+ | io | main | |
+| 19 | HS_USB_D− | io | main | Native USB OTG = **host** for the USB-C (UAC) handset port. Flashing/console via the CH340C on the power port. |
+| 20 | HS_USB_D+ | io | main | |
 | 21 | I2S_DOUT → ES8311 | out | main | |
 | 35–37 | — | — | — | **Reserved (octal PSRAM)** |
 | 38 | I2S_DIN ← ES7210 (TDM) | in | main | |
@@ -351,20 +389,21 @@ $0.17):
 
 | AW9523B pin | Signal |
 |---|---|
-| P0_0–P0_7 | KEY F1–F4, R1–R4 (active-low to GND; **external 10 k pull-ups** — AW9523B has no configurable pull-ups **[UNVERIFIED]**) |
-| P1_0–P1_1 | KEY SPEAKER, KEY END |
+| P0_0–P0_7 | KEY 1–8 (active-low to GND; **external 10 k pull-ups** — AW9523B has no configurable pull-ups **[UNVERIFIED]**) |
+| P1_0–P1_1 | KEY 9, KEY 0 |
 | P1_2–P1_3 | VOL−, VOL+ (side tact) |
 | P1_4 | MUTE_SENSE (2nd pole of slide switch) |
 | P1_5 | LED_PWR_EN (P-FET cuts SK6812 quiescent ~1 mA each) |
-| P1_6–P1_7 | spare |
+| P1_6–P1_7 | KEY MENU, KEY BACK |
 
 **I2C map (no conflicts):** ES8311 0x18, **LIS2DH12 0x19** (SA0=1, avoids ES8311),
 LTR-303ALS 0x29, MAX17048 0x36 (B-option), ES7210 0x40, ST25DV04K 0x53/0x57 (+0x2D system),
 AW9523B 0x58, ATECC608B 0x60 (DNP).
 
 **Main↔Deck FFC (24-pin, 0.5 mm, ~60 mm):** 3V3 ×2, VSYS ×2, GND ×6 (interleaved), EPD ×6,
-I2C ×2, IRQ, LED_DATA(buffered), MICBIAS_IN / MICBIAS_OUT (mute switch loop), PRIV_LED_K,
-spare ×2. Analog audio never crosses the FFC. The mute loop carries only filtered DC bias.
+I2C ×2, IRQ, LED_DATA(buffered), PRIV_LED_K, MUTE_SENSE, VOL_DN, VOL_UP (since the stacked
+form factor the side controls sit on the main board; hardware/schematic/ffc.py is the pinout).
+No analog audio crosses the FFC.
 
 ---
 
@@ -372,16 +411,25 @@ spare ×2. Analog audio never crosses the FFC. The mute loop carries only filter
 
 ### 6.1 Key count and layout
 
-**10 MX-compatible keys at 19.05 mm pitch:** rear row R1–R4 + SPEAKER, front row F1–F4 + END.
-The e-ink strip sits **between** the rows, so each of the 8 contact keys has its label band
-directly beside it (strip 296 px / 4 columns = 74 px ≈ 16.7 mm per column vs 19.05 mm key pitch.
-Labels are drawn centred on the key positions and clipped at the panel edge.)
+**12 MX-compatible keys at 19.05 mm pitch** (owner decision 2026-09-27), two rows of six:
 
-- Kids: 8 contacts, SPEAKER (hands-free answer/call), END (hang up speakerphone; long-press =
-  play voicemail). **Relegendable clear keycaps** take printed photos/names, which works for
-  pre-readers.
-- Lounge: 8 "contact slots" filled per session with the user's trusted contacts (names on strip,
-  presence on LEDs). SPEAKER, and a red **END SESSION** cap.
+```
+ rear row:   1   2   3   4   5   MENU
+            [   e-ink strip, centred over the five digit columns   ]
+ front row:  6   7   8   9   0   BACK
+```
+
+- Digits 0–9 are essential (dialling, codes). Pressing a digit selects the option the strip
+  shows for it. **MENU** turns the digits into soft keys labelled on the strip (contacts,
+  speakerphone, voicemail, settings); **BACK** steps out. Hang up = handset on hook;
+  speakerphone is a menu item (no SPEAKER/END keys).
+- The strip is **representational**, not physically aligned: it draws the two rows of labels in
+  the same order as the keys (the 79 mm panel is narrower than the 95.25 mm digit span).
+- **Kids Lite (no display):** the same keys drive a **voice menu** (audio prompts); relegendable
+  clear keycaps can carry photos for the contacts reachable by digit.
+- Lounge: per-session contacts on the digits (names on the strip, presence on the key LEDs).
+- The deck is generated from `n_keys` (hardware/schematic/config.py, even 4..12), so a later
+  change of key count is a parameter change plus a placement review.
 
 ### 6.2 Switch choice
 
@@ -606,7 +654,7 @@ ESP32-S3 Wi-Fi TX peak **355 mA** (802.11b 1 Mbps, 20.5 dBm, datasheet). LD2410C
 | ES8311 + ES7210 + mic bias | 3V0 | 1 | 1 | 25 | 25 | 10 | 25 |
 | E-ink strip (avg; refresh ≈10.5 mW) | 3V3 | ~0 | ~0 | ~0 | ~0 | 3 | 6 |
 | AW9523B, LTR-303, LIS2DH12, DRV5032, ST25DV | 3V3 | 0.5 | 0.5 | 0.5 | 0.5 | 0.5 | 1 |
-| SK6812 ×11 (quiescent ~1 mA each + light) | VSYS | 27 | 40 | 30 | 30 | 120 (capped) | 400 (uncapped) |
+| SK6812 ×13 (quiescent ~1 mA each + light; ×13/11 of the 11-LED figures) | VSYS | 32 | 47 | 35 | 35 | 142 (capped) | 473 (uncapped) |
 | LD2410C | VBUS | — | 79 | 79 | 79 | 79 | 100 |
 | NS4150B (avg electrical in) | VSYS | 0 | 0 | 0 | 130 | 470 | 550 |
 | **Total @5 V** | | **≈59 mA / 0.30 W** | **≈151 mA / 0.76 W** | **≈240 mA / 1.2 W** (Kids ≈160 mA / 0.8 W) | **≈370 mA / 1.85 W** | **≈730 mA / 3.6 W** | **≈1.35 A / 6.7 W** |
@@ -716,7 +764,7 @@ ATECC608B (populate the DNP footprint) or a future C5/P4 board with a truly non-
 | Server | session, presence subscriptions | `session.end` → server revokes token (source of truth) |
 
 **Triggers:** radar reports empty for >60 s → 10 s warning (chime + END key flashing + strip
-"Ending session — press any key to stay") → logout. END SESSION key. Companion app "leave".
+"Ending session — press any key to stay") → logout. MENU → "end session". Companion app "leave".
 Power pull (§9.5). Server-side heartbeat timeout.
 
 ### 10.3 Dead-man switch reality check
@@ -748,7 +796,7 @@ needs a live camera feed to abuse, and we still require the key press.
 ### 10.5 Onboarding and pairing without a main screen
 
 - **Wi-Fi provisioning (in order of preference):**
-  1. **SoftAP + Wi-Fi QR on the strip** (`WIFI:T:WPA;S:OpenTinCan-7F3A;P:<random>;;`): every modern
+  1. **SoftAP + Wi-Fi QR on the strip** (`WIFI:T:WPA;S:OpenLoungePhone-7F3A;P:<random>;;`): every modern
      phone joins by camera, no app. The captive portal collects home SSID/password **and the
      backend URL** (self-hosters). The password is random per boot and only visible on the strip,
      so it proves physical access.
@@ -760,7 +808,7 @@ needs a live camera feed to abuse, and we still require the key press.
   4. NFC tap opens the setup URL (read-only NDEF; the phone can't write credentials without an app).
 - **Pairing (after Wi-Fi):** `pair.begin` → `pair.code`. The **strip shows "Pair code 429 117"**
   in large digits, keys run the chase animation, and **lifting the handset reads it aloud**
-  ("Your pairing code is 4-2-9, 1-1-7", repeated). SPEAKER announces it on the speaker. The
+  ("Your pairing code is 4-2-9, 1-1-7", repeated). MENU → "speaker" announces it on the speaker. The
   captive-portal success page links to the companion with the device ID prefilled.
 
 ---
@@ -771,10 +819,9 @@ needs a live camera feed to abuse, and we still require the key press.
 
 | Board | Size (mm) | Layers | Key contents |
 |---|---|---|---|
-| **Main** | 144 × 80, 4 × M2.5 bosses | 4 | ESP32-S3 module (rear edge, antenna overhang), ES8311, ES7210, NS4150B, BQ24074, buck + LDO, USB-C + RJ9 (rear-left), DRV5032 (x≈113, under handset magnet), LD2410C header (front edge), base-mic pads, LIS2DH12, supercap/B-option pads, FFC |
-| **Deck** | 98 × 84, 4 bosses + plate standoffs | 4 | 10 hot-swap sockets (bottom), 11 SK6812MINI-E (bottom, reverse-mount), AW9523B, LTR-303, ST25DV04K + coil, e-ink 24-pin FPC + SSD1680 boost (inductor, MOSFET, 3 Schottky, caps), side switches (right edge), privacy/status LEDs, FFC |
-| **Key plate** | 98 × 84 × 1.6 FR4, 14.0 mm cutouts, strip window | 0 (bare FR4) | Panelized with the others |
-| Handset carrier (optional) | 20 × 14 | 2 | 4P4C + 3 caps (passive) |
+| **Main** | 180 × 88 (stacked under the deck), 6 × M2.5 | 4 | ESP32-S3 module (rear edge, antenna in a notch right of the deck), ES8311, ES7210, NS4150B, BQ24074, buck + LDO, power USB-C (sink) + CH340C, handset USB-C (host, SY6280 VBUS switch), DRV5032 under the hook post, VOL−/VOL+/MUTE (right edge), LD2410C socket (front edge), base mic, LIS2DH12, supercap/B-option pads, FFC |
+| **Deck** | 117 × 84, 5 M2.5 holes | 4 | 12 hot-swap sockets (bottom), 13 SK6812MINI-E (bottom, reverse-mount), AW9523B, LTR-303, ST25DV04K + coil, e-ink 24-pin FPC + SSD1680 boost (inductor, MOSFET, 3 Schottky, caps), privacy/status LEDs, DNP Qwiic port, FFC |
+| **Key plate** | 117 × 84 × 1.5–1.6 FR4, 14.0 mm cutouts, strip window | 0 (bare FR4) | Panelized with the others |
 
 ### 11.2 Stackup (main and deck)
 
@@ -869,7 +916,7 @@ LCSC prices are list prices seen during research (quantity breaks vary). Everyth
 | Mute slide + 2 side tacts | | 1 | 0.11 | 0.11 | EST |
 | Privacy/status discrete LEDs | | 1 | 0.02 | 0.02 | EST |
 | Passives (~40) | | 1 | 0.25 | 0.25 | EST |
-| PCB 4L 98 × 84 ENIG | | 1 | 0.80 | 0.80 | EST |
+| PCB 4L 117 × 84 ENIG | | 1 | 0.95 | 0.95 | EST |
 | FR4 key plate 1.6 mm | | 1 | 0.30 | 0.30 | EST |
 | **Deck subtotal** | | | | **4.09** | |
 
@@ -882,7 +929,7 @@ LCSC prices are list prices seen during research (quantity breaks vary). Everyth
 | SMT assembly (JLC-class, ~650 joints, double-sided deck, extended-part fees amortized) | 2.20 | 2.20 | EST |
 | **Core PCBA (target < $20)** | **15.39** ✓ | **15.39** ✓ | |
 | E-ink strip GDEY029T94 | 4.50 | 4.50 | EST (no public price) |
-| MX-compatible tactile switches ×10 | 2.50 | 2.50 | EST $0.25 each |
+| MX-compatible tactile switches ×12 | 3.00 | 3.00 | EST $0.25 each |
 | Keycaps | 3.44 (8 relegendable + 2 printed) | 1.20 (10 printed DSA) | EST |
 | Speaker 40 mm 4 Ω 3 W | 0.60 | 0.60 | EST |
 | Handset electrical: receiver 0.35, electret 0.10, magnet 0.12, carrier/jack 0.20, coiled cord 0.75 | 1.52 | 1.52 | EST |
@@ -935,7 +982,7 @@ parts. Cost-down levers (≈ −$4 to −5): 2.13" strip / Compact-6 (−$1.0), 
 **Call model / `deviceStep`**
 9. Speakerphone: new input `{type:"speaker", on}` behaving as a virtual hook-up/down.
    `hook` message gains `via:"handset"|"speaker"`.
-10. END key: `call.hangup` when in a call. In Lounge idle/bound it's `session.end`.
+10. No END key (12-key layout): hang up is the hook; in Lounge, `session.end` is a MENU item (and the radar timeout). MENU/BACK drive a strip menu (voice menu on Kids Lite).
 11. `soundFor`: add `"offline"` (prompt instead of dial tone when not connected) and `"howler"`
     (off-hook abandoned). Add an `offline` device state.
 
@@ -985,11 +1032,11 @@ a prompt player.
 
 ## 15. Open questions for the product owner
 
-1. **Envelope:** is a ~330 × 92 × 36 mm base (≈46% longer than a real Trimline) acceptable, or do we
-   go Compact-6 (2.13" strip, 6 contacts + 2 fn keys, ~310 mm)? Desk-only, or must wall-mount ship
-   day one?
-2. **Key count:** 8 contact keys + SPEAKER + END enough? Kids with >8 contacts: pages on the strip,
-   or hard cap?
+1. ~~**Envelope**~~ **Resolved 2026-09-27:** compact stacked base ≈186 × 94 × 33 mm, key deck
+   117 × 84 over a 180 × 88 main board, handset on a raised hook rest above the keypad (this
+   supersedes the ≈350 mm in-line base accepted earlier the same day).
+2. ~~**Key count**~~ **Resolved 2026-09-27:** 12 keys, `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`
+   (§6.1); more contacts than digits are reached through MENU pages on the strip / voice menu.
 3. **Battery:** agree to ship **without** a battery (USB power bank = backup), with the B-option held
    for later? Guardians then see "power status" instead of battery %.
 4. **Toy classification:** is the Kids' phone marketed to under-14s (EU toy directive / ASTM F963
@@ -1122,6 +1169,11 @@ a prompt player.
 ---
 
 ## Revision notes
+
+- 2026-09-27 (layout): 12-key deck (1-5 MENU / 6-0 BACK), deck 117 × 84 mm, compact base ≈186 × 94 × 33 mm
+  (supersedes ≈350 mm), 13 SK6812; USB-C UAC handset replaces RJ9; display variants (Kids Lite = no display, Kids Standard/Lounge = e-ink)
+  and the DNP Qwiic display port are in hardware/SCHEMATIC.md; layout in hardware/LAYOUT.md.
+
 
 **r0.1a (2026-09-27, schematic capture; see [SCHEMATIC.md](SCHEMATIC.md)).** These are errata
 found while checking datasheets. The r0.1 text above has not been edited.

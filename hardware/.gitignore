@@ -4,3 +4,9 @@ __pycache__/
 *.erc
 *.log
 *_sklib.py
+.tools/
+# KiCad local/intermediate files (layout pipeline)
+*.kicad_prl
+kicad/*/route/
+*-backups/
+fp-info-cache

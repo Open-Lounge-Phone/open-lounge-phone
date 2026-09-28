@@ -1,0 +1,107 @@
+# Component placement: ref: [x, y, rotation_deg, side]  (side defaults to top)
+# Board-relative mm, x right, y DOWN from the top-left corner (see boards.yaml for outlines).
+# Grouped by functional block; every netlist ref must appear (the deck key grid - sockets,
+# key LEDs, their caps and key pull-ups - is generated from boards.yaml `keys`).
+# All footprints of all variants are placed; variants differ only by DNP.
+
+main:
+  # Compact base A: 180 x 88 mm, R8.5 corners (hardware/enclosure/params.yaml main_intent,
+  # ENCLOSURE.md s8). The key deck sits above x 31.5-148.5, y 1.8-85.8 (parts <= 4.7 mm).
+  # Resistors/capacitors/beads/small transistors and test pads are placed automatically next
+  # to the pin they serve (build_board.auto_place); list a ref here to pin it by hand.
+  # ---- rear left: handset USB-C (host, x = 24) + ESD + current-limited VBUS -----------
+  handset:
+    J7: [24.0, 3.15, 180]         # handset USB-C (UAC host), rear edge x = 24
+    D7: [24.0, 12.0, 0]           # SRV05-4 at the connector
+    U15: [40.0, 12.0, 0]          # SY6280 handset VBUS switch
+    D8: [38.0, 16.8, 0]           # handset supply diode-OR (VBUS / VSYS)
+    D9: [45.0, 16.8, 0]
+  # ---- rear right: power USB-C (sink, x = 159) + ESD + USB-UART bridge -------------------
+  usb:
+    J1: [159.0, 3.15, 180]        # power / programming USB-C
+    D1: [161.0, 11.2, 90]         # USBLC6 D+/D- at the connector
+    D2: [155.5, 11.2, 90]         # USBLC6 CC1/CC2 at the connector
+    R6: [161.5, 14.8, 0]          # D- 0R
+    R5: [160.1, 16.5, 0]          # D+ 0R
+    U16: [163.0, 37.5, 0]         # CH340C USB-UART (power port -> UART0, auto-reset)
+    J2: [5.6, 50.0, 270]          # B-option battery JST-PH-3, plug from the left
+  # ---- power path under the deck, right half (away from the codecs) --------------------
+  power:
+    F1: [151.5, 10.5, 90]         # PTC at the VBUS entry
+    D3: [151.5, 16.5, 90]         # SMF5.0A TVS
+    U2: [134.0, 12.0, 0]          # BQ24074
+    U14: [126.0, 22.0, 0]         # MAX17048 (B-option)
+    U3: [114.0, 8.0, 0]           # TLV62569 buck
+    L1: [120.2, 8.3, 0]
+    C7: [14.0, 74.0, 0]           # supercap hold-up (Lounge), left front end region (see LAYOUT.md)
+  # ---- ESP32-S3-WROOM-1U under the deck (U.FL cable to the antenna on the shell) --------
+  mcu:
+    U1: [68.0, 15.0, 0]
+    SW1: [157.0, 46.8, 90]        # RESET pinhole (enclosure position)
+    SW2: [165.0, 46.8, 90]        # BOOT pinhole
+    U13: [84.0, 26.0, 0]          # ATECC608B (DNP)
+  # ---- audio: codecs + analog LDO in the middle, class-D amp at the left end -------------
+  audio:
+    U7: [92.0, 40.0, 180]         # ES7210
+    U6: [92.0, 64.0, 180]         # ES8311
+    U4: [76.0, 52.0, 0]           # LP5907 3V0
+    MK1: [155.0, 58.8, 0]         # base electret (enclosure port position)
+  amp:
+    J4: [17.0, 37.0, 0]           # speaker JST-PH-2 (speaker box above at z >= 15)
+    U9: [18.0, 60.0, 0]           # NS4150B
+  # ---- deck FFC + LED data buffer (under the deck FFC J1 at board (36.1, 43.8)) -----------
+  io:
+    J6: [26.0, 44.0, 90]
+    U5: [38.0, 56.0, 0]           # SN74LV1T125
+  # ---- hook sensing under the right-hand plunger (enclosure: (171.0, 18.8)) --------------
+  sensors:
+    U10: [171.0, 18.8, 0]         # DRV5032 hall
+    U11: [164.0, 22.0, 0]         # ITR8307 IR option (DNP)
+    U12: [110.0, 50.0, 0]         # LIS2DH12
+  # ---- side controls on the right edge (enclosure: y 70.8 / 62.8 / 53.8) ----------------
+  side:
+    SW3: [177.6, 70.8, 90]        # VOL-
+    SW4: [177.6, 62.8, 90]        # VOL+
+    SW5: [174.5, 53.8, 90]        # MUTE, right-angle DPDT (lever out through the edge)
+    D5: [169.0, 62.0, 90]         # SRV05-4 at the switches
+  # ---- radar (Lounge): enclosure position, facing the front ------------------------------
+  radar:
+    J5: [162.0, 66.4, 90]
+
+deck:
+  # 12-key deck. Key sockets, key LEDs, their caps and the key pull-ups come from the key
+  # grid (boards.yaml `keys`); small parts are auto-placed next to their pins.
+  logic:
+    J1: [4.6, 42.0, 90, bottom]   # FFC from the main board, cable enters from the left
+    U1: [7.6, 26.6, 0, bottom]    # AW9523B
+    Q1: [4.4, 54.8, 90, bottom]   # VLED P-FET
+    Q2: [9.2, 54.8, 90, bottom]
+  nfc:
+    L1: [49.0, 42.0, 0]           # PCB coil around the strip band (top copper + underpass)
+    U3: [92.0, 56.0, 90, bottom]  # ST25DV04K next to the coil terminals
+  eink:
+    J2: [96.0, 42.0, 90, bottom]  # e-ink ZIF (tail through the slot)
+    L2: [95.0, 33.0, 0]           # boost on the top side, under the plate
+    Q3: [95.0, 37.8, 0]
+    D15: [99.8, 44.4, 90]
+    D16: [95.0, 47.4, 0]
+    D17: [95.0, 50.6, 0]
+    J3: [95.0, 56.4, 180]         # Qwiic display port (DNP), top
+  indicators:
+    U2: [110.0, 56.0, 0]          # LTR-303ALS (light pipe beside the strip)
+    D14: [110.0, 51.6, 0]         # privacy LED
+    D13: [106.0, 27.0, 0, bottom] # status SK6812MINI-E
+
+# ---- hand-specified critical routes (locked; FreeRouting routes around them) -------------
+# USB D+/D- (GUIDELINES §5): 90 ohm pair (0.27/0.15 mm on L1 over the L2 plane), no vias,
+# ESD (D1) and the 0R links at the connector; lengths matched (checked in checks.py).
+routes:
+  main:
+    # handset USB-C (the S3's native USB, host) -> ESP32-S3 pads 13/14: ESD (D7) at the
+    # connector, then a 90-ohm pair on L1 over the L2 plane (0.27 / 0.15 mm), no vias. The
+    # bump on D- matches the lengths (checks.py: mismatch <= 0.15 mm).
+    - {net: HS_USB_DN, layer: F.Cu, width: 0.27,
+       pts: [D7.3, [21.41, 12.95], [21.41, 21.83], [40.0, 21.83], [40.0, 20.074],
+             [41.0, 20.074], [41.0, 21.83], U1.13]}
+    - {net: HS_USB_DP, layer: F.Cu, width: 0.27,
+       pts: [D7.1, [20.99, 11.05], [20.99, 22.25], [58.0, 22.25], [58.85, 23.1], U1.14]}

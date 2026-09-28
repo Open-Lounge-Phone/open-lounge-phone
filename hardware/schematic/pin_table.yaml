@@ -11,8 +11,8 @@ gpio:
   0:  {net: BOOT, strap: pullup, board: main, note: "10k pull-up + BOOT button; runtime long-press = factory reset"}
   1:  {net: CC1_SENSE, adc1: true, board: main}
   2:  {net: CC2_SENSE, adc1: true, board: main}
-  3:  {net: EAR_EN, strap: pulldown, board: main, note: "strap only if EFUSE_STRAP_JTAG_SEL burned; 100k pull-down"}
-  4:  {net: HANDSET_DET, adc1: true, board: main}
+  3:  {net: HS_VBUS_EN, strap: pulldown, board: main, note: "handset port VBUS switch; strap only if EFUSE_STRAP_JTAG_SEL burned; 100k pull-down (off at boot)"}
+  4:  {net: HS_VBUS_SENSE, adc1: true, board: main, note: "handset VBUS via 100k/100k"}
   5:  {net: HOOK, rtc: true, board: main}
   6:  {net: LD_OUT, rtc: true, board: main}
   7:  {net: IRQ, rtc: true, board: both, pull: up}
@@ -27,8 +27,8 @@ gpio:
   16: {net: I2S_MCLK, board: main}
   17: {net: I2S_BCLK, board: main}
   18: {net: I2S_WS, board: main}
-  19: {net: USB_DN, board: main}
-  20: {net: USB_DP, board: main}
+  19: {net: HS_USB_DN, board: main, note: "native USB OTG = host for the USB-C (UAC) handset port"}
+  20: {net: HS_USB_DP, board: main}
   21: {net: I2S_DOUT, board: main}
   35: {net: null, note: "reserved: octal PSRAM"}
   36: {net: null, note: "reserved: octal PSRAM"}
@@ -55,3 +55,9 @@ i2c_expected:
   ST25DV04K: [0x53, 0x57, 0x2D]
   AW9523B: 0x58
   ATECC608B: 0x60
+# Optional external modules on the deck's DNP Qwiic port (owner decision 2026-09-27). They are not
+# on either board, but the bus must leave their addresses free, so the uniqueness check reserves
+# them: SSD1306 0.91" OLED (0x3C; 0x3D if its SA0 jumper is moved), HT16K33 backpack (0x70 base).
+i2c_optional_external:
+  SSD1306: 0x3C
+  HT16K33: 0x70

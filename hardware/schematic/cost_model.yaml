@@ -1,0 +1,56 @@
+# Cost roll-up assumptions for cost.py (owner guidance 2026-09-27: $28-40 per phone is fine; it
+# should be affordable to build ONE and cheap at scale). Part prices come from lcsc_cache.json
+# (JLCPCB assembly ladder first, then LCSC). Everything in this file is an ESTIMATE (EST) dated
+# below; re-quote before relying on it. JLCPCB is the reference quote, not a requirement.
+date: 2026-09-27
+warn_at_scale_usd: 40      # WARN when the 1k-qty electronics total exceeds this
+
+scales: [1000, 10000]
+
+# Bare PCBs, per board, at volume (DESIGN.md §12; 4-layer 1.6 mm ENIG, plate = bare FR4).
+pcb_at_scale:
+  1000: {main: 1.20, deck: 0.95, plate: 0.36}   # deck/plate 117 x 84 since the 12-key deck
+  10000: {main: 0.85, deck: 0.66, plate: 0.24}
+# SMT + THT assembly per phone (both boards, extended-part fees amortised). DESIGN.md §12.3.
+assembly_at_scale:
+  1000: 2.20
+  10000: 1.50
+
+one_off:
+  phones: 2                 # smallest JLC PCBA quantity; the other 3 bare boards are spares
+  boards_ordered: 5
+  jlc:                      # reference quote (EST, jlcpcb.com list prices seen 2026-09)
+    pcb: {main: 32.0, deck: 24.0, plate: 8.0}   # 5 pcs; 4L 1.6 mm ENIG; plate 2L no copper
+    shipping: 20.0
+    pcba_setup: {main: 25.0, deck: 50.0}        # standard PCBA; deck is double-sided (2 setups)
+    stencil: {main: 7.9, deck: 15.8}
+    extended_fee: 3.0       # per unique "extended" library part per board
+    per_joint: 0.0017
+    joints: {main: 700, deck: 370}              # EST from pad counts of fitted parts
+  osh_park:                 # published formula (docs.oshpark.com, 2026-09-27): 3 copies
+    per_sq_in_4layer: 10.0
+    per_sq_in_2layer: 5.0
+    copies: 3
+    boards_mm: {main: [144, 80], deck: [117, 84], plate: [117, 84]}
+  hand_assembly_min_line_usd: 0.10  # LCSC cut-tape minimums make each BOM line cost >= ~$0.10
+
+# Fitted on-board parts with no LCSC/JLC price (value per phone).
+unpriced:
+  SE-5R5-D474VYV: {scale: 0.50, retail: 1.50}   # 0.47 F 5.5 V supercap (Lounge), DESIGN.md §12
+  PCB coil (copper): {scale: 0.0, retail: 0.0}
+
+# Off-board electronics included in DESIGN.md §12.3 totals. `when` filters by variant.
+off_board:
+  mx_switches_x12:   {scale: 3.00, retail: 5.40}
+  keycaps_kids:      {scale: 4.13, retail: 12.00, when: {sku: kids}}   # 12 relegendable caps
+  keycaps_lounge:    {scale: 1.44, retail: 3.60, when: {sku: lounge}}  # 12 printed DSA
+  speaker_20x40_4ohm: {scale: 0.60, retail: 3.00}  # rectangular top-firing
+  # off-the-shelf G-style USB-C (UAC 1.0) handset, not designed here. Retail: Native Union
+  # POP class ~$30; at-scale OEM price is a guess (UNVERIFIED) until a vendor quotes.
+  handset_usbc_uac:  {scale: 7.00, retail: 30.00}
+  # WROOM-1U external antenna: adhesive FPC 2.4 GHz antenna with U.FL pigtail (~100 mm)
+  antenna_fpc_ufl:   {scale: 0.45, retail: 2.50}
+  ffc_cable_24p_60mm: {scale: 0.12, retail: 1.00}
+  eink_panel_gdey029t94: {scale: 4.50, retail: 6.50, when: {display: eink}}
+  radar_ld2410c:     {scale: 3.00, retail: 4.00, when: {radar: true}}
+  lipo_1200mah:      {scale: 2.50, retail: 6.00, when: {battery: true}}

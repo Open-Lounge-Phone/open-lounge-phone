@@ -1,4 +1,4 @@
-# OpenTinCan "Trimline" r0.1: schematic as code
+# Open Lounge Phone "Trimline" r0.1: schematic as code
 
 Status: **electrical capture of the main and deck boards, pre-layout.** This implements
 [DESIGN.md](DESIGN.md) r0.1 as checked, version-controlled Python. It does not decide any of the
@@ -54,18 +54,32 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 | `pin_table.yaml` | DESIGN.md §5 GPIO table, machine-readable |
 | `config.py` | Variants / open-question parameters |
 | `checks.py` | Custom checks (below) |
-| `lcsc.py`, `fpcheck.py` | LCSC/JLCPCB and KiCad-footprint verifiers with committed caches |
+| `lcsc.py`, `fpcheck.py` | LCSC/JLCPCB and KiCad-footprint verifiers with committed caches (the LCSC cache also stores LCSC and JLCPCB price ladders) |
+| `cost.py`, `cost_model.yaml` | per-variant cost roll-up (at scale and one-off) |
 
 ## Variants (open questions stay parameters)
 
-| Build | Radar LD2410C | Supercap hold-up | Battery B-option | Keys |
-|---|---|---|---|---|
-| `kids` | DNP | DNP | DNP (10k TS resistor fitted) | 10 |
-| `lounge` | fitted (header + 5 V switch) | fitted | DNP | 10 |
-| `kids-batt` | DNP | DNP | fitted (JST-PH-3, MAX17048; TS resistor DNP) | 10 |
+| Build | Display | Radar LD2410C | Supercap hold-up | Battery B-option | Keys |
+|---|---|---|---|---|---|
+| `kids` (Kids "Lite", default Kids SKU) | none: e-ink FPC + SSD1680 boost DNP; printed relegendable keycaps, status via LEDs + audio | DNP | DNP | DNP (10k TS resistor fitted) | 12 |
+| `kids-eink` (Kids "Standard") | e-ink strip GDEY029T94 | DNP | DNP | DNP | 12 |
+| `lounge` | e-ink strip | fitted (header + 5 V switch) | fitted | DNP | 12 |
+| `kids-batt` | none | DNP | DNP | fitted (JST-PH-3, MAX17048; TS resistor DNP) | 12 |
 
-- **Key count** is `Variant.n_keys` (DESIGN.md's 10; §15 Q2 is open). The deck generator accepts
-  4–12 keys; 8 and 12 were built to confirm this.
+- **Display** (owner decision 2026-09-27) is `Variant.display` (`"none"` or `"eink"`). One deck
+  layout serves every variant; the e-ink connector J2 and all boost parts are DNP when the
+  display is `none` (`check_display` enforces it both ways).
+- **Optional cheaper-display port:** a DNP 4-pin JST-SH Qwiic/STEMMA QT connector (J3 on the
+  deck, SM04B-SRSS-TB, LCSC C160404, pinout GND/3V3/SDA/SCL) on the shared I2C bus, beside the
+  strip window, for a 0.91" SSD1306 OLED (0x3C) or an HT16K33 14-segment backpack (0x70). It is
+  DNP on every variant (maker/field option). No ESD part: the port and cable stay inside the
+  enclosure. `pin_table.yaml` reserves 0x3C and 0x70 as "optional external" so the I2C
+  uniqueness check keeps them free.
+- **Key count** is `Variant.n_keys` = 12 (owner decision 2026-09-27): rear row `1 2 3 4 5 MENU`,
+  front row `6 7 8 9 0 BACK`. AW9523B ports: P0_0–P1_1 = digits 1–9, 0; P1_6/P1_7 = MENU/BACK.
+  The SK6812 chain runs rear row left→right, front row right→left, then the status pixel
+  (`board_deck.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
+  (even) keys.
 - **Battery default** (§15 Q3) follows DESIGN.md's proposal (no battery) but builds both ways.
 - **Kids radar** (§15 Q5) is DNP, per DESIGN.md.
 - **Not touched by the schematic:** base length and envelope (§15 Q1) and toy classification
@@ -88,14 +102,21 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
   - ES8311 at 0x18 (CE strap). ES7210 at 0x40 (AD0/AD1 straps), TDM on SDOUT1 through 47 Ω to GPIO38.
   - Shared MCLK/BCLK/WS.
   - AVDD from 3V0; digital supplies from 3V3.
-- **Handset and base mic:**
-  - RJ9 jack with SRV05-4 at the jack.
-  - Four 3-pad solder jumpers swap the cord pairs; the default is pins 1/4 mic, 2/3 earpiece.
-  - Each cord line gets a 600 Ω bead and 100 pF.
-  - The handset mic is biased through 2.2 k from filtered MICBIAS and goes pseudo-differentially into ES7210 CH1. Its return uses a net tie.
-  - HANDSET_DET: 100 k/100 k divider plus 100 nF to GPIO4.
-  - The base electret goes into CH2.
-- **Earpiece:** ES8311 OUTP → TS5A3166 (EAR_EN, GPIO3, 100 k pull-down) → EAR+; OUTN → EAR−. The receiver is driven DC-coupled and bridge-tied.
+- **Handset (owner decision 2026-09-27): off-the-shelf USB-C UAC handset/headset** on a
+  second USB-C receptacle (J7, rear edge). The ESP32-S3 native USB (GPIO19/20) is the host.
+  Source role: Rp 33 k to 3V3 on CC1/CC2; VBUS from a SY6280 0.45 A switch (U15, EN = GPIO3
+  with 100 k pull-down, ILIM 15 k) fed from VBUS or VSYS through two B5819W (diode-OR, works on
+  the battery option); HS_VBUS sensed on GPIO4 via 100 k/100 k + 100 nF; SRV05-4 (D7) on
+  D+/D−/CC1/CC2 at the connector. The RJ9 jack, its ESD, the pair-swap jumpers, cord filters,
+  handset mic bias/detect and the TS5A3166 earpiece switch are gone. ES7210 CH1 and the ES8311
+  ADC inputs are AC-grounded (unused).
+- **Programming/console:** CH340C (U16, 3.3 V) on the power USB-C D+/D− (after the USBLC6 and
+  0 Ω links) to UART0 (GPIO43/44), DTR/RTS auto-reset through two MMBT3904 (Q5 → EN, Q6 →
+  GPIO0).
+- **Base mic:** the base electret goes into CH2.
+- **Side controls (main board edge):** VOL−/VOL+ (SKRTLAE010) and MUTE (C&K JS202011AQN,
+  right-angle through-hole DPDT) with 10 k pull-ups and SRV05-4; MUTE pole A breaks the mic bias
+  locally, pole B and the VOL lines go to the deck's AW9523B over the FFC.
 - **AEC reference:** ES8311 OUTP/OUTN → 470 nF → 20 k per leg, with 4.3 k + 100 pF shunted across the legs (≈ −24 dB, Korvo values) → ES7210 CH3. CH4 is AC-grounded.
 - **Speaker:** NS4150B on VSYS, CTRL = PA_EN (GPIO41, 100 k pull-down). Input is 100 nF + 150 k (gain 1.6). Outputs go through 2.2 A ferrite beads + 220 pF to a JST-PH-2.
 - **Mic bias / privacy:**
@@ -112,17 +133,17 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
   - LED data: GPIO42 (100 k pull-down) → SN74LV1T125 on VSYS → 330 Ω → FFC.
   - Shared I2C pull-ups of 4.7 k, and a 10 k IRQ pull-up.
   - 24-pin FFC (Hirose FH12).
-  - Test points: VBUS, VSYS, 3V3, 3V0, GND×4, USB D±, U0TX/RX, EN, GPIO0, I2S BCLK/WS/DIN/DOUT, I2C, HOOK, PA_EN, SPK±, EAR±, MIC±, ES8311 ASDOUT and the FFC spare.
+  - Test points: VBUS, VSYS, 3V3, 3V0, GND×4, USB D±, U0TX/RX, EN, GPIO0, I2S BCLK/WS/DIN/DOUT, I2C, HOOK, PA_EN, SPK±, handset VBUS and D±, ES8311 ASDOUT.
 
-**Deck board: 92 parts (10 keys).**
+**Deck board: 99 parts (12 keys).**
 
 - **Keys and side controls:**
   - FFC mate.
   - AW9523B at 0x58. RSTN is pulled up because the chip has an internal pull-down. The port map follows DESIGN.md §5.
-  - 10 Kailh hot-swap sockets with 10 k pull-ups (the chip has none).
+  - 12 Kailh hot-swap sockets with 10 k pull-ups (the chip has none).
   - VOL−/VOL+ side tacts, and the MUTE DPDT: pole A breaks the bias, pole B pulls MUTE_SENSE low.
   - SRV05-4 on the side-switch lines.
-- **LEDs:** 11 × SK6812MINI-E (10 keys + status) on VLED. VLED is switched from VSYS by a P-FET with an N-FET driver, from LED_PWR_EN (AW9523B P1_5).
+- **LEDs:** 13 × SK6812MINI-E (12 keys + status) on VLED. VLED is switched from VSYS by a P-FET with an N-FET driver, from LED_PWR_EN (AW9523B P1_5).
 - **Indicators and sensors:**
   - Red privacy LED.
   - LTR-303ALS at 0x29, polled.
@@ -149,7 +170,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
    - each passive's value matches LCSC's description;
    - zero JLCPCB stock is warned;
    - `[UNVERIFIED]` items are listed.
-7. **Footprints:** every name exists in the official KiCad library. `OpenTinCan:` footprints are listed as TODO.
+7. **Footprints:** every name exists in the official KiCad library. `OpenLoungePhone:` footprints are listed as TODO.
 
 **The checks have been mutation-tested.** Each of these deliberate breakages made the build fail:
 - swapping two GPIOs;
@@ -162,7 +183,16 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - a wrong basic-resistor code;
 - a misspelled footprint.
 
-**Current result:** 6 builds (3 variants × 2 boards) with 0 ERC errors and 0 check errors.
+**Current result:** 8 builds (4 variants × 2 boards) with 0 ERC errors and 0 check errors.
+
+8. **Display population** (`check_display`): e-ink parts DNP exactly when `display == "none"`;
+   the Qwiic port always DNP.
+9. **Cost roll-up** (`cost.py`, runs after the boards): per variant, BOM × price ladder from
+   `lcsc_cache.json` (JLCPCB assembly price first) at 1k and 10k phones, plus a one-off
+   maker order (JLCPCB PCBA reference quote and an OSH Park bare-board + hand-assembly build),
+   PCB/assembly/off-board estimates from `cost_model.yaml` (all dated, marked EST). Writes
+   `build/<variant>/cost.txt` and one line per variant in `build/summary.txt`; WARNs above
+   $40 at 1k (owner guidance: $28-40 is fine), never fails the build.
 
 ## Deviations from DESIGN.md (and why)
 
@@ -194,7 +224,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 - **Pin maps:**
   - ES7210 pins 3/4 (CDATA/CCLK) follow the pinout drawing and Korvo-2; the datasheet's pin table has them swapped.
-  - RJ9 jack pin order and body: the jumpers cover either pair assignment.
+  - SY6280 current limit formula (6800/Rset) from the Silergy application note; CH340C pinout from the WCH datasheet (SOP-16).
   - Electret ground pad, red LED cathode mark, MMBT3904 B/E/C and ITR8307 variant.
   - MAX17048 exposed pad.
   - AW9523B exposed-pad land size.
@@ -211,19 +241,10 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 ## What's left
 
-1. **Custom footprints** in `OpenTinCan.pretty`:
-   - RJ9 jack
-   - 6 mm electret
-   - supercap
-   - Kailh MX hot-swap socket
-   - NFC coil. Design it with ST eDesignSuite for ~4.8 µH, to resonate with the ST25DV's 28.5 pF.
-2. **KiCad project and layout:** import the netlists, draw board outlines per DESIGN.md §11, then place and route. Layout needs to cover:
-   - the antenna keep-out;
-   - codec and analog placement;
-   - the hall sensor under the magnet;
-   - the NFC loop keep-out;
-   - the bottom-side deck sockets and LEDs.
-   Then DRC, the family panel and stackup. This needs KiCad, which isn't installed here.
-3. **Deck mechanics:** the FR4 key plate (no electrical content), side-switch placement, and the strip window.
-4. **Mechanical integration:** enclosure, radome window, and handset parts (not electrical).
-5. **Before layout freeze:** close the unverified items above, and pick the FFC cable type so that pin n maps to pin n.
+Layout is done as code in `hardware/layout/` (see [LAYOUT.md](LAYOUT.md)). The project
+footprints (hot-swap socket, electret, supercap, NFC coil) live in
+`layout/footprints/openloungephone.pretty`. Passives are 0603 by default (hand-solderable; see LAYOUT.md "Hand assembly").
+
+1. **Deck mechanics:** side-switch heights and the plate/enclosure stack (see LAYOUT.md).
+2. **Mechanical integration:** enclosure, radome window, and handset parts (not electrical).
+3. **Before layout freeze:** close the unverified items above, and pick the FFC cable type so that pin n maps to pin n.

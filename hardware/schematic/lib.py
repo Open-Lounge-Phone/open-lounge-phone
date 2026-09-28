@@ -105,7 +105,15 @@ def make(key: str, ref: str | None = None, value: str | None = None, dnp: bool =
 
 # --------------------------------------------------------------------------------------------
 # Passives. Codes are JLCPCB "basic" parts, verified with lcsc.py (see lcsc_cache.json).
+# Default size is 0603 (owner requirement 2026-09-27: hand-solderable one-offs; 0603 costs
+# nothing electrically at these frequencies). 0402 stays available via size="0402".
 
+RES_0603 = {
+    "0": "C21189", "1": "C22936", "22": "C23345", "33": "C23140", "47": "C23182", "100": "C22775",
+    "200": "C8218", "330": "C23138", "470": "C23179", "1k": "C21190", "2.2k": "C4190",
+    "4.7k": "C23162", "5.1k": "C23186", "10k": "C25804", "22k": "C31850", "47k": "C25819",
+    "100k": "C25803", "1M": "C22935", "15k": "C22809", "33k": "C4216",
+}
 RES_0402 = {
     "0": "C17168", "1": "C25086", "22": "C25092", "33": "C25105", "47": "C25118", "100": "C25076",
     "200": "C25087", "330": "C25104", "470": "C25117", "1k": "C11702", "2.2k": "C25879",
@@ -115,16 +123,14 @@ RES_0402 = {
 RES_EXTRA = {}  # (value, size) -> (lcsc, mpn); filled by parts.py for non-basic values
 CAP = {
     # value -> (lcsc, package, voltage)
-    "22p": ("C1555", "0402", "50V C0G"),
-    "33p": ("C1562", "0402", "50V C0G"),
-    "47p": ("C1567", "0402", "50V C0G"),
-    "100p": ("C1546", "0402", "50V C0G"),
-    "1n": ("C1523", "0402", "50V X7R"),
-    "2.2n": ("C1531", "0402", "50V X7R"),
-    "10n": ("C15195", "0402", "50V X7R"),
-    "100n": ("C1525", "0402", "16V X7R"),
-    "1u": ("C52923", "0402", "25V X5R"),
-    "2.2u": ("C12530", "0402", "6.3V X5R"),
+    "22p": ("C1653", "0603", "50V C0G"),
+    "33p": ("C1663", "0603", "50V C0G"),
+    "47p": ("C1671", "0603", "50V C0G"),
+    "100p": ("C14858", "0603", "50V C0G"),
+    "1n": ("C1588", "0603", "50V X7R"),
+    "100n": ("C14663", "0603", "50V X7R"),
+    "1u": ("C15849", "0603", "50V X5R"),
+    "2.2u": ("C23630", "0603", "16V X5R"),
     "4.7u": ("C19666", "0603", "16V X5R"),
     "10u": ("C19702", "0603", "10V X5R"),
     "22u": ("C45783", "0805", "25V X5R"),
@@ -168,12 +174,13 @@ def _two_pin(prefix, name, value, footprint, lcsc, mpn, dnp, note, verified="yes
     return p
 
 
-def R(value: str, dnp: bool = False, note: str = "", size: str = "0402") -> Part:
+def R(value: str, dnp: bool = False, note: str = "", size: str = "0603") -> Part:
+    basic = {"0603": RES_0603, "0402": RES_0402}.get(size, {})
     if (value, size) in RES_EXTRA:
         lcsc, mpn = RES_EXTRA[(value, size)]
         verified = "yes"
-    elif size == "0402" and value in RES_0402:
-        lcsc, mpn, verified = RES_0402[value], "", "yes"
+    elif value in basic:
+        lcsc, mpn, verified = basic[value], "", "yes"
     else:
         lcsc, mpn, verified = None, "", f"no LCSC code chosen for {value} {size}"
     return _two_pin("R", "resistor", value, _FP_R[size], lcsc, mpn, dnp, note, verified)

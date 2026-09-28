@@ -2,7 +2,7 @@
 
 Uses the GitLab API for kicad/libraries/kicad-footprints (master) and caches the list of
 footprints per library in ``fp_cache.json`` (committed), so `make build` stays offline.
-Footprints in the ``OpenTinCan:`` library are project-local and must still be drawn
+Footprints in the ``OpenLoungePhone:`` library are project-local and must still be drawn
 (listed as TODO by checks.py).
 
     python fpcheck.py RF_Module Connector_USB     # refresh these libraries (network)
@@ -51,10 +51,10 @@ def refresh(libs: list[str]) -> dict:
 
 
 def status(footprint: str, cache: dict | None = None) -> str:
-    """'ok', 'local' (OpenTinCan: library, to be drawn), 'missing' or 'unknown-lib'."""
+    """'ok', 'local' (OpenLoungePhone: library, to be drawn), 'missing' or 'unknown-lib'."""
     cache = cache if cache is not None else load_cache()
     lib, _, name = footprint.partition(":")
-    if lib == "OpenTinCan":
+    if lib == "OpenLoungePhone":
         return "local"
     if lib not in cache:
         return "unknown-lib"
@@ -68,5 +68,5 @@ if __name__ == "__main__":
         import parts  # noqa: F401
         from lib import SPECS
 
-        args = sorted({s.footprint.split(":")[0] for s in SPECS.values()} - {"OpenTinCan"})
+        args = sorted({s.footprint.split(":")[0] for s in SPECS.values()} - {"OpenLoungePhone"})
     refresh(args)

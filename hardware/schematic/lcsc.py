@@ -5,7 +5,8 @@ library type (basic/extended), because boards are assembled at JLCPCB.
 
 Results are cached in ``lcsc_cache.json`` (committed) so that builds and checks work offline.
 ``python lcsc.py C25744 C1525`` looks codes up (network) and refreshes the cache;
-``python lcsc.py --all`` re-checks every code used by the design.
+``python lcsc.py --all`` re-checks every code used by the design. Each entry also records the
+LCSC USD price ladder, which ``cost.py`` uses for the per-variant cost roll-up.
 """
 
 from __future__ import annotations
@@ -49,8 +50,12 @@ def fetch(code: str) -> dict:
         data = json.load(resp)
     res = data.get("result")
     jlc = fetch_jlc(code)
-    jl = {"jlc_stock": jlc.get("stockCount"), "jlc_library": jlc.get("componentLibraryType")} \
-        if jlc else {"jlc_stock": None, "jlc_library": None}
+    jl = {"jlc_stock": jlc.get("stockCount"), "jlc_library": jlc.get("componentLibraryType"),
+          # JLCPCB assembly price ladder [[min qty, unit USD], ...] (what a JLC PCBA order pays)
+          "jlc_prices": sorted([x["startNumber"], x["productPrice"]]
+                               for x in jlc.get("componentPrices") or []
+                               if x.get("productPrice") is not None)} \
+        if jlc else {"jlc_stock": None, "jlc_library": None, "jlc_prices": []}
     if not res:
         if jlc:  # listed for JLCPCB assembly but not in the LCSC catalogue
             return {"code": code, "found": True, "source": "jlcpcb", "mpn": jlc["componentModelEn"],
@@ -66,6 +71,9 @@ def fetch(code: str) -> dict:
         "package": res.get("encapStandard"),
         "desc": res.get("productNameEn") or res.get("productIntroEn"),
         "stock": res.get("stockNumber"),
+        # USD price ladder [[min qty, unit price], ...] for the cost roll-up (cost.py)
+        "prices": [[x.get("ladder"), x.get("usdPrice")] for x in res.get("productPriceList") or []
+                   if x.get("ladder") and x.get("usdPrice") is not None],
         "checked": time.strftime("%Y-%m-%d"),
     }
 

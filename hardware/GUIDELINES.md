@@ -9,8 +9,8 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 
 | Rule | Status | How it's met |
 |---|---|---|
-| ESD protection on every user-reachable conductor | adopted | USB-C D+/D−/CC: USBLC6-2SC6 ×2. VBUS: SMF5.0A TVS. RJ9 handset: SRV05-4 at the jack + ferrite + 100 pF per line. Side switches (VOL±, MUTE) that pass the enclosure edge: SRV05-4. Place every TVS **at the connector**, ground via ≤ 1 mm to the GND plane, before anything else on the line. |
-| Series resistance between anything user-facing and a GPIO | adopted | CC sense: 1 kΩ. Handset detect: 100 kΩ. Keys/side switches reach the AW9523B expander, **never a bare ESP32 pin**. The only ESP32-direct buttons (RESET, BOOT) are internal pinhole buttons. `checks.py` should flag any connector/switch net that reaches the ESP32 without a TVS or ≥ 100 Ω series R (to add). |
+| ESD protection on every user-reachable conductor | adopted | Power USB-C D+/D−/CC: USBLC6-2SC6 ×2; VBUS: SMF5.0A TVS. Handset USB-C (host): SRV05-4 on D+/D−/CC1/CC2 with its VBUS as the reference, VBUS behind a current-limited switch. Side switches (VOL±, MUTE) at the main board edge: SRV05-4. Place every TVS **at the connector**, ground via ≤ 1 mm to the GND plane, before anything else on the line. |
+| Series resistance between anything user-facing and a GPIO | adopted | CC sense: 1 kΩ. Handset-port VBUS sense: 100 kΩ divider; handset D+/D− go to the native USB pins behind the SRV05-4 (USB needs them direct). Keys/side switches reach the AW9523B expander, **never a bare ESP32 pin**. The only ESP32-direct buttons (RESET, BOOT) are internal pinhole buttons. `checks.py` should flag any connector/switch net that reaches the ESP32 without a TVS or ≥ 100 Ω series R (to add). |
 | Overcurrent protection | adopted | 1.5 A-hold PTC on VBUS, plus BQ24074 input current limit (1.35 A guaranteed); budget enforced by `check_power_budget`. |
 | Reverse-polarity P-MOSFET | **rejected** | USB-C is reversible and keyed, with VBUS/GND on fixed pins: a USB-C source can't present reverse polarity. The TVS + PTC handle faulty chargers. An extra FET would add a part and ~50 mV drop for no failure mode. (Revisit only for a barrel-jack or battery-terminal variant; the battery option uses a keyed, polarized JST-PH.) |
 | Toy-safety standards (ASTM F963, EN 71-1, EN 18031-2) | adopted as a design input | Whether the Kids phone is legally a "toy" is an open owner question, but design as if it is: no sharp edges, screws needed to reach electronics/battery, and **captive keycaps** (§4). |
@@ -22,7 +22,7 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 |---|---|---|
 | Respect strapping pins | **adapted** | The advice lists GPIO 0/2/5/12/15. Those are the *original ESP32's* straps. The ESP32-S3's are **GPIO0, GPIO3, GPIO45, GPIO46**; each has the required pull in `pin_table.yaml`, checked by `check_pin_table`. |
 | Octal PSRAM pins | adopted | GPIO35–37 left unconnected (N16R8), enforced by the pin table. |
-| Antenna keep-out on **all** layers | adopted | Module antenna overhangs the board edge; no copper, pours, traces or vias under/around it on any layer, per Espressif's WROOM-1 guidelines. Nearest metal (USB-C, RJ9, speaker, screws) ≥ 15 mm; the enclosure has no metal there. |
+| Antenna ≥ 15 mm from metal, keep-out on all layers | **adapted** | In the compact base no main-board edge is ≥ 15 mm from the metal hook tubes, deck standoffs and brass inserts, so the module is the **ESP32-S3-WROOM-1U** (U.FL) and a small adhesive FPC antenna sits on the inside of the shell wall, ≥ 15 mm from metal and outside the key deck (placement in ENCLOSURE.md / LAYOUT.md). The module itself sits under the deck. Reverting to the PCB-antenna WROOM-1 needs a board edge with that clearance. |
 | Pin allocation via expander when GPIOs run out | adopted | AW9523B (16 I/O, I2C) on the deck board handles keys, side switches and LED power; the ESP32 keeps the timing-critical signals (I2S, SPI, RMT, UART). |
 
 ## 3. Power, sensors, grounding
@@ -44,8 +44,8 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 | Hardware RC debounce on every key | **rejected** | These are metal-contact MX switches read through the AW9523B's interrupt; software debounce (5–10 ms) is reliable and standard for keyboards. RC filters would add 20 parts and slow the interrupt edge. Keep a 100 nF footprint (DNP) only on the hook/mute lines if field testing shows problems. |
 | E-ink strip: drop-in, not soldered | adopted | FPC into a 24-pin 0.5 mm ZIF connector; replaceable without tools. |
 | Mounting holes | **adapted** | The advice says M3/M4. Board space under the handset trough is tight, so **M2.5 plated holes with generous copper keep-out** (5.5 mm) and **plastite screws into bosses**, one within 10 mm of every connector and switch cluster so impact loads go into the case, not solder joints. The key plate, not the PCB, takes keystroke force. |
-| Through-hole where force is applied | adopted | USB-C receptacle with through-hole shell tabs, RJ9 jack with through-hole pins/posts, ZIF connector with hold-down tabs. Plain SMD pads are not used for anything a user pulls on. |
-| Clear silkscreen for maintenance | adopted | Label connectors, test points, variant/DNP options, key numbers, board name/revision, and "CERN-OHL-S-2.0 · opentincan" on both boards. |
+| Through-hole where force is applied | adopted | USB-C receptacles (power and handset) with through-hole shell tabs, right-angle through-hole MUTE slide, ZIF/FFC connectors with hold-down tabs. Plain SMD pads are not used for anything a user pulls on. |
+| Clear silkscreen for maintenance | adopted | Label connectors, test points, variant/DNP options, key numbers, board name/revision, and "CERN-OHL-S-2.0 · openloungephone" on both boards. |
 | Stackup | adopted | 4-layer JLCPCB standard (1.6 mm): L1 signal + parts, L2 **solid GND**, L3 power pours (VSYS, 3V3) + slow signals, L4 signal. Both boards. |
 
 ## 5. Layout rules (JLCPCB 4-layer standard capability, with margin)

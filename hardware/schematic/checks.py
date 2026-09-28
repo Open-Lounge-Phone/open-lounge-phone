@@ -155,6 +155,8 @@ def check_i2c_union(per_board: dict) -> list:
     """The I2C bus spans main + deck (FFC): addresses must be unique across both boards,
     counting DNP footprints too (they may be populated later)."""
     out, seen = [], {}
+    for name, a in (PIN_TABLE.get("i2c_optional_external") or {}).items():
+        seen[a] = f"qwiic:{name}(optional external)"
     for board, devs in per_board.items():
         for a, ref, key, fitted in devs:
             tag = f"{board}:{ref}({key}{'' if fitted else ',DNP'})"
@@ -249,7 +251,10 @@ def check_footprints(circuit):
         elif st == "unknown-lib":
             out.append(("ERROR", f"footprint library of {fp} not cached (run `make footprints`)"))
         elif st == "local":
-            out.append(("TODO", f"footprint {fp} must be drawn in OpenTinCan.pretty ({', '.join(refs[:4])})"))
+            lib = HERE.parent / "layout" / "footprints" / "openloungephone.pretty"
+            if not (lib / f"{fp.split(':')[1]}.kicad_mod").exists():
+                out.append(("ERROR", f"footprint {fp} is not in layout/footprints/"
+                                     f"openloungephone.pretty ({', '.join(refs[:4])})"))
     return out
 
 
@@ -267,12 +272,42 @@ def check_ffc(main_map: dict, deck_map: dict):
     return out
 
 
-def run_all(circuit, board: str = "main"):
+EPD_SPECS = {"FPC24_EPD", "L47u", "EPD_NFET", "MBR0530"}  # e-ink connector + SSD1680 boost
+
+
+def check_display(circuit, variant):
+    """display == "none": the e-ink connector and every boost part are DNP (and fitted for
+    "eink"); the Qwiic display port is DNP on every variant."""
+    out = []
+    want_dnp = variant.display != "eink"
+    epd = [p for p in circuit.parts if p.fields.get("SpecKey") in EPD_SPECS]
+    if not epd:
+        out.append(("ERROR", "no e-ink parts found on the deck"))
+    # passives on e-ink-only nets follow the same rule
+    epd_nets = {pin.net.name for p in epd for pin in p.pins
+                if _net_of(pin) is not None and pin.net.name.startswith("EPD_")
+                and pin.net.name not in ("EPD_CS", "EPD_MOSI", "EPD_SCK", "EPD_DC", "EPD_RST",
+                                         "EPD_BUSY")}
+    for p in circuit.parts:
+        on_epd = p in epd or (p.ref_prefix in ("R", "C") and any(
+            _name(_net_of(pin)) in epd_nets for pin in p.pins))
+        if on_epd and bool(p.fields.get("DNP")) != want_dnp:
+            out.append(("ERROR", f"{p.ref} ({p.fields.get('SpecKey')}) should be "
+                                 f"{'DNP' if want_dnp else 'fitted'} for display={variant.display}"))
+        if p.fields.get("SpecKey") == "QWIIC" and not p.fields.get("DNP"):
+            out.append(("ERROR", f"{p.ref} Qwiic display port must be DNP (field option)"))
+    return out
+
+
+def run_all(circuit, board: str = "main", variant=None):
     results = []
     fns = [check_i2c, check_nets, check_sourcing, check_footprints]
     if board == "main":
         fns.insert(0, check_pin_table)
         fns.append(check_power_budget)
+    if board == "deck" and variant is not None:
+        fns.append(lambda c: check_display(c, variant))
+        fns[-1].__name__ = "check_display"
     for fn in fns:
         try:
             results += [(lvl, f"[{fn.__name__}] {msg}") for lvl, msg in fn(circuit)]
