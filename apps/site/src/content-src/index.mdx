@@ -7,16 +7,24 @@ hero:
   image:
     file: ../../logo.svg
   actions:
-    - text: Get started
-      link: /getting-started/
-      icon: right-arrow
     - text: Try it on your computer
       link: /getting-started/
-      icon: laptop
+      icon: right-arrow
+    - text: Deploy your own
+      link: /how-to/deploy-cloudflare/
+      icon: rocket
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Aside, Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+<Aside type="note" title="Where things stand">
+  **The software works today, end to end.** Run your own server, pair a phone, make real calls,
+  set quiet hours, get voicemail with transcripts. Until the hardware ships, the phone runs in a
+  browser: an old tablet or laptop left on a shelf makes a fine first phone. **The hardware is
+  forthcoming.** The circuit board and 3D-printed base are being designed in the open now; there
+  is nothing to buy yet.
+</Aside>
 
 <CardGrid>
   <Card title="Kids phone" icon="heart">
@@ -24,9 +32,10 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
     people a guardian approves. Quiet hours send callers to voicemail with a transcript instead of
     waking anyone up.
   </Card>
-  <Card title="Lounge phone" icon="rocket">
-    A shared booth phone for hospitality spaces: take it over with your own contacts, see who's
-    open to chat, and it forgets you the moment you walk away.
+  <Card title="Grown-ups too" icon="open-book">
+    Parents, grandparents and friends use the companion app on their own phone or computer. They
+    can call the kids' phone and each other, and they only ring when they've said they're
+    available.
   </Card>
   <Card title="Your own server" icon="setting">
     Deploy to your own free Cloudflare account or self-host with Docker. Nobody — including this
@@ -37,13 +46,46 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 <img
   class="screenshot"
   src="/images/emulator-menu.png"
-  alt="The browser emulator of the phone: twelve keys, a handset and a small e-ink status strip showing the menu"
+  alt="The browser version of the phone: twelve keys, a handset and a small e-ink status strip showing the menu"
   width="520"
 />
 
+## What works today
+
+- **Calls** between the phone and the grown-ups' companion app, peer to peer (audio never passes
+  through the server).
+- **Default-deny contacts:** a guardian decides exactly who can call the phone and who it can call.
+- **Quiet hours** per household, with a clear "quiet until 7:00" on the phone.
+- **Voicemail** recorded by the caller, with automatic transcripts for the grown-ups.
+- **Invites and passkeys:** add family by link; sign in with a passkey, no passwords or email.
+- **Two ways to run it:** your own Cloudflare account (Workers, Durable Objects, D1, R2) or a
+  self-hosted Node server with SQLite.
+
+## The hardware (in design)
+
+One open circuit board built around an ESP32-S3:
+- 12 swappable mechanical keys with lights, and a small e-ink status strip
+- a speaker and a microphone, NFC for tap-to-pair, and an optional battery
+- a USB-C port for an off-the-shelf classic G-style handset
+
+It sits in a simple 3D-printable base, and you pick the colour, keycaps and cord. Schematic,
+layout and enclosure are all code in the repository, so anyone can build or modify one. Follow
+along in [Build the hardware](/how-to/build-the-hardware/).
+
 <CardGrid>
-  <LinkCard title="Try it on your computer" href="/getting-started/" description="Run the server, the emulated phone and the companion app in five minutes." />
+  <Card title="Lounge phone (later)" icon="rocket">
+    A shared booth phone for hospitality spaces: take it over with your own contacts, see who's
+    open to chat, and it forgets you the moment you walk away.
+  </Card>
+  <Card title="Open" icon="github">
+    Software under AGPL-3.0-or-later, hardware under CERN-OHL-S-2.0. No accounts with us, no
+    tracking, no ads.
+  </Card>
+</CardGrid>
+
+<CardGrid>
+  <LinkCard title="Try it on your computer" href="/getting-started/" description="Run the server, the phone in a browser tab and the companion app in five minutes." />
   <LinkCard title="Deploy your own" href="/how-to/deploy-cloudflare/" description="Your household on your own Cloudflare account." />
-  <LinkCard title="Build the hardware" href="/how-to/build-the-hardware/" description="Open hardware: schematic, PCB layout, assembly." />
+  <LinkCard title="Build the hardware" href="/how-to/build-the-hardware/" description="Open hardware: schematic, board layout, enclosure — in progress." />
   <LinkCard title="About the project" href="/project/about/" description="Why it exists, principles, and status." />
 </CardGrid>

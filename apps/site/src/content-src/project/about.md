@@ -34,9 +34,12 @@ and it forgets you when you leave.
 | Self-hosted server, browser phone emulator, companion app | done |
 | Cloudflare backend (Workers, Durable Objects, D1, TURN) | done |
 | Invites, passkeys, voicemail with transcripts | done |
+| Grown-up calls between companion apps, availability | done |
 | One-command deploy, desktop app | next |
 | Lounge features | planned |
-| ESP32-S3 firmware and custom PCB | in design |
+| Circuit board (one ESP32-S3 board) | in design: parts placed, routing next |
+| 3D-printable base | prototype designed |
+| ESP32-S3 firmware | after the board |
 
 See the [introduction](/intro/) for the full picture and [contributing](/project/contributing/)
 to get involved.
