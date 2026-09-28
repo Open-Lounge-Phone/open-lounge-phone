@@ -37,9 +37,38 @@ export function loungeLines(view: LoungeView, state: DeviceState): StatusLines |
   return ["SCAN TO USE", "THIS PHONE"];
 }
 
-/** The QR code shows whenever the phone is idle (a new takeover ends the current session). */
-export function showQr(view: LoungeView, state: DeviceState, menuOpen: boolean): boolean {
-  return !!view.nonce && !view.challenge && state.kind === "idle" && !menuOpen;
+/** Ask for a new code this long before the current one expires. */
+export const QR_REFRESH_LEAD_MS = 5_000;
+
+/** The code's place on screen: the phone is idle (a new takeover ends the current session). */
+function codeScreen(view: LoungeView, state: DeviceState, menuOpen: boolean): boolean {
+  return !view.challenge && state.kind === "idle" && !menuOpen;
+}
+
+/** The QR code shows while the phone is idle and its code is still valid. */
+export function showQr(
+  view: LoungeView,
+  state: DeviceState,
+  menuOpen: boolean,
+  now: number,
+): boolean {
+  return !!view.nonce && view.nonce.expiresAt > now && codeScreen(view, state, menuOpen);
+}
+
+/**
+ * Whether to send `lounge.refresh`: only while the code is actually on a visible screen and it
+ * is missing or about to expire. The server never pushes codes on a timer, so this is all an
+ * unused Lounge phone ever costs it.
+ */
+export function wantsFreshCode(
+  view: LoungeView,
+  state: DeviceState,
+  menuOpen: boolean,
+  now: number,
+  visible: boolean,
+): boolean {
+  if (!visible || !codeScreen(view, state, menuOpen)) return false;
+  return !view.nonce || view.nonce.expiresAt - now < QR_REFRESH_LEAD_MS;
 }
 
 /** Key digits a free Lounge phone can dial: none, until someone takes it over. */

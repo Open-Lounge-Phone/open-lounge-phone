@@ -48,7 +48,15 @@ import {
   slotOf,
 } from "./keypad.ts";
 import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
-import { type LoungeView, loungeKeysLive, loungeLines, loungeUrl, showQr } from "./lounge.ts";
+import {
+  type LoungeView,
+  loungeKeysLive,
+  loungeLines,
+  loungeUrl,
+  QR_REFRESH_LEAD_MS,
+  showQr,
+  wantsFreshCode,
+} from "./lounge.ts";
 import {
   DEFAULT_SETTINGS,
   type MenuEvent,
@@ -138,6 +146,8 @@ const keyEls = new Map<KeyId, HTMLButtonElement>();
 /** Lounge phone state from the server; emptied when a session ends. */
 let lounge: LoungeView = {};
 let challengeTimer: ReturnType<typeof setTimeout> | undefined;
+let qrTimer: ReturnType<typeof setTimeout> | undefined;
+let lastQrAsk = 0;
 
 const tones = new TonePlayer();
 const identity = await loadOrCreateIdentity(profile);
@@ -290,6 +300,12 @@ async function handle(msg: ServerToDevice): Promise<void> {
     case "lounge.idle":
       lounge = { ...lounge, nonce: { nonce: msg.nonce, expiresAt: msg.expiresAt } };
       delete lounge.challenge;
+      // Look again shortly before it expires; render() asks for a new one if it's still shown.
+      clearTimeout(qrTimer);
+      qrTimer = setTimeout(
+        render,
+        Math.max(1_000, msg.expiresAt - Date.now() - QR_REFRESH_LEAD_MS),
+      );
       break;
     case "lounge.challenge":
       lounge = { ...lounge, challenge: { index: msg.index, expiresAt: msg.expiresAt } };
@@ -332,6 +348,17 @@ function forgetPerson(): void {
   lastStatusText = "";
   logEl.replaceChildren(); // the developer log holds names and call history too
   log("•", "Lounge session ended; forgot everything");
+}
+
+/** Lounge: fetch a new takeover code when the idle screen shows a missing or stale one. */
+function maybeRefreshQr(): void {
+  if (variant !== "lounge" || !authed || pairingCode) return;
+  const now = Date.now();
+  const visible = document.visibilityState === "visible";
+  if (!wantsFreshCode(lounge, deviceState, !!menu, now, visible)) return;
+  if (now - lastQrAsk < QR_REFRESH_LEAD_MS) return;
+  lastQrAsk = now;
+  send({ t: "lounge.refresh" });
 }
 
 function sendStatus(): void {
@@ -638,6 +665,7 @@ document.addEventListener("visibilitychange", () => {
   void awake.onVisibilityChange();
   // Back from the background (or a sleeping tablet): reconnect now instead of after backoff.
   if (document.visibilityState === "visible") socket.retryNow();
+  render();
 });
 // The network changed (Wi-Fi ↔ cellular, router restart): the old socket is probably dead.
 addEventListener("online", () => socket.reconnect());
@@ -727,6 +755,7 @@ function render(): void {
   statusLedEl.dataset.mode = leds.status.mode;
 
   renderDisplay();
+  maybeRefreshQr();
 
   const muted = pairingCode || !authed;
   tones.play(muted ? "none" : soundFor(deviceState));
@@ -757,7 +786,7 @@ function renderDisplay(): void {
   const loungeText = loungeLive && !view ? loungeLines(lounge, deviceState) : undefined;
   const deviceId = getDeviceId(profile);
   const qr =
-    loungeLive && deviceId && lounge.nonce && showQr(lounge, deviceState, !!view)
+    loungeLive && deviceId && lounge.nonce && showQr(lounge, deviceState, !!view, Date.now())
       ? loungeUrl(location.origin, deviceId, lounge.nonce.nonce)
       : undefined;
   const lines = loungeText

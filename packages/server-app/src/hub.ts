@@ -24,6 +24,7 @@ import {
   type Conn,
   LOUNGE_NONCE_TTL_MS,
   LOUNGE_PROOF_MS,
+  LOUNGE_RECONNECT_GRACE_MS,
   type PeerInfo,
   RING_TIMEOUT_MS,
   type RoomSnapshot,
@@ -92,13 +93,11 @@ export class HouseholdHub {
   private readonly apps = new Map<string, Set<Peer>>();
   private readonly rooms = new Map<string, Room>();
   private queue: Promise<unknown> = Promise.resolve();
-  private cancelQuietTimer?: () => void;
+  /** Timer standing in for `wakeAt` on hosts without one. */
+  private cancelWakeTimer?: () => void;
   private roomsDirty = false;
-  /** Lounge phones' nonce rotation, key-proof and idle timers, by device id. */
-  private readonly loungeTimers = new Map<
-    string,
-    { rotate?: () => void; proof?: () => void; idle?: () => void }
-  >();
+  /** Lounge phones' key-proof and idle timers, by device id. */
+  private readonly loungeTimers = new Map<string, { proof?: () => void; idle?: () => void }>();
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -188,7 +187,7 @@ export class HouseholdHub {
     return this.run(async () => {
       const old = this.devices.get(device.id);
       if (old) {
-        this.dropPeer(old);
+        this.dropPeer(old, true);
         old.conn.close(CloseCode.replaced, "replaced by a newer connection");
       }
       const peer: DevicePeer = {
@@ -204,17 +203,23 @@ export class HouseholdHub {
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
         ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
       };
-      // A session never outlives the connection it was made on.
-      if (peer.lounge)
-        await this.env.store.endOpenLoungeSessions(device.id, "offline", this.env.now());
+      // Back within the grace period: the session carries on (a replaced socket hands it over).
+      const resumed = peer.lounge ? await this.resumeLounge(peer, old) : undefined;
       const wasOnline = device.ownerUserId ? this.userOnline(device.ownerUserId) : true;
       this.devices.set(device.id, peer);
+      if (resumed) {
+        conn.send({ t: "lounge.session", name: resumed.name, openToChat: resumed.openToChat });
+      }
       await this.sendConfig(peer, true);
       this.remember(peer);
-      if (peer.lounge) this.rotateNonce(peer);
+      if (peer.lounge) this.issueNonce(peer);
       this.broadcastStatus(peer, true);
       if (device.ownerUserId && !wasOnline) await this.announceMember(device.ownerUserId);
-      await this.scheduleQuietCheck();
+      if (resumed) {
+        await this.announceMember(resumed.userId);
+        await this.touchIdle(peer);
+      }
+      await this.scheduleWake();
       return peer;
     });
   }
@@ -258,20 +263,25 @@ export class HouseholdHub {
     return this.run(() => this.dropPeer(peer));
   }
 
-  private dropPeer(peer: Peer): void {
+  /** `replaced`: a newer connection of the same device takes over (and any Lounge session). */
+  private dropPeer(peer: Peer, replaced = false): void {
     if (peer.kind === "device") {
       if (this.devices.get(peer.id) !== peer) return;
       this.devices.delete(peer.id);
       this.clearLoungeTimers(peer.id);
-      const session = peer.lounge?.session;
+      const session = replaced ? undefined : peer.lounge?.session;
+      const now = this.env.now();
       if (session) {
-        void this.env.store.endLoungeSession(session.id, "offline", this.env.now());
-        this.tellUser(session.userId, peer.id, "offline");
+        // Not over yet: the phone has LOUNGE_RECONNECT_GRACE_MS to come back (see wake()).
+        void this.env.store
+          .setLoungeOffline(session.id, now)
+          .then(() => this.scheduleWake())
+          .catch((e) => this.env.log("error", "lounge offline failed", { error: String(e) }));
         void this.announceMember(session.userId);
       }
       if (peer.owner && !this.userOnline(peer.owner)) void this.announceMember(peer.owner);
       this.broadcastStatus(peer as DevicePeer, false);
-      if (this.devices.size === 0) this.cancelQuietCheck();
+      if (this.devices.size === 0 && !session) void this.scheduleWake();
     } else {
       const set = this.apps.get(peer.id);
       if (!set?.delete(peer)) return;
@@ -314,11 +324,16 @@ export class HouseholdHub {
           return this.loungePress(device, msg.index);
         case "lounge.leave":
           return this.endLoungeSession(device, "logout");
+        case "lounge.refresh":
+          // The phone is showing its code and needs a (new) one. Not during a key proof.
+          if (device.lounge && !device.lounge.challenge) this.issueNonce(device);
+          return;
         case "lounge.chat": {
           const session = device.lounge?.session;
           if (!session) return;
           session.openToChat = msg.open;
           this.remember(device);
+          await this.env.store.setLoungeChat(session.id, msg.open);
           device.conn.send({ t: "lounge.session", name: session.name, openToChat: msg.open });
           await this.announceMember(session.userId);
           return;
@@ -424,7 +439,7 @@ export class HouseholdHub {
         }
       }
       await this.sendConfig(peer, true);
-      await this.scheduleQuietCheck();
+      await this.scheduleWake();
       // Permissions changed: people on Lounge phones may have gained or lost a key.
       for (const d of this.devices.values()) {
         if (d !== peer && d.lounge?.session) await this.sendConfig(d, true);
@@ -445,7 +460,8 @@ export class HouseholdHub {
   wake(): Promise<void> {
     return this.run(async () => {
       for (const d of this.devices.values()) await this.sendConfig(d, false);
-      if (this.devices.size > 0) await this.scheduleQuietCheck();
+      await this.expireOfflineLounges();
+      await this.scheduleWake();
     });
   }
 
@@ -798,30 +814,35 @@ export class HouseholdHub {
   }
 
   /**
-   * Quiet hours start and end on their own. Sleep until the next change instead of polling, so
-   * a Durable Object host can hibernate in between.
+   * The hub's one alarm: the next quiet-hours change (while phones are connected) or the end of
+   * a disconnected Lounge phone's reconnect grace, whichever is first. Sleeping until then
+   * instead of polling lets a Durable Object host hibernate in between.
    */
-  private async scheduleQuietCheck(): Promise<void> {
-    const schedule = await this.env.store.getSchedule(this.householdId);
-    const next = nextQuietChange(schedule, new Date(this.env.now()));
-    this.cancelQuietCheck();
-    if (!next) return;
-    // A second of slack so the check lands after the boundary.
-    const at = next.getTime() + 1000;
+  private async scheduleWake(): Promise<void> {
+    const { store } = this.env;
+    const now = this.env.now();
+    let at: number | undefined;
+    if (this.devices.size > 0) {
+      const next = nextQuietChange(await store.getSchedule(this.householdId), new Date(now));
+      // A second of slack so the check lands after the boundary.
+      if (next) at = next.getTime() + 1000;
+    }
+    const [firstOffline] = await store.offlineLoungeSessions(this.householdId);
+    if (firstOffline?.offlineAt != null) {
+      const graceEnd = firstOffline.offlineAt + LOUNGE_RECONNECT_GRACE_MS;
+      at = at === undefined ? graceEnd : Math.min(at, graceEnd);
+    }
+    this.cancelWakeTimer?.();
+    this.cancelWakeTimer = undefined;
+    if (at === undefined) {
+      this.env.wakeAt?.(null);
+      return;
+    }
     if (this.env.wakeAt) {
       this.env.wakeAt(at);
       return;
     }
-    this.cancelQuietTimer = this.env.setTimer(
-      () => void this.wake(),
-      Math.max(0, at - this.env.now()),
-    );
-  }
-
-  private cancelQuietCheck(): void {
-    this.cancelQuietTimer?.();
-    this.cancelQuietTimer = undefined;
-    this.env.wakeAt?.(null);
+    this.cancelWakeTimer = this.env.setTimer(() => void this.wake(), Math.max(0, at - now));
   }
 
   private statusMessage(
@@ -880,7 +901,6 @@ export class HouseholdHub {
 
   private clearLoungeTimers(deviceId: string): void {
     const t = this.loungeTimers.get(deviceId);
-    t?.rotate?.();
     t?.proof?.();
     t?.idle?.();
     this.loungeTimers.delete(deviceId);
@@ -891,34 +911,70 @@ export class HouseholdHub {
     return this.devices.get(device.id) === device && device.lounge ? device : undefined;
   }
 
-  /** Issues a fresh takeover nonce and schedules the next one. */
-  private rotateNonce(device: DevicePeer): void {
+  /**
+   * Issues a fresh single-use takeover nonce. Only on demand — connect, the phone's
+   * `lounge.refresh`, and after each use or failed proof — never on a server timer, so a quiet
+   * Lounge phone lets the host sleep.
+   */
+  private issueNonce(device: DevicePeer): void {
     const lounge = device.lounge;
     if (!lounge) return;
     lounge.nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(16)));
     lounge.nonceExpiresAt = this.env.now() + LOUNGE_NONCE_TTL_MS;
     this.remember(device);
     device.conn.send({ t: "lounge.idle", nonce: lounge.nonce, expiresAt: lounge.nonceExpiresAt });
-    this.armRotate(device, LOUNGE_NONCE_TTL_MS);
   }
 
-  private armRotate(device: DevicePeer, ms: number): void {
-    const t = this.timers(device.id);
-    t.rotate?.();
-    t.rotate = this.env.setTimer(
-      () =>
-        void this.run(() => {
-          const d = this.liveLounge(device);
-          if (d) this.rotateNonce(d);
-        }),
-      Math.max(0, ms),
-    );
+  /**
+   * A reconnecting Lounge phone gets its session back if it left less than
+   * LOUNGE_RECONNECT_GRACE_MS ago (or its old socket is only now being replaced).
+   */
+  private async resumeLounge(
+    peer: DevicePeer,
+    old: DevicePeer | undefined,
+  ): Promise<{ userId: string; name: string; openToChat: boolean } | undefined> {
+    const lounge = peer.lounge;
+    if (!lounge) return undefined;
+    const { store } = this.env;
+    const now = this.env.now();
+    const row = await store.openLoungeSession(peer.id);
+    if (!row) return undefined;
+    const fresh = row.offlineAt === null || now - row.offlineAt < LOUNGE_RECONNECT_GRACE_MS;
+    const user = fresh ? await store.getUser(row.userId) : undefined;
+    if (!user) {
+      await store.endLoungeSession(
+        row.id,
+        user === undefined && fresh ? "removed" : "offline",
+        now,
+      );
+      this.tellUser(row.userId, peer.id, "offline");
+      return undefined;
+    }
+    await store.setLoungeOffline(row.id, null);
+    lounge.session = {
+      id: row.id,
+      userId: user.id,
+      name: user.name,
+      since: row.startedAt,
+      openToChat: old?.lounge?.session?.openToChat ?? row.openToChat,
+    };
+    return { userId: user.id, name: user.name, openToChat: lounge.session.openToChat };
+  }
+
+  /** Ends sessions whose phone didn't come back within the grace period. */
+  private async expireOfflineLounges(): Promise<void> {
+    const now = this.env.now();
+    for (const row of await this.env.store.offlineLoungeSessions(this.householdId)) {
+      if (row.offlineAt === null || now - row.offlineAt < LOUNGE_RECONNECT_GRACE_MS) continue;
+      if (this.devices.has(row.deviceId)) continue; // came back meanwhile
+      await this.env.store.endLoungeSession(row.id, "offline", now);
+      this.tellUser(row.userId, row.deviceId, "offline");
+    }
   }
 
   /** After the host slept: timers are gone, the state came back from the socket memo. */
   private rearmLounge(device: DevicePeer): void {
     const now = this.env.now();
-    this.armRotate(device, (device.lounge?.nonceExpiresAt ?? now) - now);
     const challenge = device.lounge?.challenge;
     if (challenge) this.armProof(device, challenge.expiresAt - now);
     void this.touchIdle(device);
@@ -955,9 +1011,14 @@ export class HouseholdHub {
     const device = this.devices.get(deviceId);
     const lounge = device?.lounge;
     if (!device || !lounge) return fail("not_found");
-    if (nonce !== lounge.nonce || this.env.now() >= lounge.nonceExpiresAt) return fail("expired");
+    if (this.env.now() >= lounge.nonceExpiresAt) {
+      // The phone's code is stale: refuse, and give the phone a new one.
+      if (!lounge.challenge) this.issueNonce(device);
+      return fail("expired");
+    }
+    if (nonce !== lounge.nonce) return fail("expired");
     // Single use: the code in any photo of the phone is dead from here on.
-    this.rotateNonce(device);
+    this.issueNonce(device);
     if (this.busy(device.key)) return fail("busy");
     const earlier = lounge.challenge;
     if (earlier)
@@ -994,7 +1055,7 @@ export class HouseholdHub {
       reason,
     });
     // Back to the code (a fresh one: the scanned nonce was used up).
-    this.rotateNonce(device);
+    this.issueNonce(device);
   }
 
   private async loungePress(device: DevicePeer, index: number): Promise<void> {
@@ -1005,7 +1066,7 @@ export class HouseholdHub {
     delete device.lounge?.challenge;
     this.timers(device.id).proof?.();
     const user = await this.env.store.getUser(challenge.userId);
-    if (!user || user.householdId !== this.householdId) return this.rotateNonce(device);
+    if (!user || user.householdId !== this.householdId) return this.issueNonce(device);
     await this.startLoungeSession(device, user, challenge.app);
   }
 
@@ -1055,7 +1116,7 @@ export class HouseholdHub {
     }
     device.conn.send({ t: "lounge.ended", reason });
     await this.sendConfig(device, true);
-    this.rotateNonce(device);
+    this.issueNonce(device);
     this.tellUser(session.userId, device.id, reason);
     await this.announceMember(session.userId);
     this.broadcastStatus(device, true);

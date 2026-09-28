@@ -14,6 +14,9 @@ CREATE TABLE lounge_sessions (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   started_at INTEGER NOT NULL,
   ended_at INTEGER,
-  end_reason TEXT
+  end_reason TEXT,
+  open_to_chat INTEGER NOT NULL DEFAULT 0,
+  -- Set while the phone is disconnected; the session survives a short reconnect grace.
+  offline_at INTEGER
 );
 CREATE INDEX lounge_sessions_household ON lounge_sessions(household_id, started_at);

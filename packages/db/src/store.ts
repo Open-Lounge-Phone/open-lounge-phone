@@ -35,7 +35,31 @@ export interface LoungeSessionRecord {
   startedAt: number;
   endedAt: number | null;
   endReason: string | null;
+  openToChat: boolean;
+  /** Set while the phone is disconnected (the session may still resume). */
+  offlineAt: number | null;
 }
+
+type LoungeSessionRow = {
+  id: string;
+  device_id: string;
+  user_id: string;
+  started_at: number;
+  ended_at: number | null;
+  end_reason: string | null;
+  open_to_chat: number;
+  offline_at: number | null;
+};
+const toLoungeSession = (r: LoungeSessionRow): LoungeSessionRecord => ({
+  id: r.id,
+  deviceId: r.device_id,
+  userId: r.user_id,
+  startedAt: r.started_at,
+  endedAt: r.ended_at,
+  endReason: r.end_reason,
+  openToChat: r.open_to_chat === 1,
+  offlineAt: r.offline_at,
+});
 
 export const DEFAULT_LOUNGE_IDLE_MINUTES = 10;
 
@@ -611,38 +635,45 @@ export class Store {
     );
   }
 
-  /** Closes sessions a restarted server lost track of. */
-  async endOpenLoungeSessions(deviceId: string, reason: string, now: number): Promise<void> {
-    await this.sql.run(
-      "UPDATE lounge_sessions SET ended_at = ?, end_reason = ? WHERE device_id = ? AND ended_at IS NULL",
-      now,
-      reason,
+  /** The session still open on a phone (at most one), e.g. to resume after a reconnect. */
+  async openLoungeSession(deviceId: string): Promise<LoungeSessionRecord | undefined> {
+    const r = await this.sql.first<LoungeSessionRow>(
+      "SELECT * FROM lounge_sessions WHERE device_id = ? AND ended_at IS NULL ORDER BY started_at DESC",
       deviceId,
+    );
+    return r && toLoungeSession(r);
+  }
+
+  /** Open sessions whose phone is disconnected, in a household (oldest disconnect first). */
+  async offlineLoungeSessions(householdId: string): Promise<LoungeSessionRecord[]> {
+    const rows = await this.sql.all<LoungeSessionRow>(
+      `SELECT * FROM lounge_sessions WHERE household_id = ? AND ended_at IS NULL
+       AND offline_at IS NOT NULL ORDER BY offline_at`,
+      householdId,
+    );
+    return rows.map(toLoungeSession);
+  }
+
+  async setLoungeOffline(id: string, at: number | null): Promise<void> {
+    await this.sql.run("UPDATE lounge_sessions SET offline_at = ? WHERE id = ?", at, id);
+  }
+
+  async setLoungeChat(id: string, open: boolean): Promise<void> {
+    await this.sql.run(
+      "UPDATE lounge_sessions SET open_to_chat = ? WHERE id = ?",
+      open ? 1 : 0,
+      id,
     );
   }
 
   /** Newest first; open sessions have `endedAt` null. */
   async listLoungeSessions(householdId: string, limit = 50): Promise<LoungeSessionRecord[]> {
-    const rows = await this.sql.all<{
-      id: string;
-      device_id: string;
-      user_id: string;
-      started_at: number;
-      ended_at: number | null;
-      end_reason: string | null;
-    }>(
+    const rows = await this.sql.all<LoungeSessionRow>(
       "SELECT * FROM lounge_sessions WHERE household_id = ? ORDER BY started_at DESC LIMIT ?",
       householdId,
       limit,
     );
-    return rows.map((r) => ({
-      id: r.id,
-      deviceId: r.device_id,
-      userId: r.user_id,
-      startedAt: r.started_at,
-      endedAt: r.ended_at,
-      endReason: r.end_reason,
-    }));
+    return rows.map(toLoungeSession);
   }
 
   // --- invites --------------------------------------------------------------

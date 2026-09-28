@@ -144,6 +144,12 @@ export const LoungePress = z
     "Lounge phone: a key pressed while `lounge.challenge` is showing (proximity proof), as a button index.",
   );
 
+export const LoungeRefresh = z
+  .object({ t: z.literal("lounge.refresh"), ...Ref })
+  .describe(
+    "Lounge phone: asks for a fresh takeover code (answered with `lounge.idle`). Sent only while the code is on screen and the current one is missing or about to expire, so an unused phone costs the server nothing.",
+  );
+
 export const LoungeLeave = z
   .object({ t: z.literal("lounge.leave"), ...Ref })
   .describe("Lounge phone: MENU → Log out. Ends the session; the phone forgets everything.");
@@ -160,6 +166,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   Button,
   Status,
   LoungePress,
+  LoungeRefresh,
   LoungeLeave,
   LoungeChat,
   CallAnswer,
@@ -258,7 +265,7 @@ export const LoungeIdle = z
     expiresAt: EpochMs,
   })
   .describe(
-    "Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; replaced every minute and after each use.",
+    "Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; sent on connect, after each use or failed proof, and on `lounge.refresh`. Expired nonces are refused.",
   );
 
 export const LoungeChallenge = z

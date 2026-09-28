@@ -92,6 +92,14 @@ Lounge phone: a key pressed while `lounge.challenge` is showing (proximity proof
 | `id` | string (len ≤64) |  |  |
 | `index` | integer (≥0, ≤15) | yes |  |
 
+### `lounge.refresh`
+
+Lounge phone: asks for a fresh takeover code (answered with `lounge.idle`). Sent only while the code is on screen and the current one is missing or about to expire, so an unused phone costs the server nothing.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
 ### `lounge.leave`
 
 Lounge phone: MENU → Log out. Ends the session; the phone forgets everything.
@@ -203,7 +211,7 @@ Sent after authentication and whenever guardians change settings.
 
 ### `lounge.idle`
 
-Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; replaced every minute and after each use.
+Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; sent on connect, after each use or failed proof, and on `lounge.refresh`. Expired nonces are refused.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|

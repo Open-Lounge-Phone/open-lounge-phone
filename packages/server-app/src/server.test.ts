@@ -76,6 +76,10 @@ class ManualTimers {
       t.live = false;
     };
   };
+  /** Timers still pending (for "the host can sleep" checks). */
+  pending() {
+    return this.timers.filter((t) => t.live).length;
+  }
   advance(ms: number) {
     this.now += ms;
     for (const t of this.timers.filter((t) => t.live && t.at <= this.now)) {
@@ -1094,7 +1098,7 @@ describe("Lounge phones", () => {
     const { deviceId } = await conn.next("pair.done");
     const phone = await connectDevice(deviceId, key.pair);
     const idle = await phone.next("lounge.idle");
-    return { ...g, dad, dadToken, deviceId, phone, idle };
+    return { ...g, dad, dadToken, deviceId, phone, idle, keyPair: key.pair };
   }
 
   /** Scan + key proof as the person behind `app`; returns the key index that was pressed. */
@@ -1113,7 +1117,7 @@ describe("Lounge phones", () => {
 
   it("pairs as a shared phone with nothing on its keys and nobody allowed", async () => {
     const { token, deviceId, phone, idle } = await lounge();
-    expect(idle.expiresAt).toBe(timers.now + 60_000);
+    expect(idle.expiresAt).toBe(timers.now + 120_000);
     const list = (await http("/devices", { token })).json as { id: string; kind: string }[];
     expect(list.find((d) => d.id === deviceId)?.kind).toBe("lounge");
     expect((await http(`/devices/${deviceId}/contacts`, { token })).json.contacts).toEqual([]);
@@ -1175,19 +1179,28 @@ describe("Lounge phones", () => {
   it("refuses expired, replayed and wrong-key takeovers", async () => {
     const { dadToken, deviceId, phone, idle } = await lounge();
     const dadApp = await connectApp(dadToken);
-    // A photo of the code a minute later is useless: the nonce rotated.
-    timers.advance(60_000);
-    const fresh = await phone.next("lounge.idle");
-    expect(fresh.nonce).not.toBe(idle.nonce);
+    // Nothing is pushed on a timer: the phone asks for a new code when it needs one.
+    timers.advance(5 * 60_000);
+    expect(phone.sent.filter((m) => m.t === "lounge.idle")).toHaveLength(1);
+    // A photo of the code minutes later is useless: it expired. The phone gets a new one.
     dadApp.write({ t: "lounge.claim", deviceId, nonce: idle.nonce });
     expect(await dadApp.next("lounge.progress")).toMatchObject({
       step: "failed",
       reason: "expired",
     });
+    const fresh = await phone.next("lounge.idle");
+    expect(fresh.nonce).not.toBe(idle.nonce);
+    expect(fresh.expiresAt).toBe(timers.now + 120_000);
     expect(phone.sent.some((m) => m.t === "lounge.challenge")).toBe(false);
+    // The phone's own refresh also replaces it.
+    phone.write({ t: "lounge.refresh" });
+    const refreshed = await phone.next("lounge.idle");
+    expect(refreshed.nonce).not.toBe(fresh.nonce);
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: fresh.nonce });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({ reason: "expired" });
 
     // Wrong key: fails, and the used nonce can't be replayed.
-    dadApp.write({ t: "lounge.claim", deviceId, nonce: fresh.nonce });
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: refreshed.nonce });
     await dadApp.next("lounge.progress");
     const { index } = await phone.next("lounge.challenge");
     phone.write({ t: "lounge.press", index: (index + 1) % 10 });
@@ -1195,7 +1208,7 @@ describe("Lounge phones", () => {
       step: "failed",
       reason: "wrong_key",
     });
-    dadApp.write({ t: "lounge.claim", deviceId, nonce: fresh.nonce });
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: refreshed.nonce });
     expect(await dadApp.next("lounge.progress")).toMatchObject({
       step: "failed",
       reason: "expired",
@@ -1358,6 +1371,58 @@ describe("Lounge phones", () => {
       expect(phone.sent.filter((m) => m.t === "call.ringing")).toHaveLength(1),
     );
     expect(user.name).toBe("Mom");
+  });
+
+  it("a free Lounge phone leaves no server timers running (the host can hibernate)", async () => {
+    const { phone } = await lounge();
+    await vi.waitFor(() => expect(phone.sent.some((m) => m.t === "lounge.idle")).toBe(true));
+    expect(timers.pending()).toBe(0);
+  });
+
+  it("keeps the session through a reconnect within 60 s, ends it after", async () => {
+    const { dad, dadToken, deviceId, phone, idle, token, keyPair } = await lounge();
+    const dadApp = await connectApp(dadToken);
+    await takeOver(dadApp, phone, deviceId, idle.nonce);
+    phone.write({ t: "lounge.chat", open: true });
+    await vi.waitFor(async () =>
+      expect((await store.openLoungeSession(deviceId))?.openToChat).toBe(true),
+    );
+    // Wi-Fi blip: gone for 30 s, then back.
+    phone.handler.closed();
+    await vi.waitFor(async () =>
+      expect((await store.openLoungeSession(deviceId))?.offlineAt).toBe(timers.now),
+    );
+    timers.advance(30_000);
+    const back = await connectDevice(deviceId, keyPair);
+    expect(back.sent.find((m) => m.t === "lounge.session")).toEqual({
+      t: "lounge.session",
+      name: "Dad",
+      openToChat: true,
+    });
+    timers.advance(60_000);
+    expect(dadApp.sent.some((m) => m.t === "lounge.progress" && m.step === "ended")).toBe(false);
+    // Calls for him ring there again.
+    const mom = await connectApp(token);
+    mom.write({ t: "call.user", userId: dad.id });
+    await back.next("call.ringing");
+    mom.write({ t: "call.hangup", callId: (await mom.nextState("ringing")).callId });
+
+    // Gone for good: 60 s later the session ends.
+    back.handler.closed();
+    await vi.waitFor(async () =>
+      expect((await store.openLoungeSession(deviceId))?.offlineAt).toBe(timers.now),
+    );
+    timers.advance(59_000);
+    expect(dadApp.sent.some((m) => m.t === "lounge.progress" && m.step === "ended")).toBe(false);
+    timers.advance(1_000);
+    let progress = await dadApp.next("lounge.progress");
+    while (progress.step !== "ended") progress = await dadApp.next("lounge.progress");
+    expect(progress).toMatchObject({ deviceId, reason: "offline" });
+    expect(await store.openLoungeSession(deviceId)).toBeUndefined();
+    // Reconnecting later starts fresh: no session.
+    const later = await connectDevice(deviceId, keyPair);
+    await later.next("lounge.idle");
+    expect(later.sent.some((m) => m.t === "lounge.session")).toBe(false);
   });
 
   it("forgets a person who is removed from the household", async () => {

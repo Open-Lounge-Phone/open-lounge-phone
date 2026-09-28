@@ -16,8 +16,8 @@ and is called with exactly their permissions, and forgets them when they're done
 2. A guardian pairs it like any phone ([Pair a phone](/how-to/pair-a-phone/)). The pairing screen
    can also turn any phone into a Lounge phone (**Kind of phone**).
 
-The idle phone shows a **QR code** on its display. The code changes every minute and after
-every use.
+The idle phone shows a **QR code** on its display. Each code works once and only for a couple
+of minutes; the phone fetches a new one by itself.
 
 ## Use it
 
@@ -44,7 +44,7 @@ Your session ends — and the phone forgets you completely (name, speed-dial, ca
 - the phone sits hung up and unused for **10 minutes** (guardians can change this under
   **Lounge settings** on the Home screen);
 - someone else takes the phone over;
-- the phone goes offline.
+- the phone stays offline for more than a minute (a short Wi-Fi hiccup doesn't log you out).
 
 The server only records *that* a session happened — who, which phone, when — so guardians can
 see it under **Lounge settings and history**. Nothing about the calls is kept.

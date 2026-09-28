@@ -56,7 +56,9 @@ screen on (Screen Wake Lock) and redials when the network comes back. Its first-
 
 **Lounge phone (takeover).** A device with `kind = 'lounge'` has no allow-list of its own. While
 free it shows a QR code for `<server>/lounge#<deviceId>.<nonce>` (`lounge.idle`); the nonce is
-single-use and rotates every minute. A member scans it and sends `lounge.claim`; the hub rotates
+single-use and expires after 2 minutes; the phone asks for a new one (`lounge.refresh`) only
+while the code is on screen, and the server never rotates it on a timer, so a quiet Lounge phone
+lets its household's Durable Object hibernate. A member scans it and sends `lounge.claim`; the hub rotates
 the nonce, and the phone flashes a random key (`lounge.challenge`) that must be pressed on the
 phone (`lounge.press`) within 30 s — the proximity proof. The phone then *stands for* that
 person (`personOf` in `hub.ts`): calls to them ring it (`reachable`), and its keys dial their
@@ -64,7 +66,8 @@ speed-dial as if they called from their app (`appDial`/`userDial` with the perso
 identity, so `authorizeInbound` and the availability rules decide — exactly their own
 permissions). The session is ephemeral: it ends on MENU → Log out (`lounge.leave`), Leave in the
 app, the household's idle timeout while hung up (`households.lounge_idle_minutes`, default 10),
-a new takeover, or a disconnect; the phone gets `lounge.ended` and forgets everything. The server
+a new takeover, or a disconnect that lasts over 60 s (a reconnect within 60 s resumes the session;
+the deadline uses the hub's single `wakeAt` alarm, shared with quiet hours); the phone gets `lounge.ended` and forgets everything. The server
 keeps only a `lounge_sessions` row (who, where, when) for guardians. "Open to chat"
 (`lounge.chat`, a MENU item) and the person's location travel in `member.status.lounge`.
 

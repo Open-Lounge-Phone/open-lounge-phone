@@ -104,7 +104,9 @@ export const CloseCode = {
 export const HELLO_TIMEOUT_MS = 10_000;
 export const RING_TIMEOUT_MS = 30_000;
 export const CONNECT_TIMEOUT_MS = 20_000;
-/** A Lounge phone's QR nonce is replaced this often (and after every use). */
-export const LOUNGE_NONCE_TTL_MS = 60_000;
+/** A Lounge phone's QR nonce is valid this long (and single use); the phone asks for more. */
+export const LOUNGE_NONCE_TTL_MS = 120_000;
+/** A Lounge session survives its phone reconnecting within this long. */
+export const LOUNGE_RECONNECT_GRACE_MS = 60_000;
 /** Time to press the flashing key after scanning a Lounge phone's code. */
 export const LOUNGE_PROOF_MS = 30_000;
