@@ -1,6 +1,0 @@
-WARN  [check_sourcing] U1 AW9523BTQR: [UNVERIFIED] pin map checked (datasheet V1.1.1 + V2.4); exposed-pad size of the land pattern not checked against the package drawing
-WARN  [check_sourcing] SW1, SW2, SW3, SW4, SW5, SW6 ... CPG151101S11-2: [UNVERIFIED] C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing
-WARN  [check_sourcing] D14 KT-0603R: [UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
-WARN  [check_sourcing] L1 PCB coil (copper): [UNVERIFIED] inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)
-WARN  [check_sourcing] L1 PCB coil (copper): no LCSC code
-WARN  [check_sourcing] J2 FH12-24S-0.5SH(55): [UNVERIFIED] panel pin table checked; which pins get caps read from a small reference drawing; FPC contact side vs connector (bottom contact) to confirm with a sample

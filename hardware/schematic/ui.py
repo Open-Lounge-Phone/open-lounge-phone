@@ -1,8 +1,11 @@
-"""Deck board (98 x 84 mm, under the keys). DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
+"""User-interface block of the single board: keys, key LEDs, e-ink strip, NFC tag, ambient
+light, privacy LED, Qwiic port. DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
 
-Electrical content only - placement (sockets/LEDs on the bottom, strip window, NFC coil keep-out)
-is a layout task. Key count comes from the build variant (owner decision 2026-09-27: 12 keys,
-rear row 1 2 3 4 5 MENU, front row 6 7 8 9 0 BACK).
+Single board (owner decision 2026-09-27): this used to be the separate deck board behind a
+24-pin FFC; it is now part of the main board's netlist (``board_main.build`` calls ``ui``).
+Placement (sockets/LEDs on the bottom, strip window, NFC coil in a free end region) is a layout
+task. Key count comes from the build variant (owner decision 2026-09-27: 12 keys, rear row
+1 2 3 4 5 MENU, front row 6 7 8 9 0 BACK).
 """
 
 from __future__ import annotations
@@ -14,7 +17,6 @@ from skidl import Net
 NC = builtins.NC  # SKiDL explicit no-connect net
 
 from config import Variant
-from ffc import FFC_PINS
 from lib import TP, C, R, decouple, make, rail, series
 
 
@@ -49,27 +51,16 @@ KEY_PORTS = ["P0_0", "P0_1", "P0_2", "P0_3", "P0_4", "P0_5", "P0_6", "P0_7", "P1
              "P1_6", "P1_7"]
 
 
-def build(v: Variant) -> dict:
-    GND = rail("GND")
-    V3V3 = rail("3V3")
-    VSYS = rail("VSYS")
-    nets = {"GND": GND, "3V3": V3V3, "VSYS": VSYS}
-
-    # ---- FFC from the main board ----
-    j = make("FFC24", ref="J1", note="deck <-> main")
-    for pin, name in FFC_PINS.items():
-        if name not in nets:
-            nets[name] = Net(name)
-        net = nets[name]
-        j[str(pin)] += net
-    j["MP"] += GND
-    ffc_map = {str(p): j[str(p)].net.name for p in FFC_PINS}
-    decouple(V3V3, GND, "10u", "100n")
-    decouple(VSYS, GND, "10u")
-    n = nets
-
-    # ---- AW9523B I/O expander, I2C 0x58 (AD0=AD1=0 -> all outputs low at power-up) ----
-    x = make("AW9523B", ref="U1")
+def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
+    """``n``: the main board's named nets (I2C, IRQ, EPD_*, LED_DATA_BUF, PRIV_LED_K, VOL_*,
+    MUTE_SENSE)."""
+    # ---- AW9523B I/O expander (C148077), I2C 0x58 = 0x58 + AD1<<1 + AD0 with AD0=AD1=0.
+    # Datasheet: AD0/AD1 also select the power-on state of the outputs; tied low the outputs
+    # come up low, so LED_PWR_EN (P1_5) is off and nothing is powered before firmware runs.
+    # RSTN has an internal 100k pull-DOWN (external pull-up below); INTN is open-drain (IRQ
+    # pull-up on this board, mcu()); P0 is open-drain by default and there are no internal
+    # pull-ups (every key has an external 10k pull-up; P1 drives LED_PWR_EN push-pull).
+    x = make("AW9523B", ref="U17")
     x["VCC"] += V3V3
     x["GND"] += GND
     x["EP"] += GND
@@ -95,8 +86,7 @@ def build(v: Variant) -> dict:
         s[1] += k
         s[2] += GND
 
-    # side controls (VOL-, VOL+, MUTE) live on the main board edge since the stacked form
-    # factor; their states arrive over the FFC (pull-ups and ESD are on the main board)
+    # side controls (VOL-, VOL+, MUTE) at the board edge (pull-ups and ESD in side_controls())
     for name, port in (("VOL_DN", "P1_2"), ("VOL_UP", "P1_3"), ("MUTE_SENSE", "P1_4")):
         x[port] += n[name]
         used.add(port)
@@ -138,15 +128,16 @@ def build(v: Variant) -> dict:
         if port not in used:
             x[port] += NC
 
-    # ---- privacy LED (red): lit by the main-board NPN whenever mic bias is present ----
+    # ---- privacy LED (red): lit by the NPN Q1 (audio()) whenever mic bias is present ----
     pa = Net("PRIV_LED_A")
     series(V3V3, pa, R("470", note="~2.5 mA"))
     pl = make("LED_RED", note="PRIVACY (hardwired to mic bias)")
     pl["A"] += pa
     pl["K"] += n["PRIV_LED_K"]
 
-    # ---- LTR-303ALS ambient light, I2C 0x29 (INT unused: polled; not on shared IRQ per §5) ----
-    als = make("LTR-303ALS", ref="U2")
+    # ---- LTR-303ALS-01 (C364577) ambient light, I2C 0x29; pins 1 VDD, 2 NC, 3 GND, 4 SCL,
+    # 5 INT (open-drain, unused: polled; not on the shared IRQ per §5), 6 SDA ----
+    als = make("LTR-303ALS", ref="U18")
     als["VDD"] += V3V3
     als["GND"] += GND
     als["SCL"] += n["I2C_SCL"]
@@ -158,7 +149,6 @@ def build(v: Variant) -> dict:
     nfc(n, GND, V3V3)
     eink(n, GND, V3V3, dnp=v.display != "eink")
     qwiic(n, GND, V3V3)
-    return ffc_map
 
 
 def qwiic(n, GND, V3V3):
@@ -175,8 +165,8 @@ def qwiic(n, GND, V3V3):
 
 
 def nfc(n, GND, V3V3):
-    """ST25DV04K dynamic tag + PCB coil around the strip band (§8, §11.3)."""
-    u = make("ST25DV04K", ref="U3")
+    """ST25DV04K dynamic tag + PCB coil in a free end region of the board (§8, §11.3)."""
+    u = make("ST25DV04K", ref="U19")
     u["VCC"] += V3V3
     u["VSS"] += GND
     u["SDA"] += n["I2C_SDA"]
@@ -187,7 +177,7 @@ def nfc(n, GND, V3V3):
     u["AC0"] += ac0
     u["AC1"] += ac1
     decouple(V3V3, GND, "100n", note="ST25DV")
-    coil = make("NFC_COIL", note="PCB coil ~4.6 uH (est.), 6 turns around the strip band")
+    coil = make("NFC_COIL", note="PCB coil (est. L in gen_footprints.py), front-left end region")
     coil[1] += ac0
     coil[2] += ac1
     series(ac0, ac1, C("22p", dnp=True, note="tuning cap placeholder: value set in EVT from the measured coil L"))
@@ -196,7 +186,7 @@ def nfc(n, GND, V3V3):
 def eink(n, GND, V3V3, dnp: bool = False):
     """GDEY029T94 (SSD1680) 24-pin FPC + Good Display reference boost (datasheet p.29, §7).
     ``dnp``: display "none" variants leave the connector and every boost part unfitted."""
-    j = make("FPC24_EPD", ref="J2", dnp=dnp, note="GDEY029T94 panel tail")
+    j = make("FPC24_EPD", ref="J6", dnp=dnp, note="GDEY029T94 panel tail")
     j["MP"] += GND
     sig = {
         "BUSY": "EPD_BUSY", "RES": "EPD_RST", "DC": "EPD_DC", "CS": "EPD_CS",

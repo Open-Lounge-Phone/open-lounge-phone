@@ -17,10 +17,12 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 > **Current architecture — owner decisions of 2026-09-27 (supersede conflicting text below;
 > the older sections are kept for their reasoning and are being brought in line):**
 >
-> - **Form factor:** compact stacked base ≈ 186 × 94 × 33 mm with a G-style handset resting on a
->   raised hook rest **above** the keypad (keys and e-ink stay visible). Boards stack: the key
->   **deck (117 × 84 mm)** on top, the **main board (180 × 88 mm)** underneath, joined by the
->   24-pin FFC. Hook sensing: DRV5032 on the main board under one hook-rest post (plunger magnet,
+> - **Form factor:** compact base ≈ 186 × 94 × 33 mm with a G-style handset resting on a
+>   raised hook rest **above** the keypad (keys and e-ink stay visible). **Single board (owner,
+>   2026-09-27):** one 180 × 88 mm 4-layer board carries everything, including the 12 hot-swap
+>   keys, LEDs, e-ink ZIF, AW9523B, NFC coil (free end region) and sensors. Two stacked boards
+>   were carried over from the old long base; one board is cheaper one-off (one fab/assembly
+>   setup, no FFC/connectors/standoffs). Hook sensing: DRV5032 on the main board under one hook-rest post (plunger magnet,
 >   post at ≈ +80 mm from the base centre, a layout parameter until the enclosure confirms it).
 > - **Keys:** 12 MX keys, `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK` (§6.1); 13 SK6812MINI-E.
 > - **Handset:** **off-the-shelf USB-C (UAC 1.0) handset/headset** — e.g. a G-style retro USB-C
@@ -39,8 +41,8 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 > - **Programming/console:** the power USB-C (sink) now has a **CH340C** USB-UART bridge to UART0
 >   with DTR/RTS auto-reset (the native PHY belongs to the handset port).
 > - **Side controls:** VOL−/VOL+ (right-angle tacts) and MUTE (right-angle DPDT, lever outward)
->   on the **main board's right edge** with ESD; MUTE breaks the mic bias locally; their states go
->   to the deck's AW9523B over the FFC (pins 20/22/23).
+>   on the board's right edge with ESD; MUTE breaks the mic bias locally; their states go to
+>   the AW9523B.
 > - **Speaker:** 20 × 40 mm rectangular top-firing speaker beside the deck (keep-out on the main
 >   board's left zone).
 > - **Display variants:** Kids Lite (no display, voice menu) / Kids Standard and Lounge (e-ink);
@@ -61,7 +63,7 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 
 | # | Decision | Why (one line) |
 |---|---|---|
-| 1 | **Envelope: compact stacked base ≈186 L × 94 D × 33 H mm** (owner decision 2026-09-27, supersedes the ≈350 mm Trimline stretch). Key deck 117 × 84 on top, main board 180 × 88 underneath, G-style USB-C handset on a raised hook rest above the keypad. | Smallest base that holds both boards; keys and e-ink stay visible under the handset bridge. The earlier ≈350 mm in-line layout is superseded. |
+| 1 | **Envelope: compact base ≈186 L × 94 D × 33 H mm** (owner decision 2026-09-27, supersedes the ≈350 mm Trimline stretch). **One 180 × 88 mm board** with the keys on it (single board, owner 2026-09-27; the stacked deck + main pair is superseded), G-style USB-C handset on a raised hook rest above the keypad. | Smallest base that holds the board; keys and e-ink stay visible under the handset bridge. One board = one fab/assembly setup, no FFC/connectors/standoffs. |
 | 2 | **Handset is fully passive.** Dynamic receiver + electret capsule + N52 magnet, on a standard **4P4C (RJ9/RJ22) coiled cord**, analog to the base. | Any $3 replacement coiled cord (and most landline handsets) works. There is nothing to break, charge or flash in the part kids throw. |
 | 3 | **MCU: ESP32-S3-WROOM-1-N16R8** (pre-certified module, 16 MB flash, 8 MB octal PSRAM). | Espressif's AFE/AEC (ESP-SR) and esp-webrtc both target the S3. The C5 lacks AFE support and the P4 costs too much. |
 | 4 | **Audio: ES8311 (DAC/earpiece driver) + ES7210 (4-ch ADC) + NS4150B (3 W class-D)**, the same chipset as ESP32-S3-Korvo-2 / S3-BOX-3. ES7210 ch3 records the **analog AEC reference**. | This is Espressif's known-good AEC topology, so the dev kit matches the product. INMP441/MAX98357A can't serve a passive handset and give no hardware reference. |
@@ -73,7 +75,7 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 | 10 | **Power: USB-C sink (5.1 kΩ Rd, no PD) → BQ24074 power-path** (always fitted: OVP, input current limit, optional battery) **→ 3.3 V buck + 3.0 V low-noise analog LDO.** No battery by default. The **LiPo 1S 1200 mAh "B-option"** is footprint-ready. A **0.47 F supercap hold-up** on Lounge enables power-pull wipe. | Mains-powered desk device; a USB power bank *is* the UPS. The Wi-Fi router dies in an outage anyway. Lounge needs a few seconds after unplug to wipe the screen and log the user out. |
 | 11 | **Radar: HLK-LD2410C** (Lounge only; DNP on Kids) behind a 0.9 mm radome window, **its BLE disabled** at boot. **NFC: ST25DV04K dynamic tag** (both SKUs) with a PCB coil around the strip. | Presence for the dead-man logout. NFC tap covers setup, pairing and lounge takeover. |
 | 12 | **Security:** Secure Boot v2 + flash encryption (release) + HMAC-protected NVS encryption. The **Ed25519 seed is derived at boot by the eFuse-keyed HMAC peripheral and never stored in flash.** Protocol should add **alg negotiation (ed25519 \| p256)** now. | The S3's DS peripheral is RSA-only and ATECC608B is P-256-only. P-256 opens the door to ESP32-C5/P4 on-chip ECDSA keys later. |
-| 13 | **PCBs: 3 boards.** Main (4-layer, 144 × 80 mm) under the cradle; Deck (4-layer, 117 × 84 mm) under the keys; FR4 key plate. Connected by one 24-pin 0.5 mm FFC. The handset optionally gets a *passive* 20 × 14 mm jack carrier. One family panel at JLCPCB. | One stencil and one SMT run. Keeps the antenna and analog audio on the main board, away from key-switch ESD. |
+| 13 | **PCBs: one board** (owner, 2026-09-27): 4-layer 180 × 88 mm with keys, LEDs, e-ink, NFC and all electronics; plus the key plate (FR4 or the printed top). Supersedes the 3-board main + deck + plate set and its 24-pin FFC. | One fab/assembly setup, no FFC, connectors or standoffs; cheapest one-off. |
 | 14 | **Cost:** core PCBA (main + deck, assembled) **≈ $15.4** (meets the <$20 goal). All electronics incl. strip, switches, caps, speaker, handset parts: **Kids ≈ $28, Lounge ≈ $29**. Landed COGS with enclosure ≈ **$36–38**. | The <$20 target holds for the PCBA only. The whole phone doesn't make it (§12). |
 
 **Top risks:** (1) speakerphone AEC and **RF buzz from Wi-Fi bursts into the 2 m analog handset
@@ -819,11 +821,10 @@ needs a live camera feed to abuse, and we still require the key press.
 
 | Board | Size (mm) | Layers | Key contents |
 |---|---|---|---|
-| **Main** | 180 × 88 (stacked under the deck), 6 × M2.5 | 4 | ESP32-S3 module (rear edge, antenna in a notch right of the deck), ES8311, ES7210, NS4150B, BQ24074, buck + LDO, power USB-C (sink) + CH340C, handset USB-C (host, SY6280 VBUS switch), DRV5032 under the hook post, VOL−/VOL+/MUTE (right edge), LD2410C socket (front edge), base mic, LIS2DH12, supercap/B-option pads, FFC |
-| **Deck** | 117 × 84, 5 M2.5 holes | 4 | 12 hot-swap sockets (bottom), 13 SK6812MINI-E (bottom, reverse-mount), AW9523B, LTR-303, ST25DV04K + coil, e-ink 24-pin FPC + SSD1680 boost (inductor, MOSFET, 3 Schottky, caps), privacy/status LEDs, DNP Qwiic port, FFC |
+| **Board** (single, owner 2026-09-27) | 180 × 88, R8.5, 9 × M2.5 | 4 | ESP32-S3-WROOM-1U (U.FL), ES8311, ES7210, NS4150B, BQ24074, buck + LDO, power USB-C (sink) + CH340C, handset USB-C (host, SY6280 VBUS switch), DRV5032 under the hook post, VOL−/VOL+/MUTE (right edge), LD2410C socket, base mic, LIS2DH12, supercap/B-option pads; 12 hot-swap sockets (bottom), 13 SK6812MINI-E (bottom, reverse-mount), AW9523B, LTR-303, ST25DV04K + PCB coil in a free end region, e-ink 24-pin FPC (FPC-05F-24PH20) + SSD1680 boost, privacy/status LEDs, DNP Qwiic port. Replaces the main + deck pair and their FFC. |
 | **Key plate** | 117 × 84 × 1.5–1.6 FR4, 14.0 mm cutouts, strip window | 0 (bare FR4) | Panelized with the others |
 
-### 11.2 Stackup (main and deck)
+### 11.2 Stackup
 
 JLCPCB **JLC04161H-7628** (≈1.6 mm): L1 signal/components (35 µm) / 0.21 mm PP / **L2 solid GND** /
 1.065 mm core / **L3 power pours (3V3, VSYS, 3V0) + slow signals** / 0.21 mm PP / L4 signal + GND fill.
@@ -873,6 +874,10 @@ FR-4 TG155 if impedance is ordered. **ENIG** finish (QFN-20/32 and FPC fine pitc
 
 LCSC prices are list prices seen during research (quantity breaks vary). Everything else is an
 **[EST]imate**.
+
+> **Superseded by the single board (2026-09-27):** the per-board tables below are the r0.1
+> estimate for the old main + deck pair. Current per-variant costs come from `make build`
+> (`schematic/cost.py`, one board; see SCHEMATIC.md and `build/<variant>/cost.txt`).
 
 ### 12.1 Main board (both SKUs)
 
@@ -1170,6 +1175,10 @@ a prompt player.
 
 ## Revision notes
 
+- 2026-09-27 (single board, owner): the deck board is merged into the main board: one
+  180 × 88 mm 4-layer board, no FFC/connectors/standoffs, NFC coil in a free end region, e-ink
+  FPC-05F-24PH20. Two stacked boards were carried over from the old long base; one board is
+  cheaper one-off (one fab/assembly setup).
 - 2026-09-27 (layout): 12-key deck (1-5 MENU / 6-0 BACK), deck 117 × 84 mm, compact base ≈186 × 94 × 33 mm
   (supersedes ≈350 mm), 13 SK6812; USB-C UAC handset replaces RJ9; display variants (Kids Lite = no display, Kids Standard/Lounge = e-ink)
   and the DNP Qwiic display port are in hardware/SCHEMATIC.md; layout in hardware/LAYOUT.md.

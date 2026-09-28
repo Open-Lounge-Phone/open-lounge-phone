@@ -5,7 +5,7 @@
 # adc1:   signal is analog; GPIO must be on ADC1 (GPIO1-10, usable with Wi-Fi)
 # rtc:    signal is a deep-sleep wake source; GPIO must be an RTC GPIO (0-21)
 # strap:  required resistor at reset: pullup | pulldown (value checked loosely)
-# board:  where the signal ends up (main | deck | tp)
+# board:  where the signal ends up (main | tp); one board since 2026-09-27
 
 gpio:
   0:  {net: BOOT, strap: pullup, board: main, note: "10k pull-up + BOOT button; runtime long-press = factory reset"}
@@ -18,12 +18,12 @@ gpio:
   7:  {net: IRQ, rtc: true, board: both, pull: up}
   8:  {net: I2C_SDA, board: both, pull: up}
   9:  {net: I2C_SCL, board: both, pull: up}
-  10: {net: EPD_CS, board: deck}
-  11: {net: EPD_MOSI, board: deck}
-  12: {net: EPD_SCK, board: deck}
-  13: {net: EPD_DC, board: deck}
-  14: {net: EPD_RST, board: deck}
-  15: {net: EPD_BUSY, board: deck}
+  10: {net: EPD_CS, board: main}
+  11: {net: EPD_MOSI, board: main}
+  12: {net: EPD_SCK, board: main}
+  13: {net: EPD_DC, board: main}
+  14: {net: EPD_RST, board: main}
+  15: {net: EPD_BUSY, board: main}
   16: {net: I2S_MCLK, board: main}
   17: {net: I2S_BCLK, board: main}
   18: {net: I2S_WS, board: main}
@@ -37,7 +37,7 @@ gpio:
   39: {net: LD_RX, board: main}
   40: {net: LD_TX, board: main}
   41: {net: PA_EN, strap_like: pulldown, board: main, note: "100k pull-down: amp off at boot"}
-  42: {net: LED_DATA, board: deck, note: "via SN74LV1T125 buffer on main"}
+  42: {net: LED_DATA, board: main, note: "via SN74LV1T125 buffer on main"}
   43: {net: U0TXD, board: tp}
   44: {net: U0RXD, board: tp}
   45: {net: CHG_CE, strap: pulldown, board: main, note: "must be low at reset (3.3 V flash)"}
@@ -55,7 +55,7 @@ i2c_expected:
   ST25DV04K: [0x53, 0x57, 0x2D]
   AW9523B: 0x58
   ATECC608B: 0x60
-# Optional external modules on the deck's DNP Qwiic port (owner decision 2026-09-27). They are not
+# Optional external modules on the board's DNP Qwiic port (owner decision 2026-09-27). They are not
 # on either board, but the bus must leave their addresses free, so the uniqueness check reserves
 # them: SSD1306 0.91" OLED (0x3C; 0x3D if its SA0 jumper is moved), HT16K33 backpack (0x70 base).
 i2c_optional_external:

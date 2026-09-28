@@ -2,7 +2,7 @@
 
     python cost.py            # after build.py; writes ../build/<variant>/cost.txt
 
-Inputs: ../build/{main,deck}-<variant>/bom.csv (fitted rows), lcsc_cache.json price ladders
+Inputs: ../build/main-<variant>/bom.csv (fitted rows), lcsc_cache.json price ladders
 (JLCPCB assembly price first, LCSC second), cost_model.yaml (dated estimates for PCBs,
 assembly fees and off-board parts). Every number that is not a cached distributor price is
 marked EST. Returns WARN lines (never errors) when the 1k total exceeds warn_at_scale_usd.
@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 
 from lcsc import load_cache  # noqa: E402
 
-BOARDS = ("main", "deck")
+BOARDS = ("main",)  # one board since 2026-09-27 (deck merged in)
 
 
 def ladder_price(ladder: list, qty: int) -> float | None:
@@ -116,14 +116,12 @@ def roll_up(variant: str, cache: dict, model: dict) -> tuple[str, list[str], dic
         drivers += [(v["scale"], f"off-board: {k} EST") for k, v in off.items()]
         pcbs = sum(pcb.values())
         asm = model["assembly_at_scale"][n]
-        total = parts["main"] + parts["deck"] + pcbs + asm + offb
+        total = sum(parts.values()) + pcbs + asm + offb
         summary[n] = total
         out.append("")
         out.append(f"== At scale, {n} phones (USD per phone) ==")
-        out.append(f"  main parts            {parts['main']:7.2f}")
-        out.append(f"  deck parts            {parts['deck']:7.2f}")
-        out.append(f"  PCBs main/deck/plate  {pcbs:7.2f}  EST ({pcb['main']}/{pcb['deck']}/"
-                   f"{pcb['plate']})")
+        out.append(f"  board parts           {parts['main']:7.2f}")
+        out.append(f"  PCBs board/plate      {pcbs:7.2f}  EST ({pcb['main']}/{pcb['plate']})")
         out.append(f"  assembly              {asm:7.2f}  EST")
         out.append(f"  off-board electronics {offb:7.2f}  EST ({', '.join(off)})")
         out.append(f"  TOTAL                 {total:7.2f}")
@@ -153,8 +151,8 @@ def roll_up(variant: str, cache: dict, model: dict) -> tuple[str, list[str], dic
                f"{k} assembled) ==")
     out.append(f"  bare PCBs + shipping  {pcb:7.2f}  EST")
     out.append(f"  PCBA setup + stencils {fees:7.2f}  EST")
-    out.append(f"  extended-part fees    {extfee:7.2f}  EST ({len(ext['main'])} main + "
-               f"{len(ext['deck'])} deck unique extended parts x ${jlc['extended_fee']})")
+    out.append(f"  extended-part fees    {extfee:7.2f}  EST ({len(ext['main'])} unique extended "
+               f"parts x ${jlc['extended_fee']})")
     out.append(f"  joints                {joints:7.2f}  EST")
     out.append(f"  parts for {k} phones    {parts2:7.2f}")
     out.append(f"  off-board (retail)    {offr:7.2f}  EST per phone")
@@ -163,17 +161,15 @@ def roll_up(variant: str, cache: dict, model: dict) -> tuple[str, list[str], dic
     # ---- one-off, bare boards from OSH Park + hand assembly ----
     osh = oo["osh_park"]
     area = {b: (w / 25.4) * (h / 25.4) for b, (w, h) in osh["boards_mm"].items()}
-    bare = (area["main"] + area["deck"]) * osh["per_sq_in_4layer"] + \
-        area["plate"] * osh["per_sq_in_2layer"]
+    bare = area["main"] * osh["per_sq_in_4layer"] + area["plate"] * osh["per_sq_in_2layer"]
     hand = sum(parts_cost(rows[b], cache, model, 1, retail=True)[0] for b in BOARDS)
     diy = bare + hand + offr
     summary["one_off_osh_diy"] = diy
     out.append("")
     out.append(f"== One-off, bare boards (OSH Park formula, {osh['copies']} copies) + "
                "self-sourced parts + hand assembly, 1 phone ==")
-    out.append(f"  OSH Park boards       {bare:7.2f}  (${osh['per_sq_in_4layer']}/in^2 4L main "
-               f"{area['main']:.1f} + deck {area['deck']:.1f} in^2; plate 2L "
-               f"${osh['per_sq_in_2layer']}/in^2)")
+    out.append(f"  OSH Park boards       {bare:7.2f}  (${osh['per_sq_in_4layer']}/in^2 4L board "
+               f"{area['main']:.1f} in^2; plate 2L ${osh['per_sq_in_2layer']}/in^2)")
     out.append(f"  parts, qty 1          {hand:7.2f}  (each BOM line >= "
                f"${oo['hand_assembly_min_line_usd']:.2f} for cut-tape minimums)")
     out.append(f"  off-board (retail)    {offr:7.2f}  EST")
@@ -202,7 +198,7 @@ def main() -> int:
         lines.append(f"cost ({variant}): ${s[n0]:.2f} @{n0 // 1000}k, ${s[n1]:.2f} @{n1 // 1000}k;"
                      f" one-off ${s['one_off_jlc']:.2f}/phone (JLC PCBA, 2 built), "
                      f"${s['one_off_osh_diy']:.2f} (OSH Park bare + hand); extended parts "
-                     f"main {s['extended']['main']} / deck {s['extended']['deck']}"
+                     f"{s['extended']['main']}"
                      + "".join(f"; WARN {w}" for w in warns))
     return "\n".join(lines) + "\n"
 

@@ -152,8 +152,8 @@ def i2c_devices(circuit) -> list:
 
 
 def check_i2c_union(per_board: dict) -> list:
-    """The I2C bus spans main + deck (FFC): addresses must be unique across both boards,
-    counting DNP footprints too (they may be populated later)."""
+    """Addresses on the one I2C bus must be unique, counting DNP footprints too (they may be
+    populated later) and the optional external Qwiic modules."""
     out, seen = [], {}
     for name, a in (PIN_TABLE.get("i2c_optional_external") or {}).items():
         seen[a] = f"qwiic:{name}(optional external)"
@@ -169,7 +169,7 @@ def check_i2c_union(per_board: dict) -> list:
             expected[a] = name
     for a, name in expected.items():
         if a not in seen and a != 0x2D:
-            out.append(("WARN", f"DESIGN.md lists {name} at 0x{a:02X}; not on either board"))
+            out.append(("WARN", f"DESIGN.md lists {name} at 0x{a:02X}; not on the board"))
     out.append(("INFO", "OK, " + ", ".join(f"0x{a:02X} {t}" for a, t in sorted(seen.items()))))
     return out
 
@@ -258,20 +258,6 @@ def check_footprints(circuit):
     return out
 
 
-def check_ffc(main_map: dict, deck_map: dict):
-    """Both ends of the 24-pin FFC carry the same net on the same pin number."""
-    out = []
-    if len(main_map) != 24 or len(deck_map) != 24:
-        out.append(("ERROR", f"FFC pin count main={len(main_map)} deck={len(deck_map)} (want 24)"))
-    for n in sorted(set(main_map) | set(deck_map), key=int):
-        if main_map.get(n) != deck_map.get(n):
-            out.append(("ERROR", f"FFC pin {n}: main={main_map.get(n)} deck={deck_map.get(n)}"))
-    gnds = sum(1 for v in main_map.values() if v == "GND")
-    if gnds != 6:
-        out.append(("ERROR", f"FFC has {gnds} GND pins; DESIGN.md §5 specifies 6"))
-    return out
-
-
 EPD_SPECS = {"FPC24_EPD", "L47u", "EPD_NFET", "MBR0530"}  # e-ink connector + SSD1680 boost
 
 
@@ -282,7 +268,7 @@ def check_display(circuit, variant):
     want_dnp = variant.display != "eink"
     epd = [p for p in circuit.parts if p.fields.get("SpecKey") in EPD_SPECS]
     if not epd:
-        out.append(("ERROR", "no e-ink parts found on the deck"))
+        out.append(("ERROR", "no e-ink parts found on the board"))
     # passives on e-ink-only nets follow the same rule
     epd_nets = {pin.net.name for p in epd for pin in p.pins
                 if _net_of(pin) is not None and pin.net.name.startswith("EPD_")
@@ -305,7 +291,7 @@ def run_all(circuit, board: str = "main", variant=None):
     if board == "main":
         fns.insert(0, check_pin_table)
         fns.append(check_power_budget)
-    if board == "deck" and variant is not None:
+    if variant is not None:
         fns.append(lambda c: check_display(c, variant))
         fns[-1].__name__ = "check_display"
     for fn in fns:

@@ -10,9 +10,14 @@ Only parts with no suitable official KiCad footprint live here (official library
   (2.55 x 2.5 pads @ (-7.085,-2.54)/(5.842,-5.08)) - [UNVERIFIED] against the -2 suffix drawing.
 - Electret_6mm_SMD_pads: 6 mm capsule with solder pads - [UNVERIFIED] pad pitch/can pad.
 - Supercap_D11.5mm_P5.0mm: 11.5 mm radial, 5.0 mm pitch - [UNVERIFIED] part not chosen yet.
-- NFC_Coil_Strip: 13.56 MHz PCB spiral around the e-ink strip band (net-tie footprint, spiral
-  on F.Cu, underpass on B.Cu). Inductance is estimated here with a filament Neumann integral;
-  tune in EVT with the DNP cap.
+- NFC_Coil_Strip: 13.56 MHz PCB spiral (net-tie footprint, spiral on F.Cu, underpass on
+  B.Cu), since the single board (2026-09-27) in the free front-left end region, 26 x 42 mm,
+  9 turns. Inductance is estimated here with a filament Neumann integral; tune in EVT with the
+  DNP cap.
+- FPC-05F-24PH20: XUNPU 24P 0.5 mm flip-lock bottom-contact FPC connector (e-ink tail),
+  land pattern from the XUNPU FPC-05F-NPH20 drawing: signal pads 0.30 x 1.25 on 0.5 mm,
+  mounting pads 2.0 x 2.5 whose outer edge is 2.69 mm beyond pin 1/N and whose top edge is
+  0.70 mm below the signal pads.
 
 The RJ9 jack uses the official Connector_RJ:RJ9_Evercom_5301-440xxx_Horizontal (same part).
 """
@@ -27,9 +32,9 @@ LIB = HERE / "openloungephone.pretty"
 MODELS = HERE / "openloungephone.3dshapes"
 MODEL_REF = "${KIPRJMOD}/../../layout/footprints/openloungephone.3dshapes"
 
-# NFC coil parameters (outer size is chosen to fit around the e-ink band on the deck; see
-# layout/placement_deck.yaml). Width/spacing are well above every fab's minimum.
-COIL = dict(w_out=70.0, h_out=36.8, turns=6, width=0.40, space=0.35)
+# NFC coil parameters: sized for the free front-left end region of the single board
+# (boards.yaml keep-out NFC_LOOP). Width/spacing are well above every fab's minimum.
+COIL = dict(w_out=26.0, h_out=42.0, turns=9, width=0.30, space=0.30)
 
 
 def f(x: float) -> str:
@@ -196,6 +201,35 @@ def supercap() -> str:
     return s
 
 
+def fpc24() -> str:
+    """XUNPU FPC-05F-24PH20 (C2856805). Pin 1 left, pads toward -y, FPC enters from +y."""
+    n, pitch = 24, 0.5
+    span = (n - 1) * pitch
+    x1 = -span / 2
+    my = 0.625 + 0.70 + 1.25            # mounting-pad centre: 0.70 below the signal pads
+    mx = span / 2 + 2.69 - 1.0          # outer edge 2.69 beyond the end pins, pad 2.0 wide
+    body_w = span + 4.90
+    s = header("FPC-05F-24PH20",
+               "XUNPU FPC-05F-24PH20 24P 0.5 mm FPC connector, flip lock, bottom contact, H2.0 "
+               "(land pattern per the FPC-05F-NPH20 drawing)", "FPC FFC 0.5mm 24P flip",
+               ref_at=(0, -2.2), val_at=(0, 6.0))
+    for i in range(n):
+        s += smd(str(i + 1), x1 + i * pitch, 0, 0.30, 1.25, shape="rect")
+    s += smd("MP", -mx, my, 2.0, 2.5, shape="rect")
+    s += smd("MP", mx, my, 2.0, 2.5, shape="rect")
+    s += rect(-body_w / 2, 0.3, body_w / 2, 0.3 + 5.12, "F.Fab", 0.1)
+    s += line(-body_w / 2, 0.9, -mx - 1.2, 0.9, "F.SilkS")
+    s += line(body_w / 2, 0.9, mx + 1.2, 0.9, "F.SilkS")
+    s += circle(x1, -1.2, 0.15, "F.SilkS", 0.3)
+    s += rect(-body_w / 2 - 0.3, -0.95, body_w / 2 + 0.3, 0.3 + 5.12 + 0.3, "F.CrtYd", 0.05)
+    s += text("${REFERENCE}", 0, 2.8, "F.Fab", 0.8)
+    s += model("FPC-05F-24PH20.wrl")
+    s += "\t(embedded_fonts no)\n)\n"
+    wrl_box(MODELS / "FPC-05F-24PH20.wrl",
+            [(0, 0.3 + 2.56, 1.0, body_w, 5.12, 2.0, (0.9, 0.9, 0.85))])
+    return s
+
+
 # ---------------------------------------------------------------------------------------------
 def coil_path(w_out, h_out, turns, width, space):
     """Rectangular spiral centred at 0,0: returns (F.Cu polyline, inner end, pad1, pad2)."""
@@ -266,7 +300,7 @@ def main() -> None:
     LIB.mkdir(parents=True, exist_ok=True)
     MODELS.mkdir(parents=True, exist_ok=True)
     fps = {"Kailh_MX_Hotswap_CPG151101S11": hotswap(), "Electret_6mm_SMD_pads": electret(),
-           "Supercap_D11.5mm_P5.0mm": supercap()}
+           "Supercap_D11.5mm_P5.0mm": supercap(), "FPC-05F-24PH20": fpc24()}
     coil, L = nfc_coil()
     fps["NFC_Coil_Strip"] = coil
     for name, text_ in fps.items():

@@ -8,6 +8,13 @@ WARN  [check_sourcing] U11 ITR8307: [UNVERIFIED] pin map from the ITR8307/F43 da
 WARN  [check_sourcing] U12 LIS2DH12TR: C110926 showed zero JLCPCB stock on 2026-09-27 (LCSC stock 0)
 WARN  [check_sourcing] U14 MAX17048G+T10: [UNVERIFIED] pin map from datasheet text via search (PDF fetch timed out); EP-to-GND assumed; footprint EP size to confirm
 WARN  [check_sourcing] SW5 JS202011AQN: [UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); check against the C&K drawing
+WARN  [check_sourcing] U17 AW9523BTQR: [UNVERIFIED] pin map checked (datasheet V1.1.1 + V2.4); exposed-pad size of the land pattern not checked against the package drawing
+WARN  [check_sourcing] SW6, SW7, SW8, SW9, SW10, SW11 ... CPG151101S11-16: [UNVERIFIED] exact MPN CPG151101S11-16 = LCSC C5156480, OUT OF STOCK at LCSC/JLC on 2026-09-27. In-stock alternative C49352235 (CPG151101S11-2, 26k stock, listed under HanElectricity) is the same socket body per its listing - confirm against its drawing before a JLC order; otherwise hand-source Kailh sockets (keyboard vendors) and hand-solder (large pads, easy)
+WARN  [check_sourcing] SW6, SW7, SW8, SW9, SW10, SW11 ... CPG151101S11-16: C5156480 showed zero JLCPCB stock on 2026-09-27 (LCSC stock 0)
+WARN  [check_sourcing] D22 KT-0603R: [UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
+WARN  [check_sourcing] L2 PCB coil (copper): [UNVERIFIED] inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)
+WARN  [check_sourcing] L2 PCB coil (copper): no LCSC code
+WARN  [check_sourcing] J6 FPC-05F-24PH20: [UNVERIFIED] panel pin table checked; land pattern from the XUNPU FPC-05F-NPH20 drawing (signal 0.30 x 1.25 @ 0.5, MP 2.0 x 2.5); FPC contact side vs connector (bottom contact) to confirm with a sample
 INFO  [check_power_budget] ILIM with R=1100 Ω: 1350 mA guaranteed, 1464 typ, 1579 max
 INFO  [check_power_budget] idle_kids: 64 mA through charger (limit ≥1350, headroom +95%); 94 mA from USB (source 1500)
 INFO  [check_power_budget] idle_lounge: 79 mA through charger (limit ≥1350, headroom +94%); 188 mA from USB (source 1500)

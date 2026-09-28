@@ -6055,6 +6055,71 @@
   ],
   "checked": "2026-09-27"
  },
+ "C2856805": {
+  "jlc_stock": 114709,
+  "jlc_library": "expand",
+  "jlc_prices": [
+   [
+    1,
+    0.1095
+   ],
+   [
+    50,
+    0.0873
+   ],
+   [
+    150,
+    0.0762
+   ],
+   [
+    500,
+    0.0679
+   ],
+   [
+    2000,
+    0.0561
+   ],
+   [
+    4000,
+    0.0528
+   ]
+  ],
+  "source": "lcsc",
+  "code": "C2856805",
+  "found": true,
+  "mpn": "FPC-05F-24PH20",
+  "brand": "XUNPU",
+  "package": "SMD,P=0.5mm,Surface Mount,Right Angle",
+  "desc": "CONN FFC FPC 24POS 0.5mm BOTTOM CNT SMD R/A",
+  "stock": 112530,
+  "prices": [
+   [
+    5,
+    0.1108
+   ],
+   [
+    50,
+    0.0884
+   ],
+   [
+    150,
+    0.0771
+   ],
+   [
+    500,
+    0.0687
+   ],
+   [
+    2000,
+    0.0568
+   ],
+   [
+    4000,
+    0.0535
+   ]
+  ],
+  "checked": "2026-09-27"
+ },
  "C2913202": {
   "jlc_stock": 22089,
   "jlc_library": "expand",
@@ -7315,7 +7380,7 @@
   "brand": "HanElectricity",
   "package": "-",
   "desc": "5,000 cycles 2 12V 3000gf Pushbutton Switches RoHS",
-  "stock": 26510,
+  "stock": 26300,
   "prices": [
    [
     10,
@@ -7477,6 +7542,32 @@
  "C5156480": {
   "jlc_stock": 0,
   "jlc_library": "expand",
+  "jlc_prices": [
+   [
+    1,
+    0.1482
+   ],
+   [
+    50,
+    0.1155
+   ],
+   [
+    150,
+    0.1014
+   ],
+   [
+    500,
+    0.084
+   ],
+   [
+    2000,
+    0.0762
+   ],
+   [
+    4000,
+    0.0715
+   ]
+  ],
   "source": "lcsc",
   "code": "C5156480",
   "found": true,
@@ -7485,6 +7576,32 @@
   "package": "-",
   "desc": "Pushbutton Switches ",
   "stock": 0,
+  "prices": [
+   [
+    5,
+    0.1377
+   ],
+   [
+    50,
+    0.1073
+   ],
+   [
+    150,
+    0.0942
+   ],
+   [
+    500,
+    0.078
+   ],
+   [
+    2000,
+    0.0707
+   ],
+   [
+    4000,
+    0.0664
+   ]
+  ],
   "checked": "2026-09-27"
  },
  "C52923": {

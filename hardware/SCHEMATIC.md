@@ -1,6 +1,9 @@
 # Open Lounge Phone "Trimline" r0.1: schematic as code
 
-Status: **electrical capture of the main and deck boards, pre-layout.** This implements
+Status: **electrical capture of the single board, pre-layout.** (Single board, owner
+decision 2026-09-27: two stacked boards were carried over from the old long base; one board is
+cheaper one-off: one fab/assembly setup, no FFC/connectors/standoffs. The former deck board is
+the `ui.py` block of the one netlist.) This implements
 [DESIGN.md](DESIGN.md) r0.1 as checked, version-controlled Python. It does not decide any of the
 owner's open questions in DESIGN.md §15; they are build parameters (see Variants below).
 License: CERN-OHL-S-2.0, like the rest of `hardware/`.
@@ -36,21 +39,20 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 | File | What |
 |---|---|
-| `main.net` / `deck.net` | KiCad netlist. In Pcbnew: File → Import → Netlist. |
+| `main.net` | KiCad netlist. In Pcbnew: File → Import → Netlist. |
 | `bom.csv` | Full BOM incl. DNP, with MPN, LCSC, footprint and verification status |
 | `bom-jlc.csv` | Fitted parts only, in JLCPCB assembly format |
 | `erc.txt`, `checks.txt` | SKiDL ERC output and custom check results |
-| `../summary.txt` | One line per board, plus the cross-board FFC and I2C results |
+| `../summary.txt` | One line per variant, plus the I2C bus and cost results |
 
 ## Source layout (`schematic/`)
 
 | File | Contents |
 |---|---|
-| `board_main.py` | Main board, block by block: power, MCU, audio, sensors, radar, FFC, test points |
-| `board_deck.py` | Deck board: FFC, AW9523B keys/side controls, LED chain, privacy LED, ALS, NFC, e-ink |
+| `board_main.py` | The board, block by block: power, MCU, audio, sensors, radar, handset port, side controls, test points |
+| `ui.py` | UI block (the former deck board): AW9523B keys, LED chain, privacy LED, ALS, NFC, e-ink, Qwiic |
 | `parts.py` | Every non-passive part: pin map, footprint, MPN, LCSC, datasheet, verification note |
 | `lib.py` | Part factory, passives (JLC basic codes), DNP, references |
-| `ffc.py` | The 24-pin main↔deck FFC pinout (single source for both boards) |
 | `pin_table.yaml` | DESIGN.md §5 GPIO table, machine-readable |
 | `config.py` | Variants / open-question parameters |
 | `checks.py` | Custom checks (below) |
@@ -66,11 +68,11 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 | `lounge` | e-ink strip | fitted (header + 5 V switch) | fitted | DNP | 12 |
 | `kids-batt` | none | DNP | DNP | fitted (JST-PH-3, MAX17048; TS resistor DNP) | 12 |
 
-- **Display** (owner decision 2026-09-27) is `Variant.display` (`"none"` or `"eink"`). One deck
-  layout serves every variant; the e-ink connector J2 and all boost parts are DNP when the
+- **Display** (owner decision 2026-09-27) is `Variant.display` (`"none"` or `"eink"`). One
+  layout serves every variant; the e-ink connector J6 and all boost parts are DNP when the
   display is `none` (`check_display` enforces it both ways).
-- **Optional cheaper-display port:** a DNP 4-pin JST-SH Qwiic/STEMMA QT connector (J3 on the
-  deck, SM04B-SRSS-TB, LCSC C160404, pinout GND/3V3/SDA/SCL) on the shared I2C bus, beside the
+- **Optional cheaper-display port:** a DNP 4-pin JST-SH Qwiic/STEMMA QT connector (J3,
+  SM04B-SRSS-TB, LCSC C160404, pinout GND/3V3/SDA/SCL) on the shared I2C bus, beside the
   strip window, for a 0.91" SSD1306 OLED (0x3C) or an HT16K33 14-segment backpack (0x70). It is
   DNP on every variant (maker/field option). No ESD part: the port and cable stay inside the
   enclosure. `pin_table.yaml` reserves 0x3C and 0x70 as "optional external" so the I2C
@@ -78,7 +80,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - **Key count** is `Variant.n_keys` = 12 (owner decision 2026-09-27): rear row `1 2 3 4 5 MENU`,
   front row `6 7 8 9 0 BACK`. AW9523B ports: P0_0–P1_1 = digits 1–9, 0; P1_6/P1_7 = MENU/BACK.
   The SK6812 chain runs rear row left→right, front row right→left, then the status pixel
-  (`board_deck.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
+  (`ui.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
   (even) keys.
 - **Battery default** (§15 Q3) follows DESIGN.md's proposal (no battery) but builds both ways.
 - **Kids radar** (§15 Q5) is DNP, per DESIGN.md.
@@ -88,7 +90,7 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 ## What is captured
 
-**Main board: 200 parts, all blocks from DESIGN.md §3–§5, §8, §9 and §11.3.**
+**The board: 286 parts (12 keys), all blocks from DESIGN.md §3–§5, §6–§9 and §11.3.**
 
 - **Power:**
   - USB-C sink with separate 5.1 k Rd on CC1/CC2.
@@ -116,13 +118,13 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - **Base mic:** the base electret goes into CH2.
 - **Side controls (main board edge):** VOL−/VOL+ (SKRTLAE010) and MUTE (C&K JS202011AQN,
   right-angle through-hole DPDT) with 10 k pull-ups and SRV05-4; MUTE pole A breaks the mic bias
-  locally, pole B and the VOL lines go to the deck's AW9523B over the FFC.
+  locally, pole B and the VOL lines go to the AW9523B.
 - **AEC reference:** ES8311 OUTP/OUTN → 470 nF → 20 k per leg, with 4.3 k + 100 pF shunted across the legs (≈ −24 dB, Korvo values) → ES7210 CH3. CH4 is AC-grounded.
 - **Speaker:** NS4150B on VSYS, CTRL = PA_EN (GPIO41, 100 k pull-down). Input is 100 nF + 150 k (gain 1.6). Outputs go through 2.2 A ferrite beads + 220 pF to a JST-PH-2.
 - **Mic bias / privacy:**
-  - ES7210 MICBIAS12 → FFC → deck MUTE slide (pole A) → back to main.
-  - On main: 100 k bleed and a 100 Ω/10 µF filter, feeding both electrets.
-  - An MMBT3904 senses the post-switch bias and sinks the deck privacy-LED cathode. Firmware cannot light a mic without lighting the LED.
+  - ES7210 MICBIAS12 → MUTE slide (pole A) → MICBIAS_OUT.
+  - 100 k bleed and a 100 Ω/10 µF filter, feeding the electret.
+  - An MMBT3904 senses the post-switch bias and sinks the privacy-LED cathode. Firmware cannot light a mic without lighting the LED.
 - **Sensors:**
   - DRV5032**FA** hall hook → GPIO5 (0 Ω link), with a DNP ITR8307 IR alternative.
   - LIS2DH12 at 0x19. INT1 reaches the shared IRQ through an N-FET (see Deviations).
@@ -130,25 +132,30 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - **Radar (Lounge):** 5-pin right-angle socket. 5 V comes through a P-FET with an N-FET gate driver on LD_PWR_EN (GPIO46 strap pull-down), and the UART/OUT lines have 1 k series resistors.
 - **Supercap (Lounge):** 47 Ω 2512 charge resistor and a B5819W discharge diode into VSYS.
 - **Other:**
-  - LED data: GPIO42 (100 k pull-down) → SN74LV1T125 on VSYS → 330 Ω → FFC.
-  - Shared I2C pull-ups of 4.7 k, and a 10 k IRQ pull-up.
-  - 24-pin FFC (Hirose FH12).
+  - LED data: GPIO42 (100 k pull-down) → SN74LV1T125 on VSYS → 330 Ω → LED chain.
+  - Shared I2C pull-ups of 4.7 k, and a 10 k IRQ pull-up (AW9523B INTN, ST25DV GPO, MAX17048 ALRT are open-drain).
   - Test points: VBUS, VSYS, 3V3, 3V0, GND×4, USB D±, U0TX/RX, EN, GPIO0, I2S BCLK/WS/DIN/DOUT, I2C, HOOK, PA_EN, SPK±, handset VBUS and D±, ES8311 ASDOUT.
 
-**Deck board: 99 parts (12 keys).**
+**UI block (`ui.py`, the former deck board).**
 
-- **Keys and side controls:**
-  - FFC mate.
-  - AW9523B at 0x58. RSTN is pulled up because the chip has an internal pull-down. The port map follows DESIGN.md §5.
-  - 12 Kailh hot-swap sockets with 10 k pull-ups (the chip has none).
-  - VOL−/VOL+ side tacts, and the MUTE DPDT: pole A breaks the bias, pole B pulls MUTE_SENSE low.
-  - SRV05-4 on the side-switch lines.
+- **Keys:**
+  - AW9523B (U17, C148077) at 0x58 = 0x58 + AD1·2 + AD0 with AD0 = AD1 = GND. Per the datasheet
+    AD0/AD1 also set the power-on output state; tied low the outputs start low, so LED_PWR_EN
+    (P1_5) keeps the LED chain unpowered until firmware runs. RSTN has an internal 100 k
+    pull-*down*: 10 k pull-up + 100 nF. INTN is open-drain: shared IRQ with its 10 k pull-up.
+    P0 is open-drain by default and there are no internal pull-ups: every key has a 10 k
+    pull-up (P1_5 drives LED_PWR_EN push-pull). Port map per DESIGN.md §5.
+  - 12 Kailh hot-swap sockets **CPG151101S11-16** (C5156480, out of stock on 2026-09-27; see
+    Deviations 10).
 - **LEDs:** 13 × SK6812MINI-E (12 keys + status) on VLED. VLED is switched from VSYS by a P-FET with an N-FET driver, from LED_PWR_EN (AW9523B P1_5).
 - **Indicators and sensors:**
   - Red privacy LED.
-  - LTR-303ALS at 0x29, polled.
-  - ST25DV04K at 0x53/0x57, GPO on IRQ. Its PCB coil is a footprint placeholder, with a DNP tuning cap.
-- **E-ink:** GDEY029T94 on a Hirose FH12 FPC connector, with the Good Display reference boost:
+  - LTR-303ALS-01 (U18, C364577) at 0x29, polled; pins 1 VDD, 2 NC, 3 GND, 4 SCL, 5 INT
+    (open-drain, unused), 6 SDA.
+  - ST25DV04K (U19) at 0x53/0x57, GPO on IRQ. Its PCB coil (9 turns, 26 × 42 mm, ≈ 4.8 µH
+    estimated) sits in the free front-left end region of the board, with a DNP tuning cap.
+- **E-ink:** GDEY029T94 on an XUNPU **FPC-05F-24PH20** (J6, C2856805: 24P 0.5 mm flip-lock,
+  bottom contact; project footprint from the XUNPU drawing) with the Good Display reference boost:
   - 47 µH inductor and Si1308EDL switch, with a 1 M gate pull-down.
   - 2.2 Ω sense resistor and 3 × MBR0530.
   - 4.7 µF charge pump, and 1 µF (50 V parts) on VSH1/VSH2/VSL/VGH/VGL/VCOM/VDD.
@@ -156,14 +163,14 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 ## Checks (all run by `make build`)
 
-1. **SKiDL ERC.** Result: 0 errors. There are 3 expected warnings on main, all open-drain outputs (/PGOOD, /CHG, MAX17048 ALRT) meeting an ESP32 GPIO.
+1. **SKiDL ERC.** Result: 0 errors. There are 5 expected warnings, all open-drain outputs (/PGOOD, /CHG, MAX17048 ALRT, AW9523B INTN, ST25DV GPO) meeting an ESP32 GPIO.
 2. **Pin table.** Every ESP32 pad's net must equal `pin_table.yaml`. Beyond that:
    - analog signals must be on ADC1 and wake signals on RTC GPIOs;
    - strap pins need a pull in the right direction only;
    - IO35–37 must be unconnected;
    - no GPIO outside the table may be used.
-3. **I2C addresses** are derived from the strap wiring, not declared. They must match DESIGN.md's map and be unique across both boards, DNP parts included.
-4. **FFC:** 24 pins, 6 GND, and the same net on the same pin at both ends. This is read from the actual connector pins.
+3. **I2C addresses** are derived from the strap wiring, not declared. They must match DESIGN.md's map and be unique on the bus, DNP parts and the optional Qwiic modules included.
+4. (The FFC pin check was removed with the FFC: single board since 2026-09-27.)
 5. **Nets:** no single-pin nets and no floating input or power pins.
 6. **Sourcing:**
    - every LCSC code exists, and its MPN matches the schematic's;
@@ -176,14 +183,13 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - swapping two GPIOs;
 - flipping the GPIO45 strap;
 - strapping LIS2DH12 SA0 low;
-- crossing the mic-bias lines at one FFC end;
 - using PSRAM pin IO36;
 - floating BQ24074 EN1;
 - a wrong LCSC code;
 - a wrong basic-resistor code;
 - a misspelled footprint.
 
-**Current result:** 8 builds (4 variants × 2 boards) with 0 ERC errors and 0 check errors.
+**Current result:** 4 builds (4 variants, one board) with 0 ERC errors and 0 check errors.
 
 8. **Display population** (`check_display`): e-ink parts DNP exactly when `display == "none"`;
    the Qwiic port always DNP.
@@ -196,10 +202,10 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 
 ## Deviations from DESIGN.md (and why)
 
-1. **LED level shifter:** SN74LV1T125 instead of 74AHCT1G125. The AHCT part's minimum VCC is 4.5 V, but VSYS is 4.4 V, or lower on battery. The LV1T125 accepts 3.3 V inputs at VCC 4.4 V. It sits on the **main** board, because the FFC carries buffered data; DESIGN.md §12.2 lists it on the deck.
+1. **LED level shifter:** SN74LV1T125 instead of 74AHCT1G125. The AHCT part's minimum VCC is 4.5 V, but VSYS is 4.4 V, or lower on battery. The LV1T125 accepts 3.3 V inputs at VCC 4.4 V.
 2. **Hall sensor:** DRV5032**FA** (C140921) instead of FB (C2655033). FB is the 5 Hz variant; FA is the 20 Hz omnipolar push-pull part DESIGN.md intends. FB also showed zero JLCPCB stock.
 3. **LIS2DH12 INT1 → IRQ goes through an N-FET.** The LIS2DH12 has no open-drain interrupt mode, so it cannot be wire-OR'd directly.
-4. **FFC has one spare, not two.** DESIGN.md §5's list adds up to 25 signals for a 24-pin cable. The pin order in `ffc.py` fences LED data and SPI clock with GND and keeps the mic-bias pair at the far end.
+4. **No FFC** (single board, 2026-09-27): DESIGN.md §5's 24-pin main↔deck FFC and both FH12 connectors are gone.
 5. **B-option battery connector is JST-PH-3** (VBAT/NTC/GND) instead of PH-2. A 2-pin plug cannot bring the pack NTC to the BQ24074 TS pin.
 6. **P-FET load switches get N-FET gate drivers** (radar 5 V, LED VSYS). A 3.3 V GPIO or AW9523B output cannot pull a 4.4–5 V P-FET gate high enough to turn it off. DESIGN.md didn't specify the driver.
 7. **Supercap charge resistor is a 47 Ω 2512 (1 W).** It dissipates 0.41 W at t = 0.
@@ -218,7 +224,15 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
    - 330 Ω LED-data series resistor and a GPIO42 pull-down, to limit back-feed into an unpowered LED chain;
    - AW9523B RSTN pull-up;
    - 0 Ω D± links for EVT tuning.
-10. **Hot-swap socket listing:** C49352235 (CPG151101S11-2, in stock) instead of C5156480 (-16, zero stock). Marked unverified.
+10. **Hot-swap socket:** the exact part is Kailh **CPG151101S11-16** (LCSC C5156480), out of
+    stock at LCSC/JLCPCB on 2026-09-27. In-stock alternative: C49352235 (CPG151101S11-2, 26k
+    stock, listed under HanElectricity), the same socket body per its listing — confirm against
+    its drawing before a JLC order. Otherwise hand-source Kailh sockets (keyboard vendors) and
+    hand-solder them (large pads).
+11. **Datasheet re-check 2026-09-27 (no change needed):** right-angle 5-pin radar socket is
+    C35167 (C50950 is the straight one); side-push VOL switches Alps SKRTLAE010 (C110293; alt
+    K2-1114SA-A4SW-06, C136662); JST S3B-PH-SM4-TB is C265101; no 2N7002 is used (every
+    3.3 V-driven N-FET is an AO3400A, C20917, logic-level).
 
 ## Assumptions and unverified items (also in `checks.txt`)
 
@@ -242,9 +256,9 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 ## What's left
 
 Layout is done as code in `hardware/layout/` (see [LAYOUT.md](LAYOUT.md)). The project
-footprints (hot-swap socket, electret, supercap, NFC coil) live in
+footprints (hot-swap socket, electret, supercap, NFC coil, e-ink FPC connector) live in
 `layout/footprints/openloungephone.pretty`. Passives are 0603 by default (hand-solderable; see LAYOUT.md "Hand assembly").
 
-1. **Deck mechanics:** side-switch heights and the plate/enclosure stack (see LAYOUT.md).
-2. **Mechanical integration:** enclosure, radome window, and handset parts (not electrical).
-3. **Before layout freeze:** close the unverified items above, and pick the FFC cable type so that pin n maps to pin n.
+1. **Mechanical integration:** enclosure (the prototype box is `enclosure/proto_box.py`),
+   radome window, and handset parts (not electrical).
+2. **Before layout freeze:** close the unverified items above.

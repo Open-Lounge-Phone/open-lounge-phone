@@ -1,10 +1,14 @@
-"""Main board (144 x 80 mm, under the handset trough). DESIGN.md §3, §4, §5, §8, §9, §11.
+"""The one board (180 x 88 mm, 4 layers). DESIGN.md §3, §4, §5, §8, §9, §11.
 
-Blocks: USB-C sink + ESD, BQ24074 power path, 3V3 buck, 3V0 analog LDO, ESP32-S3 module,
-ES8311 + ES7210 + NS4150B audio with AEC reference loopback, RJ9 handset jack, base mic,
-mic bias / privacy-LED sense, DRV5032 hook (+ DNP IR option), LIS2DH12, ATECC608B (DNP),
-MAX17048 + battery (B-option), LD2410C radar (Lounge), supercap hold-up (Lounge),
-LED-data buffer, 24-pin FFC to the deck board, test points.
+Single board (owner decision 2026-09-27): two stacked boards were carried over from the old
+long base; one board is cheaper one-off (one fab/assembly setup, no FFC/connectors/standoffs).
+
+Blocks: USB-C sink + ESD + CH340C, BQ24074 power path, 3V3 buck, 3V0 analog LDO, ESP32-S3
+module, ES8311 + ES7210 + NS4150B audio with AEC reference loopback, USB-C handset port (host),
+base mic, mic bias / privacy-LED sense, DRV5032 hook (+ DNP IR option), LIS2DH12, ATECC608B
+(DNP), MAX17048 + battery (B-option), LD2410C radar (Lounge), supercap hold-up (Lounge),
+LED-data buffer, side controls, test points, and the UI block (ui.py: 12 hot-swap keys,
+13 SK6812MINI-E, AW9523B, e-ink strip, NFC tag, ambient light, privacy LED, Qwiic).
 """
 
 from __future__ import annotations
@@ -16,11 +20,11 @@ from skidl import Net
 NC = builtins.NC  # SKiDL explicit no-connect net
 
 from config import Variant
-from ffc import FFC_PINS
 from lib import TP, C, NetTie, R, SJ, decouple, make, rail, series
+from ui import ui
 
 
-def build(v: Variant) -> dict:
+def build(v: Variant) -> None:
     # ---- rails and shared nets -------------------------------------------------------------
     GND = rail("GND")
     VBUS_C = rail("VBUS_C")  # connector side, before the PTC
@@ -47,9 +51,8 @@ def build(v: Variant) -> dict:
     handset_port(n, GND, VBUS, VSYS, V3V3)
     usb_uart(n, GND, V3V3)
     side_controls(n, GND, V3V3)
-    ffc_map = ffc(n, GND, V3V3, VSYS)
+    ui(v, n, GND, V3V3, VSYS)
     test_points(n, GND, VBUS, VSYS, V3V3, V3V0)
-    return ffc_map
 
 
 # ---------------------------------------------------------------------------------------------
@@ -213,7 +216,7 @@ def mcu(n, GND, V3V3, VSYS):
     series(n["I2C_SDA"], V3V3, R("4.7k"))
     series(n["I2C_SCL"], V3V3, R("4.7k"))
     series(n["IRQ"], V3V3, R("10k"))
-    # LED data: 3.3 V GPIO42 -> SN74LV1T125 on VSYS -> 33R -> FFC (SK6812 VIH = 0.7*VDD)
+    # LED data: 3.3 V GPIO42 -> SN74LV1T125 on VSYS -> 330R -> LED chain (SK6812 VIH = 0.7*VDD)
     buf = make("SN74LV1T125", ref="U5")
     buf["VCC"] += VSYS
     buf["GND"] += GND
@@ -279,7 +282,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
         net = Net(f"ES7210_{p}")
         adc[p] += net
         series(net, GND, C("1u"))
-    micbias = n["MICBIAS_IN"]  # MICBIAS12 -> FFC -> deck MUTE slide (pole A) -> MICBIAS_OUT
+    micbias = n["MICBIAS_IN"]  # MICBIAS12 -> MUTE slide (pole A) -> MICBIAS_OUT
     adc["MICBIAS12"] += micbias
     series(micbias, GND, C("1u"))
     adc["MICBIAS34"] += NC  # CH3 = line-level reference, CH4 spare: no bias
@@ -290,7 +293,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
     mb_f = Net("MICBIAS_F")
     series(mb_out, mb_f, R("100", note="bias RC filter"))
     series(mb_f, GND, C("10u"))
-    # Hardwired privacy LED: NPN senses post-switch bias, sinks the deck LED cathode.
+    # Hardwired privacy LED: NPN senses post-switch bias, sinks the privacy LED cathode (ui.py).
     q = make("MMBT3904", ref="Q1", note="privacy LED sink; firmware cannot bypass")
     qb = Net("PRIV_Q_B")
     series(mb_out, qb, R("22k", note="~75 uA base drive at 2.5 V bias"))
@@ -528,9 +531,9 @@ def usb_uart(n, GND, V3V3):
 
 def side_controls(n, GND, V3V3):
     """VOL-, VOL+ (right-angle tacts) and MUTE (right-angle DPDT slide, lever outward) at the
-    main board edge (owner decision 2026-09-27, stacked form factor). MUTE pole A breaks the
-    ES7210 mic bias (MICBIAS_IN -> MICBIAS_OUT) in hardware; pole B reports to the deck's
-    AW9523B over the FFC. SRV05-4 at the switches: they are user-reachable."""
+    board's right edge (owner decision 2026-09-27). MUTE pole A breaks the ES7210 mic bias
+    (MICBIAS_IN -> MICBIAS_OUT) in hardware; pole B reports to the AW9523B (ui.py).
+    SRV05-4 at the switches: they are user-reachable."""
     for name in ("VOL_DN", "VOL_UP"):
         series(n[name], V3V3, R("10k"))
         t = make("SIDE_TACT", note=name)
@@ -552,17 +555,6 @@ def side_controls(n, GND, V3V3):
     tvs["IO4"] += NC
     tvs["REF1"] += GND
     tvs["REF2"] += V3V3
-
-
-def ffc(n, GND, V3V3, VSYS) -> dict:
-    j = make("FFC24", ref="J6", note="main <-> deck, 24P 0.5 mm, ~60 mm cable")
-    nets = {"GND": GND, "3V3": V3V3, "VSYS": VSYS}
-    for pin, name in FFC_PINS.items():
-        net = nets.get(name) or n.get(name) or Net(name)
-        j[str(pin)] += net
-    j["MP"] += GND
-    ffc_map = {str(p): j[str(p)].net.name for p in FFC_PINS}
-    return ffc_map
 
 
 def test_points(n, GND, VBUS, VSYS, V3V3, V3V0):

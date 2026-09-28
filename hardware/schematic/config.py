@@ -4,15 +4,16 @@
   The owner has not answered §15 Q3, so both variants build; the default follows the proposal.
 - ``radar``: HLK-LD2410C fitted on Lounge, DNP on Kids (§8); §15 Q5 is still open for Kids.
 - ``n_keys``: 12 (owner decision 2026-09-27: digits 1-9, 0 + MENU + BACK in two rows of six;
-  no SPEAKER/END keys). The deck circuit and key grid are generated from this number
+  no SPEAKER/END keys). The key circuit (ui.py) and key grid are generated from this number
   (4..12, even; AW9523B has room for 12 keys + VOL/MUTE/LED_EN).
 - ``supercap``: 0.47 F power-fail hold-up, Lounge only (§9.5).
 - ``secure_element``: ATECC608B footprint, DNP until the protocol adopts p256 (§10.1).
 - ``ir_hook``: IR reflective hook sensor for third-party handsets without a magnet, DNP (§6.4).
 - ``display`` (owner decision 2026-09-27): ``"none"`` (Kids "Lite": printed relegendable keycaps,
   status via key LEDs + audio; the e-ink FPC connector and SSD1680 boost parts are DNP) or
-  ``"eink"`` (GDEY029T94 strip populated). One deck layout serves both; the difference is DNP.
-  The deck also carries a DNP Qwiic/STEMMA QT I2C port for a cheaper field/maker display
+  ``"eink"`` (GDEY029T94 strip populated). One board layout serves every variant (single board,
+  owner decision 2026-09-27); the difference is DNP. The board also carries a DNP
+  Qwiic/STEMMA QT I2C port for a cheaper field/maker display
   (SSD1306 0.91" OLED at 0x3C or HT16K33 14-segment backpack at 0x70) on every variant.
 """
 

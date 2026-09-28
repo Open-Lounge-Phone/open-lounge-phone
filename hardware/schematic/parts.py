@@ -373,16 +373,8 @@ spec(
     pins=[(1, "1", "pas"), (2, "2", "pas"), (3, "3", "pas"), ("MP", "MP", "pas")],
 )
 
-_FFC_PINS = [(i, str(i), "pas") for i in range(1, 25)] + [("MP", "MP", "pas")]
-spec(
-    "FFC24", ref="J", mpn="FH12-24S-0.5SH(55)", manufacturer="Hirose", lcsc="C202112",
-    footprint="Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal",
-    desc="24P 0.5 mm FFC/FPC connector, bottom contact, flip lock (main <-> deck FFC)",
-    pins=_FFC_PINS,
-)
-
 # ---------------------------------------------------------------------------------------------
-# Deck board
+# UI block (ui.py): keys, LEDs, e-ink, NFC, light sensor (the former deck board)
 
 spec(
     "AW9523B", ref="U", mpn="AW9523BTQR", manufacturer="Awinic", lcsc="C148077",
@@ -435,19 +427,23 @@ spec(
 spec(
     "NFC_COIL", ref="L", mpn="PCB coil (copper)", manufacturer="", lcsc=None,
     footprint="OpenLoungePhone:NFC_Coil_Strip",
-    desc="13.56 MHz PCB antenna around the strip band: 6 turns 0.40/0.35 mm, 70 x 36.8 mm, "
-         "~4.6 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)",
+    desc="13.56 MHz PCB antenna in the front-left end region: 9 turns 0.30/0.30 mm, "
+         "26 x 42 mm, ~4.8 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV "
+         "CTUN 28.5 pF)",
     verified="inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT "
              "(DNP tuning cap trims it)",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
 spec(
-    "HOTSWAP", ref="SW", mpn="CPG151101S11-2", manufacturer="Kailh", lcsc="C49352235",
+    "HOTSWAP", ref="SW", mpn="CPG151101S11-16", manufacturer="Kailh", lcsc="C5156480",
     footprint="OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11",
-    desc="MX hot-swap socket (switch plugs in; 2 pads)",
-    verified="C49352235 (-2 suffix, in stock) assumed to be the same socket as DESIGN.md's "
-             "C5156480 (-16 suffix, zero stock); confirm with Kailh/LCSC drawing",
+    desc="Kailh MX hot-swap socket CPG151101S11-16 (switch plugs in; 2 pads)",
+    verified="exact MPN CPG151101S11-16 = LCSC C5156480, OUT OF STOCK at LCSC/JLC on "
+             "2026-09-27. In-stock alternative C49352235 (CPG151101S11-2, 26k stock, listed "
+             "under HanElectricity) is the same socket body per its listing - confirm against "
+             "its drawing before a JLC order; otherwise hand-source Kailh sockets (keyboard "
+             "vendors) and hand-solder (large pads, easy)",
     datasheet="https://datasheet.lcsc.com/datasheet/pdf/5ea75d84e431b4d0c68ab6e4e17d332c.pdf",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
@@ -488,12 +484,14 @@ _EPD = ["NC1", "GDR", "RESE", "NC4", "VSH2", "TSCL", "TSDA", "BS1", "BUSY", "RES
         "SCL", "SDA", "VDDIO", "VCI", "VSS", "VDD", "VPP", "VSH1", "PREVGH", "VSL", "PREVGL",
         "VCOM"]
 spec(
-    "FPC24_EPD", ref="J", mpn="FH12-24S-0.5SH(55)", manufacturer="Hirose", lcsc="C202112",
-    footprint="Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal",
-    desc="24P 0.5 mm FPC connector for the GDEY029T94 tail (pin names per panel datasheet)",
+    "FPC24_EPD", ref="J", mpn="FPC-05F-24PH20", manufacturer="XUNPU", lcsc="C2856805",
+    footprint="OpenLoungePhone:FPC-05F-24PH20",
+    desc="24P 0.5 mm FPC connector, flip lock, bottom contact, H2.0 (GDEY029T94 tail; pin "
+         "names per the panel datasheet)",
     datasheet="https://files.seeedstudio.com/wiki/Other_Display/29-epaper/GDEY029T94.pdf",
-    verified="panel pin table checked; which pins get caps read from a small reference drawing; "
-             "FPC contact side vs connector (bottom contact) to confirm with a sample",
+    verified="panel pin table checked; land pattern from the XUNPU FPC-05F-NPH20 drawing "
+             "(signal 0.30 x 1.25 @ 0.5, MP 2.0 x 2.5); FPC contact side vs connector (bottom "
+             "contact) to confirm with a sample",
     pins=[(i + 1, name, "pas") for i, name in enumerate(_EPD)] + [("MP", "MP", "pas")],
 )
 

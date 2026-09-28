@@ -9,7 +9,9 @@ Outputs go to ../build/<board>-<variant>/ :
     bom-jlc.csv     fitted parts only, JLCPCB assembly format (Comment,Designator,Footprint,LCSC)
     erc.txt         SKiDL ERC output
     checks.txt      checks.py results
-    ffc.json        FFC pin -> net map (cross-checked between main and deck)
+    i2c.json        I2C devices and addresses
+
+One board since the owner decision of 2026-09-27 (the deck board and its FFC were merged in).
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BUILD = HERE.parent / "build"
-BOARDS = ("main", "deck")
+BOARDS = ("main",)
 
 
 def one(board: str, variant_name: str) -> int:
@@ -42,12 +44,11 @@ def one(board: str, variant_name: str) -> int:
     out = BUILD / f"{board}-{variant_name}"
     out.mkdir(parents=True, exist_ok=True)
     mod = __import__(f"board_{board}")
-    ffc_map = mod.build(variant)
+    mod.build(variant)
 
     circuit = builtins.default_circuit
     ERC()
     results = checks.run_all(circuit, board, variant)
-    (out / "ffc.json").write_text(json.dumps(ffc_map, indent=1) + "\n")
     (out / "i2c.json").write_text(json.dumps(checks.i2c_devices(circuit), indent=1) + "\n")
 
     net_path = out / f"{board}.net"
@@ -133,21 +134,11 @@ def main() -> int:
                 rc = 1
                 if proc.returncode and "check errors" not in status:
                     summary.append(log[-3000:])
-        def load(board):
-            f = BUILD / f"{board}-{variant}" / "ffc.json"
-            return json.loads(f.read_text()) if f.exists() else {}
-
-        main_ffc, deck_ffc = load("main"), load("deck")
-        ffc = checks.check_ffc(main_ffc, deck_ffc)
         i2c = {b: json.loads((BUILD / f"{b}-{variant}" / "i2c.json").read_text())
                for b in BOARDS if (BUILD / f"{b}-{variant}" / "i2c.json").exists()}
         bus = checks.check_i2c_union(i2c)
         summary.append(f"I2C bus ({variant}): " + "; ".join(m for _, m in bus))
         if any(lvl == "ERROR" for lvl, _ in bus):
-            rc = 1
-        summary.append(f"FFC main<->deck ({variant}): "
-                       + ("OK" if not ffc else "; ".join(m for _, m in ffc)))
-        if any(lvl == "ERROR" for lvl, _ in ffc):
             rc = 1
     try:  # cost roll-up (never fails the build; WARNs are in the text)
         import cost
