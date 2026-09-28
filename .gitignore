@@ -18,3 +18,6 @@ apps/server-cloudflare/public/
 
 # per-instance deploy state (account IDs) written by apps/server-cloudflare/scripts/deploy.ts
 apps/server-cloudflare/instances/
+
+# local scratch for agents (screenshots, renders under review)
+.work/
