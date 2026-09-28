@@ -9,10 +9,22 @@ keys with SK6812MINI-E LEDs, 2.9" e-ink strip between key rows, DRV5032 hall hoo
 BQ24074, LD2410C radar on Lounge, ST25DV NFC; its §13 lists protocol recommendations such as
 key-algorithm negotiation ed25519|p256, per-key LED/strip messages, audio prompt ids). Its open
 questions are the owner's to answer — don't decide them silently.
-The main and deck boards are captured as **schematic-as-code in SKiDL** (`hardware/schematic/`,
-`make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`): 3 variants
-(kids, lounge, kids-batt) × 2 boards, ERC + custom checks (pin table, I2C addresses, FFC pinout,
-LCSC/footprint validity). Open questions are parameters in `config.py`.
+The board is captured as **schematic-as-code in SKiDL** (`hardware/schematic/`,
+`make build` in `hardware/`, venv in `hardware/.venv`, see `hardware/SCHEMATIC.md`), ERC + custom
+checks (pin table, I2C addresses, LCSC/footprint validity). Open questions are parameters in `config.py`.
+**ONE BOARD, ONE DESIGN (owner decisions 2026-09-28; supersedes every variant/deck/Lite/Qwiic/
+radar mention below):** a single 180 × 88 mm 4-layer board (`hardware/kicad/main/`,
+`hardware/build/main/`) with the keys, e-ink ZIF + booster, NFC (ST25DV + coil), and the battery
+charger + fuel gauge all populated. No build variants and no separate deck board (the two stacked
+boards were left over from the old long base). Removed: LD2410C radar (Lounge presence is deferred
+to a possible future board), ATECC (flash encryption + eFuse HMAC instead), Qwiic port, supercap.
+Perfect this one board; don't design options.
+**Layout method (owner, 2026-09-28):** placement comes first, laid out as a standard board.
+- Blocks are local hubs next to what they connect to. GND is the L2 plane and power runs on L3 pours, reached by vias.
+- Buses run in planned lanes: keys as parallel row buses into the AW9523B at the row ends, the I2C spine, and the I2S/SPI bundles.
+- Show the owner the placement (`make review` → `build/review/placement.png`) before routing.
+- Route block by block (LAYOUT.md plan A–E), not with an unconstrained autorouter.
+- Keep silkscreen clear of pads, parts and other silkscreen (these DRC checks are errors).
 **Display & cost (owner decisions 2026-09-27):** Kids ships as **Lite** by default — no display;
 printed relegendable keycap labels (companion: Manage phone → "Print key labels"), LEDs + voice.
 **E-ink 2.9" (GDEY029T94) is the standard option** (Kids Standard, Lounge); cheaper displays
@@ -90,7 +102,7 @@ shows `USE 1.5A CHARGER` and the companion warns. Kids works on any source. Enfo
 custom footprints are not done yet.
 
 ## Decisions already made (don't relitigate without the owner)
-- **Variants:** Kids' phone first; Lounge phone (QR takeover, presence, ephemeral sessions) later.
+- **Variants (software):** Kids first; Lounge features (QR takeover, presence, ephemeral sessions) later. Hardware is one board (see top).
 - **No main screen; small e-ink status stripe only (owner decisions, 2026-09-27).** The phone is
   keys, LEDs, a narrow e-ink status strip, mic, speaker(s) and radios/sensors (Wi-Fi, BLE, NFC,
   mmWave, hall hook sensor, light sensor). The handset is bare/passive (earpiece + mic + magnet);
