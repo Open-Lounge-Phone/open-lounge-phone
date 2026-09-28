@@ -153,7 +153,7 @@ def main() -> int:
     ap.add_argument("--variant", default="lounge")
     ap.add_argument("--out", default=str(HW / "build" / "review" / "schematic.pdf"))
     a = ap.parse_args()
-    net = nl.read(HW / "build" / f"main-{a.variant}" / "main.net")
+    net = nl.read(HW / "build" / "main" / "main.net")
     names = load_pin_names()
     pin_net = net.pin_net()
     blocks = assign(net)

@@ -1,6 +1,6 @@
 """Build a KiCad board from the SKiDL netlist + boards.yaml + placement.yaml (KiCad Python).
 
-    python build_board.py main|plate [--variant kids] [--stage place|route|all]
+    python build_board.py main|plate  [--stage place|route|all]
 
 Stages (all by default):
   place  project files, outline, holes, keep-outs, footprints (all variants' footprints placed,
@@ -836,7 +836,7 @@ def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, o
     routes, escape stubs or fan-out vias, and every zone defined but unfilled."""
     cfg = dict(cfg_all[board_name])
     cfg.update({k: cfg_all[k] for k in ("rules", "netclasses", "netclass_rules", "stackup")})
-    net = nl.read(BUILD / f"{board_name}-{variant}" / f"{cfg['netlist']}.net")
+    net = nl.read(BUILD / board_name / f"{cfg['netlist']}.net")
     write_project(board_name, cfg, net, out)
     pcb_path = out / f"{board_name}.kicad_pcb"
 
@@ -974,7 +974,7 @@ def apply_netclasses(board, cfg_all: dict, net: nl.Netlist) -> dict:
 def load(board_name: str, cfg_all: dict, variant: str):
     pcb = KICAD_OUT / board_name / f"{board_name}.kicad_pcb"
     board = pcbnew.LoadBoard(str(pcb))
-    net = nl.read(BUILD / f"{board_name}-{variant}" / f"{cfg_all[board_name]['netlist']}.net")
+    net = nl.read(BUILD / board_name / f"{cfg_all[board_name]['netlist']}.net")
     apply_netclasses(board, cfg_all, net)
     return board, pcb, net
 
@@ -1020,7 +1020,7 @@ def build_plate(cfg_all: dict, variant: str) -> Path:
     tb.SetCompany("Open Lounge Phone - CERN-OHL-S-2.0")
     w, h = pc["size"]
     rounded_outline(board, w, h, pc["corner_radius"])
-    net = nl.read(BUILD / f"main-{variant}" / "main.net")
+    net = nl.read(BUILD / "main" / "main.net")
     names = [re.fullmatch(r"key (\w+)", c.fields.get("Note", "")).group(1)
              for c in net.comps.values() if c.fields.get("SpecKey") == "HOTSWAP"]
     half = pc["cutout"] / 2
@@ -1536,7 +1536,7 @@ def nl_sort(ref: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("board", choices=["main", "plate"])
-    ap.add_argument("--variant", default="kids")
+    ap.add_argument("--variant", default="main", help="one board since 2026-09-28")
     ap.add_argument("--passes", type=int, default=100)
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--router", default="grid", choices=["grid", "freerouting"])

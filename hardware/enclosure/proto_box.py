@@ -59,9 +59,9 @@ DECK_ORIGIN = (31.5, 1.8)      # old deck origin in board coordinates (key grid 
 KEY_X0, KEY_PITCH, KEY_ROWS = 10.9, 19.05, (13.0, 71.0)
 EINK_PANEL = (9.5, 23.65, 88.5, 60.35)   # deck coords, GDEY029T94 outline 79.0 x 36.7
 EINK_VIEW, EINK_CHAMFER, EINK_PANEL_T = (68.0, 30.0), 0.5, 1.0
-LIGHT_HOLES = [(127.0, 62.8, 3.2), (110.0, 64.2, 2.0), (105.0, 64.2, 2.0)]   # board coords
+LIGHT_HOLES = [(127.0, 62.8, 3.2), (158.5, 67.5, 2.0), (140.0, 63.6, 2.0)]   # board coords
 PINHOLES = [(158.5, 12.5, 1.6, "RESET SW1"), (158.5, 20.8, 1.6, "BOOT SW2"),
-            (19.5, 25.0, 1.6, "mic MK1")]     # base mic at the audio end (left)
+            (152.0, 62.5, 1.6, "mic MK1")]    # base mic by the codecs and the MUTE switch
 
 # fastening: 4 shell-bolt holes clamp lid + board + tray (M2.5x10 countersunk into inserts)
 BOLTS = [(5.0, 29.8), (26.0, 29.8), (154.0, 29.8), (176.0, 29.8)]
@@ -105,6 +105,9 @@ Z_SLEEVE_TOP = Z_BODY_BOT + BODY_H             # pressed: body flush with the sl
 SPK_C, SPK_SIZE, SPK_T = (80.5, 43.8), (40.0, 20.0), 5.0   # board coords, centre bottom
 SPK_RIM_T, SPK_RIM_H = 1.2, 3.0
 GRILLE_D, GRILLE_PITCH = 2.0, 3.5
+
+# 1S LiPo pack lying on the tray floor under the board (board coords), wires to J2 at (150, 46)
+BATTERY = (102.4, 24.0, 142.4, 54.0, 6.0)   # x0, y0, x1, y1, thickness (e.g. 603040, ~700 mAh)
 
 # underside
 FEET = [(14.0, 10.0), (172.0, 10.0), (14.0, 85.0), (172.0, 85.0)]   # base frame
@@ -454,6 +457,16 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
     add(not bad, "speaker keep-out",
         f"speaker {SPK_SIZE[0]:.0f}x{SPK_SIZE[1]:.0f}x{SPK_T} under board ({sx0:.1f}..{sx1:.1f}, "
         f"{sy0:.1f}..{sy1:.1f}), {room:.1f} mm to the board bottom"
+        + (": conflicts " + ", ".join(bad) if bad else ""))
+    # battery pocket under the board
+    bx0, by0, bx1, by1, bt = BATTERY
+    # (the module's thermal vias and the mounting holes have no leads below the board)
+    bad = [p["ref"] for p in parts if (p["side"] == "bottom" or p["tht"])
+           and not any(k in p["fp"] for k in ("MountingHole", "ESP32"))
+           and not (p["crt"][2] <= bx0 or p["crt"][0] >= bx1 or p["crt"][3] <= by0
+                    or p["crt"][1] >= by1)]
+    add(not bad and bt <= BOT_CLEAR - 1.0, "battery pocket",
+        f"{bx1 - bx0:.0f} x {by1 - by0:.0f} x {bt} mm pack under the board ({bx0}..{bx1}, {by0}..{by1})"
         + (": conflicts " + ", ".join(bad) if bad else ""))
     # sockets: parts under the plunger stem
     for bx, by, bore in SOCKETS:

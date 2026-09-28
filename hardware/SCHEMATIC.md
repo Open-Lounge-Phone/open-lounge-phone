@@ -27,7 +27,7 @@ License: CERN-OHL-S-2.0, like the rest of `hardware/`.
 
 ```sh
 cd hardware
-make build        # venv (first run) + ERC + checks + netlists + BOMs for every board x variant
+make build        # venv (first run) + ERC + checks + netlist + BOM for the one board
 make lcsc         # network: re-verify every LCSC code (LCSC + JLCPCB), refresh lcsc_cache.json
 make footprints   # network: refresh the KiCad footprint-library listing (fp_cache.json)
 ```
@@ -35,59 +35,55 @@ make footprints   # network: refresh the KiCad footprint-library listing (fp_cac
 `make build` works offline because it uses the committed caches. It exits non-zero on any ERC
 error or check error. Two harmless warnings, "fp-lib-table file was not found", come from SKiDL.
 
-Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<variant>/`:
+Outputs (regenerate with `make build`) are in `build/main/` (one board, one BOM):
 
 | File | What |
 |---|---|
 | `main.net` | KiCad netlist. In Pcbnew: File → Import → Netlist. |
-| `bom.csv` | Full BOM incl. DNP, with MPN, LCSC, footprint and verification status |
+| `bom.csv` | Full BOM with MPN, LCSC, footprint and verification status (only the NFC tuning cap is DNP) |
 | `bom-jlc.csv` | Fitted parts only, in JLCPCB assembly format |
 | `erc.txt`, `checks.txt` | SKiDL ERC output and custom check results |
-| `../summary.txt` | One line per variant, plus the I2C bus and cost results |
+| `../summary.txt` | The build line, the I2C bus and the cost result |
 
 ## Source layout (`schematic/`)
 
 | File | Contents |
 |---|---|
-| `board_main.py` | The board, block by block: power, MCU, audio, sensors, radar, handset port, side controls, test points |
-| `ui.py` | UI block (the former deck board): AW9523B keys, LED chain, privacy LED, ALS, NFC, e-ink, Qwiic |
+| `board_main.py` | The board, block by block: power + battery, MCU, audio, sensors, handset port, side controls, test points |
+| `ui.py` | UI block (the former deck board): AW9523B keys, LED chain, privacy LED, ALS, NFC, e-ink |
 | `parts.py` | Every non-passive part: pin map, footprint, MPN, LCSC, datasheet, verification note |
 | `lib.py` | Part factory, passives (JLC basic codes), DNP, references |
 | `pin_table.yaml` | DESIGN.md §5 GPIO table, machine-readable |
-| `config.py` | Variants / open-question parameters |
+| `config.py` | Design parameters (one design) |
 | `checks.py` | Custom checks (below) |
 | `lcsc.py`, `fpcheck.py` | LCSC/JLCPCB and KiCad-footprint verifiers with committed caches (the LCSC cache also stores LCSC and JLCPCB price ladders) |
-| `cost.py`, `cost_model.yaml` | per-variant cost roll-up (at scale and one-off) |
+| `cost.py`, `cost_model.yaml` | cost roll-up (at scale and one-off) |
 
-## Variants (open questions stay parameters)
+## One board, one BOM (owner decision 2026-09-28)
 
-| Build | Display | Radar LD2410C | Supercap hold-up | Battery B-option | Keys |
-|---|---|---|---|---|---|
-| `kids` (Kids "Lite", default Kids SKU) | none: e-ink FPC + SSD1680 boost DNP; printed relegendable keycaps, status via LEDs + audio | DNP | DNP | DNP (10k TS resistor fitted) | 12 |
-| `kids-eink` (Kids "Standard") | e-ink strip GDEY029T94 | DNP | DNP | DNP | 12 |
-| `lounge` | e-ink strip | fitted (header + 5 V switch) | fitted | DNP | 12 |
-| `kids-batt` | none | DNP | DNP | fitted (JST-PH-3, MAX17048; TS resistor DNP) | 12 |
+No Kids/Lounge variants: `config.DESIGN` is the only build. On the board: every core part plus
+the e-ink strip (GDEY029T94 ZIF + SSD1680 boost), NFC (ST25DV04K + PCB coil) and the 1S LiPo
+charger path with the MAX17048 fuel gauge and the JST-PH-3 (no fixed TS resistor: the pack NTC
+sets TS; without a pack the charger simply does not charge). Everything is fitted except the NFC
+tuning cap (value set in EVT); `check_one_bom` enforces it.
 
-- **Display** (owner decision 2026-09-27) is `Variant.display` (`"none"` or `"eink"`). One
-  layout serves every variant; the e-ink connector J6 and all boost parts are DNP when the
-  display is `none` (`check_display` enforces it both ways).
-- **Optional cheaper-display port:** a DNP 4-pin JST-SH Qwiic/STEMMA QT connector (J3,
-  SM04B-SRSS-TB, LCSC C160404, pinout GND/3V3/SDA/SCL) on the shared I2C bus, beside the
-  strip window, for a 0.91" SSD1306 OLED (0x3C) or an HT16K33 14-segment backpack (0x70). It is
-  DNP on every variant (maker/field option). No ESD part: the port and cable stay inside the
-  enclosure. `pin_table.yaml` reserves 0x3C and 0x70 as "optional external" so the I2C
-  uniqueness check keeps them free.
+Removed: the LD2410C radar with its 5 V switch, series resistors and LD_* GPIOs (GPIO4/5/6 now
+free, GPIO46 strap left open with its internal pull-down), the supercap hold-up (47 Ω, 0.47 F,
+Schottky), the ATECC608B footprint (flash encryption + eFuse HMAC instead), the IR hook option,
+the Qwiic display port, the fixed 10 k TS resistor and the 1 µF caps on the unused codec mic
+inputs (ES7210 MIC1/MIC4, ES8311 MIC1 now open: they are biased internally at VMID
+**[UNVERIFIED against the datasheets]**). Lounge features (radar presence, power-fail wipe)
+are deferred to a future board.
+
 - **Key count** is `Variant.n_keys` = 12 (owner decision 2026-09-27): rear row `1 2 3 4 5 MENU`,
-  front row `6 7 8 9 0 BACK`. AW9523B ports: `ui.AW_PORTS` (chosen from the board geometry).
+  front row `6 7 8 9 0 BACK`. AW9523B ports: `ui.AW_PORTS` (bus order: each row arrives as a
+  parallel bus on one side of the AW9523B at the right end of the rows).
   The SK6812 chain runs rear row right→left (MENU first, next to the ESP32), front row
-  left→right, then the status pixel
-  (`ui.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
-  (even) keys.
-- **Battery default** (§15 Q3) follows DESIGN.md's proposal (no battery) but builds both ways.
-- **Kids radar** (§15 Q5) is DNP, per DESIGN.md.
+  left→right, then the status pixel (`ui.led_chain`, firmware maps LED index → key with it).
+- **Power:** full features need a ≥ 1.5 A USB-C source; any source works in reduced mode
+  (`power_budget.yaml`, `check_power_budget`).
 - **Not touched by the schematic:** base length and envelope (§15 Q1) and toy classification
   (§15 Q4).
-- **Always DNP footprints:** ATECC608B and the analog-sidetone links (the IR hook option left the board on 2026-09-28: the magnet is in the plunger; `ir_hook=True` puts it back).
 
 ## What is captured
 
@@ -190,15 +186,14 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
 - a wrong basic-resistor code;
 - a misspelled footprint.
 
-**Current result:** 4 builds (4 variants, one board) with 0 ERC errors and 0 check errors.
+**Current result:** one build (`build/main/`) with 0 ERC errors and 0 check errors.
 
-8. **Display population** (`check_display`): e-ink parts DNP exactly when `display == "none"`;
-   the Qwiic port always DNP.
-9. **Cost roll-up** (`cost.py`, runs after the boards): per variant, BOM × price ladder from
+8. **One BOM** (`check_one_bom`): e-ink parts present and nothing DNP except the NFC tuning cap.
+9. **Cost roll-up** (`cost.py`, runs after the board): BOM × price ladder from
    `lcsc_cache.json` (JLCPCB assembly price first) at 1k and 10k phones, plus a one-off
    maker order (JLCPCB PCBA reference quote and an OSH Park bare-board + hand-assembly build),
    PCB/assembly/off-board estimates from `cost_model.yaml` (all dated, marked EST). Writes
-   `build/<variant>/cost.txt` and one line per variant in `build/summary.txt`; WARNs above
+   `build/main/cost.txt` and one line in `build/summary.txt`; WARNs above
    $40 at 1k (owner guidance: $28-40 is fine), never fails the build.
 
 ## Deviations from DESIGN.md (and why)

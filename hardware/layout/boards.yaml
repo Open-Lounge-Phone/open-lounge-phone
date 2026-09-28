@@ -111,14 +111,18 @@ main:
        pours: true, footprints: false, layers: [F.Cu]}
     - {name: HS_USB_CORRIDOR_B, rect: [141.6, 21.7, 149.9, 26.2], tracks: true, vias: true,
        pours: true, footprints: false, layers: [F.Cu]}
+    # 1S LiPo pack under the board (<= 40 x 30 x 6 mm, e.g. 603040 ~700 mAh), wires to J2: no
+    # bottom-side parts there (tracks and vias are fine)
+    - {name: BATTERY_POCKET, rect: [102.4, 24.0, 142.4, 54.0], tracks: true, vias: true,
+       pours: true, footprints: false, layers: [B.Cu]}
     # signature logo + name + revision/licence (bottom silk, inside the NFC coil where nothing
     # else may go anyway): no tracks, vias or parts under it on the bottom (owner 2026-09-28)
     - {name: LOGO, rect: [4.0, 41.6, 26.8, 61.4], tracks: false, vias: false, pours: false,
        footprints: false, layers: [B.Cu]}
   anchors:   # supply-only passives without a schematic note: the IC they decouple
-    U2: [C1, C2, C3, C4, C5, C6, R9]   # BQ24074 IN / OUT / BAT, TS resistor on top
-    L1: [C9, C10]                  # buck output (at the inductor)
-    U4: [C11, C12, C13]            # LP5907 in / out
+    U2: [C1, C2, C3, C4, C5, C6]   # BQ24074 IN / OUT / BAT
+    L1: [C8, C9]                   # buck output (at the inductor)
+    U4: [C10, C11, C12]            # LP5907 in / out
   testpoints:   # pogo grid on the bottom under the ESP32, 2.54 mm pitch; USB nets stay on top
     origin: [156.0, 9.6]    # bottom, rear right: next to J7, the CH340C and RESET/BOOT
     cols: 6
@@ -126,7 +130,7 @@ main:
     side: bottom
     top_nets: [USB_DP, USB_DN, HS_USB_DP, HS_USB_DN]
     groups:     # the 3V0 pad sits at the codec cluster
-      - {origin: [139.5, 44.5], cols: 1, nets: [3V0]}
+      - {origin: [140.0, 57.5], cols: 1, nets: [3V0]}
   zones:
     # [net, layer, polygon | "board", priority]
     - [GND, In1.Cu, board, 0]
@@ -168,5 +172,4 @@ plate:
   pocket_clearance: 0.2 # e-ink pocket = 79.0 x 36.7 panel outline + 0.2 mm all round
   light_holes:          # [x, y, d] in plate coordinates: status LED, privacy LED, ALS
     - [95.5, 61.0, 3.2]    # status LED D21 (127.0, 62.8)
-    - [78.5, 62.4, 2.0]    # privacy LED D22 (110.0, 64.2)
-    - [73.5, 62.4, 2.0]    # ALS U18 (105.0, 64.2)
+    - [108.5, 61.8, 2.0]   # ALS U18 (140.0, 63.6); the privacy LED D22 (158.5, 67.5) is off the plate

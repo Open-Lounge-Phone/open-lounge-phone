@@ -13,7 +13,9 @@ Rules (schematic/pin_table.yaml, GUIDELINES §2): straps (GPIO0/3/45/46), octal 
 (35-37), native USB (19/20) and UART0 (43/44, ROM download) stay; analog
 nets stay on ADC1 (GPIO1-10); deep-sleep wake nets stay on RTC GPIOs (0-21). AW9523B:
 LED_PWR_EN needs a push-pull output, so it stays on port 1; keys and side controls are
-plain inputs and may use any port.
+plain inputs and may use any port. Since A3 the AW9523B map is set by hand in bus order
+(ui.AW_PORTS: each key row arrives as a parallel bus on one side) and pinswap runs with
+--groups U1.
 The result is written back by hand into schematic/pin_table.yaml, board_main.PIN_TABLE and
 ui.AW_PORTS (then `make build` checks it).
 """
@@ -58,6 +60,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pcb", nargs="?", default=str(KICAD_OUT / "main" / "main.kicad_pcb"))
     ap.add_argument("--out", default="pinswap.json")
+    ap.add_argument("--groups", default="U1,U17", help="ICs whose pins may be swapped")
     a = ap.parse_args()
     board = pcbnew.LoadBoard(a.pcb)
     planes = M.plane_nets(board) | {"VBUS", "VBAT", "HS_VIN", "HS_VBUS", "VLED", "SCAP"}
@@ -73,19 +76,24 @@ def main():
                 series.setdefault(n1, set()).add(n2)
                 series.setdefault(n2, set()).add(n1)
             continue
-        for p in ps:
+        for p in fp.Pads():
             n = p.GetNetname()
-            if n.startswith("unconnected-"):
-                continue
+            free = ref == "U1" and p.GetNumber().isdigit() and int(p.GetNumber()) in ESP_PAD
+            if not n or n.startswith("unconnected-"):
+                if not free:
+                    continue
+                n = ""   # a free GPIO: a net may move here
             pads.append([n, p.GetPosition().x / 1e6, p.GetPosition().y / 1e6, ref, p.GetNumber()])
-    group_pads = {("U1", k) for k in ESP_PAD} | {("U17", k) for k in AW_PAD}
+    groups = a.groups.split(",")
+    group_pads = ({("U1", k) for k in ESP_PAD} if "U1" in groups else set()) | \
+        ({("U17", k) for k in AW_PAD} if "U17" in groups else set())
     idx = {(p[3], int(p[4])): i for i, p in enumerate(pads) if p[4].isdigit()
            and (p[3], int(p[4])) in group_pads}
 
     def cost():
         by = {}
         for n, x, y, ref, _ in pads:
-            if n in planes or n == "GND":
+            if not n or n in planes or n == "GND":
                 continue
             by.setdefault(n, []).append((x, y, ref))
         eff = {}
@@ -123,7 +131,7 @@ def main():
     for (ref, pad), i in sorted(idx.items()):
         n = pads[i][0]
         if ref == "U1":
-            out["U1"][f"GPIO{ESP_PAD[pad]}"] = n
+            out["U1"][f"GPIO{ESP_PAD[pad]}"] = n or None
         else:
             out["U17"][AW_PAD[pad]] = n
     with open(a.out, "w") as f:

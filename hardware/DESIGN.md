@@ -45,8 +45,13 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 >   the AW9523B.
 > - **Speaker:** 20 × 40 mm rectangular top-firing speaker beside the deck (keep-out on the main
 >   board's left zone).
-> - **Display variants:** Kids Lite (no display, voice menu) / Kids Standard and Lounge (e-ink);
->   a DNP Qwiic port allows a cheaper OLED/segment module. See SCHEMATIC.md.
+> - **One board, one BOM (owner decision 2026-09-28), no variants:** every core part plus the
+>   e-ink strip (ZIF + boost), NFC (ST25DV + coil) and the 1S battery charger with its fuel
+>   gauge, all fitted. **Removed:** the Lounge radar (LD2410C) and supercap hold-up (Lounge
+>   features are deferred to a future board), the ATECC608B footprint (the ESP32-S3 uses flash
+>   encryption + eFuse HMAC), the IR hook option (the magnet is in the plunger) and the Qwiic
+>   display port. Kids/Lounge text below describes software modes and the deferred Lounge
+>   board; the hardware sections follow SCHEMATIC.md / LAYOUT.md where they differ.
 > - **ESP32 module: WROOM-1U (U.FL + external FPC antenna on the shell wall)** instead of the
 >   PCB-antenna WROOM-1 (layout, 2026-09-27): in base A no main-board edge is ≥ 15 mm from the
 >   hook tubes, standoffs and inserts. Same pinout and firmware; +≈$0.45 at scale for the antenna.
@@ -695,10 +700,9 @@ The sink reads the source's Rp advertisement on CC1/CC2 (GPIO1/2, ADC1) with the
 place: < 0.66 V = Default (500 mA; also what every USB-A→C cable reports), 0.66–1.23 V = 1.5 A,
 > 1.23 V = 3 A. Re-read on attach and every few seconds (sources may change advertisement).
 
-| SKU | Default source | ≥1.5 A source |
+| Board (one design since 2026-09-28) | Default source | ≥1.5 A source |
 |---|---|---|
-| Kids | full features (491 mA peak) | full features |
-| Lounge | **reduced mode**: radar off, LEDs ≤10 %, ringer ≤0.5 W, charging off; strip "USE 1.5A CHARGER" | full features (1.07 A capped peak) |
+| main | **reduced mode**: LEDs ≤10 %, ringer ≤0.5 W, charging off; strip "USE 1.5A CHARGER" (491 mA peak) | full features (1.11 A capped peak) |
 
 USB PD / higher voltages are deliberately not used: everything runs from 5 V, and a 5 V / 3 A
 Type-C advertisement already covers the worst case. Budget numbers and the per-SKU requirement
@@ -706,7 +710,9 @@ are enforced by `hardware/schematic/power_budget.yaml` + `check_power_budget`.
 
 ### 9.3 Battery decision
 
-**Default: no battery (both SKUs).** Rationale: a desk device on USB. In a power cut the home
+**Superseded 2026-09-28 (owner): the battery charger, fuel gauge and JST-PH-3 are fitted on the
+one board**; the pack (≤ 40 × 30 × 6 mm, e.g. 603040 ≈ 700 mAh) lies under the board
+(LAYOUT.md). Earlier text: **Default: no battery (both SKUs).** Rationale: a desk device on USB. In a power cut the home
 router is down too, so a battery buys little connectivity. Users who want backup plug in a USB-C
 power bank with pass-through, which acts as an external UPS at zero product risk. Kids' "battery
 %" becomes **power status** (`usb` / `battery nn%` / `unplugged→offline`).

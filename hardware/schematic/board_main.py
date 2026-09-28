@@ -5,10 +5,10 @@ long base; one board is cheaper one-off (one fab/assembly setup, no FFC/connecto
 
 Blocks: USB-C sink + ESD + CH340C, BQ24074 power path, 3V3 buck, 3V0 analog LDO, ESP32-S3
 module, ES8311 + ES7210 + NS4150B audio with AEC reference loopback, USB-C handset port (host),
-base mic, mic bias / privacy-LED sense, DRV5032 hook (+ DNP IR option), LIS2DH12, ATECC608B
-(DNP), MAX17048 + battery (B-option), LD2410C radar (Lounge), supercap hold-up (Lounge),
+base mic, mic bias / privacy-LED sense, DRV5032 hook, LIS2DH12, MAX17048 + 1S battery,
 LED-data buffer, side controls, test points, and the UI block (ui.py: 12 hot-swap keys,
-13 SK6812MINI-E, AW9523B, e-ink strip, NFC tag, ambient light, privacy LED, Qwiic).
+13 SK6812MINI-E, AW9523B, e-ink strip, NFC tag, ambient light, privacy LED).
+One board, one BOM (owner 2026-09-28); the Lounge radar and supercap are deferred.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def build(v: Variant) -> None:
     # ---- rails and shared nets -------------------------------------------------------------
     GND = rail("GND")
     VBUS_C = rail("VBUS_C")  # connector side, before the PTC
-    VBUS = rail("VBUS")  # after PTC + TVS: BQ24074 IN, radar switch
+    VBUS = rail("VBUS")  # after PTC + TVS: BQ24074 IN, handset-port diode
     VSYS = rail("VSYS")  # BQ24074 OUT: 4.4 V on USB, = VBAT on battery
     V3V3 = rail("3V3")
     V3V0 = rail("3V0")  # analog: ES8311/ES7210 AVDD, mic bias source
@@ -36,10 +36,10 @@ def build(v: Variant) -> None:
     n = {name: Net(name) for name in (
         "BOOT", "EN", "CC1", "CC2", "CC1_SENSE", "CC2_SENSE", "HS_VBUS_EN", "HS_VBUS_SENSE",
         "HOOK", "HS_USB_DP", "HS_USB_DN",
-        "LD_OUT", "IRQ", "I2C_SDA", "I2C_SCL", "EPD_CS", "EPD_MOSI", "EPD_SCK", "EPD_DC",
+        "IRQ", "I2C_SDA", "I2C_SCL", "EPD_CS", "EPD_MOSI", "EPD_SCK", "EPD_DC",
         "EPD_RST", "EPD_BUSY", "I2S_MCLK", "I2S_BCLK", "I2S_WS", "USB_DN", "USB_DP",
-        "USB_DN_C", "USB_DP_C", "I2S_DOUT", "I2S_DIN", "LD_RX", "LD_TX", "PA_EN", "LED_DATA",
-        "U0TXD", "U0RXD", "CHG_CE", "LD_PWR_EN", "CHG_STAT", "PGOOD", "LED_DATA_BUF",
+        "USB_DN_C", "USB_DP_C", "I2S_DOUT", "I2S_DIN", "PA_EN", "LED_DATA",
+        "U0TXD", "U0RXD", "CHG_CE", "CHG_STAT", "PGOOD", "LED_DATA_BUF",
         "MICBIAS_IN", "MICBIAS_OUT", "PRIV_LED_K", "VOL_DN", "VOL_UP", "MUTE_SENSE",
     )}
 
@@ -47,7 +47,6 @@ def build(v: Variant) -> None:
     mcu(n, GND, V3V3, VSYS)
     audio(n, GND, V3V3, V3V0, VSYS)
     sensors(v, n, GND, V3V3, VBAT)
-    radar(v, n, GND, VBUS)
     handset_port(n, GND, VBUS, VSYS, V3V3)
     usb_uart(n, GND, V3V3)
     side_controls(n, GND, V3V3)
@@ -116,7 +115,7 @@ def power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT):
     # TS: 10k fixed resistor without a battery (datasheet), pack NTC via J_BAT pin 2 with one
     ts = Net("BQ_TS")
     u["TS"] += ts
-    series(ts, GND, R("10k", dnp=v.battery, note="TS fixed 10k (no-battery variant)"))
+    # (the pack NTC on J2 pin 2 sets TS; with no pack the charger just does not charge)
     decouple(VBUS, GND, "1u")
     decouple(VSYS, GND, "10u", "10u", "100n")
     decouple(VBAT, GND, "4.7u")
@@ -124,24 +123,13 @@ def power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT):
         series(net, V3V3, R(pull))
     series(n["CHG_CE"], GND, R("10k", note="GPIO45 strap: low = 3.3 V flash, charge enabled"))
 
-    # B-option battery: JST-PH-3 (VBAT, NTC, GND). DESIGN.md said PH-2, which cannot carry
-    # the pack NTC to TS - see SCHEMATIC.md deviations.
-    jb = make("JST-PH-3", ref="J2", dnp=not v.battery, note="B-option LiPo 1S + 10k NTC")
+    # battery: JST-PH-3 (VBAT, NTC, GND). DESIGN.md said PH-2, which cannot carry the pack NTC
+    # to TS - see SCHEMATIC.md deviations.
+    jb = make("JST-PH-3", ref="J2", note="LiPo 1S + 10k NTC")
     jb[1] += VBAT
     jb[2] += ts
     jb[3] += GND
     jb["MP"] += GND
-
-    # Lounge supercap hold-up: VSYS -> 47R -> SCAP, SCAP -> Schottky -> VSYS. §9.5
-    scap = Net("SCAP")
-    series(VSYS, scap, R("47", size="2512", dnp=not v.supercap,
-                         note="supercap charge, tau 22 s; 0.41 W at t=0 -> 2512 1 W"))
-    sc = make("SUPERCAP", dnp=not v.supercap)
-    sc["+"] += scap
-    sc["-"] += GND
-    d = make("B5819W", ref="D4", dnp=not v.supercap)
-    d["A"] += scap
-    d["K"] += VSYS
 
     # 3V3 buck (TLV62569): Vout = 0.6 * (1 + 100k/22k) = 3.327 V
     b = make("TLV62569", ref="U3")
@@ -175,13 +163,13 @@ def power(v, n, GND, VBUS_C, VBUS, VSYS, V3V3, V3V0, VBAT):
 PIN_TABLE = {
     # GPIO -> net (must match pin_table.yaml; checks.py enforces it). Assignment follows the
     # board geometry (layout/pinswap.py, 2026-09-28).
-    "IO0": "BOOT", "IO1": "I2S_DIN", "IO2": "HS_VBUS_SENSE", "IO3": "HS_VBUS_EN", "IO4": "LD_RX",
-    "IO5": "LD_TX", "IO6": "LD_OUT", "IO7": "CC2_SENSE", "IO8": "CHG_STAT", "IO9": "HOOK",
-    "IO10": "CC1_SENSE", "IO11": "I2C_SDA", "IO12": "I2S_MCLK", "IO13": "I2S_BCLK",
-    "IO14": "I2S_WS", "IO15": "I2S_DOUT", "IO16": "IRQ", "IO17": "I2C_SCL", "IO18": "PGOOD",
-    "IO19": "HS_USB_DN", "IO20": "HS_USB_DP", "IO21": "LED_DATA", "IO38": "PA_EN",
-    "IO39": "EPD_BUSY", "IO40": "EPD_RST", "IO41": "EPD_CS", "IO42": "EPD_SCK", "IO45": "CHG_CE",
-    "IO46": "LD_PWR_EN", "IO47": "EPD_MOSI", "IO48": "EPD_DC", "RXD0": "U0RXD", "TXD0": "U0TXD",
+    "IO0": "BOOT", "IO1": "I2S_DOUT", "IO2": "I2S_WS", "IO3": "HS_VBUS_EN", "IO4": "I2S_DIN",
+    "IO5": "IRQ", "IO6": "CC2_SENSE", "IO7": "I2C_SCL", "IO8": "CC1_SENSE",
+    "IO10": "HS_VBUS_SENSE", "IO11": "I2S_MCLK", "IO14": "I2S_BCLK", "IO15": "I2C_SDA",
+    "IO16": "PGOOD", "IO17": "HOOK", "IO18": "CHG_STAT", "IO19": "HS_USB_DN", "IO20": "HS_USB_DP",
+    "IO21": "LED_DATA", "IO38": "PA_EN", "IO39": "EPD_BUSY", "IO40": "EPD_RST", "IO41": "EPD_CS",
+    "IO42": "EPD_SCK", "IO45": "CHG_CE", "IO47": "EPD_MOSI", "IO48": "EPD_DC", "RXD0": "U0RXD",
+    "TXD0": "U0TXD",
 }
 
 
@@ -210,8 +198,6 @@ def mcu(n, GND, V3V3, VSYS):
     # strapping / default-off pulls (§5)
     series(n["HS_VBUS_EN"], GND, R("100k", note="GPIO3: handset VBUS off at boot"))
     series(n["PA_EN"], GND, R("100k", note="GPIO41: amp off at boot (no pop)"))
-    series(n["LD_PWR_EN"], GND, R("100k", note="GPIO46 strap: radar off at boot"))
-    series(n["LD_OUT"], GND, R("100k", note="defined level when radar is DNP/unpowered"))
     # shared I2C pull-ups (4.7k, 400 kHz) and shared open-drain IRQ pull-up (10k)
     series(n["I2C_SDA"], V3V3, R("4.7k"))
     series(n["I2C_SCL"], V3V3, R("4.7k"))
@@ -302,11 +288,13 @@ def audio(n, GND, V3V3, V3V0, VSYS):
 
     # ---- handset: off-the-shelf USB-C (UAC) handset on its own USB-C host port (see
     # handset_port()); the codecs serve the base speaker, base mic and the AEC reference.
-    # ES7210 CH1 (was the analog handset mic) is unused: inputs AC-grounded like CH4.
-    series(adc["MIC1P"], GND, C("1u"))
-    series(adc["MIC1N"], GND, C("1u"))
-    series(dac["MIC1P"], GND, C("1u"))  # ES8311 ADC input unused: AC-grounded
-    series(dac["MIC1N"], GND, C("1u"))
+    # Unused mic inputs (ES7210 CH1/CH4, ES8311 MIC1) are left open, no caps (owner
+    # 2026-09-28). The inputs are biased internally at VMID, so a hard tie to GND would load
+    # that bias. [UNVERIFIED against the ES7210/ES8311 datasheets: confirm "leave floating".]
+    for pin in ("MIC1P", "MIC1N", "MIC4P", "MIC4N"):
+        adc[pin] += NC
+    dac["MIC1P"] += NC
+    dac["MIC1N"] += NC
 
     # ---- base (speakerphone) electret -> ES7210 CH2 ----
     mk = make("ELECTRET", ref="MK1", note="front wall, rubber boot")
@@ -329,9 +317,6 @@ def audio(n, GND, V3V3, V3V0, VSYS):
         series(div, adc[mic], C("1u"))
     series(rp, rn, R("4.3k", note="AEC ref divider shunt (tune in EVT)"))
     series(rp, rn, C("100p"))
-    # CH4 spare: inputs AC-grounded
-    series(adc["MIC4P"], GND, C("1u"))
-    series(adc["MIC4N"], GND, C("1u"))
 
     # ---- NS4150B speaker amp on VSYS: Rin 150k -> gain 1.6 (Korvo-2), CTRL = PA_EN ----
     pa = make("NS4150B", ref="U9")
@@ -345,7 +330,7 @@ def audio(n, GND, V3V3, V3V0, VSYS):
         mid = Net(f"PA_IN_{pin}")
         series(out, mid, C("100n"))
         series(mid, pa[pin], R("150k"))
-    # EVT: total VSYS capacitance is ~140 uF (+ supercap via 47R on Lounge); TI recommends
+    # EVT: total VSYS capacitance is ~140 uF ; TI recommends
     # 4.7-47 uF on BQ24074 OUT - verify start-up / short-circuit detection with this load.
     decouple(VSYS, GND, "100u", "10u", "100n", note="NS4150B supply, at pin 6")
     spk = make("JST-PH-2", ref="J4", note="speaker 4 ohm 3 W")
@@ -407,16 +392,8 @@ def sensors(v, n, GND, V3V3, VBAT):
     a["INT2"] += NC
     decouple(V3V3, GND, "100n", "10u", note="LIS2DH12")
 
-    # ATECC608B footprint, DNP until the protocol adopts p256 (§10.1)
-    se = make("ATECC608B", ref="U13", dnp=not v.secure_element)
-    se["VCC"] += V3V3
-    se["GND"] += GND
-    se["SDA"] += n["I2C_SDA"]
-    se["SCL"] += n["I2C_SCL"]
-    series(V3V3, GND, C("100n", dnp=not v.secure_element, note="ATECC608B"))
-
     # MAX17048 fuel gauge (B-option). ALRT on the shared IRQ (open-drain).
-    fg = make("MAX17048", ref="U14", dnp=not v.battery)
+    fg = make("MAX17048", ref="U14")
     fg["VDD"] += VBAT
     fg["CELL"] += VBAT
     fg["GND"] += GND
@@ -426,33 +403,7 @@ def sensors(v, n, GND, V3V3, VBAT):
     fg["SCL"] += n["I2C_SCL"]
     fg["SDA"] += n["I2C_SDA"]
     fg["ALRT_N"] += n["IRQ"]
-    series(VBAT, GND, C("100n", dnp=not v.battery, note="MAX17048 VDD"))
-
-
-# ---------------------------------------------------------------------------------------------
-def radar(v, n, GND, VBUS):
-    """HLK-LD2410C on a 5-pin right-angle socket, 5 V switched by P-FET (Lounge). §8"""
-    dnp = not v.radar
-    vld = Net("VBUS_LD")
-    gate = Net("LD_PFET_G")
-    qp = make("AO3401A", ref="Q2", dnp=dnp, note="radar 5 V switch")
-    qp["S"] += VBUS
-    qp["D"] += vld
-    qp["G"] += gate
-    series(VBUS, gate, R("100k", dnp=dnp))
-    # 3.3 V GPIO cannot turn a 5 V P-FET off -> N-FET pulls the gate low when LD_PWR_EN = 1
-    qn = make("AO3400A", ref="Q3", dnp=dnp)
-    qn["D"] += gate
-    qn["S"] += GND
-    qn["G"] += n["LD_PWR_EN"]
-    j = make("LD2410C-HDR", ref="J5", dnp=dnp, note="HLK-LD2410C plugs in (not soldered)")
-    j["VCC"] += vld
-    j["GND"] += GND
-    series(vld, GND, C("10u", dnp=dnp))
-    # 1k series on every IO: the module may be unpowered while the S3 drives its RX
-    series(n["LD_TX"], j["RX"], R("1k", dnp=dnp))
-    series(j["TX"], n["LD_RX"], R("1k", dnp=dnp))
-    series(j["OUT"], n["LD_OUT"], R("1k", dnp=dnp))
+    series(VBAT, GND, C("100n", note="MAX17048 VDD"))
 
 
 # ---------------------------------------------------------------------------------------------

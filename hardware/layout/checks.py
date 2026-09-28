@@ -1,6 +1,6 @@
 """Layout checks as code (KiCad Python). Fails (exit 1) on any ERROR.
 
-    python checks.py main [--variant kids] [--out DIR]
+    python checks.py main  [--out DIR]
 
 - KiCad DRC (kicad-cli, project rules + fab-common.kicad_dru): 0 errors, 0 unconnected items
   (courtyard overlaps, clearances, edge, holes, keep-outs are all DRC errors in the project).
@@ -229,11 +229,11 @@ def check_power_widths(board, results):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("board", choices=["main"])
-    ap.add_argument("--variant", default="kids")
+    ap.add_argument("--variant", default="main", help="one board since 2026-09-28")
     ap.add_argument("--out")
     a = ap.parse_args()
     cfg_all = load_yaml(LAYOUT / "boards.yaml")
-    out = Path(a.out) if a.out else BUILD / f"{a.board}-{a.variant}" / "layout"
+    out = Path(a.out) if a.out else BUILD / a.board / "layout"
     out.mkdir(parents=True, exist_ok=True)
     board, pcb, _ = load(a.board, cfg_all, a.variant)
     results = []

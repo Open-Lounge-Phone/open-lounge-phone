@@ -530,14 +530,6 @@
       },
       {
         "netclass": "Bus",
-        "pattern": "LD_RX"
-      },
-      {
-        "netclass": "Bus",
-        "pattern": "LD_TX"
-      },
-      {
-        "netclass": "Bus",
         "pattern": "LED_D1"
       },
       {
@@ -606,6 +598,14 @@
       },
       {
         "netclass": "Audio",
+        "pattern": "N$10"
+      },
+      {
+        "netclass": "Audio",
+        "pattern": "N$11"
+      },
+      {
+        "netclass": "Audio",
         "pattern": "N$12"
       },
       {
@@ -613,48 +613,12 @@
         "pattern": "N$13"
       },
       {
-        "netclass": "Audio",
+        "netclass": "Speaker",
         "pattern": "N$14"
       },
       {
-        "netclass": "Audio",
+        "netclass": "Speaker",
         "pattern": "N$15"
-      },
-      {
-        "netclass": "Audio",
-        "pattern": "N$16"
-      },
-      {
-        "netclass": "Audio",
-        "pattern": "N$17"
-      },
-      {
-        "netclass": "Audio",
-        "pattern": "N$18"
-      },
-      {
-        "netclass": "Audio",
-        "pattern": "N$19"
-      },
-      {
-        "netclass": "Speaker",
-        "pattern": "N$20"
-      },
-      {
-        "netclass": "Speaker",
-        "pattern": "N$21"
-      },
-      {
-        "netclass": "Bus",
-        "pattern": "N$22"
-      },
-      {
-        "netclass": "Bus",
-        "pattern": "N$23"
-      },
-      {
-        "netclass": "Bus",
-        "pattern": "N$24"
       },
       {
         "netclass": "Audio",
@@ -687,10 +651,6 @@
       {
         "netclass": "Audio",
         "pattern": "REF_DIV_P"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "SCAP"
       },
       {
         "netclass": "Speaker",
@@ -735,10 +695,6 @@
       {
         "netclass": "Power",
         "pattern": "VBUS_C"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "VBUS_LD"
       },
       {
         "netclass": "Power",

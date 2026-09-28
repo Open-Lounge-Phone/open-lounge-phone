@@ -174,6 +174,11 @@ def check_i2c_union(per_board: dict) -> list:
     return out
 
 
+# Inputs deliberately left open (explicit NC in the schematic): unused codec mic inputs are
+# biased internally (owner 2026-09-28; [UNVERIFIED] "leave floating" against the datasheets).
+OPEN_INPUTS = {"ES8311": {"MIC1P", "MIC1N"}, "ES7210": {"MIC1P", "MIC1N", "MIC4P", "MIC4N"}}
+
+
 def check_nets(circuit):
     out = []
     for net in circuit.nets:
@@ -188,6 +193,8 @@ def check_nets(circuit):
     # input / power-in pins left floating
     for part in circuit.parts:
         for pin in part.pins:
+            if pin.name in OPEN_INPUTS.get(part.fields.get("SpecKey"), ()):
+                continue
             if _net_of(pin) is None and pin.func in (pin.types.INPUT, pin.types.PWRIN):
                 out.append(("ERROR", f"{part.ref}.{pin.name} ({pin.num}) is an unconnected input"))
     return out
@@ -261,27 +268,16 @@ def check_footprints(circuit):
 EPD_SPECS = {"FPC24_EPD", "L47u", "EPD_NFET", "MBR0530"}  # e-ink connector + SSD1680 boost
 
 
-def check_display(circuit, variant):
-    """display == "none": the e-ink connector and every boost part are DNP (and fitted for
-    "eink"); the Qwiic display port is DNP on every variant."""
+def check_one_bom(circuit):
+    """One board, one BOM (owner 2026-09-28): the e-ink connector and boost are fitted, and the
+    only unfitted part is the NFC tuning cap (value set in EVT)."""
     out = []
-    want_dnp = variant.display != "eink"
     epd = [p for p in circuit.parts if p.fields.get("SpecKey") in EPD_SPECS]
     if not epd:
         out.append(("ERROR", "no e-ink parts found on the board"))
-    # passives on e-ink-only nets follow the same rule
-    epd_nets = {pin.net.name for p in epd for pin in p.pins
-                if _net_of(pin) is not None and pin.net.name.startswith("EPD_")
-                and pin.net.name not in ("EPD_CS", "EPD_MOSI", "EPD_SCK", "EPD_DC", "EPD_RST",
-                                         "EPD_BUSY")}
     for p in circuit.parts:
-        on_epd = p in epd or (p.ref_prefix in ("R", "C") and any(
-            _name(_net_of(pin)) in epd_nets for pin in p.pins))
-        if on_epd and bool(p.fields.get("DNP")) != want_dnp:
-            out.append(("ERROR", f"{p.ref} ({p.fields.get('SpecKey')}) should be "
-                                 f"{'DNP' if want_dnp else 'fitted'} for display={variant.display}"))
-        if p.fields.get("SpecKey") == "QWIIC" and not p.fields.get("DNP"):
-            out.append(("ERROR", f"{p.ref} Qwiic display port must be DNP (field option)"))
+        if p.fields.get("DNP") and "tuning cap" not in p.fields.get("Note", ""):
+            out.append(("ERROR", f"{p.ref} ({p.fields.get('SpecKey')}) is DNP: one BOM, no variants"))
     return out
 
 
@@ -291,9 +287,7 @@ def run_all(circuit, board: str = "main", variant=None):
     if board == "main":
         fns.insert(0, check_pin_table)
         fns.append(check_power_budget)
-    if variant is not None:
-        fns.append(lambda c: check_display(c, variant))
-        fns[-1].__name__ = "check_display"
+    fns.append(check_one_bom)
     for fn in fns:
         try:
             results += [(lvl, f"[{fn.__name__}] {msg}") for lvl, msg in fn(circuit)]
@@ -352,21 +346,19 @@ def check_power_budget(circuit):
         else:  # advisory: documents why a policy exists; reported, never fails
             out.append(("INFO", line + " (advisory)"))
 
-    # Full-feature scenarios must fit the source each SKU requires; Lounge needs >=1.5 A.
+    # One board: full features need the >=1.5 A source, reduced mode fits any USB source.
     need = budget["required_source_ma"]
     for name, (total, _direct, source, kind) in budget["scenarios"].items():
-        if kind == "policy" and not name.startswith("default_usb") and source < need["lounge"]:
+        if kind == "policy" and not name.startswith("default_usb") and source < need["full"]:
             out.append(("ERROR", f"{name}: full-feature scenario assumes a {source} mA source, "
-                                 f"below the Lounge requirement of {need['lounge']} mA"))
-    for sku, ma in need.items():
-        full = [t for n, (t, _d, _s, k) in budget["scenarios"].items()
-                if k == "policy" and not n.startswith("default_usb")]
-        if sku == "kids":
-            full = [budget["scenarios"]["default_usb_kids"][0]]
-        if max(full) > ma:
-            out.append(("ERROR", f"{sku}: needs {max(full)} mA but only requires a {ma} mA source"))
+                                 f"below the required {need['full']} mA"))
+    for mode, ma in need.items():
+        peak = max(t for n, (t, _d, _s, k) in budget["scenarios"].items() if k == "policy"
+                   and n.startswith("default_usb") == (mode == "reduced"))
+        if peak > ma:
+            out.append(("ERROR", f"{mode}: needs {peak} mA but only requires a {ma} mA source"))
         else:
-            out.append(("INFO", f"{sku}: requires a ≥{ma} mA USB source; peak {max(full)} mA"))
+            out.append(("INFO", f"{mode} mode: requires a ≥{ma} mA USB source; peak {peak} mA"))
 
     worst_rating = min(budget["vsys_parts_max_v"].values())
     if ch["vsys_max_v"] > worst_rating:

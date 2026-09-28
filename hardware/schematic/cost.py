@@ -45,7 +45,7 @@ def unit_price(entry: dict, qty: int) -> tuple[float | None, str]:
 
 def fitted_rows(variant: str, board: str) -> list[dict]:
     rows = []
-    with (BUILD / f"{board}-{variant}" / "bom.csv").open() as f:
+    with (BUILD / board / "bom.csv").open() as f:
         for r in csv.DictReader(f):
             if r["Fitted"] == "yes":
                 r["Qty"] = int(r["Qty"])
@@ -56,9 +56,7 @@ def fitted_rows(variant: str, board: str) -> list[dict]:
 def variant_flags(variant: str) -> dict:
     from config import VARIANTS
 
-    v = VARIANTS[variant]
-    return {"sku": v.name, "display": v.display, "radar": v.radar, "battery": v.battery,
-            "supercap": v.supercap}
+    return {"sku": VARIANTS[variant].name}   # one board: no per-variant cost items
 
 
 def applies(item: dict, flags: dict) -> bool:

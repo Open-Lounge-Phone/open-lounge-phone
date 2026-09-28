@@ -1,6 +1,6 @@
 """`make layout`: footprints -> boards (place + route, cached) -> plate -> checks -> exports.
 
-    python run_layout.py [--force] [--boards main] [--variants kids,lounge,...]
+    python run_layout.py [--force] [--boards main]
 
 Routing (layout/router.py, a deterministic grid router) takes minutes, so a board is only re-placed and re-routed when its inputs
 change: the SHA-256 of the netlist, boards.yaml, placement.yaml, the project footprints and the
@@ -21,7 +21,7 @@ import kienv
 from kienv import BUILD, KICAD_OUT, LAYOUT
 
 PY = sys.executable
-VARIANTS = ["kids", "kids-eink", "lounge", "kids-batt"]
+VARIANTS = ["main"]   # one board, one BOM (owner 2026-09-28)
 
 
 def inputs_hash(board: str) -> str:
@@ -36,7 +36,7 @@ def inputs_hash(board: str) -> str:
     for f in files:
         h.update(f.name.encode())
         h.update(f.read_bytes())
-    net = nl.read(BUILD / f"{board}-kids" / f"{board}.net")
+    net = nl.read(BUILD / board / f"{board}.net")
     for ref in sorted(net.comps):
         h.update(f"{ref}={net.comps[ref].footprint};".encode())
     for name in sorted(net.nets):
@@ -75,17 +75,11 @@ def main() -> int:
     if run("build_board.py", "plate") or run("export.py", "plate"):
         return 1
     for b in boards:
-        out = BUILD / f"{b}-kids" / "layout"
-        if run("checks.py", b, "--variant", "kids", "--out", out):
+        out = BUILD / b / "layout"
+        if run("checks.py", b, "--out", out):
             rc = 1
-        for v in a.variants.split(","):
-            if v != "kids":
-                dst = BUILD / f"{b}-{v}" / "layout"
-                dst.mkdir(parents=True, exist_ok=True)
-                for f in ("checks.txt", "drc.json", "drc.rpt"):
-                    shutil.copy(out / f, dst / f)
-            if run("export.py", b, "--variant", v):
-                rc = 1
+        if run("export.py", b):
+            rc = 1
     return rc
 
 

@@ -1,50 +1,57 @@
 Refs,Qty,Value,Description,MPN,LCSC,Footprint,Fitted,Verified
-C1 C3 C4 C8 C13 C35 C54 C60 C65,9,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C2 C11 C12 C16 C20 C22 C23 C24 C27 C28 C29 C30 C31 C32 C33 C34 C36 C37 C38 C39 C41 C42 C44 C46 C48 C49 C50 C64 C85,29,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C5 C15 C17 C18 C19 C21 C25 C26 C51 C52 C55 C58 C59 C62 C66 C67 C68 C69 C72 C73 C74 C75 C76 C77 C78 C79 C80 C81 C82 C83 C84 C86,32,100nF 50V X7R,capacitor,CC0603KRX7R9BB104,C14663,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C1 C3 C4 C7 C12 C34 C47 C53 C56,9,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C2 C10 C11 C15 C19 C21 C22 C23 C26 C27 C28 C29 C30 C31 C32 C33 C36 C37 C39 C41 C43 C55 C76 C79 C80 C81 C82 C83 C84 C85 C86,31,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C5 C14 C16 C17 C18 C20 C24 C25 C44 C45 C48 C51 C52 C54 C57 C58 C59 C60 C63 C64 C65 C66 C67 C68 C69 C70 C71 C72 C73 C74 C75 C77,32,100nF 50V X7R,capacitor,CC0603KRX7R9BB104,C14663,Capacitor_SMD:C_0603_1608Metric,yes,yes
 C6,1,4.7uF 16V X5R,capacitor,CL10A475KO8NNNC,C19666,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C9 C10 C14 C70 C71,5,22uF 25V X5R,capacitor,CL21A226MAQNNNE,C45783,Capacitor_SMD:C_0805_2012Metric,yes,yes
-C40,1,33pF 50V C0G,capacitor,CL10C330JB8NNNC,C1663,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C43 C45,2,470nF 25V X7R,capacitor,CL10B474KA8NNNC,C1623,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C47,1,100pF 50V C0G,capacitor,CL10C101JB8NNNC,C14858,Capacitor_SMD:C_0603_1608Metric,yes,yes
-C53,1,100uF 6.3V X5R,capacitor,CL31A107MQHNNNE,C15008,Capacitor_SMD:C_1206_3216Metric,yes,yes
-C56 C57,2,220pF 50V X7R,capacitor,CL10B221KB8NNNC,C1603,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C8 C9 C13 C61 C62,5,22uF 25V X5R,capacitor,CL21A226MAQNNNE,C45783,Capacitor_SMD:C_0805_2012Metric,yes,yes
+C35,1,33pF 50V C0G,capacitor,CL10C330JB8NNNC,C1663,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C38 C40,2,470nF 25V X7R,capacitor,CL10B474KA8NNNC,C1623,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C42,1,100pF 50V C0G,capacitor,CL10C101JB8NNNC,C14858,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C46,1,100uF 6.3V X5R,capacitor,CL31A107MQHNNNE,C15008,Capacitor_SMD:C_1206_3216Metric,yes,yes
+C49 C50,2,220pF 50V X7R,capacitor,CL10B221KB8NNNC,C1603,Capacitor_SMD:C_0603_1608Metric,yes,yes
+C87 C88,2,4.7uF 25V X5R,capacitor,CL21A475KAQNNNE,C1779,Capacitor_SMD:C_0805_2012Metric,yes,yes
 D1 D2,2,USBLC6-2SC6,"2-line low-cap ESD (USB D+/D-, or CC1/CC2)",USBLC6-2SC6,C7519,Package_TO_SOT_SMD:SOT-23-6,yes,yes
 D3,1,SMF5.0A,TVS 5 V unidirectional 200 W (VBUS),SMF5.0A,C151296,Diode_SMD:D_SOD-123F,yes,yes
-D5 D7,2,SRV05-4.TCT,"4-line ESD array (REF1=GND, REF2=VCC or float)",SRV05-4.TCT,C13612,Package_TO_SOT_SMD:SOT-23-6,yes,yes
-D6 D10 D11 D12 D13 D14 D15 D16 D17 D18 D19 D20 D21,13,SK6812MINI-E,"RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)",SK6812MINI-E,C5149201,LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount,yes,yes
+D4 D7,2,SRV05-4.TCT,"4-line ESD array (REF1=GND, REF2=VCC or float)",SRV05-4.TCT,C13612,Package_TO_SOT_SMD:SOT-23-6,yes,yes
+D5 D6 D10 D11 D12 D13 D14 D15 D16 D17 D18 D19 D20,13,SK6812MINI-E,"RGB LED with driver, reverse mount (VDD 3.7-5.5 V, VIH 0.7 VDD)",SK6812MINI-E,C5149201,LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount,yes,yes
 D8 D9,2,B5819W SL,Schottky 40 V 1 A (supercap discharge path),B5819W SL,C8598,Diode_SMD:D_SOD-123,yes,yes
-D22,1,KT-0603R,Red LED 0603 (privacy indicator),KT-0603R,C2286,LED_SMD:LED_0603_1608Metric,yes,[UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
+D21,1,KT-0603R,Red LED 0603 (privacy indicator),KT-0603R,C2286,LED_SMD:LED_0603_1608Metric,yes,[UNVERIFIED] cathode mark not checked against the drawing (KiCad pad 1 = K)
+D22 D23 D24,3,MBR0530T1G,Schottky 30 V 0.5 A (e-ink boost),MBR0530T1G,C82046,Diode_SMD:D_SOD-123,yes,yes
 F1,1,SMD1206P150TFT,"PTC resettable fuse, hold 1.5 A, trip 3 A, 8 V",SMD1206P150TFT,C495353,Fuse:Fuse_1206_3216Metric,yes,yes
 FB1 FB2,2,BLM18PG121SN1D,"Ferrite bead 120R@100MHz 2 A 50 mOhm 0603 (speaker outputs; JLC basic part, was BLM18KG221SN1D extended)",BLM18PG121SN1D,C14709,Inductor_SMD:L_0603_1608Metric,yes,yes
 J1 J7,2,TYPE-C-31-M-12,"USB-C 16P receptacle (USB 2.0), sink only",TYPE-C-31-M-12,C165948,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,yes,yes
 J2,1,S3B-PH-SM4-TB(LF)(SN),"JST PH 3-pin SMD right-angle (B-option battery: VBAT, NTC, GND)",S3B-PH-SM4-TB(LF)(SN),C265101,Connector_JST:JST_PH_S3B-PH-SM4-TB_1x03-1MP_P2.00mm_Horizontal,yes,yes
 J4,1,S2B-PH-SM4-TB(LF)(SN),JST PH 2-pin SMD right-angle (speaker),S2B-PH-SM4-TB(LF)(SN),C295747,Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal,yes,yes
+J6,1,FPC-05F-24PH20,"24P 0.5 mm FPC connector, flip lock, bottom contact, H2.0 (GDEY029T94 tail; pin names per the panel datasheet)",FPC-05F-24PH20,C2856805,OpenLoungePhone:FPC-05F-24PH20,yes,"[UNVERIFIED] panel pin table checked; land pattern from the XUNPU FPC-05F-NPH20 drawing (signal 0.30 x 1.25 @ 0.5, MP 2.0 x 2.5); FPC contact side vs connector (bottom contact) to confirm with a sample"
 L1,1,SWPA4020S2R2MT,2.2 uH power inductor 4x4 mm (buck),SWPA4020S2R2MT,C83423,Inductor_SMD:L_Sunlord_SWPA4020S,yes,yes
 L2,1,PCB coil (copper),"13.56 MHz PCB antenna in the front-left end region: 9 turns 0.30/0.30 mm, 26 x 42 mm, ~4.8 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV CTUN 28.5 pF)",PCB coil (copper),,OpenLoungePhone:NFC_Coil_Strip,yes,[UNVERIFIED] inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT (DNP tuning cap trims it)
+L3,1,SWPA4020S470MT,"47 uH 440 mA power inductor 4x4 mm (e-ink boost, GD reference 47 uH/500 mA)",SWPA4020S470MT,C83427,Inductor_SMD:L_Sunlord_SWPA4020S,yes,yes
 MK1,1,GMI6027-2C42DB,"6 mm electret capsule, -42 dB, 2.2k load (base speakerphone mic, in rubber boot)",GMI6027-2C42DB,C233885,OpenLoungePhone:Electret_6mm_SMD_pads,yes,[UNVERIFIED] ground (can) pad identification not checked against drawing
 Q1 Q5 Q6,3,MMBT3904,NPN 40 V 200 mA,MMBT3904,C20526,Package_TO_SOT_SMD:SOT-23,yes,[UNVERIFIED] standard SOT-23 B/E/C order; JSCJ datasheet text not readable
-Q4 Q8,2,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,yes,yes
-Q7,1,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_SMD:SOT-23,yes,yes
+Q2,1,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_SMD:SOT-23,yes,yes
+Q3 Q4,2,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,yes,yes
+Q7,1,SI1308EDL-T1-GE3,"N-MOSFET 30 V 1.5 A (e-ink boost switch, Good Display reference part)",SI1308EDL-T1-GE3,C469327,Package_TO_SOT_SMD:SOT-323_SC-70,yes,yes
 R1 R2,2,5.1k,resistor,0603WAF5101T5E,C23186,Resistor_SMD:R_0603_1608Metric,yes,yes
 R3 R4,2,1k,resistor,0603WAF1001T5E,C21190,Resistor_SMD:R_0603_1608Metric,yes,yes
 R5 R6,2,0,resistor,0603WAF0000T5E,C21189,Resistor_SMD:R_0603_1608Metric,yes,yes
 R7,1,1.1k,resistor,0603WAF1101T5E,C22764,Resistor_SMD:R_0603_1608Metric,yes,yes
 R8,1,1.8k,resistor,0603WAF1801T5E,C4177,Resistor_SMD:R_0603_1608Metric,yes,yes
-R10 R11 R12 R16 R17 R24 R27 R29 R30 R51 R52 R53 R54 R55 R56 R57 R58 R59 R60 R61 R62 R63 R64 R65 R66 R67 R68,27,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,yes,yes
-R14 R18 R19 R20 R21 R25 R31 R34 R41 R49 R50 R69 R70,13,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,yes,yes
-R15 R33,2,22k,resistor,0603WAF2202T5E,C31850,Resistor_SMD:R_0603_1608Metric,yes,yes
-R22 R23,2,4.7k,resistor,0603WAF4701T5E,C23162,Resistor_SMD:R_0603_1608Metric,yes,yes
-R26,1,330,resistor,0603WAF3300T5E,C23138,Resistor_SMD:R_0603_1608Metric,yes,yes
-R28,1,47,resistor,0603WAF470JT5E,C23182,Resistor_SMD:R_0603_1608Metric,yes,yes
-R32,1,100,resistor,0603WAF1000T5E,C22775,Resistor_SMD:R_0603_1608Metric,yes,yes
-R35,1,2.2k,resistor,0603WAF2201T5E,C4190,Resistor_SMD:R_0603_1608Metric,yes,yes
-R36 R37,2,20k,resistor,0603WAF2002T5E,C4184,Resistor_SMD:R_0603_1608Metric,yes,yes
-R38,1,4.3k,resistor,0603WAF4301T5E,C23159,Resistor_SMD:R_0603_1608Metric,yes,yes
-R39 R40,2,150k,resistor,0603WAF1503T5E,C22807,Resistor_SMD:R_0603_1608Metric,yes,yes
-R46 R47,2,33k,resistor,0603WAF3302T5E,C4216,Resistor_SMD:R_0603_1608Metric,yes,yes
-R48,1,15k,resistor,0603WAF1502T5E,C22809,Resistor_SMD:R_0603_1608Metric,yes,yes
-R71,1,470,resistor,0603WAF4700T5E,C23179,Resistor_SMD:R_0603_1608Metric,yes,yes
+R9 R10 R11 R14 R15 R20 R23 R25 R26 R43 R44 R45 R46 R47 R48 R49 R50 R51 R52 R53 R54 R55 R56 R57 R58 R59 R60,27,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,yes,yes
+R12 R16 R17 R21 R27 R30 R37 R41 R42 R61 R62,11,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,yes,yes
+R13 R29,2,22k,resistor,0603WAF2202T5E,C31850,Resistor_SMD:R_0603_1608Metric,yes,yes
+R18 R19,2,4.7k,resistor,0603WAF4701T5E,C23162,Resistor_SMD:R_0603_1608Metric,yes,yes
+R22,1,330,resistor,0603WAF3300T5E,C23138,Resistor_SMD:R_0603_1608Metric,yes,yes
+R24,1,47,resistor,0603WAF470JT5E,C23182,Resistor_SMD:R_0603_1608Metric,yes,yes
+R28,1,100,resistor,0603WAF1000T5E,C22775,Resistor_SMD:R_0603_1608Metric,yes,yes
+R31,1,2.2k,resistor,0603WAF2201T5E,C4190,Resistor_SMD:R_0603_1608Metric,yes,yes
+R32 R33,2,20k,resistor,0603WAF2002T5E,C4184,Resistor_SMD:R_0603_1608Metric,yes,yes
+R34,1,4.3k,resistor,0603WAF4301T5E,C23159,Resistor_SMD:R_0603_1608Metric,yes,yes
+R35 R36,2,150k,resistor,0603WAF1503T5E,C22807,Resistor_SMD:R_0603_1608Metric,yes,yes
+R38 R39,2,33k,resistor,0603WAF3302T5E,C4216,Resistor_SMD:R_0603_1608Metric,yes,yes
+R40,1,15k,resistor,0603WAF1502T5E,C22809,Resistor_SMD:R_0603_1608Metric,yes,yes
+R63,1,470,resistor,0603WAF4700T5E,C23179,Resistor_SMD:R_0603_1608Metric,yes,yes
+R64,1,1M,resistor,0603WAF1004T5E,C22935,Resistor_SMD:R_0603_1608Metric,yes,yes
+R65,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,yes,yes
 SW1 SW2,2,TS-1187A-B-A-B,Tactile switch 5.1x5.1 mm (pads 1-1 and 2-2 internally joined),TS-1187A-B-A-B,C318884,Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A,yes,yes
 SW3 SW4,2,SKRTLAE010,Side-push SMD tactile switch (VOL-/VOL+ on the right end face),SKRTLAE010,C110293,Button_Switch_SMD:SW_Push_1P1T-MP_NO_Horizontal_Alps_SKRTLAE010,yes,yes
 SW5,1,JS202011AQN,"DPDT slide switch, right-angle through-hole (MUTE, lever out through the edge)",JS202011AQN,C221662,Button_Switch_THT:SW_CK_JS202011AQN_DPDT_Angled,yes,[UNVERIFIED] pole pinout assumed 1-2-3 / 4-5-6 with commons 2 and 5 (usual C&K JS); check against the C&K drawing
@@ -65,25 +72,4 @@ U16,1,CH340C,"USB 2.0 full-speed to UART bridge, internal oscillator",CH340C,C84
 U17,1,AW9523BTQR,"16-bit I2C I/O expander (keys, side controls, LED power enable); I2C 0x58",AW9523BTQR,C148077,Package_DFN_QFN:TQFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm,yes,[UNVERIFIED] pin map checked (datasheet V1.1.1 + V2.4); exposed-pad size of the land pattern not checked against the package drawing
 U18,1,LTR-303ALS-01,Ambient light sensor; I2C 0x29,LTR-303ALS-01,C364577,OptoDevice:Lite-On_LTR-303ALS-01,yes,yes
 U19,1,ST25DV04K-IER6S3,"NFC dynamic tag 4 kbit, I2C 0x53 (user) / 0x57 (system), GPO open-drain",ST25DV04K-IER6S3,C155601,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,yes,yes
-C7,1,SE-5R5-D474VYV,"0.47 F 5.5 V supercap, power-fail hold-up (Lounge)",SE-5R5-D474VYV,,OpenLoungePhone:Supercap_D11.5mm_P5.0mm,DNP,"[UNVERIFIED] no LCSC/JLCPCB listing found for 0.47 F 5.5 V (C150565 did not resolve); part, lead pitch and footprint to choose; ESR ~40 ohm is fine for 0.9 W hold-up"
-C61,1,100nF 50V X7R,capacitor,CC0603KRX7R9BB104,C14663,Capacitor_SMD:C_0603_1608Metric,DNP,yes
-C63,1,10uF 10V X5R,capacitor,CL10A106KP8NNNC,C19702,Capacitor_SMD:C_0603_1608Metric,DNP,yes
-C87,1,22pF 50V C0G,capacitor,CL10C220JB8NNNC,C1653,Capacitor_SMD:C_0603_1608Metric,DNP,yes
-C88 C89 C90 C91 C92 C93 C94 C95,8,1uF 50V X5R,capacitor,CL10A105KB8NNNC,C15849,Capacitor_SMD:C_0603_1608Metric,DNP,yes
-C96 C97,2,4.7uF 25V X5R,capacitor,CL21A475KAQNNNE,C1779,Capacitor_SMD:C_0805_2012Metric,DNP,yes
-D4,1,B5819W SL,Schottky 40 V 1 A (supercap discharge path),B5819W SL,C8598,Diode_SMD:D_SOD-123,DNP,yes
-D23 D24 D25,3,MBR0530T1G,Schottky 30 V 0.5 A (e-ink boost),MBR0530T1G,C82046,Diode_SMD:D_SOD-123,DNP,yes
-J3,1,SM04B-SRSS-TB(LF)(SN),"Qwiic/STEMMA QT I2C port (JST-SH 4P 1.0 mm): optional external display module (SSD1306 0.91"" OLED 0x3C or HT16K33 14-seg backpack 0x70); internal, DNP by default",SM04B-SRSS-TB(LF)(SN),C160404,Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal,DNP,yes
-J5,1,2.54-1*5P (right angle),5-pin right-angle socket for the HLK-LD2410C radar (module bought separately),2.54-1*5P (right angle),C35167,Connector_PinSocket_2.54mm:PinSocket_1x05_P2.54mm_Horizontal,DNP,yes
-J6,1,FPC-05F-24PH20,"24P 0.5 mm FPC connector, flip lock, bottom contact, H2.0 (GDEY029T94 tail; pin names per the panel datasheet)",FPC-05F-24PH20,C2856805,OpenLoungePhone:FPC-05F-24PH20,DNP,"[UNVERIFIED] panel pin table checked; land pattern from the XUNPU FPC-05F-NPH20 drawing (signal 0.30 x 1.25 @ 0.5, MP 2.0 x 2.5); FPC contact side vs connector (bottom contact) to confirm with a sample"
-L3,1,SWPA4020S470MT,"47 uH 440 mA power inductor 4x4 mm (e-ink boost, GD reference 47 uH/500 mA)",SWPA4020S470MT,C83427,Inductor_SMD:L_Sunlord_SWPA4020S,DNP,yes
-Q2,1,AO3401A,P-MOSFET -30 V -4 A (load switch),AO3401A,C15127,Package_TO_SOT_SMD:SOT-23,DNP,yes
-Q3,1,AO3400A,N-MOSFET 30 V 5.7 A (gate driver / e-ink boost),AO3400A,C20917,Package_TO_SOT_SMD:SOT-23,DNP,yes
-Q9,1,SI1308EDL-T1-GE3,"N-MOSFET 30 V 1.5 A (e-ink boost switch, Good Display reference part)",SI1308EDL-T1-GE3,C469327,Package_TO_SOT_SMD:SOT-323_SC-70,DNP,yes
-R9,1,10k,resistor,0603WAF1002T5E,C25804,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R13,1,47,resistor,25121WJ0470T4E,C15261,Resistor_SMD:R_2512_6332Metric,DNP,yes
-R42,1,100k,resistor,0603WAF1003T5E,C25803,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R43 R44 R45,3,1k,resistor,0603WAF1001T5E,C21190,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R72,1,1M,resistor,0603WAF1004T5E,C22935,Resistor_SMD:R_0603_1608Metric,DNP,yes
-R73,1,2.2,resistor,0603WAF220KT5E,C22939,Resistor_SMD:R_0603_1608Metric,DNP,yes
-U13,1,ATECC608B-SSHDA-T,"Secure element (P-256), DNP footprint; I2C 0x60",ATECC608B-SSHDA-T,C1518769,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,DNP,yes
+C78,1,22pF 50V C0G,capacitor,CL10C220JB8NNNC,C1653,Capacitor_SMD:C_0603_1608Metric,DNP,yes

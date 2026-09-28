@@ -18,16 +18,10 @@
   true
  ],
  [
-  96,
-  "U13",
-  "ATECC608B",
-  false
- ],
- [
   54,
   "U14",
   "MAX17048",
-  false
+  true
  ],
  [
   88,

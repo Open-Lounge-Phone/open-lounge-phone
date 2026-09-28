@@ -17,7 +17,7 @@ venv: .venv/.ok
 	.venv/bin/pip install -q -r requirements.txt
 	touch $@
 
-# ERC + checks + netlists + BOMs for every board x variant (offline; uses lcsc_cache.json)
+# ERC + checks + netlist + BOM for the one board (offline; uses lcsc_cache.json)
 build: venv
 	cd schematic && ../$(PY) build.py
 

@@ -1,5 +1,5 @@
 """User-interface block of the single board: keys, key LEDs, e-ink strip, NFC tag, ambient
-light, privacy LED, Qwiic port. DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
+light, privacy LED. DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
 
 Single board (owner decision 2026-09-27): this used to be the separate deck board behind a
 24-pin FFC; it is now part of the main board's netlist (``board_main.build`` calls ``ui``).
@@ -46,14 +46,19 @@ def led_chain(n_keys: int) -> list[str]:
     return rear[::-1] + front + ["STATUS"]
 
 
-# AW9523B port per signal, chosen from the board geometry (layout/pinswap.py, 2026-09-28) so
-# the key lines fan out in order: keys and side controls are plain inputs (any port);
-# LED_PWR_EN must stay on port 1 (push-pull). Firmware reads the key map from this table.
+# AW9523B port per signal in bus order (A3, 2026-09-28): the AW9523B sits at the right end of
+# the key rows and each row arrives as a straight parallel bus on one side. Keys and side
+# controls are plain inputs (any port); LED_PWR_EN must stay on port 1 (push-pull). Firmware
+# reads the key map from this table.
 AW_PORTS = {
-    "KEY_4": "P0_0", "KEY_3": "P0_1", "KEY_2": "P0_2", "KEY_1": "P0_3", "KEY_5": "P0_4",
-    "KEY_6": "P0_5", "KEY_7": "P0_6", "KEY_8": "P0_7", "VOL_DN": "P1_0", "KEY_MENU": "P1_1",
-    "MUTE_SENSE": "P1_2", "VOL_UP": "P1_3", "LED_PWR_EN": "P1_4", "KEY_9": "P1_5", "KEY_0": "P1_6",
-    "KEY_BACK": "P1_7",
+    # left side, top -> bottom: the rear-row bus (nearest key on the top lane)
+    "KEY_MENU": "P1_0", "KEY_5": "P1_1", "KEY_4": "P1_2", "KEY_3": "P1_3", "KEY_2": "P0_0",
+    "KEY_1": "P0_1",
+    # bottom side, left -> right, then the corner: the front-row bus
+    "KEY_6": "P0_2", "KEY_7": "P0_3", "KEY_8": "P0_4", "KEY_9": "P0_5", "KEY_0": "P0_6",
+    "KEY_BACK": "P0_7",
+    # right side, bottom -> top: side controls from the right edge (VOL- lowest), LED enable
+    "VOL_DN": "P1_4", "VOL_UP": "P1_5", "MUTE_SENSE": "P1_6", "LED_PWR_EN": "P1_7",
 }
 KEY_PORTS = sorted({p for n, p in AW_PORTS.items() if n.startswith("KEY_")})  # 12-key set
 
@@ -157,21 +162,7 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
     decouple(V3V3, GND, "1u", note="LTR-303")
 
     nfc(n, GND, V3V3)
-    eink(n, GND, V3V3, dnp=v.display != "eink")
-    qwiic(n, GND, V3V3)
-
-
-def qwiic(n, GND, V3V3):
-    """Optional cheaper-display port (owner decision 2026-09-27): Qwiic/STEMMA QT pinout
-    GND, 3V3, SDA, SCL on the shared I2C bus. DNP on every variant (field/maker option) for a
-    0.91" SSD1306 OLED (0x3C) or an HT16K33 14-segment backpack (0x70) behind the strip window.
-    No ESD part: the port and its cable stay inside the enclosure (not user-reachable)."""
-    j = make("QWIIC", ref="J3", dnp=True, note="optional display module port (internal)")
-    j["GND"] += GND
-    j["3V3"] += V3V3
-    j["SDA"] += n["I2C_SDA"]
-    j["SCL"] += n["I2C_SCL"]
-    j["MP"] += GND
+    eink(n, GND, V3V3)
 
 
 def nfc(n, GND, V3V3):
@@ -195,7 +186,7 @@ def nfc(n, GND, V3V3):
 
 def eink(n, GND, V3V3, dnp: bool = False):
     """GDEY029T94 (SSD1680) 24-pin FPC + Good Display reference boost (datasheet p.29, §7).
-    ``dnp``: display "none" variants leave the connector and every boost part unfitted."""
+    Always fitted (one board, 2026-09-28); ``dnp`` stays for a future display-less board."""
     j = make("FPC24_EPD", ref="J6", dnp=dnp, note="GDEY029T94 panel tail")
     j["MP"] += GND
     sig = {

@@ -1,9 +1,9 @@
-"""Build every board x variant: SKiDL ERC, custom checks, KiCad netlist, BOM CSVs.
+"""Build the board (one design, one BOM): SKiDL ERC, custom checks, KiCad netlist, BOM CSVs.
 
     python build.py              # everything (what `make` runs); exit code 1 on any ERROR
-    python build.py --one main kids   # a single board/variant (used internally)
+    python build.py --one main main   # the board (used internally)
 
-Outputs go to ../build/<board>-<variant>/ :
+Outputs go to ../build/<board>/ :
     <board>.net     KiCad netlist (import in KiCad PCB editor: File > Import > Netlist)
     bom.csv         full BOM incl. DNP, MPN, LCSC, verification status
     bom-jlc.csv     fitted parts only, JLCPCB assembly format (Comment,Designator,Footprint,LCSC)
@@ -41,7 +41,7 @@ def one(board: str, variant_name: str) -> int:
     from config import VARIANTS
 
     variant = VARIANTS[variant_name]
-    out = BUILD / f"{board}-{variant_name}"
+    out = BUILD / board
     out.mkdir(parents=True, exist_ok=True)
     mod = __import__(f"board_{board}")
     mod.build(variant)
@@ -64,7 +64,7 @@ def one(board: str, variant_name: str) -> int:
         for lvl, msg in results:
             f.write(f"{lvl:5} {msg}\n")
     n_err = sum(1 for lvl, _ in results if lvl == "ERROR")
-    print(f"{board}-{variant_name}: {len(circuit.parts)} parts, {len(circuit.nets)} nets, "
+    print(f"{board}: {len(circuit.parts)} parts, {len(circuit.nets)} nets, "
           f"{n_err} check errors")
     return 1 if n_err else 0
 
@@ -111,7 +111,7 @@ def main() -> int:
     summary = []
     for variant in VARIANTS:
         for board in BOARDS:
-            out = BUILD / f"{board}-{variant}"
+            out = BUILD / board
             out.mkdir(parents=True, exist_ok=True)
             # point SKiDL at an empty KiCad library dir: all parts are defined in parts.py
             env = dict(os.environ, **{f"KICAD{v}_SYMBOL_DIR": str(HERE) for v in ("", "6", "7",
@@ -134,8 +134,8 @@ def main() -> int:
                 rc = 1
                 if proc.returncode and "check errors" not in status:
                     summary.append(log[-3000:])
-        i2c = {b: json.loads((BUILD / f"{b}-{variant}" / "i2c.json").read_text())
-               for b in BOARDS if (BUILD / f"{b}-{variant}" / "i2c.json").exists()}
+        i2c = {b: json.loads((BUILD / b / "i2c.json").read_text())
+               for b in BOARDS if (BUILD / b / "i2c.json").exists()}
         bus = checks.check_i2c_union(i2c)
         summary.append(f"I2C bus ({variant}): " + "; ".join(m for _, m in bus))
         if any(lvl == "ERROR" for lvl, _ in bus):

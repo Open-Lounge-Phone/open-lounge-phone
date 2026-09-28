@@ -43,14 +43,12 @@ unpriced:
 # Off-board electronics included in DESIGN.md §12.3 totals. `when` filters by variant.
 off_board:
   mx_switches_x12:   {scale: 3.00, retail: 5.40}
-  keycaps_kids:      {scale: 4.13, retail: 12.00, when: {sku: kids}}   # 12 relegendable caps
-  keycaps_lounge:    {scale: 1.44, retail: 3.60, when: {sku: lounge}}  # 12 printed DSA
+  keycaps:           {scale: 1.44, retail: 3.60}   # 12 printed DSA (digits, MENU, BACK)
   speaker_20x40_4ohm: {scale: 0.60, retail: 3.00}  # rectangular top-firing
   # off-the-shelf G-style USB-C (UAC 1.0) handset, not designed here. Retail: Native Union
   # POP class ~$30; at-scale OEM price is a guess (UNVERIFIED) until a vendor quotes.
   handset_usbc_uac:  {scale: 7.00, retail: 30.00}
   # WROOM-1U external antenna: adhesive FPC 2.4 GHz antenna with U.FL pigtail (~100 mm)
   antenna_fpc_ufl:   {scale: 0.45, retail: 2.50}
-  eink_panel_gdey029t94: {scale: 4.50, retail: 6.50, when: {display: eink}}
-  radar_ld2410c:     {scale: 3.00, retail: 4.00, when: {radar: true}}
-  lipo_1200mah:      {scale: 2.50, retail: 6.00, when: {battery: true}}
+  eink_panel_gdey029t94: {scale: 4.50, retail: 6.50}
+  lipo_1200mah:      {scale: 2.50, retail: 6.00}
