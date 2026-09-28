@@ -5,10 +5,10 @@ PASS  bed fit sleeve: 12.0 x 12.0 x 19.2 mm (bed 220)
 PASS  walls: wall 2.5, floor 2.0, lid 2.0; thinnest lid: key clip 1.5, e-ink rim 1.0
 PASS  MX stack: board top z 10.6, plate top z 15.6 (+5.0), space under the lid 3.0, under the board 7.0
 PASS  lid pocket J5: PinSocket_1x05_P2.54mm_Horizontal h 3.00 > 3.0: pocket 0.20 deep (lid left 1.80)
-PASS  lid pocket U1: ESP32-S3-WROOM-1U h 3.30 > 3.0: pocket 0.50 deep (lid left 1.50)
 PASS  lid pocket J7: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
-PASS  lid pocket J3: JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal h 2.95 > 3.0: pocket 0.15 deep (lid left 1.85)
+PASS  lid pocket U1: ESP32-S3-WROOM-1U h 3.30 > 3.0: pocket 0.50 deep (lid left 1.50)
 PASS  lid pocket J1: USB_C_Receptacle_HRO_TYPE-C-31-M-12 h 3.26 > 3.0: pocket 0.46 deep (lid left 1.54)
+PASS  lid pocket J3: JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal h 2.95 > 3.0: pocket 0.15 deep (lid left 1.85)
 PASS  bosses / spacers: no part courtyard inside a boss/spacer (bolts Ø6.0, supports Ø4.6)
 PASS  speaker keep-out: speaker 40x20x5.0 under board (59.2..101.8, 32.5..55.1), 2.0 mm to the board bottom
 PASS  hall under plunger: U10 at [171.0, 18.8], socket (171.0,18.8), off 0.00
