@@ -39,10 +39,11 @@ def key_names(n_keys: int) -> list[str]:
 
 
 def led_chain(n_keys: int) -> list[str]:
-    """SK6812 data chain in physical order (short hops): rear row left->right, front row
-    right->left, then the status pixel. Firmware maps LED index -> key with this list."""
+    """SK6812 data chain in physical order (short hops), one serpentine that starts next to
+    the ESP32 (right of centre): rear row right->left (MENU first), front row left->right,
+    then the status pixel beside BACK. Firmware maps LED index -> key with this list."""
     rear, front = key_rows(n_keys)
-    return rear + front[::-1] + ["STATUS"]
+    return rear[::-1] + front + ["STATUS"]
 
 
 # AW9523B port order (DESIGN.md §5): P0_0-7 = keys 1-8, P1_0-1 = 9, 0; P1_2-3 = VOL-, VOL+;

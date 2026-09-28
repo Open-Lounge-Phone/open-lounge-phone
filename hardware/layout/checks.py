@@ -237,6 +237,12 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     board, pcb, _ = load(a.board, cfg_all, a.variant)
     results = []
+    pro = json.loads(pcb.with_suffix(".kicad_pro").read_text())
+    sev = pro["board"]["design_settings"]["rule_severities"]
+    strict = ("silk_overlap", "silk_over_copper", "silk_edge_clearance", "courtyards_overlap")
+    loose = [k for k in strict if sev.get(k) != "error"]
+    results.append(("ERROR" if loose else "OK",
+                    f"DRC severities: {'not error: ' + ', '.join(loose) if loose else ', '.join(strict)} = error"))
     errs, unconnected, d = run_drc(pcb, out)
     results.append(("ERROR" if errs else "OK", f"DRC: {len(errs)} errors"))
     for v in errs[:200]:

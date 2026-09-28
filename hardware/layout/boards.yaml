@@ -64,8 +64,9 @@ main:
   # lid, 7.0 mm under the board).
   # Zones: keys at x 42.4 + 19.05 i, rows y 14.8 / 72.8 (switch bodies keep the 14 x 14 squares
   # free on the top side); e-ink panel (at plate level, parts <= 2.8 mm may sit under it) over
-  # x 41-120, y 25.45-62.15; left end: handset USB-C, NFC coil (front-left); right end: power
-  # USB-C, power path, hall, CH340C, RESET/BOOT, mic, radar, side controls (bottom side).
+  # x 41-120, y 25.45-62.15; left end: audio (codecs, amp, speaker connector, base mic) + NFC
+  # coil (front-left); right end: both USB-C (handset x 153.8, power x 167), power path, hall,
+  # CH340C, RESET/BOOT, radar, side controls (bottom side); ESP32 right of the panel.
   size: [180, 88]
   corner_radius: 8.5      # clears the shell's inner corner radius
   hook_post_x: 171.0      # hall U10 at (171.0, 18.8) under the right-hand plunger
@@ -104,12 +105,28 @@ main:
     # slit from the loop to the left board edge on every layer: the pours around the coil must
     # not form a closed (shorted) turn around it
     - {name: NFC_SLIT, rect: [-0.5, 58.5, 2.5, 59.5], tracks: true, vias: false, pours: false}
-  testpoints:   # pogo grid on the bottom, 2.54 mm pitch; USB nets stay on top (no stubs)
-    origin: [104.0, 24.5]
+    # handset USB pair J7 -> D7 -> U1 pins 14/13 (step B: L1 only, no vias, <= ~25 mm): no
+    # parts in its corridor, so the placement keeps the straight path free
+    - {name: HS_USB_CORRIDOR_A, rect: [145.5, 9.0, 149.9, 22.4], tracks: true, vias: true,
+       pours: true, footprints: false, layers: [F.Cu]}
+    - {name: HS_USB_CORRIDOR_B, rect: [141.6, 21.7, 149.9, 26.2], tracks: true, vias: true,
+       pours: true, footprints: false, layers: [F.Cu]}
+    # signature logo + name + revision/licence (bottom silk, inside the NFC coil where nothing
+    # else may go anyway): no tracks, vias or parts under it on the bottom (owner 2026-09-28)
+    - {name: LOGO, rect: [4.0, 41.6, 26.8, 61.4], tracks: false, vias: false, pours: false,
+       footprints: false, layers: [B.Cu]}
+  anchors:   # supply-only passives without a schematic note: the IC they decouple
+    U2: [C1, C2, C3, C4, C5, C6, R9]   # BQ24074 IN / OUT / BAT, TS resistor on top
+    L1: [C9, C10]                  # buck output (at the inductor)
+    U4: [C11, C12, C13]            # LP5907 in / out
+  testpoints:   # pogo grid on the bottom under the ESP32, 2.54 mm pitch; USB nets stay on top
+    origin: [124.5, 36.5]   # below the module's GND via array
     cols: 6
     pitch: 2.54
     side: bottom
     top_nets: [USB_DP, USB_DN, HS_USB_DP, HS_USB_DN]
+    groups:     # audio pads at the codecs/amp (left end, bottom), the rest under the ESP32
+      - {origin: [32.0, 52.0], cols: 4, nets: [ES8311_ASDOUT, SPK_VOP, SPK_VON, 3V0]}
   zones:
     # [net, layer, polygon | "board", priority]
     - [GND, In1.Cu, board, 0]
@@ -120,17 +137,18 @@ main:
     - [VSYS, In2.Cu, [[147.5, 12], [172, 12], [172, 44], [147.5, 44]], 1]
   stitch_pitch: 5.0
   logos:   # owner's signature (hardware/art/make_logo.py): [footprint, x, y, side]
-    - [openloungephone_logo_B, 60.0, 44.0, bottom]
+    - [openloungephone_logo_B, 15.4, 47.0, bottom]   # inside the LOGO keep-out (NFC coil)
   texts:
-    - ["Open Lounge Phone", 60.0, 50.6, 1.5, bottom]
-    - ["board r0.2  CERN-OHL-S-2.0", 60.0, 53.6, 1.0, bottom]
-    - ["HANDSET", 24.0, 9.0, 0.8, bottom]
-    - ["PWR / PROG", 159.0, 9.0, 0.8, bottom]
-    - ["NFC", 15.5, 59.0, 1.5]
+    - ["Open Lounge Phone", 15.4, 53.8, 1.5, bottom]
+    - ["board r0.3", 15.4, 57.0, 1.0, bottom]
+    - ["CERN-OHL-S-2.0", 15.4, 59.2, 1.0, bottom]
+    - ["HANDSET", 153.8, 10.0, 0.8, bottom]
+    - ["PWR / PROG", 167.0, 10.0, 0.8, bottom]
+    - ["NFC", 15.5, 66.0, 1.5]
     - ["HOOK", 171.0, 24.0, 0.8, bottom]
     - ["RST", 157.0, 51.8, 0.8]
     - ["BOOT", 165.0, 51.8, 0.8]
-    - ["TEST PADS 2.54 mm", 110.0, 23.2, 0.8, bottom]
+    - ["TEST PADS 2.54 mm", 130.85, 47.5, 0.8, bottom]
     - ["DNP by variant: e-ink J6+boost, Qwiic J3, radar J5 Q2 Q3, supercap C7, battery J2 U14", 90.0, 86.4, 0.8, bottom]
 
 plate:

@@ -5,22 +5,30 @@ in `hardware/layout/` from the SKiDL netlists in `hardware/build/<variant>/`. Ki
 License CERN-OHL-S-2.0.
 
 <!-- STATUS -->
-**Status 2026-09-28 (single board):** placed and routed by the grid router; KiCad DRC **0
-violations, 36 unconnected items** (32 connections in 21 nets, `kicad/main/unrouted.txt`), down
-from 572 violations / 480 unconnected (main) + 255 / 231 (deck) for the stacked pair. Layout
-checks: USB pair matched (161.30 mm each, no vias away from J7), power widths OK, NFC keep-outs
-clean, 13 decoupling findings (WARN). What is left, in the two dense spots:
+**Status 2026-09-28: re-placed for signal flow, NOT routed (step A; the owner approves the
+placement before routing).** The first routed layout (commit e3eda11) was rejected: the
+placement ignored signal flow (handset USB pair 161 mm, logo over traces and a part). The
+board in `kicad/main/` is now placed only (`build_board.py main --stage placed`: no tracks or
+vias, every zone defined but unfilled). Numbers (`layout/metrics.py`, ratsnest = per-net
+minimum spanning tree over the pad centres, summed):
 
-- **Codecs ES7210 U7 / ES8311 U6:** pin ↔ own decoupling-cap links (REFP12/REFQ12/REFP34,
-  N$5-N$16), DAC_OUTP, I2S_MCLK, ES8311_ASDOUT, BASEMIC_N from MK1 at the right end.
-- **Around the AW9523B U17 (now on the bottom with the sockets):** KEY_0, KEY_9, KEY_BACK,
-  MUTE_SENSE, IRQ, I2C_SDA, three 3V3 links.
+| Metric | Before (e3eda11) | After |
+|---|---|---|
+| Ratsnest, all nets | 8203 mm | 7005 mm (−15 %) |
+| Ratsnest without GND | 7074 mm | 5925 mm (−16 %) |
+| Handset USB D+ / D− (ratsnest) | 109.9 / 111.0 mm (routed 161.3) | 22.9 / 23.6 mm |
+| Power USB D+ / D− (J1→ESD→0R→CH340C) | 6.2+33.6 / 7.5+36.8 mm | 10.3+17.9 / 9.8+18.8 mm |
+| Bottom-side footprints | 102 | 68 = 44 assembled + 24 bare test pads |
+| Courtyard overlaps / 100 nF caps > 2 mm from their pin | 0 / n.a. | 0 / 0 |
+| KiCad DRC | 0 errors, 36 unconnected (routed) | 0 errors, 499 unconnected (unrouted) |
 
-Tried: AW9523B on top at the centre (36 connections left), codecs next to the ESP32 (41),
-incremental `--stage strip` / `reroute` / `finish` passes (+3 once, worse the second time: the
-rip-ups cascade). Next: spread the codec decoupling caps (bigger `fine_pitch_gap` or pin them
-by hand), bring MK1's BASEMIC pair closer or give it a reserved L3 channel, then finish the last
-links by hand in KiCad (one full route ≈ 45 min on this machine).
+Review image: `build/review/placement.png` (ratsnest coloured by group: power red, USB blue,
+audio green, keys/LEDs orange, other grey; top parts dark grey, bottom parts light blue),
+regenerated with `<kicad python> layout/metrics.py --png ../build/review/placement.png`.
+
+Bottom side (44 assembled): 12 hot-swap sockets, 13 SK6812MINI-E (reverse mount) + their 13
+100 nF caps, battery JST J2, speaker JST J4, supercap C7 (too tall for the 3 mm under the
+lid), VOL−/VOL+/MUTE (enclosure). The 12 key pull-ups moved to the top beside the AW9523B.
 
 ## 1. How to run
 
@@ -91,7 +99,7 @@ The former deck board (keys, LEDs, e-ink, NFC, ALS) is merged into the main boar
 
 | Board | Size | Layers | Parts on | Notes |
 |---|---|---|---|---|
-| main | 180 × 88 mm, R8.5 corners, 9 × M2.5 holes | 4 | both | 12 MX hot-swap sockets + 13 SK6812MINI-E on the bottom (keys on top); rear edge: handset USB-C (x 24), power USB-C (x 159); right edge: VOL−/VOL+/MUTE (bottom side) |
+| main | 180 × 88 mm, R8.5 corners, 9 × M2.5 holes | 4 | both | 12 MX hot-swap sockets + 13 SK6812MINI-E on the bottom (keys on top); rear edge: handset USB-C (x 153.8), power USB-C (x 167); right edge: VOL−/VOL+/MUTE (bottom side) |
 | plate | 117 × 84 mm, 1.6 mm FR4 | 2 (no copper) | none | 12 × 14.0 mm switch cut-outs, e-ink window, light holes; screws to the holes at (34.7, 5) (145.3, 5) (34.7, 82.6) (145.3, 82.6). The prototype box's lid is the plate instead (enclosure/PROTO_BOX.md). |
 
 Geometry (board coordinates, x right, y down from the rear edge): outline 180 × 88 R8.5;
@@ -100,7 +108,7 @@ plate screws) and the shell bolts (5.0, 29.8) (26.0, 29.8) (154.0, 29.8) (176.0,
 x 42.4 + 19.05 i, rows y 14.8 (1 2 3 4 5 MENU) and 72.8 (6 7 8 9 0 BACK), the 13.5 mm switch
 bodies are top-side part keep-outs; e-ink panel outline (at plate level, parts ≤ 2.8 mm may sit
 under it) x 41-120, y 25.45-62.15; hall U10 at (171.0, 18.8) under the right plunger; RESET/BOOT
-at (157, 46.8) / (165, 46.8); mic MK1 at (155, 58.8); status LED (128, 50), privacy LED
+at (157, 46.8) / (165, 46.8); mic MK1 at (19.5, 25.0); status LED (128, 50), privacy LED
 (141.5, 53.4), ALS (141.5, 57.8) under the plate's light holes.
 
 Height rules from the prototype box (enclosure/proto_box.py checks them against the placed
@@ -156,30 +164,77 @@ rules for auto-named nets) and written into the board and the `.kicad_pro`.
 | MX hot-swap NPTH 0.45 mm (not 0.5) hole-to-hole | standard Kailh socket land; fabricated routinely |
 | SKRTLAE010 pad 0.09 mm from its own peg hole | Alps land pattern as published |
 
-## 5. Placement rationale
+## 5. Placement rationale (2026-09-28, owner-approved floorplan)
 
-Top view, rear edge at y = 0:
+Top view, rear edge at y = 0. Signal flow decides the ends:
 
-- **Left end (x < 35):** handset USB-C J7 (x 24) with the SRV05-4 D7 at its pins, the SY6280
-  VBUS switch U15 and the B5819W diode-OR D8/D9; battery JST-PH J2 on the bottom; the NFC coil
-  L2 (26 × 42 mm, 9 turns) in the front-left region with a pour slit to the left edge and no
-  copper inside on any layer; its ST25DV04K U19 beside the coil terminals; e-ink FPC J6 at the
-  panel's left end (the panel tail folds down).
-- **Between the key rows (y 22-65):** under the e-ink panel the codecs ES7210 (U7) and ES8311
-  (U6), LP5907 3V0 (U4), NS4150B (U9), AW9523B (U17), the LED-data buffer U5, LIS2DH12 (U12),
-  ATECC608B (U13, DNP) and the e-ink boost (L3, Q9, D23-D25); right of the panel the
-  ESP32-S3-WROOM-1U (U1; U.FL cable to the antenna on the shell wall), status/privacy LEDs,
-  ALS and the Qwiic port. On the bottom: speaker JST J4 and the Lounge supercap C7, the pogo
-  test-pad grid, the speaker keep-out (proto box speaker under the board centre).
-- **Right end (x > 147):** power USB-C J1 (x 159) with USBLC6 ESD, CC resistors, PTC and TVS
-  behind it; BQ24074 (U2), TLV62569 buck (U3 + L1) over the L3 VSYS pour; MAX17048 (U14,
-  B-option); hall U10 under the plunger (IR option U11 beside it); CH340C (U16); RESET/BOOT;
-  mic MK1; radar socket J5; VOL−/VOL+/MUTE on the bottom at the right edge with the SRV05-4 D5.
-- **Keys:** hot-swap sockets, SK6812MINI-E (reverse mount, 5.08 mm above each switch centre,
-  lens through the board cut-out), their 100 nF caps and key pull-ups on the bottom; legends
-  on the top silk (under the plate).
+- **Right end = digital + power.** Both USB-C on the rear wall: handset J7 at x 153.8 (next
+  to the ESP32, clear of hole H2) and power J1 at x 167. The **ESP32-S3-WROOM-1U (U1) sits right
+  of the e-ink panel, rotated 180°**, so its native-USB pins 13/14 are at its top-right corner
+  facing J7; the SRV05-4 D7 sits at J7's pins and a no-parts corridor (`HS_USB_CORRIDOR_A/B`)
+  keeps the straight L1 path free (ratsnest 23 mm). Handset VBUS switch U15 + diode-OR D8/D9
+  beside the corridor. Power chain in signal-flow order: J1 → USBLC6 D1 (D+/D−) / D2 (CC) at
+  the pins → PTC F1 + TVS D3 → (VBUS down past the CH340C) → BQ24074 U2 → TLV62569 U3 + L1
+  below the hole row. The CH340C U16 is right under J1 between holes H8/H9 (USB pins on its
+  top edge). Hall U10 under the plunger (171, 18.8), IR option U11 beside it. RESET/BOOT at
+  their pinholes with the auto-reset Q5/Q6 beside them; MAX17048 U14 and battery J2 (bottom)
+  next to the charger; supercap C7 on the bottom where its pins clear the top parts; radar J5
+  and its switch Q2/Q3 at the front right; side controls unchanged (bottom, right edge) with
+  their SRV05-4 D5 on top.
+- **Left end = audio.** ES7210 U7 (rotated 180°: mic/AEC pins face the mic and the DAC, I2S
+  and I2C face the rear/right where the buses arrive), ES8311 U6 (rotated 180°: DAC outputs
+  face down to the amp), LP5907 U4, NS4150B U9 (inputs left, outputs right to the speaker
+  JST J4 on the bottom), base mic MK1 at (19.5, 25) with its bias filter R32/C35/R35 at the
+  mic (lid pinhole moved there). Analog is ≥ 60 mm from the buck, charger and the LED buffer.
+- **NFC coil stays at the front-left end** (26 × 42 mm): a loop around the e-ink band would
+  keep parts and pours out of the whole middle band (AW9523B, I2C spine, ZIF) and cut the L2
+  plane under every cross-board signal; at the end it only costs the ST25DV's I2C/IRQ, which
+  run to the left-end codecs anyway. U19 beside its terminals.
+- **Middle band (under the panel):** AW9523B U17 centred between the key rows at (90, 43.8),
+  rotated so its I2C/IRQ side faces the ESP32; the 12 key pull-ups on top around it; VLED gate
+  Q7/Q8 + bulk C70/C71 beside it. The I2C spine runs from the ESP32 left through U17 to the
+  codecs and U19, with LIS2DH12 U12, ALS U18, the Qwiic port J3 and ATECC U13 (DNP) on it.
+- **E-ink ZIF J6 at the panel tail on the right** (x 113.6-120.4, next to the ESP32's SPI
+  pins), with the boost L3/Q9/D23-D25 beside it: the switching boost is now at the digital
+  end, not next to the codecs. This assumes the panel is mounted with its FPC tail at the
+  right end (owner to confirm, see the open questions).
+- **LED chain:** one serpentine from the buffer U5 (between keys 5 and MENU): MENU → 5 → 4 →
+  3 → 2 → 1 → 6 → 7 → 8 → 9 → 0 → BACK → status pixel (`schematic/ui.py led_chain`).
+- **Decoupling:** 100 nF caps are placed first, at the pin (`metrics.py`: 0 caps with a
+  pad-edge gap > 2 mm to their IC pin); ESP32 3V3 (its only supply pin, 2): C15 100 nF at the
+  pin + C14 22 µF beside it.
+- **Silkscreen:** logo, name and "board r0.3 / CERN-OHL-S-2.0" on the bottom inside the NFC
+  coil, in the `LOGO` rule area (B.Cu: no tracks, vias or parts). Reference designators stay
+  on the silk only for connectors, switches and the mic (others on the Fab layer); footprint
+  silk on pads or past the edge is dropped (`clean_silk`). silk_overlap, silk_over_copper,
+  silk_edge_clearance and courtyards_overlap are DRC **errors** (`RULE_SEVERITIES`, checked by
+  `checks.py`).
 
-## 6. Routing
+Unavoidable long runs (by the floorplan): I2S (5 nets) and I2C (2) cross the board from the
+ESP32 to the codecs (~110 mm each); VOL/MUTE from the right edge to the centred AW9523B
+(~97 mm each); MICBIAS_IN/OUT go from the ES7210 to the MUTE switch at the right edge and
+back to the mic (~157 mm each). MICBIAS is DC and filtered at the mic (R32/C35, 100 Ω/10 µF),
+but it is the one analog net that runs parallel to I2S (ratsnest: 95 mm within 3 mm of
+I2S_WS); route it on L4 along the front band, I2S on L1/L3 along the rear band, the L2 plane
+between. Everything else analog stays within the left end (≤ 6 mm parallel to I2S at the
+codec pins).
+
+## 6. Routing plan (step B, after the owner approves the placement)
+
+Layer plan: **L1** short links, fan-out and mostly left–right runs; **L2** solid GND (no
+routing); **L3** power pours (3V3 middle band, VSYS right end, 3V0 at the audio end) + slow
+signals; **L4** mostly front–back runs (key lines to the sockets, LED chain).
+Routing is done in sequential blocks; each ends with a numeric check before the next starts:
+
+| Block | Scope | Numeric check |
+|---|---|---|
+| A. Power and PDN | VBUS (J1→F1→BQ), VSYS, 3V3/3V0 pours, VLED, HS_VBUS; GND vias at every cap | power widths ≥ class minimum (Power 0.5, 3V3/3V0 0.3 mm); every decoupling cap's GND pad has a via ≤ 1.0 mm; DRC 0 errors |
+| B. ESP32 + both USB-C ports | HS_USB_DP/DN in the corridor, USB_DP/DN J1→D1→R5/R6→CH340C, CC, UART, EN/BOOT | handset pair ≤ 25 mm, 0 vias, mismatch ≤ 0.15 mm, L1 only; power pair mismatch ≤ 0.5 mm; DRC 0 errors |
+| C. I2C / SPI / I2S | I2C spine, EPD SPI to J6, I2S to the codecs along the rear band | I2S lengths within 10 mm of each other; 0 I2S/SPI segments within 1 mm of an Audio-class track on the same layer; DRC 0 errors |
+| D. Analog audio | mic, AEC divider, DAC→amp, speaker, MICBIAS (L4, front band) | Audio-class tracks ≤ 0.2 mm wide/0.2 mm clearance; 0 vias on BASEMIC_P/N; speaker nets ≥ 0.5 mm; DRC 0 errors |
+| E. Keys and LED chain | 12 key lines U17→sockets, LED data serpentine, VLED to each LED — **drawn as uniform scripted traces with pcbnew, not autorouted** | 0 unconnected items; all 13 LED hops the same pattern; DRC 0 errors |
+
+## 6b. Router notes (first layout, e3eda11; the hand route below is superseded by §6 B)
 
 - **Hand routes** (`placement.yaml` → `routes`): the handset USB pair HS_USB_DP/DN from the
   SRV05-4 at J7 to ESP32 GPIO19/20, on L1 only, no vias, over the solid L2 plane: out of D7,

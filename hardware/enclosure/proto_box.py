@@ -61,7 +61,7 @@ EINK_PANEL = (9.5, 23.65, 88.5, 60.35)   # deck coords, GDEY029T94 outline 79.0 
 EINK_VIEW, EINK_CHAMFER, EINK_PANEL_T = (68.0, 30.0), 0.5, 1.0
 LIGHT_HOLES = [(128.0, 50.0, 3.2), (141.5, 53.4, 2.0), (141.5, 57.8, 2.0)]   # board coords
 PINHOLES = [(157.0, 46.8, 1.6, "RESET SW1"), (165.0, 46.8, 1.6, "BOOT SW2"),
-            (155.0, 58.8, 1.6, "mic MK1")]
+            (19.5, 25.0, 1.6, "mic MK1")]     # base mic at the audio end (left)
 
 # fastening: 4 shell-bolt holes clamp lid + board + tray (M2.5x10 countersunk into inserts)
 BOLTS = [(5.0, 29.8), (26.0, 29.8), (154.0, 29.8), (176.0, 29.8)]
@@ -72,7 +72,7 @@ SCREW_CLEAR, CSK_D = 2.8, 5.0  # M2.5 countersunk (ISO 10642: head 5.0, 90 deg)
 INSERT_D, INSERT_DEPTH = 3.2, 5.0   # M2.5 x 4 heat-set insert (OD 3.5)
 
 # rear wall USB-C (top-mount HRO TYPE-C-31-M-12, body 3.26 tall)
-USB = [(24.0, "J7 handset"), (159.0, "J1 power")]
+USB = [(153.8, "J7 handset"), (167.0, "J1 power")]   # both at the right end (2026-09-28)
 USB_BODY_H = 3.26
 USB_CUT, USB_CUT_R = (12.8, 7.2), 3.4
 USB_RECESS, USB_RECESS_D = (14.5, 9.0), 1.0

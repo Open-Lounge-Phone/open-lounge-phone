@@ -3981,7 +3981,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 2: 2")
+          (name "Note") "LED 2: 5")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4021,7 +4021,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 3: 3")
+          (name "Note") "LED 3: 4")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4061,7 +4061,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 4: 4")
+          (name "Note") "LED 4: 3")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4101,7 +4101,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 5: 5")
+          (name "Note") "LED 5: 2")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4141,7 +4141,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 6: MENU")
+          (name "Note") "LED 6: 1")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4181,7 +4181,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 7: BACK")
+          (name "Note") "LED 7: 6")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4221,7 +4221,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 8: 0")
+          (name "Note") "LED 8: 7")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4261,7 +4261,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 9: 9")
+          (name "Note") "LED 9: 8")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4301,7 +4301,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 10: 8")
+          (name "Note") "LED 10: 9")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4341,7 +4341,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 11: 7")
+          (name "Note") "LED 11: 0")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4421,7 +4421,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 12: 6")
+          (name "Note") "LED 12: BACK")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field
@@ -4781,7 +4781,7 @@
         (field
           (name "DNP"))
         (field
-          (name "Note") "LED 1: 1")
+          (name "Note") "LED 1: MENU")
         (field
           (name "SpecKey") "SK6812MINI-E")
         (field

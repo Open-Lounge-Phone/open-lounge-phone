@@ -79,7 +79,8 @@ Outputs (git-ignored, regenerate with `make build`) are in `build/<board>-<varia
   uniqueness check keeps them free.
 - **Key count** is `Variant.n_keys` = 12 (owner decision 2026-09-27): rear row `1 2 3 4 5 MENU`,
   front row `6 7 8 9 0 BACK`. AW9523B ports: P0_0–P1_1 = digits 1–9, 0; P1_6/P1_7 = MENU/BACK.
-  The SK6812 chain runs rear row left→right, front row right→left, then the status pixel
+  The SK6812 chain runs rear row right→left (MENU first, next to the ESP32), front row
+  left→right, then the status pixel
   (`ui.led_chain`, firmware maps LED index → key with it). The generator accepts 4–12
   (even) keys.
 - **Battery default** (§15 Q3) follows DESIGN.md's proposal (no battery) but builds both ways.

@@ -57,6 +57,38 @@ def netclass_of(name: str, nodes: list, rules: list) -> str:
     return "Default"
 
 
+# DRC severities written into the project (and re-applied after every SaveBoard, which rewrites
+# the .kicad_pro from the board's own settings). Silkscreen and courtyards are errors (owner
+# 2026-09-28): no label on a pad, a part, another label or the board edge.
+RULE_SEVERITIES = {
+    "lib_footprint_issues": "ignore",
+    "lib_footprint_mismatch": "ignore",
+    # owner 2026-09-28: silkscreen must be clean
+    "silk_over_copper": "error",
+    "silk_overlap": "error",
+    "silk_edge_clearance": "error",
+    "text_height": "warning", "text_thickness": "warning",
+    "missing_courtyard": "ignore",
+    "npth_inside_courtyard": "ignore",
+    "pth_inside_courtyard": "ignore",
+    "footprint_symbol_mismatch": "ignore",
+    "extra_footprint": "ignore", "missing_footprint": "ignore",
+    "isolated_copper": "warning",
+    "courtyards_overlap": "error",
+    "starved_thermal": "warning",
+}
+
+
+def save_board(board, path) -> None:
+    pcbnew.SaveBoard(str(path), board)
+    pro = Path(path).with_suffix(".kicad_pro")
+    if pro.exists():
+        d = json.loads(pro.read_text())
+        d.setdefault("board", {}).setdefault("design_settings", {}).setdefault(
+            "rule_severities", {}).update(RULE_SEVERITIES)
+        pro.write_text(json.dumps(d, indent=2, sort_keys=True) + "\n")
+
+
 def write_project(board: str, cfg: dict, net: nl.Netlist, out: Path) -> dict:
     """.kicad_pro (net classes + rules), fp-lib-table, fab-common.kicad_dru. Returns net->class."""
     classes = []
@@ -84,20 +116,7 @@ def write_project(board: str, cfg: dict, net: nl.Netlist, out: Path) -> dict:
                              "silk_text_size_v": 0.8, "silk_text_thickness": 0.12},
                 "diff_pair_dimensions": [{"gap": 0.0, "via_gap": 0.0, "width": 0.0},
                                          {"gap": 0.15, "via_gap": 0.25, "width": 0.27}],
-                "rule_severities": {"lib_footprint_issues": "ignore",
-                                    "lib_footprint_mismatch": "ignore",
-                                    "silk_over_copper": "ignore",
-                                    "silk_overlap": "warning",
-                                    "silk_edge_clearance": "warning",
-                                    "text_height": "warning", "text_thickness": "warning",
-                                    "missing_courtyard": "ignore",
-                                    "npth_inside_courtyard": "ignore",
-                                    "pth_inside_courtyard": "ignore",
-                                    "footprint_symbol_mismatch": "ignore",
-                                    "extra_footprint": "ignore", "missing_footprint": "ignore",
-                                    "isolated_copper": "warning",
-                                    "courtyards_overlap": "error",
-                                    "starved_thermal": "warning"},
+                "rule_severities": dict(RULE_SEVERITIES),
                 "rules": {
                     "allow_blind_buried_vias": False, "allow_microvias": False,
                     "max_error": 0.005, "min_clearance": r["min_clearance"],
@@ -408,8 +427,10 @@ key_labels: dict = {}
 
 
 def key_placements(cfg: dict, net: nl.Netlist) -> dict:
-    """ref -> [x, y, rot, side] for hot-swap sockets, key LEDs, their decoupling caps and the
-    key pull-ups, derived from the netlist notes and the key grid."""
+    """ref -> [x, y, rot, side] for hot-swap sockets, key LEDs and their decoupling caps,
+    derived from the netlist notes and the key grid. The key pull-ups are not pinned here:
+    auto_place puts them on the top side next to the AW9523B pin they serve (fewer
+    bottom-side parts; the sockets and LEDs are the only parts the keys force underneath)."""
     keys = cfg["keys"]
     socket_of, led_of = {}, {}
     for ref, c in net.comps.items():
@@ -434,14 +455,10 @@ def key_placements(cfg: dict, net: nl.Netlist) -> dict:
         out[socket_of[name]] = [x, y, 0, "bottom"]
         led_ref, idx = led_of[name]
         out[led_ref] = [x + lx, y + ly, 0, "bottom"]
-        # LED decoupling cap (note "LED i") beside the LED; key pull-up beside the socket
+        # LED decoupling cap (note "LED i") beside the LED
         for ref, c in net.comps.items():
             if c.fields.get("Note") == f"LED {idx}" and ref.startswith("C"):
                 out[ref] = [x + 5.6, y + ly, 90, "bottom"]
-        knet = f"KEY_{name}"
-        for ref, pin in net.nets.get(knet, []):
-            if ref.startswith("R") and net.comps[ref].fields.get("SpecKey", "").startswith("_R"):
-                out[ref] = [x - 5.6, y + ly, 90, "bottom"]
     return out, led_of
 
 
@@ -458,6 +475,17 @@ NOTE_HINTS = [  # decoupling-cap note keyword -> reference of the part it belong
 ]
 
 
+ANCHORS: dict = {}   # ref -> IC ref, from boards.yaml `anchors` (set in auto_place)
+RAW_BOX: dict = {}   # fine-pitch IC -> courtyard without the escape-room margin
+
+
+def _is_decap(fp) -> bool:
+    """100 nF between a supply and GND: goes first and right at the pin (GUIDELINES §3)."""
+    nets = {p_.GetNetname() for p_ in fp.Pads()}
+    return fp.GetReference().startswith("C") and fp.GetValue().startswith("100nF") \
+        and "GND" in nets and len(nets - {"GND"} - SUPPLY) == 0
+
+
 def _crtyd(fp):
     lay = pcbnew.B_CrtYd if fp.IsFlipped() else pcbnew.F_CrtYd
     poly = fp.GetCourtyard(lay)
@@ -471,6 +499,10 @@ def auto_place(board, cfg, fps, net, placed, log=print):
     """Place every footprint not in `placed` next to the pad it serves (first legal spot on
     growing rings, 0/90 degrees, same side), deterministic. Test pads go to the pogo grid."""
     w, h = cfg["size"]
+    RAW_BOX.clear()
+    ANCHORS.clear()
+    for ic, refs in (cfg.get("anchors") or {}).items():
+        ANCHORS.update({r: ic for r in refs})
     boxes = {r: _crtyd(fps[r]) for r in placed if r in fps}
     for fp in board.GetFootprints():
         if fp.GetReference() not in fps:
@@ -482,27 +514,63 @@ def auto_place(board, cfg, fps, net, placed, log=print):
         fp = fps.get(r) or board.FindFootprintByReference(r)
         if fg and fp is not None and _fine_pitch(fp):
             x0, y0, x1, y1 = boxes[r]
+            RAW_BOX[r] = boxes[r]
             boxes[r] = (x0 - fg, y0 - fg, x1 + fg, y1 + fg)
+    txt_side = {}
+    for k, d in enumerate(board.GetDrawings()):  # board silk texts: same-side obstacles
+        if d.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS) and isinstance(d, pcbnew.PCB_TEXT):
+            bb = d.GetBoundingBox()
+            (x0, y0), (x1, y1) = unP(bb.GetOrigin()), unP(bb.GetEnd())
+            boxes[f"_text{k}"] = (x0 - 0.2, y0 - 0.2, x1 + 0.2, y1 + 0.2)
+            txt_side[f"_text{k}"] = {"bottom" if d.GetLayer() == pcbnew.B_SilkS else "top"}
     for k, t in enumerate(board.GetTracks()):  # hand routes laid before auto placement
         x0, y0 = unP(t.GetStart())
         x1, y1 = unP(t.GetEnd())
         m = pcbnew.ToMM(t.GetWidth()) / 2 + 0.4
         boxes[f"_track{k}"] = (min(x0, x1) - m, min(y0, y1) - m, max(x0, x1) + m, max(y0, y1) + m)
-    no_parts = [k["rect"] for k in cfg.get("keepouts", []) if k.get("footprints") is False]
-    no_parts += [n[:4] for n in cfg.get("notches", [])]
-    no_parts += [(x0 - 0.4, y0 - 0.4, x1 + 0.4, y1 + 0.4) for x0, y0, x1, y1 in cfg.get("slots", [])]
+    # sides each obstacle blocks: SMD parts only their own side; parts with holes (THT pins,
+    # NPTH pegs, the SK6812 light cut-outs) and hand routes both
+    both = {"top", "bottom"}
+    fpmap = {fp.GetReference(): fp for fp in board.GetFootprints()}
+    thru = {r: any(p_.GetAttribute() in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH)
+                   for p_ in fp.Pads())
+            or any(g.GetLayer() == pcbnew.Edge_Cuts for g in fp.GraphicalItems())
+            for r, fp in fpmap.items()}
+
+    def sides_of(k):
+        if k in txt_side:
+            return txt_side[k]
+        fp = fpmap.get(k)
+        if fp is None or thru.get(k):
+            return both
+        return {"bottom" if fp.IsFlipped() else "top"}
+
+    def layer_sides(layers):
+        if not layers:
+            return both
+        return ({"top"} if "F.Cu" in layers else set()) | ({"bottom"} if "B.Cu" in layers else set())
+
+    no_parts = [(k["rect"], layer_sides(k.get("layers"))) for k in cfg.get("keepouts", [])
+                if k.get("footprints") is False and "rect" in k]
+    no_parts += [(n[:4], both) for n in cfg.get("notches", [])]
+    no_parts += [((x0 - 0.4, y0 - 0.4, x1 + 0.4, y1 + 0.4), both)
+                 for x0, y0, x1, y1 in cfg.get("slots", [])]
     zones = [z for z in board.Zones() if z.GetIsRuleArea() and z.GetDoNotAllowFootprints()]
     for fp in board.GetFootprints():
         zones += [z for z in fp.Zones() if z.GetIsRuleArea() and z.GetDoNotAllowFootprints()]
 
-    def free(box, ref):
+    def free(box, ref, side="top"):
         x0, y0, x1, y1 = box
         if x0 < 0.4 or y0 < 0.4 or x1 > w - 0.4 or y1 > h - 0.4:
             return False
-        for b in list(boxes.values()) + no_parts:
-            if x0 < b[2] and x1 > b[0] and y0 < b[3] and y1 > b[1]:
+        obst = [(b, sides_of(k)) for k, b in boxes.items()] + no_parts
+        for b, sides in obst:
+            if side in sides and x0 < b[2] and x1 > b[0] and y0 < b[3] and y1 > b[1]:
                 return False
+        lay = pcbnew.F_Cu if side == "top" else pcbnew.B_Cu
         for z in zones:
+            if not z.GetLayerSet().Contains(lay):
+                continue
             for px, py in ((x0, y0), (x1, y0), (x0, y1), (x1, y1), ((x0 + x1) / 2, (y0 + y1) / 2)):
                 if z.Outline().Contains(P(px, py)):
                     return False
@@ -517,17 +585,27 @@ def auto_place(board, cfg, fps, net, placed, log=print):
     top_tp = set(tp_cfg.get("top_nets", []))
     gx, gy = tp_cfg.get("origin", [2.0, 2.0])
     cols, pitch = tp_cfg.get("cols", 6), tp_cfg.get("pitch", 2.54)
+    groups = [dict(g, k=0) for g in tp_cfg.get("groups", [])]   # e.g. audio pads at the codecs
     k = 0
     for r in tps:
         n = pin_net.get((r, "1"))
         if n in top_tp:
             continue  # placed like a passive, on top, next to its net
-        place(fps[r], gx + (k % cols) * pitch, gy + (k // cols) * pitch, 0,
-              tp_cfg.get("side", "bottom"))
+        g = next((g for g in groups if n in g["nets"]), None)
+        if g:
+            ox, oy = g["origin"]
+            gc, kk = g.get("cols", cols), g["k"]
+            place(fps[r], ox + (kk % gc) * pitch, oy + (kk // gc) * pitch, 0,
+                  tp_cfg.get("side", "bottom"))
+            g["k"] += 1
+        else:
+            place(fps[r], gx + (k % cols) * pitch, gy + (k // cols) * pitch, 0,
+                  tp_cfg.get("side", "bottom"))
+            k += 1
         boxes[r] = _crtyd(fps[r])
         placed.add(r)
-        k += 1
-    todo = [r for r in sorted(fps, key=nl_sort) if r not in placed]
+    todo = [r for r in sorted(fps, key=lambda r: (not _is_decap(fps[r]), nl_sort(r)))
+            if r not in placed]
     assigned = {}
     for _pass in range(4):
         left = [r for r in todo if r not in placed]
@@ -566,6 +644,8 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
             for rr, pn in by_net.get(n, []):
                 if rr in placed and rr != r:
                     cands.append((len(by_net[n]), not rr.startswith(("U", "J")), nl_sort(rr), rr, pn))
+        if ANCHORS.get(r) in placed:  # boards.yaml `anchors` overrides the net-based choice
+            cands = [c for c in cands if c[3] == ANCHORS[r]] or cands
         if cands:
             cands.sort()
             _, _, _, rr, pn = cands[0]
@@ -573,6 +653,8 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
         else:
             note = comp.fields.get("Note", "")
             want = next((ref for kw, ref in NOTE_HINTS if kw in note and ref in placed), None)
+            if ANCHORS.get(r) in placed:  # boards.yaml `anchors`: supply caps of an IC
+                want = ANCHORS[r]
             m_led = re.fullmatch(r"LED (\d+)", note)
             if m_led:  # per-LED decoupling cap: the LED with that chain index
                 want = next((rr for rr, cc in net.comps.items()
@@ -593,6 +675,10 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
                 place(fp, w + 5, 5 + 3 * len([x for x in todo if x < r]), 0, "top")
             continue
         afp = fps.get(anchor[0]) or board.FindFootprintByReference(anchor[0])
+        # a decoupling cap may use the escape margin of its own fine-pitch IC (<= 2 mm to the pin)
+        widened = boxes.get(anchor[0]) if _is_decap(fp) and anchor[0] in RAW_BOX else None
+        if widened:
+            boxes[anchor[0]] = RAW_BOX[anchor[0]]
         ax, ay = next(unP(p_.GetPosition()) for p_ in afp.Pads() if p_.GetNumber() == anchor[1])
         side = "bottom" if afp.IsFlipped() else "top"
         cx, cy = unP(afp.GetPosition())
@@ -607,7 +693,7 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
                     place(fps[r], x, y, rot, side)
                     box = _crtyd(fps[r])
                     box = (box[0] - gap, box[1] - gap, box[2] + gap, box[3] + gap)
-                    if free(box, r):
+                    if free(box, r, side):
                         boxes[r] = box
                         placed.add(r)
                         done = True
@@ -616,6 +702,8 @@ def _auto_pass(todo, fps, net, placed, boxes, free, pin_net, by_net, assigned, b
                     break
             if done:
                 break
+        if widened:
+            boxes[anchor[0]] = widened
         if not done:
             log(f"auto_place: no room for {r} near {anchor[0]}.{anchor[1]}; parked beside the board")
             place(fp, w + 5, 5 + 3 * len([x for x in todo if x < r]), 0, "top")
@@ -635,8 +723,117 @@ def text(board, s, x, y, size=1.0, layer=pcbnew.F_SilkS, rot=0, bold=False, mirr
     return t
 
 
+def clean_silk(board, cfg) -> int:
+    """Footprint silk that would sit on copper or over the board edge is dropped (library
+    outlines drawn through a pad, USB-C outlines past the rear edge, marks over another part's
+    through-hole pad); footprint user texts that overlap other silk move to the Fab layer."""
+    w, h = cfg["size"]
+    pads = []
+    for fp in board.GetFootprints():
+        for p_ in fp.Pads():
+            bb = p_.GetBoundingBox()
+            (x0, y0), (x1, y1) = unP(bb.GetOrigin()), unP(bb.GetEnd())
+            thru = p_.GetAttribute() in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH)
+            sides = {"top", "bottom"} if thru else {"bottom" if p_.IsOnLayer(pcbnew.B_Cu) else "top"}
+            pads.append((x0, y0, x1, y1, sides, bb))
+    removed = 0
+    silk_boxes = []
+    for fp in board.GetFootprints():
+        for g in list(fp.GraphicalItems()):
+            lay = g.GetLayer()
+            if lay not in (pcbnew.F_SilkS, pcbnew.B_SilkS):
+                continue
+            side = "bottom" if lay == pcbnew.B_SilkS else "top"
+            bb = g.GetBoundingBox()
+            (x0, y0), (x1, y1) = unP(bb.GetOrigin()), unP(bb.GetEnd())
+            if isinstance(g, pcbnew.PCB_TEXT):
+                silk_boxes.append((g, side, x0, y0, x1, y1))
+                continue
+            bad = x0 < 0.35 or y0 < 0.35 or x1 > w - 0.35 or y1 > h - 0.35
+            if not bad:
+                m = pcbnew.FromMM(0.12)
+                for px0, py0, px1, py1, sides, pbb in pads:
+                    if side in sides and px0 < x1 + 0.2 and px1 > x0 - 0.2 and py0 < y1 + 0.2 \
+                            and py1 > y0 - 0.2:
+                        r = pcbnew.BOX2I(pbb.GetOrigin(), pbb.GetSize())
+                        r.Inflate(m)
+                        if g.HitTest(r, False, 0):
+                            bad = True
+                            break
+            if bad:
+                fp.Remove(g)
+                removed += 1
+            else:
+                silk_boxes.append((g, side, x0, y0, x1, y1))
+    for g, side, x0, y0, x1, y1 in silk_boxes:  # footprint user texts over other silk: to Fab
+        if not isinstance(g, pcbnew.PCB_TEXT):
+            continue
+        if any(o is not g and o.GetParentFootprint() is not None and s2 == side
+               and x0 < b2 and x1 > a2 and y0 < d2 and y1 > c2
+               for o, s2, a2, c2, b2, d2 in silk_boxes if not isinstance(o, pcbnew.PCB_TEXT)):
+            g.SetLayer(pcbnew.B_Fab if side == "bottom" else pcbnew.F_Fab)
+    return removed
+
+
+SILK_REF_PREFIXES = ("J", "SW", "MK")   # connectors, switches, mic: labelled on the silk
+
+
+def silk_refs(board, cfg) -> None:
+    """Reference designators stay on the silkscreen only where a person needs them
+    (connectors, switches, the mic; GUIDELINES §4); every other part is identified on the
+    Fab layer (assembly drawing), so no label sits on a pad, a part or another label.
+    Visible labels move to the first spot around their footprint that is clear."""
+    keys = {n for n in key_labels}
+    boxes = []
+    for fp in board.GetFootprints():
+        lay = pcbnew.B_CrtYd if fp.IsFlipped() else pcbnew.F_CrtYd
+        poly = fp.GetCourtyard(lay)
+        if poly.OutlineCount():
+            bb = poly.BBox()
+            boxes.append((fp.IsFlipped(), *unP(bb.GetOrigin()), *unP(bb.GetEnd())))
+    for d in board.GetDrawings():  # board texts (legends, labels) and the logo keep-out
+        if d.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS):
+            bb = d.GetBoundingBox()
+            boxes.append((d.GetLayer() == pcbnew.B_SilkS, *unP(bb.GetOrigin()), *unP(bb.GetEnd())))
+    for fp in sorted(board.GetFootprints(), key=lambda f: f.GetReference()):
+        ref = fp.Reference()
+        name = fp.GetReference()
+        if name in keys or not name.startswith(SILK_REF_PREFIXES) or \
+                re.fullmatch(r"SW([6-9]|1\d)", name):
+            ref.SetVisible(False)
+            continue
+        flip = fp.IsFlipped()
+        cx, cy = unP(fp.GetPosition())
+        bb = fp.GetCourtyard(pcbnew.B_CrtYd if flip else pcbnew.F_CrtYd).BBox()
+        x0, y0 = unP(bb.GetOrigin())
+        x1, y1 = unP(bb.GetEnd())
+        ref.SetTextSize(pcbnew.VECTOR2I(MM(0.8), MM(0.8)))
+        ref.SetTextThickness(MM(0.12))
+        ref.SetTextAngleDegrees(0)
+        ref.SetKeepUpright(True)
+        w = 0.8 * len(name) * 0.9 + 0.3
+        placed_ok = False
+        for dx, dy in [(0, y0 - 0.9 - cy), (0, y1 + 0.9 - cy), (x0 - w / 2 - 0.3 - cx, 0),
+                       (x1 + w / 2 + 0.3 - cx, 0), (0, y0 - 2.0 - cy), (0, y1 + 2.0 - cy)]:
+            tx, ty = cx + dx, cy + dy
+            tb = (tx - w / 2, ty - 0.55, tx + w / 2, ty + 0.55)
+            if tb[0] < 0.6 or tb[1] < 0.6 or tb[2] > cfg["size"][0] - 0.6 or tb[3] > cfg["size"][1] - 0.6:
+                continue
+            if any(s == flip and tb[0] < b[2] and tb[2] > b[0] and tb[1] < b[3] and tb[3] > b[1]
+                   for s, *b in boxes):
+                continue
+            ref.SetPosition(P(tx, ty))
+            boxes.append((flip, *tb))
+            placed_ok = True
+            break
+        if not placed_ok:
+            ref.SetVisible(False)
+
+
 def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, out: Path,
-                stage_unplaced: bool = False) -> Path:
+                stage_unplaced: bool = False, copper: bool = True) -> Path:
+    """Place every footprint. copper=False (`--stage placed`) is the review state: no hand
+    routes, escape stubs or fan-out vias, and every zone defined but unfilled."""
     cfg = dict(cfg_all[board_name])
     cfg.update({k: cfg_all[k] for k in ("rules", "netclasses", "netclass_rules", "stackup")})
     net = nl.read(BUILD / f"{board_name}-{variant}" / f"{cfg['netlist']}.net")
@@ -704,9 +901,20 @@ def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, o
         add_board_fp(board, "Fiducial:Fiducial_1mm_Mask2mm", f"FID{i + 1}", x, y, side=side)
 
     apply_netclasses(board, cfg, net)
-    hand_routes(board, (placement.get("routes") or {}).get(board_name))
+    # board texts first: auto_place keeps parts off them (silk must stay clear of pads)
+    for name, (x, y) in key_labels.items():  # key legends (assembly aid; under the plate)
+        text(board, name, x, y + 9.0 if y > h / 2 else y - 8.4, size=1.0)
+    for t in cfg.get("texts", []):
+        text(board, t[0], t[1], t[2], size=t[3] if len(t) > 3 else 1.0,
+             layer=pcbnew.B_SilkS if (len(t) > 4 and t[4] == "bottom") else pcbnew.F_SilkS,
+             rot=t[5] if len(t) > 5 else 0)
+
+    if copper:
+        hand_routes(board, (placement.get("routes") or {}).get(board_name))
     auto_place(board, cfg, fps, net, set(pl))
     add_zones(board, cfg, only_plane=True)
+    if not copper:
+        add_zones(board, cfg, only_plane=False)
     for i, (fpname, x, y, side) in enumerate(cfg.get("logos", [])):
         fp = load_fp(f"OpenLoungePhone:{fpname}")
         fp.SetReference(f"G{i + 1}")
@@ -715,17 +923,13 @@ def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, o
         fp.SetExcludedFromPosFiles(True)
         board.Add(fp)
         fp.SetPosition(P(x, y))  # the _B footprint is already drawn on B.SilkS, mirrored
-    for name, (x, y) in key_labels.items():  # key legends (assembly aid; under the plate)
-        text(board, name, x, y + 9.0 if y > h / 2 else y - 8.4, size=1.0)
-    for t in cfg.get("texts", []):
-        text(board, t[0], t[1], t[2], size=t[3] if len(t) > 3 else 1.0,
-             layer=pcbnew.B_SilkS if (len(t) > 4 and t[4] == "bottom") else pcbnew.F_SilkS,
-             rot=t[5] if len(t) > 5 else 0)
-
-    print(f"escape stubs: {escape_stubs(board)}")
-    n = fanout_gnd(board, cfg)
-    print(f"GND fan-out: {n} vias")
-    pcbnew.SaveBoard(str(pcb_path), board)
+    silk_refs(board, cfg)
+    print(f"silk: {clean_silk(board, cfg)} footprint silk items removed (edge / pads)")
+    if copper:
+        print(f"escape stubs: {escape_stubs(board)}")
+        n = fanout_gnd(board, cfg)
+        print(f"GND fan-out: {n} vias")
+    save_board(board, pcb_path)
     insert_stackup(pcb_path, cfg)
     return pcb_path
 
@@ -798,7 +1002,7 @@ def autoroute(board_name: str, cfg_all: dict, variant: str, passes: int = 100,
         raise SystemExit(f"FreeRouting produced no SES (see {work}/freerouting.log)")
     if not pcbnew.ImportSpecctraSES(board, str(ses)):
         raise SystemExit("SES import failed")
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
 
 
 def build_plate(cfg_all: dict, variant: str) -> Path:
@@ -840,7 +1044,7 @@ def build_plate(cfg_all: dict, variant: str) -> Path:
     text(board, "Open Lounge Phone key plate r0.1  FR4 1.5 mm, no copper  CERN-OHL-S-2.0",
          w / 2, 82.2, size=1.0)
     pcb = out / "plate.kicad_pcb"
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
     (out / "plate.kicad_pro").write_text(json.dumps({"meta": {"filename": "plate.kicad_pro",
                                                               "version": 3}}, indent=2) + "\n")
     return pcb
@@ -1152,7 +1356,7 @@ def finish(board_name: str, cfg_all: dict, variant: str) -> None:
     fill(board)
     n = stitch(board, cfg)
     fill(board)
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
     deterministic(pcb)
     print(f"finished {pcb} ({n} stitching vias)")
 
@@ -1253,7 +1457,7 @@ def sync_fields(board_name: str, cfg_all: dict, variant: str) -> None:
                 f.SetVisible(False)
                 f.SetLayer(pcbnew.F_Fab)
         fp.SetDNP(c.dnp)
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
     deterministic(pcb)
 
 
@@ -1270,7 +1474,7 @@ def grid_route(board_name: str, cfg_all: dict, variant: str) -> list:
     print(f"grid router: {time.time() - t0:.0f} s, unrouted: {unrouted or 'none'}", flush=True)
     for line in r.fail_log[-40:]:
         print("  fail:", line)
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
     (KICAD_OUT / board_name / "unrouted.txt").write_text(
         "".join(f"{n}\t{k}\n" for n, k in unrouted))
     return unrouted
@@ -1318,7 +1522,7 @@ def reroute(board_name: str, cfg_all: dict, variant: str) -> list:
     print(f"reroute: {time.time() - t0:.0f} s, unrouted: {unrouted or 'none'}", flush=True)
     for line in r.fail_log[-40:]:
         print("  fail:", line)
-    pcbnew.SaveBoard(str(pcb), board)
+    save_board(board, pcb)
     (KICAD_OUT / board_name / "unrouted.txt").write_text(
         "".join(f"{n}\t{k}\n" for n, k in unrouted))
     return unrouted
@@ -1337,7 +1541,8 @@ def main():
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--router", default="grid", choices=["grid", "freerouting"])
     ap.add_argument("--stage", default="place",
-                    choices=["place", "route", "all", "sync", "strip", "reroute", "finish"])
+                    choices=["place", "placed", "route", "all", "sync", "strip", "reroute",
+                             "finish"])
     ap.add_argument("--stage-unplaced", action="store_true",
                     help="park unplaced parts beside the board instead of failing (debug)")
     a = ap.parse_args()
@@ -1350,13 +1555,14 @@ def main():
     if a.stage == "sync":
         sync_fields(a.board, cfg, a.variant)
         return
-    if a.stage in ("place", "all"):
-        pcb = build_place(a.board, a.variant, cfg, placement, out, a.stage_unplaced)
+    if a.stage in ("place", "all", "placed"):
+        pcb = build_place(a.board, a.variant, cfg, placement, out, a.stage_unplaced,
+                          copper=a.stage != "placed")
         print(f"wrote {pcb}")
     if a.stage == "strip":
         board, pcb, _ = load(a.board, cfg, a.variant)
         print("stripped %d pours, %d stitching vias" % strip_finish(board))
-        pcbnew.SaveBoard(str(pcb), board)
+        save_board(board, pcb)
         return
     if a.stage == "reroute":   # then run --stage finish in a new process
         reroute(a.board, cfg, a.variant)
