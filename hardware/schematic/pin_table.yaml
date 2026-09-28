@@ -15,9 +15,9 @@ gpio:
   4:  {net: HS_VBUS_SENSE, adc1: true, board: main, note: "handset VBUS via 100k/100k"}
   5:  {net: HOOK, rtc: true, board: main}
   6:  {net: LD_OUT, rtc: true, board: main}
-  7:  {net: IRQ, rtc: true, board: both, pull: up}
-  8:  {net: I2C_SDA, board: both, pull: up}
-  9:  {net: I2C_SCL, board: both, pull: up}
+  7:  {net: IRQ, rtc: true, board: main, pull: up}
+  8:  {net: I2C_SDA, board: main, pull: up}
+  9:  {net: I2C_SCL, board: main, pull: up}
   10: {net: EPD_CS, board: main}
   11: {net: EPD_MOSI, board: main}
   12: {net: EPD_SCK, board: main}
