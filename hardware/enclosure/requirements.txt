@@ -1,0 +1,7 @@
+build123d==0.13.0
+cadquery-ocp-novtk==8.0.1.0.0
+pyyaml>=6
+trimesh>=4
+matplotlib>=3.9
+pillow>=10
+numpy>=1.26

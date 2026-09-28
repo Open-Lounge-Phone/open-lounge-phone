@@ -1,0 +1,88 @@
+[PASS] bed: base_top - 186.0 x 94.0 x 24.5 mm on 220 x 220
+[PASS] bed: base_top_lite - 186.0 x 94.0 x 24.5 mm on 220 x 220
+[PASS] bed: base_bottom - 186.0 x 94.0 x 17.0 mm on 220 x 220
+[PASS] bed: speaker_lid - 25.0 x 51.0 x 4.5 mm on 220 x 220
+[PASS] bed: light_bar - 63.7 x 4.1 x 3.3 mm on 220 x 220
+[PASS] bed: key_plate_printed - 117.0 x 84.0 x 1.5 mm on 220 x 220
+[PASS] bed: saddle_pop_left - 46.5 x 64.0 x 10.7 mm on 220 x 220
+[PASS] bed: saddle_pop_right - 46.5 x 64.0 x 10.7 mm on 220 x 220
+[PASS] bed: saddle_g1_left - 40.0 x 64.0 x 10.7 mm on 220 x 220
+[PASS] bed: saddle_g1_right - 40.0 x 64.0 x 10.7 mm on 220 x 220
+[PASS] bed: plunger - 9.0 x 9.0 x 27.5 mm on 220 x 220
+[PASS] bed: handset_diy_g1_left - 218.2 x 57.2 x 27.0 mm on 220 x 220
+[PASS] bed: handset_diy_g1_right - 218.2 x 57.2 x 27.0 mm on 220 x 220
+[PASS] fit: main board inside walls - min gap to inner wall 0.60 mm (>= 0.25); board 180.0 x 88.0
+[PASS] fit: deck board inside walls - min gap to inner wall 2.80 mm (>= 0.25); board 117.0 x 84.0
+[WARN] fit: main board source - main_intent (layout requirement: synced board does not fit)
+[PASS] fit: parts allowed under the deck - <= 4.7 mm tall (deck sockets at z 13.66, main top 8.51)
+[PASS] holes: board holes land on standoffs / bosses (probe) - 9 main holes, 4 shell bolts
+[PASS] holes: deck holes have a main-board hole below (hex standoffs) - all 5 aligned
+[PASS] interference: top shell x bottom tray - 0.00 mm^3
+[PASS] interference: top shell x main PCB - 0.00 mm^3
+[PASS] interference: bottom tray x main PCB - 0.00 mm^3
+[PASS] interference: top shell x deck PCB - 0.00 mm^3
+[PASS] interference: bottom tray x deck PCB - 0.00 mm^3
+[PASS] interference: top shell x key plate - 0.00 mm^3
+[PASS] interference: top shell x MX switches - 0.00 mm^3
+[PASS] interference: top shell x keycaps (rest) - 0.00 mm^3
+[PASS] interference: top shell x e-ink panel - 0.00 mm^3
+[PASS] interference: top shell x speaker - 0.00 mm^3
+[PASS] interference: top shell x USB-C bodies - 0.00 mm^3
+[PASS] interference: bottom tray x USB-C bodies - 0.00 mm^3
+[PASS] interference: top shell x radar module - 0.00 mm^3
+[PASS] interference: bottom tray x radar module - 0.00 mm^3
+[PASS] interference: top shell x hex standoffs - 0.00 mm^3
+[PASS] interference: top shell x tubes - 0.00 mm^3
+[PASS] interference: top shell x plungers - 0.00 mm^3
+[PASS] interference: top shell x speaker lid - 0.00 mm^3
+[PASS] interference: main PCB x speaker lid - 0.00 mm^3
+[PASS] interference: top shell x light bar - 0.00 mm^3
+[PASS] interference: top shell x saddles pop - 0.00 mm^3
+[PASS] interference: saddles pop x handset pop - 0.00 mm^3
+[PASS] interference: saddles pop x plungers - 0.00 mm^3
+[PASS] interference: saddles pop x tubes - 0.00 mm^3
+[PASS] interference: top shell x handset pop - 0.00 mm^3
+[PASS] interference: keycaps x handset pop - 0.00 mm^3
+[PASS] interference: top shell x saddles g1 - 0.00 mm^3
+[PASS] interference: saddles g1 x handset g1 - 0.00 mm^3
+[PASS] interference: saddles g1 x plungers - 0.00 mm^3
+[PASS] interference: saddles g1 x tubes - 0.00 mm^3
+[PASS] interference: top shell x handset g1 - 0.00 mm^3
+[PASS] interference: keycaps x handset g1 - 0.00 mm^3
+[PASS] interference: plungers off-hook x saddles pop - 0.00 mm^3
+[PASS] interference: plungers off-hook x saddles g1 - 0.00 mm^3
+[PASS] keys: skin hole < DSA skirt (captive) - hole 17.20 mm square vs skirt 18.20 mm (0.50 mm lip/side); cap width at skin 16.40; skirt sits 2.49 mm under the skin
+[PASS] keys: keycaps pressed (-travel) clear the skin - 0.00 mm^3
+[PASS] keys: keycap pulled up hits the skin (captive, geometric) - 12/12 caps caught after 2.79 mm lift
+[PASS] keys: key stack - deck PCB top 17.11, plate top 22.11, cap base 28.51, cap top 36.11, skin 31.0-33.0; pressed cap top 32.11 (below skin by 0.89)
+[PASS] walls: wall - 2.2 mm (min 2.0)
+[PASS] walls: floor - 2.2 mm (min 2.0)
+[PASS] walls: top skin - 2.0 mm (min 2.0)
+[PASS] walls: handset wall - 2.0 mm (min 2.0)
+[WARN] walls: intentional thin features - radar window 0.9 mm, VOL flexure tabs 1.2 mm, lip 1.2 mm, e-ink rim 1.0 mm (not structural)
+[WARN] overhang: base_top - >45 deg overhang 114 mm^2 (holes/text edges), bridges 510 mm^2
+[WARN] overhang: base_top_lite - >45 deg overhang 114 mm^2 (holes/text edges), bridges 312 mm^2
+[PASS] overhang: base_bottom - >45 deg overhang 0 mm^2 (holes/text edges), bridges 1686 mm^2
+[PASS] overhang: speaker_lid - >45 deg overhang 0 mm^2 (holes/text edges), bridges 0 mm^2
+[PASS] overhang: light_bar - >45 deg overhang 0 mm^2 (holes/text edges), bridges 125 mm^2
+[PASS] overhang: key_plate_printed - >45 deg overhang 0 mm^2 (holes/text edges), bridges 0 mm^2
+[PASS] overhang: saddle_pop_left - >45 deg overhang 6 mm^2 (holes/text edges), bridges 87 mm^2
+[PASS] overhang: saddle_pop_right - >45 deg overhang 6 mm^2 (holes/text edges), bridges 87 mm^2
+[PASS] overhang: saddle_g1_left - >45 deg overhang 6 mm^2 (holes/text edges), bridges 87 mm^2
+[PASS] overhang: saddle_g1_right - >45 deg overhang 6 mm^2 (holes/text edges), bridges 87 mm^2
+[PASS] overhang: plunger - >45 deg overhang 13 mm^2 (holes/text edges), bridges 7 mm^2
+[WARN] overhang: handset_diy_g1_left (needs supports inside - optional part) - >45 deg overhang 4026 mm^2 (holes/text edges), bridges 2096 mm^2
+[WARN] overhang: handset_diy_g1_right (needs supports inside - optional part) - >45 deg overhang 4001 mm^2 (holes/text edges), bridges 2149 mm^2
+[PASS] hook: hall field, pop handset, left post - on-hook 5.1 mm -> 9.2 mT (need >= 6.8), off-hook 12.0 mm -> 0.96 mT (need <= 1.2); 3.0 x 1.5 mm, Br 1.2 T; thresholds UNVERIFIED
+[PASS] hook: hall field, pop handset, right post - on-hook 5.1 mm -> 9.2 mT (need >= 6.8), off-hook 12.0 mm -> 0.96 mT (need <= 1.2); 3.0 x 1.5 mm, Br 1.2 T; thresholds UNVERIFIED
+[PASS] hook: hall field, g1 handset, right post - on-hook 4.0 mm -> 17.1 mT (need >= 6.8), off-hook 12.0 mm -> 0.96 mT (need <= 1.2); 3.0 x 1.5 mm, Br 1.2 T; thresholds UNVERIFIED
+[PASS] hook: spring vs pop handset weight per post - spring 0.39 N on-hook / 0.15 N off-hook vs 1.24 N per cup
+[PASS] hook: spring vs g1 handset weight per post - spring 0.39 N on-hook / 0.15 N off-hook vs 1.47 N per cup
+[PASS] hook: finger clearance under the pop handset - 34.0 mm from keycap tops (z 36.1) to the handset (target 34.0); handset is above 6/12 keys
+[PASS] hook: overall height with the pop handset - 96.1 mm (owner target 95-100)
+[PASS] hook: finger clearance under the g1 handset - 33.0 mm from keycap tops (z 36.1) to the handset (target 34.0); handset is above 6/12 keys
+[PASS] hook: overall height with the g1 handset - 93.1 mm (owner target 95-100)
+[PASS] radar: antenna face to radome - 12.4 mm (target 12.4 +- 1.2; module geometry UNVERIFIED)
+[WARN] rf: ESP32 antenna keep-out - antenna position not in the intent block; layout must keep it >= 15 mm from the metal tubes at [(12, 72), (174, 72)], hex standoffs and brass inserts
+
+79 pass, 7 warn, 0 fail
