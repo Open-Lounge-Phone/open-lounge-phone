@@ -12,6 +12,7 @@ cd ../enclosure && .venv/bin/python proto_box.py [--render]
 
 Outputs in `build/proto/`: `tray`, `lid`, `plunger`, `sleeve` as STL + STEP (git-ignored),
 `checks.txt` (fit checks against the board's parts; exit 1 on FAIL) and `proto.png`.
+`make` does not build it; run it by hand as above.
 
 **Designed for industrial printing (MJF/SLS/SLA class)**, to nominal dimensions with 0.1 mm
 clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the key cutouts
@@ -28,7 +29,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | Under the board | 7.0 mm: hot-swap sockets, JST-PH connectors, supercap, side controls go on the **bottom** |
 | Rear wall | two USB-C openings 12.8 × 7.2 (R3.4) + 1 mm outside recess at J7 (x 24) and J1 (x 159), centred on the receptacles (board top + 1.63). They are open to the lid top: a plug overmold on a top-mount receptacle reaches 0.1 mm below the plate top |
 | Right wall | Ø4 holes VOL− / VOL+, 9 × 4 slot MUTE, at board bottom − 1.8 (controls on the bottom side) |
-| Speaker | 20 × 40 × ≤ 5 mm, under the board at the left end (board x 16, y 62), in a 1.2 × 3 mm rim on the floor, firing down through a Ø2 / 3.5 mm hex grille; the feet lift it off the table |
+| Speaker | 40 × 20 × ≤ 5 mm, under the board centre (board x 80.5, y 43.8, below the e-ink panel), in a 1.2 × 3 mm rim on the floor, firing down through a Ø2 / 3.5 mm hex grille; the feet lift it off the table |
 | Hook sockets | two Ø12.2 × 8 mm sockets in Ø16 collars on the lid (3 crush ribs), at board (9, 18.8) and (171, 18.8), 162 mm apart, for the Ø12 posts/pegs of any printed, wooden or metal cradle |
 
 ## Fasteners and other parts (per box)
@@ -43,7 +44,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | 1 | compression spring OD ≤ 9.4, ID ≥ 7.4 (e.g. 0.5 wire × OD 9), free length ≈ 15, solid < 4 mm | plunger sleeve |
 
 The five other board holes (34.7, 5) (145.3, 5) (34.7, 82.6) (145.3, 82.6) (145.1, 29.4) sit on
-plain Ø6 support bosses (no screws). The MX switches clip into the lid, so the lid takes the
+plain Ø4.6 support bosses (no screws; Ø4.6 clears the hot-swap sockets beside them). The MX switches clip into the lid, so the lid takes the
 keystroke force.
 
 ## Assembly
@@ -80,5 +81,9 @@ values where known, otherwise conservative estimates).
 Layout rules this box sets for the single board: top-side parts ≤ 3.0 mm except where a lid
 pocket fits (≤ 3.8 mm); JST-PH J2/J4, the supercap C7 and the side controls SW3–SW5 on the
 bottom side at the right edge; nothing on the bottom inside the speaker area
-(board x 4.7–27.3, y 40.7–83.3) taller than 1.5 mm; Ø6 around every mounting hole on both
-sides.
+(board x 59–102, y 32.5–55) taller than 1.0 mm; Ø6 around every mounting hole on both sides.
+Light holes: status LED (128, 50) Ø3.2, privacy LED (141.5, 53.4) and ALS (141.5, 57.8) Ø2.
+Checked against the routed board on 2026-09-28: all checks pass.
+
+**Not covered:** the Lounge radar (LD2410C on its right-angle socket J5) stands ~20 mm tall
+and does not fit under this lid; leave it unplugged in the proto box or add a lid cut-out.
