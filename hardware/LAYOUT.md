@@ -24,6 +24,8 @@ left, all in the two dense spots:
 Next: give U17 a clear escape (move it next to the key rows or split keys across two sides,
 rotate so its key pins face the sockets), spread the codec passives, then `make layout FORCE=1`
 (one full route ≈ 1 h on this machine) or finish the last links by hand in KiCad.
+Tried and reverted: codecs next to the ESP32 + AW9523B at (80, 44) → 41 connections left
+(worse); an incremental `--stage strip` / `reroute` / `finish` pass went from 39 to 36.
 
 
 ## 1. How to run
