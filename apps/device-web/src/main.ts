@@ -21,6 +21,7 @@ import {
   PROTOCOL_VERSION,
   type ServerToDevice,
 } from "@openloungephone/protocol";
+import { renderSVG } from "uqr";
 import {
   type Autopair,
   COMPANION_TOKEN_KEY,
@@ -47,6 +48,7 @@ import {
   slotOf,
 } from "./keypad.ts";
 import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
+import { type LoungeView, loungeKeysLive, loungeLines, loungeUrl, showQr } from "./lounge.ts";
 import {
   DEFAULT_SETTINGS,
   type MenuEvent,
@@ -133,6 +135,9 @@ let menu: MenuState | undefined;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let menuTicker: ReturnType<typeof setInterval> | undefined;
 const keyEls = new Map<KeyId, HTMLButtonElement>();
+/** Lounge phone state from the server; emptied when a session ends. */
+let lounge: LoungeView = {};
+let challengeTimer: ReturnType<typeof setTimeout> | undefined;
 
 const tones = new TonePlayer();
 const identity = await loadOrCreateIdentity(profile);
@@ -167,6 +172,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
   decode: decodeServerToDevice,
   onOpen: (raw) => {
     authed = false;
+    lounge = {};
     endCall();
     deviceState = hookUp ? { kind: "offhook" } : initialDeviceState;
     const deviceId = getDeviceId(profile);
@@ -205,7 +211,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
 });
 
 function beginPairing(): void {
-  send({ t: "pair.begin", publicKey: identity.publicKey });
+  send({ t: "pair.begin", publicKey: identity.publicKey, kind: chosenKind ?? "kids" });
 }
 
 function forgetDeviceId(): void {
@@ -281,6 +287,26 @@ async function handle(msg: ServerToDevice): Promise<void> {
     case "rtc.config":
       iceByCall.set(msg.callId, msg.iceServers);
       break;
+    case "lounge.idle":
+      lounge = { ...lounge, nonce: { nonce: msg.nonce, expiresAt: msg.expiresAt } };
+      delete lounge.challenge;
+      break;
+    case "lounge.challenge":
+      lounge = { ...lounge, challenge: { index: msg.index, expiresAt: msg.expiresAt } };
+      if (menu) applyMenu({ type: "exit" });
+      clearTimeout(challengeTimer);
+      challengeTimer = setTimeout(() => {
+        delete lounge.challenge;
+        render();
+      }, msg.expiresAt - Date.now());
+      break;
+    case "lounge.session":
+      lounge = { ...lounge, session: { name: msg.name, openToChat: msg.openToChat } };
+      delete lounge.challenge;
+      break;
+    case "lounge.ended":
+      forgetPerson();
+      break;
     case "rtc.sdp":
     case "rtc.ice":
       if (call?.callId !== msg.callId) break;
@@ -294,6 +320,18 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
   }
   render();
+}
+
+/** A Lounge session ended: nothing about the person may stay on the phone. */
+function forgetPerson(): void {
+  lounge = lounge.nonce ? { nonce: lounge.nonce } : {};
+  config = config ? { buttons: [], quiet: false } : undefined;
+  activeKey = undefined;
+  activeLabel = undefined;
+  if (menu) applyMenu({ type: "exit" });
+  lastStatusText = "";
+  logEl.replaceChildren(); // the developer log holds names and call history too
+  log("•", "Lounge session ended; forgot everything");
 }
 
 function sendStatus(): void {
@@ -421,6 +459,11 @@ function pressKey(key: KeyId): void {
   unlockChime();
   flash(key);
   if (!authed || pairingCode) return; // keys do nothing until the phone is paired and online
+  // Lounge takeover: the person proves they're here by pressing the glowing key.
+  if (lounge.challenge && isDigit(key)) {
+    send({ t: "lounge.press", index: slotOf(Number(key)) });
+    return;
+  }
   const now = Date.now();
   if (key === "menu") {
     if (menu || canUseMenu()) applyMenu({ type: "menu", now });
@@ -440,7 +483,11 @@ function pressKey(key: KeyId): void {
 }
 
 function menuContext() {
-  return { missedCount: config?.missed?.length ?? 0, fw: FW };
+  return {
+    missedCount: config?.missed?.length ?? 0,
+    fw: FW,
+    ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
+  };
 }
 
 function applyMenu(event: MenuEvent): void {
@@ -448,6 +495,8 @@ function applyMenu(event: MenuEvent): void {
   const r = menuStep(menu, settings, event, menuContext());
   menu = r.state;
   if (r.settings !== settings) applySettings(r.settings);
+  if (r.action?.type === "chat") send({ t: "lounge.chat", open: r.action.open });
+  if (r.action?.type === "logout") send({ t: "lounge.leave" });
   // Phones without a display speak the menu; the others can show it.
   if (r.say && displayMode === "none") speak(r.say);
   if (was && !menu && displayMode === "none" && event.type !== "exit") speak("Menu closed.");
@@ -644,7 +693,18 @@ function render(): void {
     activeKey,
     ...(view ? { menuSlots: Object.keys(view.labels).map((d) => slotOf(Number(d))) } : {}),
   });
-  leds.keys.forEach((led, slot) => {
+  // Lounge: only the key to press glows during the proof; a free phone's keys stay dark.
+  const loungeLive = variant === "lounge" && authed && !pairingCode;
+  const challenge = loungeLive ? lounge.challenge : undefined;
+  const keyLeds = challenge
+    ? leds.keys.map((_, slot) => ({
+        color: "white" as const,
+        mode: slot === challenge.index ? ("blink" as const) : ("off" as const),
+      }))
+    : loungeLive && !loungeKeysLive(lounge) && !view
+      ? leds.keys.map((led) => ({ ...led, mode: "off" as const }))
+      : leds.keys;
+  keyLeds.forEach((led, slot) => {
     const digit = digitOf(slot);
     const el = keyEls.get(String(digit) as KeyId);
     if (!el) return;
@@ -693,24 +753,36 @@ function render(): void {
 
 function renderDisplay(): void {
   const view = menu ? menuView(menu, settings, menuContext()) : undefined;
-  const lines = view
-    ? displayMode === "segments"
-      ? menuLines(view, Date.now())
-      : ([view.title] as [string])
-    : statusLines({
-        connection,
-        ...(pairingCode ? { pairingCode } : {}),
-        deviceState,
-        ...(config ? { config } : {}),
-        ...(activeLabel ? { activeLabel } : {}),
-        ...(callStartedAt !== undefined ? { callStartedAt } : {}),
-        battery,
-        power: powerStatus(variant, powerSource),
-        now: Date.now(),
-      });
+  const loungeLive = variant === "lounge" && authed && !pairingCode && connection === "online";
+  const loungeText = loungeLive && !view ? loungeLines(lounge, deviceState) : undefined;
+  const deviceId = getDeviceId(profile);
+  const qr =
+    loungeLive && deviceId && lounge.nonce && showQr(lounge, deviceState, !!view)
+      ? loungeUrl(location.origin, deviceId, lounge.nonce.nonce)
+      : undefined;
+  const lines = loungeText
+    ? loungeText
+    : view
+      ? displayMode === "segments"
+        ? menuLines(view, Date.now())
+        : ([view.title] as [string])
+      : statusLines({
+          connection,
+          ...(pairingCode ? { pairingCode } : {}),
+          deviceState,
+          ...(config ? { config } : {}),
+          ...(activeLabel ? { activeLabel } : {}),
+          ...(callStartedAt !== undefined ? { callStartedAt } : {}),
+          battery,
+          power: powerStatus(variant, powerSource),
+          now: Date.now(),
+        });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.
-  const grid = authed && !pairingCode ? keyGrid(config, view) : undefined;
-  const text = JSON.stringify([lines, displayMode === "eink" ? grid : null]);
+  const grid =
+    authed && !pairingCode && !lounge.challenge && !(loungeLive && !lounge.session && !view)
+      ? keyGrid(config, view)
+      : undefined;
+  const text = JSON.stringify([lines, displayMode === "eink" ? grid : null, qr]);
   if (text === lastStatusText) return;
   lastStatusText = text;
   displayEl.setAttribute("aria-label", lines.join(". "));
@@ -725,6 +797,18 @@ function renderDisplay(): void {
     div.textContent = line;
     return div;
   });
+  if (qr) {
+    // The takeover code (on hardware: the printed QR/NFC tag, or the strip if it can draw one).
+    const code = document.createElement("a");
+    code.className = "eink-qr";
+    code.href = qr;
+    code.target = "_blank";
+    code.rel = "noopener";
+    code.setAttribute("aria-label", "Scan with the Open Lounge Phone app to use this phone");
+    code.innerHTML = renderSVG(qr, { border: 1, whiteColor: "transparent" });
+    children.unshift(code);
+    displayEl.classList.add("display--qr");
+  } else displayEl.classList.remove("display--qr");
   if (grid) {
     // A small map of the keys: same order as the rows above and below the display.
     const map = document.createElement("div");

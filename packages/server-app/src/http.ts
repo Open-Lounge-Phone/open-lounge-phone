@@ -25,7 +25,10 @@ const PairBody = z.object({
   name: Name,
   /** Pair as the caller's own phone (any member) rather than a household phone (guardians). */
   forMe: z.boolean().optional(),
+  /** Overrides what the phone was set up as. A Lounge phone is shared, never someone's own. */
+  kind: z.enum(["kids", "lounge"]).optional(),
 });
+const LoungeSettingsBody = z.object({ idleMinutes: z.number().int().min(1).max(240) });
 const DevicePatch = z
   .object({ name: Name.optional(), owner: z.enum(["me", "household"]).optional() })
   .refine((b) => b.name !== undefined || b.owner !== undefined, { message: "nothing to change" });
@@ -157,6 +160,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           online: await live.isOnline(user.householdId, d.id),
           lastSeen: d.lastSeen,
           ownerUserId: d.ownerUserId,
+          kind: d.kind,
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
       ),
@@ -170,17 +174,23 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!b.forMe && user.role !== "guardian") {
       return c.json({ error: "only guardians can add household phones" }, 403);
     }
+    if (b.forMe && b.kind === "lounge") {
+      return c.json({ error: "a Lounge phone is shared; pair it as a household phone" }, 400);
+    }
     const device = await store.claimPairing(
       {
         code: b.code,
         householdId: user.householdId,
         name: b.name,
         ownerUserId: b.forMe ? user.id : null,
+        ...(b.forMe ? { kind: "kids" as const } : b.kind ? { kind: b.kind } : {}),
       },
       env.now(),
     );
     if (!device) return c.json({ error: "unknown or expired code" }, 404);
-    if (b.forMe) {
+    if (device.kind === "lounge") {
+      // No allow-list of its own: whoever takes it over brings their own permissions.
+    } else if (b.forMe) {
       // A grown-up's own phone: everyone else in the household on its speed-dial keys.
       const others = (await store.listUsers(user.householdId)).filter((u) => u.id !== user.id);
       for (const [i, other] of others.slice(0, 10).entries()) {
@@ -248,6 +258,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!device) return c.json({ error: "not found" }, 404);
     const b = await body(c.req.raw, DevicePatch);
     if (b instanceof Response) return b;
+    if (b.owner === "me" && device.kind === "lounge") {
+      return c.json({ error: "a Lounge phone can't be someone's own phone" }, 400);
+    }
     if (b.owner !== undefined) {
       // You can claim a phone for yourself or release your own; guardians can also release any.
       const allowed =
@@ -315,7 +328,62 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.body(null, 204);
   });
 
-  peopleRoutes(api, env);
+  // --- Lounge phones --------------------------------------------------------
+
+  /** Lounge phones and who is at them; guardians also get the settings and session history. */
+  api.get("/lounge", async (c) => {
+    const user = c.get("user");
+    const hh = user.householdId;
+    const [devices, sessions, users, idleMinutes] = await Promise.all([
+      store.listDevices(hh),
+      store.listLoungeSessions(hh, 50),
+      store.listUsers(hh),
+      store.loungeIdleMinutes(hh),
+    ]);
+    const nameOf = new Map(users.map((u) => [u.id, u.name]));
+    const phones = await Promise.all(
+      devices
+        .filter((d) => d.kind === "lounge")
+        .map(async (d) => {
+          const open = sessions.find((s) => s.deviceId === d.id && s.endedAt === null);
+          return {
+            id: d.id,
+            name: d.name,
+            online: await live.isOnline(hh, d.id),
+            session: open
+              ? { userId: open.userId, name: nameOf.get(open.userId) ?? "", since: open.startedAt }
+              : null,
+          };
+        }),
+    );
+    const guardian = user.role === "guardian";
+    return c.json({
+      idleMinutes,
+      phones,
+      // Only that a session happened: who, where, when. Nothing about calls.
+      ...(guardian
+        ? {
+            history: sessions.map((s) => ({
+              deviceId: s.deviceId,
+              userId: s.userId,
+              userName: nameOf.get(s.userId) ?? "",
+              startedAt: s.startedAt,
+              endedAt: s.endedAt,
+              endReason: s.endReason,
+            })),
+          }
+        : {}),
+    });
+  });
+
+  api.put("/lounge/settings", guardianOnly, async (c) => {
+    const b = await body(c.req.raw, LoungeSettingsBody);
+    if (b instanceof Response) return b;
+    await store.setLoungeIdleMinutes(c.get("user").householdId, b.idleMinutes);
+    return c.body(null, 204);
+  });
+
+  peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
 
   return api;

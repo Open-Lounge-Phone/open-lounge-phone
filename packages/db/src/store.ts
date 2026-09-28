@@ -25,6 +25,19 @@ export interface User {
 }
 
 export type KeyAlg = "ed25519" | "p256";
+export type PhoneKind = "kids" | "lounge";
+
+/** A takeover of a Lounge phone; `endedAt` is null while it lasts. */
+export interface LoungeSessionRecord {
+  id: string;
+  deviceId: string;
+  userId: string;
+  startedAt: number;
+  endedAt: number | null;
+  endReason: string | null;
+}
+
+export const DEFAULT_LOUNGE_IDLE_MINUTES = 10;
 
 export interface Device {
   id: string;
@@ -34,6 +47,8 @@ export interface Device {
   keyAlg: KeyAlg;
   /** Set for a person's own phone; null for a household phone (e.g. a kid's). */
   ownerUserId: string | null;
+  /** `lounge` = a shared phone people take over; never owned by one person. */
+  kind: PhoneKind;
   createdAt: number;
   lastSeen: number | null;
 }
@@ -137,6 +152,7 @@ type DeviceRow = {
   public_key: string;
   key_alg: KeyAlg;
   owner_user_id: string | null;
+  kind: PhoneKind;
   created_at: number;
   last_seen: number | null;
 };
@@ -156,6 +172,7 @@ const toDevice = (r: DeviceRow): Device => ({
   publicKey: r.public_key,
   keyAlg: r.key_alg,
   ownerUserId: r.owner_user_id,
+  kind: r.kind ?? "kids",
   createdAt: r.created_at,
   lastSeen: r.last_seen,
 });
@@ -333,6 +350,7 @@ export class Store {
     publicKey: string,
     now: number,
     keyAlg: KeyAlg = "ed25519",
+    kind?: PhoneKind,
   ): Promise<{ code: string; expiresAt: number }> {
     await this.sql.run(
       "DELETE FROM pairings WHERE expires_at <= ? OR public_key = ?",
@@ -343,11 +361,12 @@ export class Store {
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = newPairingCode();
       const { changes } = await this.sql.run(
-        "INSERT OR IGNORE INTO pairings (code, public_key, expires_at, key_alg) VALUES (?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO pairings (code, public_key, expires_at, key_alg, kind) VALUES (?, ?, ?, ?, ?)",
         code,
         publicKey,
         expiresAt,
         keyAlg,
+        kind ?? null,
       );
       if (changes === 1) return { code, expiresAt };
     }
@@ -356,11 +375,22 @@ export class Store {
 
   /** Claims a pairing code for a household, creating the device. Single use. */
   async claimPairing(
-    input: { code: string; householdId: string; name: string; ownerUserId?: string | null },
+    input: {
+      code: string;
+      householdId: string;
+      name: string;
+      ownerUserId?: string | null;
+      /** Overrides the kind the phone asked for. */
+      kind?: PhoneKind;
+    },
     now: number,
   ): Promise<Device | undefined> {
-    const pending = await this.sql.first<{ public_key: string; key_alg: KeyAlg }>(
-      "SELECT public_key, key_alg FROM pairings WHERE code = ? AND expires_at > ?",
+    const pending = await this.sql.first<{
+      public_key: string;
+      key_alg: KeyAlg;
+      kind: PhoneKind | null;
+    }>(
+      "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ?",
       input.code,
       now,
     );
@@ -374,6 +404,7 @@ export class Store {
       publicKey: pending.public_key,
       keyAlg: pending.key_alg,
       ownerUserId: input.ownerUserId ?? null,
+      kind: input.kind ?? pending.kind ?? "kids",
       createdAt: now,
       lastSeen: null,
     };
@@ -382,7 +413,7 @@ export class Store {
       { query: "DELETE FROM devices WHERE public_key = ?", params: [device.publicKey] },
       {
         query:
-          "INSERT INTO devices (id, household_id, name, public_key, key_alg, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO devices (id, household_id, name, public_key, key_alg, owner_user_id, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         params: [
           device.id,
           device.householdId,
@@ -390,6 +421,7 @@ export class Store {
           device.publicKey,
           device.keyAlg,
           device.ownerUserId,
+          device.kind,
           now,
         ],
       },
@@ -535,6 +567,84 @@ export class Store {
       })),
     ]);
   }
+  // --- lounge ---------------------------------------------------------------
+
+  async loungeIdleMinutes(householdId: string): Promise<number> {
+    const r = await this.sql.first<{ m: number }>(
+      "SELECT lounge_idle_minutes AS m FROM households WHERE id = ?",
+      householdId,
+    );
+    return r?.m ?? DEFAULT_LOUNGE_IDLE_MINUTES;
+  }
+
+  async setLoungeIdleMinutes(householdId: string, minutes: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE households SET lounge_idle_minutes = ? WHERE id = ?",
+      minutes,
+      householdId,
+    );
+  }
+
+  /** Records that a session started (who, where, when) and returns its id. */
+  async startLoungeSession(
+    input: { householdId: string; deviceId: string; userId: string },
+    now: number,
+  ): Promise<string> {
+    const id = newId("ls");
+    await this.sql.run(
+      "INSERT INTO lounge_sessions (id, household_id, device_id, user_id, started_at) VALUES (?, ?, ?, ?, ?)",
+      id,
+      input.householdId,
+      input.deviceId,
+      input.userId,
+      now,
+    );
+    return id;
+  }
+
+  async endLoungeSession(id: string, reason: string, now: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE lounge_sessions SET ended_at = ?, end_reason = ? WHERE id = ? AND ended_at IS NULL",
+      now,
+      reason,
+      id,
+    );
+  }
+
+  /** Closes sessions a restarted server lost track of. */
+  async endOpenLoungeSessions(deviceId: string, reason: string, now: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE lounge_sessions SET ended_at = ?, end_reason = ? WHERE device_id = ? AND ended_at IS NULL",
+      now,
+      reason,
+      deviceId,
+    );
+  }
+
+  /** Newest first; open sessions have `endedAt` null. */
+  async listLoungeSessions(householdId: string, limit = 50): Promise<LoungeSessionRecord[]> {
+    const rows = await this.sql.all<{
+      id: string;
+      device_id: string;
+      user_id: string;
+      started_at: number;
+      ended_at: number | null;
+      end_reason: string | null;
+    }>(
+      "SELECT * FROM lounge_sessions WHERE household_id = ? ORDER BY started_at DESC LIMIT ?",
+      householdId,
+      limit,
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      deviceId: r.device_id,
+      userId: r.user_id,
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      endReason: r.end_reason,
+    }));
+  }
+
   // --- invites --------------------------------------------------------------
 
   /** Returns the invite token; only its hash is stored. */

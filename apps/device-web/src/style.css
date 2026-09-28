@@ -713,3 +713,25 @@ body {
     height: clamp(40px, 17dvh, 72px);
   }
 }
+
+/* Lounge phone: the takeover QR code on the display, left of the status lines. */
+.display--qr {
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  align-items: center;
+}
+.eink-qr {
+  grid-row: span 2;
+  display: block;
+  width: clamp(96px, 28vw, 180px);
+  aspect-ratio: 1;
+  color: var(--paper-ink);
+}
+.eink-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.display--qr .eink-grid {
+  grid-column: 1 / -1;
+}

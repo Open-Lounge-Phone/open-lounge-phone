@@ -1028,3 +1028,29 @@ fieldset.ownership legend {
   color: var(--accent-ink, #0c1f18);
   vertical-align: middle;
 }
+
+/* Lounge phones */
+.lounge-press {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.lounge-settings {
+  display: grid;
+  gap: 10px;
+}
+.lounge-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.lounge-settings .inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lounge-settings input[type="number"] {
+  width: 5em;
+}
+.lounge-history {
+  margin: 0;
+  padding-left: 18px;
+}

@@ -51,7 +51,9 @@ class FakeConn implements Conn {
     return vi.waitFor(() => {
       const i = this.sent.findIndex((m, idx) => idx >= this.cursor && m.t === t);
       if (i < 0)
-        throw new Error(`no ${t} yet; sent: ${JSON.stringify(this.sent.slice(this.cursor))}`);
+        throw new Error(
+          `no ${t} yet; sent: ${JSON.stringify(this.sent.slice(this.cursor))} all: ${JSON.stringify(this.sent.map((m) => m.t))}`,
+        );
       this.cursor = i + 1;
       return this.sent[i] as Extract<Msg, { t: T }>;
     });
@@ -1068,5 +1070,301 @@ describe("managing phones", () => {
     expect((await http(`/devices/${deviceId}`, { method: "DELETE", token: dadToken })).status).toBe(
       404,
     );
+  });
+});
+
+describe("Lounge phones", () => {
+  /** Guardian Mom, contact Dad, a kids' phone that lists Dad, and a connected Lounge phone. */
+  async function lounge() {
+    const g = await setup();
+    const dad = await store.createUser(
+      { householdId: g.user.householdId, name: "Dad", role: "contact" },
+      0,
+    );
+    const dadToken = await store.createSession(dad.id, timers.now);
+    // The phone chose "Lounge" on its first-run screen.
+    const key = await newKey();
+    const conn = openDevice();
+    conn.write(hello());
+    conn.write({ t: "pair.begin", publicKey: key.publicKey, kind: "lounge" });
+    const { code } = await conn.next("pair.code");
+    expect(
+      (await http("/devices/pair", { token: g.token, body: { code, name: "Lounge" } })).status,
+    ).toBe(201);
+    const { deviceId } = await conn.next("pair.done");
+    const phone = await connectDevice(deviceId, key.pair);
+    const idle = await phone.next("lounge.idle");
+    return { ...g, dad, dadToken, deviceId, phone, idle };
+  }
+
+  /** Scan + key proof as the person behind `app`; returns the key index that was pressed. */
+  async function takeOver(
+    app: FakeConn,
+    phone: FakeConn,
+    deviceId: string,
+    nonce: string,
+  ): Promise<void> {
+    app.write({ t: "lounge.claim", deviceId, nonce });
+    expect(await app.next("lounge.progress")).toMatchObject({ step: "press_key" });
+    const { index } = await phone.next("lounge.challenge");
+    phone.write({ t: "lounge.press", index });
+    expect(await app.next("lounge.progress")).toMatchObject({ deviceId, step: "started" });
+  }
+
+  it("pairs as a shared phone with nothing on its keys and nobody allowed", async () => {
+    const { token, deviceId, phone, idle } = await lounge();
+    expect(idle.expiresAt).toBe(timers.now + 60_000);
+    const list = (await http("/devices", { token })).json as { id: string; kind: string }[];
+    expect(list.find((d) => d.id === deviceId)?.kind).toBe("lounge");
+    expect((await http(`/devices/${deviceId}/contacts`, { token })).json.contacts).toEqual([]);
+    // Idle: no keys, and nobody can call it directly.
+    const app = await connectApp(token);
+    app.write({ t: "call.dial", deviceId });
+    expect(await app.nextState("ended")).toMatchObject({ reason: "denied" });
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    expect(await phone.nextState("ended")).toMatchObject({ reason: "denied" });
+    // It can't become someone's own phone either.
+    const patch = await http(`/devices/${deviceId}`, {
+      method: "PATCH",
+      token,
+      body: { owner: "me" },
+    });
+    expect(patch.status).toBe(400);
+  });
+
+  it("takes over with the key proof: Hi Dad, his speed-dial, recorded for guardians", async () => {
+    const { token, dad, dadToken, deviceId, phone, idle, user } = await lounge();
+    const dadApp = await connectApp(dadToken);
+    const mom = await connectApp(token);
+    await takeOver(dadApp, phone, deviceId, idle.nonce);
+    expect(await phone.next("lounge.session")).toEqual({
+      t: "lounge.session",
+      name: "Dad",
+      openToChat: false,
+    });
+    const config = await phone.next("config");
+    expect(config.buttons).toEqual([{ index: 0, label: "Mom" }]);
+    // Others see where he is.
+    let m = await mom.next("member.status");
+    while (m.userId !== dad.id || !m.lounge) m = await mom.next("member.status");
+    expect(m).toMatchObject({ online: true, lounge: { deviceId, label: "Lounge" } });
+    const listing = await http("/lounge", { token });
+    expect(listing.json.phones).toEqual([
+      {
+        id: deviceId,
+        name: "Lounge",
+        online: true,
+        session: { userId: dad.id, name: "Dad", since: timers.now },
+      },
+    ]);
+    expect(listing.json.history).toHaveLength(1);
+    expect((await http("/lounge", { token: dadToken })).json.history).toBeUndefined();
+    // Open to chat, from the phone's menu.
+    phone.write({ t: "lounge.chat", open: true });
+    m = await mom.next("member.status");
+    while (!m.lounge?.openToChat) m = await mom.next("member.status");
+    // He calls Mom from the Lounge phone; she sees his name.
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    const { callId } = await phone.nextState("ringing");
+    expect(await mom.next("call.ringing")).toMatchObject({ callId, from: { label: "Dad" } });
+    expect(user.name).toBe("Mom");
+  });
+
+  it("refuses expired, replayed and wrong-key takeovers", async () => {
+    const { dadToken, deviceId, phone, idle } = await lounge();
+    const dadApp = await connectApp(dadToken);
+    // A photo of the code a minute later is useless: the nonce rotated.
+    timers.advance(60_000);
+    const fresh = await phone.next("lounge.idle");
+    expect(fresh.nonce).not.toBe(idle.nonce);
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: idle.nonce });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({
+      step: "failed",
+      reason: "expired",
+    });
+    expect(phone.sent.some((m) => m.t === "lounge.challenge")).toBe(false);
+
+    // Wrong key: fails, and the used nonce can't be replayed.
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: fresh.nonce });
+    await dadApp.next("lounge.progress");
+    const { index } = await phone.next("lounge.challenge");
+    phone.write({ t: "lounge.press", index: (index + 1) % 10 });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({
+      step: "failed",
+      reason: "wrong_key",
+    });
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: fresh.nonce });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({
+      step: "failed",
+      reason: "expired",
+    });
+
+    // Too slow: 30 s to press the key.
+    let latest = phone.sent.filter((m) => m.t === "lounge.idle").at(-1) as { nonce: string };
+    dadApp.write({ t: "lounge.claim", deviceId, nonce: latest.nonce });
+    await dadApp.next("lounge.progress");
+    const late = await phone.next("lounge.challenge");
+    timers.advance(30_000);
+    expect(await dadApp.next("lounge.progress")).toMatchObject({
+      step: "failed",
+      reason: "timeout",
+    });
+    phone.write({ t: "lounge.press", index: late.index });
+    await vi.waitFor(() => expect(phone.sent.some((m) => m.t === "lounge.session")).toBe(false));
+
+    // Unknown phones.
+    latest = phone.sent.filter((m) => m.t === "lounge.idle").at(-1) as { nonce: string };
+    dadApp.write({ t: "lounge.claim", deviceId: "dev_nope", nonce: latest.nonce });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({ reason: "not_found" });
+  });
+
+  it("a second takeover ends the first; log out and leave forget the person", async () => {
+    const { token, dadToken, deviceId, phone, user, idle } = await lounge();
+    const dadApp = await connectApp(dadToken);
+    const mom = await connectApp(token);
+    let nonce = idle.nonce;
+    await takeOver(dadApp, phone, deviceId, nonce);
+    await phone.next("lounge.session");
+    nonce = (phone.sent.filter((m) => m.t === "lounge.idle").at(-1) as { nonce: string }).nonce;
+    await takeOver(mom, phone, deviceId, nonce);
+    expect(await dadApp.next("lounge.progress")).toMatchObject({
+      step: "ended",
+      reason: "replaced",
+    });
+    expect(await phone.next("lounge.ended")).toEqual({ t: "lounge.ended", reason: "replaced" });
+    expect(await phone.next("lounge.session")).toMatchObject({ name: "Mom" });
+
+    // MENU → Log out: the phone is told to forget, and its keys empty.
+    phone.write({ t: "lounge.leave" });
+    expect(await phone.next("lounge.ended")).toEqual({ t: "lounge.ended", reason: "logout" });
+    let config = await phone.next("config");
+    while (config.buttons.length) config = await phone.next("config");
+    expect(await mom.next("lounge.progress")).toMatchObject({ step: "ended", reason: "logout" });
+
+    // Leave from the app.
+    nonce = (phone.sent.filter((m) => m.t === "lounge.idle").at(-1) as { nonce: string }).nonce;
+    await takeOver(dadApp, phone, deviceId, nonce);
+    dadApp.write({ t: "lounge.leave", deviceId });
+    expect(await phone.next("lounge.ended")).toMatchObject({ reason: "left" });
+    const history = (await http("/lounge", { token })).json.history as {
+      userId: string;
+      endReason: string;
+    }[];
+    expect(history.map((h) => h.endReason)).toEqual(["left", "logout", "replaced"]);
+    expect(history[1]?.userId).toBe(user.id);
+  });
+
+  it("ends after the household's idle timeout while hung up, not during a call", async () => {
+    const { token, dadToken, deviceId, phone, idle } = await lounge();
+    expect(
+      (await http("/lounge/settings", { method: "PUT", token, body: { idleMinutes: 5 } })).status,
+    ).toBe(204);
+    expect(
+      (
+        await http("/lounge/settings", {
+          method: "PUT",
+          token: dadToken,
+          body: { idleMinutes: 5 },
+        })
+      ).status,
+    ).toBe(403);
+    const dadApp = await connectApp(dadToken);
+    await takeOver(dadApp, phone, deviceId, idle.nonce);
+    // Handset up for a long time: no timeout.
+    phone.write({ t: "hook", state: "up" });
+    await vi.waitFor(() => expect(phone.sent.some((m) => m.t === "lounge.session")).toBe(true));
+    timers.advance(6 * 60_000);
+    expect(phone.sent.some((m) => m.t === "lounge.ended")).toBe(false);
+    // Hung up: five idle minutes later the session ends.
+    phone.write({ t: "hook", state: "down" });
+    await vi.waitFor(async () => {
+      timers.advance(60_000);
+      expect(phone.sent.some((m) => m.t === "lounge.ended")).toBe(true);
+    });
+    expect(await phone.next("lounge.ended")).toMatchObject({ reason: "idle" });
+    expect(await dadApp.next("lounge.progress")).toMatchObject({ step: "ended", reason: "idle" });
+    expect(token).toBeTruthy();
+  });
+
+  it("routes calls for the person to the Lounge phone they're at, with their permissions", async () => {
+    const { token, dad, dadToken, deviceId, phone, idle, user } = await lounge();
+    // A kids' phone with Dad on key 2 (Dad may call it too).
+    const kid = await pairDevice(token, "Maya");
+    const kidPhone = await connectDevice(kid.deviceId, kid.key.pair);
+    await http(`/devices/${kid.deviceId}/contacts/${dad.id}`, {
+      method: "PUT",
+      token,
+      body: { label: "Daddy", canCallDevice: true, deviceCanCall: true, bypassQuietHours: false },
+    });
+    await http(`/devices/${kid.deviceId}/buttons/1`, {
+      method: "PUT",
+      token,
+      body: { userId: dad.id },
+    });
+    const dadApp = await connectApp(dadToken);
+    await takeOver(dadApp, phone, deviceId, idle.nonce);
+    await phone.next("lounge.session");
+    // His speed-dial: the kids' phone he may call, then the other grown-ups.
+    expect((await phone.next("config")).buttons).toEqual([
+      { index: 0, label: "Maya" },
+      { index: 1, label: "Mom" },
+    ]);
+
+    // Maya presses Daddy: it rings the Lounge phone (and his app); he answers there.
+    kidPhone.write({ t: "hook", state: "up" });
+    kidPhone.write({ t: "button", index: 1 });
+    const { callId } = await kidPhone.nextState("ringing");
+    expect(await phone.next("call.ringing")).toMatchObject({ callId, from: { label: "Maya" } });
+    await dadApp.next("call.ringing");
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "call.answer", callId });
+    await kidPhone.nextState("connecting");
+    kidPhone.write({ t: "call.hangup", callId });
+    await phone.nextState("ended");
+    phone.write({ t: "hook", state: "down" });
+    kidPhone.write({ t: "hook", state: "down" });
+
+    // He calls Maya from the Lounge phone: she sees him as "Daddy" (her allow-list label).
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    const second = await phone.nextState("ringing");
+    expect(await kidPhone.next("call.ringing")).toMatchObject({ from: { label: "Daddy" } });
+    phone.write({ t: "call.hangup", callId: second.callId });
+    await phone.nextState("ended");
+
+    // Without permission to call Maya, the key is gone and dialing it is refused.
+    await http(`/devices/${kid.deviceId}/contacts/${dad.id}`, {
+      method: "PUT",
+      token,
+      body: { label: "Daddy", canCallDevice: false, deviceCanCall: true, bypassQuietHours: false },
+    });
+    let config = await phone.next("config");
+    while (config.buttons.length !== 1) config = await phone.next("config");
+    expect(config.buttons).toEqual([{ index: 0, label: "Mom" }]);
+    phone.write({ t: "button", index: 5 });
+    expect(await phone.nextState("ended")).toMatchObject({ reason: "denied" });
+
+    // Once he logs out, calls for him no longer ring there.
+    phone.write({ t: "hook", state: "down" });
+    phone.write({ t: "lounge.leave" });
+    await phone.next("lounge.ended");
+    const mom = await connectApp(token);
+    mom.write({ t: "call.user", userId: dad.id });
+    await mom.nextState("ringing");
+    await dadApp.next("call.ringing");
+    await vi.waitFor(() =>
+      expect(phone.sent.filter((m) => m.t === "call.ringing")).toHaveLength(1),
+    );
+    expect(user.name).toBe("Mom");
+  });
+
+  it("forgets a person who is removed from the household", async () => {
+    const { token, dad, dadToken, deviceId, phone, idle } = await lounge();
+    const dadApp = await connectApp(dadToken);
+    await takeOver(dadApp, phone, deviceId, idle.nonce);
+    expect((await http(`/users/${dad.id}`, { method: "DELETE", token })).status).toBe(204);
+    expect(await phone.next("lounge.ended")).toMatchObject({ reason: "removed" });
   });
 });

@@ -19,6 +19,8 @@ export function Pair({
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [mine, setMine] = useState(!guardian || defaultMine);
+  /** Empty = keep what the phone was set up as on its first-run screen. */
+  const [kind, setKind] = useState<"" | "kids" | "lounge">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -27,7 +29,7 @@ export function Pair({
     setBusy(true);
     setError(undefined);
     try {
-      await api.pair(code, name.trim(), mine || !guardian);
+      await api.pair(code, name.trim(), mine || !guardian, mine || !kind ? undefined : kind);
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -96,6 +98,18 @@ export function Pair({
             </span>
           </span>
         </label>
+        {guardian && !mine && (
+          <label>
+            Kind of phone
+            <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+              <option value="">As chosen on the phone</option>
+              <option value="kids">Kids phone — its own allow-list and speed-dial</option>
+              <option value="lounge">
+                Lounge phone — shared; people scan it to use it as themselves
+              </option>
+            </select>
+          </label>
+        )}
         {error && (
           <p className="error" role="alert">
             {error}

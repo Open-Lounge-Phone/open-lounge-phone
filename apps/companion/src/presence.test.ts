@@ -29,3 +29,18 @@ describe("person-call end reasons", () => {
     expect(endReasonText("unreachable")).toBe("Phone is offline");
   });
 });
+
+describe("presence at a Lounge phone", () => {
+  it("says where they are and whether they're open to chat", () => {
+    const lounge = { deviceId: "d", label: "Lounge", openToChat: true };
+    expect(presenceOf({ online: true, available: true, lounge })).toEqual({
+      dot: "on",
+      label: "Available · at Lounge · open to chat",
+      callable: true,
+    });
+    expect(
+      presenceOf({ online: true, available: false, lounge: { ...lounge, openToChat: false } })
+        .label,
+    ).toBe("Not taking calls · at Lounge");
+  });
+});

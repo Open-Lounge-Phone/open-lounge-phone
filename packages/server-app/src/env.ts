@@ -45,6 +45,17 @@ export interface ServerEnv {
   saveRooms?(householdId: string, rooms: RoomSnapshot[]): void;
 }
 
+/** Live state of a Lounge phone (kept with its socket so it survives the host sleeping). */
+export interface LoungeInfo {
+  /** Current single-use takeover nonce (in the phone's QR code). */
+  nonce: string;
+  nonceExpiresAt: number;
+  /** Someone scanned the code and must now press the flashing key. */
+  challenge?: { userId: string; name: string; index: number; expiresAt: number; app: string };
+  /** Who is using the phone. Ephemeral: nothing of it stays on the phone afterwards. */
+  session?: { id: string; userId: string; name: string; since: number; openToChat: boolean };
+}
+
 /** Everything needed to rebuild an authenticated connection's peer after the host slept. */
 export interface PeerInfo {
   /** Unique per connection; rooms refer to peers by it. */
@@ -57,6 +68,8 @@ export interface PeerInfo {
   hook?: "up" | "down";
   /** A device that is a person's own phone: their user id. */
   owner?: string;
+  /** Present for Lounge phones. */
+  lounge?: LoungeInfo;
   status?: Extract<DeviceToServer, { t: "status" }>;
   lastQuiet?: boolean;
 }
@@ -91,3 +104,7 @@ export const CloseCode = {
 export const HELLO_TIMEOUT_MS = 10_000;
 export const RING_TIMEOUT_MS = 30_000;
 export const CONNECT_TIMEOUT_MS = 20_000;
+/** A Lounge phone's QR nonce is replaced this often (and after every use). */
+export const LOUNGE_NONCE_TTL_MS = 60_000;
+/** Time to press the flashing key after scanning a Lounge phone's code. */
+export const LOUNGE_PROOF_MS = 30_000;

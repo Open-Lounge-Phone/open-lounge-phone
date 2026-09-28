@@ -241,6 +241,7 @@ export class Gateway implements Coordinator {
             msg.publicKey,
             this.env.now(),
             msg.alg ?? "ed25519",
+            msg.kind,
           );
           if (closed()) return;
           phase.code = code;

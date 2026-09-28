@@ -35,7 +35,12 @@ export interface MenuContext {
   /** Callers with unheard voicemail. */
   missedCount: number;
   fw: string;
+  /** A Lounge phone someone is using: adds "Open to chat" and "Log out". */
+  lounge?: { openToChat: boolean };
 }
+
+/** Something the phone must tell the server (Lounge phone menu items). */
+export type MenuAction = { type: "chat"; open: boolean } | { type: "logout" };
 
 export interface MenuResult {
   /** undefined = menu closed. */
@@ -43,6 +48,7 @@ export interface MenuResult {
   settings: Settings;
   /** Something worth announcing (spoken on phones without a display). */
   say?: string;
+  action?: MenuAction;
 }
 
 export interface MenuView {
@@ -63,6 +69,21 @@ const ROOT_OPTIONS: { digit: number; label: string; screen: MenuScreen; spoken: 
   { digit: 0, label: "About", screen: "about", spoken: "about this phone" },
 ];
 
+/** Lounge-session items on the top menu: 5 toggles "open to chat", 9 logs out. */
+const CHAT_DIGIT = 5;
+const LOGOUT_DIGIT = 9;
+
+function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
+  const labels: Partial<Record<number, string>> = Object.fromEntries(
+    ROOT_OPTIONS.map((o) => [o.digit, o.label]),
+  );
+  if (ctx.lounge) {
+    labels[CHAT_DIGIT] = ctx.lounge.openToChat ? "Chat off" : "Chat on";
+    labels[LOGOUT_DIGIT] = "Log out";
+  }
+  return labels;
+}
+
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 export function menuView(state: MenuState, settings: Settings, ctx: MenuContext): MenuView {
@@ -72,7 +93,7 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
       return {
         ...base,
         title: "MENU",
-        labels: Object.fromEntries(ROOT_OPTIONS.map((o) => [o.digit, o.label])),
+        labels: rootLabels(ctx),
         backLabel: "Close",
       };
     case "volume":
@@ -107,8 +128,12 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
 /** What to say on entering a screen (the whole screen, for phones without a display). */
 export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContext): string {
   switch (state.screen) {
-    case "root":
-      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")} Press back to leave.`;
+    case "root": {
+      const lounge = ctx.lounge
+        ? ` Press ${CHAT_DIGIT} to ${ctx.lounge.openToChat ? "stop being" : "be"} open to chat. Press ${LOGOUT_DIGIT} to log out.`
+        : "";
+      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")}${lounge} Press back to leave.`;
+    }
     case "volume":
       return `Volume ${settings.volume}. Press 1 for quieter, 2 for louder.`;
     case "voicemail":
@@ -159,6 +184,18 @@ export function menuStep(
   const d = event.digit;
   switch (state.screen) {
     case "root": {
+      if (ctx.lounge && d === CHAT_DIGIT) {
+        const open = !ctx.lounge.openToChat;
+        return {
+          state: undefined,
+          settings,
+          say: open ? "You're open to chat." : "You're no longer open to chat.",
+          action: { type: "chat", open },
+        };
+      }
+      if (ctx.lounge && d === LOGOUT_DIGIT) {
+        return { state: undefined, settings, say: "Logged out.", action: { type: "logout" } };
+      }
       const option = ROOT_OPTIONS.find((o) => o.digit === d);
       return option ? enter(option.screen) : { state: touched, settings };
     }

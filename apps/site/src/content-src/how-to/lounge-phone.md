@@ -1,0 +1,50 @@
+---
+title: Lounge phone
+description: A shared phone anyone in the household can use as themselves — scan its code, press the key it flashes, and it forgets you when you're done.
+sidebar:
+  order: 5
+---
+
+A **Lounge phone** is a shared phone — in the living room, a kitchen, a shared house. It has no
+contacts of its own. Anyone in the household picks it up and uses it **as themselves**: it calls
+and is called with exactly their permissions, and forgets them when they're done.
+
+## Set one up
+
+1. Open `<your server>/device/` on an old phone or tablet (or use Lounge hardware later), choose
+   **Add to Home Screen**, open it and pick **Lounge phone**.
+2. A guardian pairs it like any phone ([Pair a phone](/how-to/pair-a-phone/)). The pairing screen
+   can also turn any phone into a Lounge phone (**Kind of phone**).
+
+The idle phone shows a **QR code** on its display. The code changes every minute and after
+every use.
+
+## Use it
+
+1. **Scan the code** with your own phone's camera. It opens the companion app on the
+   **Use this phone** page (sign in first if needed).
+2. Tap **Use this phone**. The phone now **flashes one key** — press it on the phone within
+   30 seconds. This proves you're really there: a photo of the code is useless from anywhere
+   else.
+3. The phone says **Hi &lt;your name&gt;** and puts your speed-dial on its keys: the household
+   phones you're allowed to call, then the other grown-ups (or your own phone's keys, if you have
+   one). Calls to you ring the Lounge phone too.
+
+## Open to chat
+
+Press **MENU**, then **5 Chat on**. Everyone in the household sees that you're at the Lounge
+phone and open to chat, and can call you there. Press it again to turn it off. Whether people can
+call you still follows **Available for calls** in your app.
+
+## Finish
+
+Your session ends — and the phone forgets you completely (name, speed-dial, calls) — when:
+
+- you press **MENU**, then **9 Log out** on the phone, or **Leave** in the app;
+- the phone sits hung up and unused for **10 minutes** (guardians can change this under
+  **Lounge settings** on the Home screen);
+- someone else takes the phone over;
+- the phone goes offline.
+
+The server only records *that* a session happened — who, which phone, when — so guardians can
+see it under **Lounge settings and history**. Nothing about the calls is kept.

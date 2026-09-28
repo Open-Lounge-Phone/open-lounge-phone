@@ -9,6 +9,7 @@ import {
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
+import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 
 const Name = z.string().trim().min(1).max(24);
@@ -113,7 +114,7 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
 }
 
 /** Routes that need a session: people, invites, and managing your passkeys. */
-export function peopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
+export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): void {
   const { store } = env;
 
   api.post("/invites", guardianOnly, async (c) => {
@@ -144,6 +145,10 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
       return c.json({ error: "not found" }, 404);
     if (target.id === me.id) return c.json({ error: "you can't remove yourself" }, 400);
     await store.deleteUser(target.id);
+    // A Lounge phone they were using forgets them now.
+    for (const d of await store.listDevices(me.householdId)) {
+      if (d.kind === "lounge") await live.refreshDevice(me.householdId, d.id);
+    }
     return c.body(null, 204);
   });
 

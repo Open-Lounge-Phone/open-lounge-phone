@@ -11,7 +11,7 @@ your server which household that key belongs to.
 1. **Power the phone** and connect it to the internet (the emulator is already online). No
    hardware yet? Use an old phone or tablet: open `<your server>/device/` in its browser, choose
    **Add to Home Screen**, open it from there and pick **Kids phone** or
-   **Lounge phone**. Tap the big **Lift handset** button in step 2.
+   [**Lounge phone**](/how-to/lounge-phone/). Tap the big **Lift handset** button in step 2.
 2. **Lift the handset.** An unpaired phone reads a six-digit code aloud through the handset
    and, if it has a display, shows it too. The code is valid for 10 minutes.
 3. **In the companion app** (as a guardian) choose **+ Pair a phone**, enter the code and give the

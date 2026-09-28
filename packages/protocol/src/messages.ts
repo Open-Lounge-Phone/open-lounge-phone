@@ -71,11 +71,21 @@ export type KeyAlg = z.infer<typeof KeyAlg>;
 /** base64url lengths of a raw public key per algorithm (32-byte Ed25519, 65-byte SEC1 P-256). */
 export const PUBLIC_KEY_LENGTH: Record<KeyAlg, number> = { ed25519: 43, p256: 87 };
 
+export const PhoneKind = z
+  .enum(["kids", "lounge"])
+  .describe(
+    "`kids` = a household phone with its own allow-list; `lounge` = a shared phone people take over with the companion app.",
+  );
+export type PhoneKind = z.infer<typeof PhoneKind>;
+
 export const PairBegin = z
   .object({
     t: z.literal("pair.begin"),
     ...Ref,
     alg: KeyAlg.optional().describe("Defaults to `ed25519`."),
+    kind: PhoneKind.optional().describe(
+      "What the phone was set up as (first-run choice); the guardian can override it when pairing. Defaults to `kids`.",
+    ),
     publicKey: Base64Url.describe(
       "Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes.",
     ),
@@ -124,6 +134,24 @@ export const Status = z
   })
   .describe("Periodic health report, forwarded to guardians.");
 
+export const LoungePress = z
+  .object({
+    t: z.literal("lounge.press"),
+    ...Ref,
+    index: z.number().int().min(0).max(15),
+  })
+  .describe(
+    "Lounge phone: a key pressed while `lounge.challenge` is showing (proximity proof), as a button index.",
+  );
+
+export const LoungeLeave = z
+  .object({ t: z.literal("lounge.leave"), ...Ref })
+  .describe("Lounge phone: MENU → Log out. Ends the session; the phone forgets everything.");
+
+export const LoungeChat = z
+  .object({ t: z.literal("lounge.chat"), ...Ref, open: z.boolean() })
+  .describe('Lounge phone: the person here toggles "open to chat" (ends with the session).');
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   PairBegin,
@@ -131,6 +159,9 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   Hook,
   Button,
   Status,
+  LoungePress,
+  LoungeLeave,
+  LoungeChat,
   CallAnswer,
   CallHangup,
   RtcSdp,
@@ -219,11 +250,60 @@ export const ErrorMsg = z
 
 export const Pong = z.object({ t: z.literal("pong"), ...Ref }).describe("Keep-alive reply.");
 
+export const LoungeIdle = z
+  .object({
+    t: z.literal("lounge.idle"),
+    ...Ref,
+    nonce: Base64Url.min(16).max(64),
+    expiresAt: EpochMs,
+  })
+  .describe(
+    "Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; replaced every minute and after each use.",
+  );
+
+export const LoungeChallenge = z
+  .object({
+    t: z.literal("lounge.challenge"),
+    ...Ref,
+    index: z.number().int().min(0).max(15).describe("Button index of the key to flash."),
+    expiresAt: EpochMs,
+  })
+  .describe(
+    "Lounge phone: someone scanned the code. Flash this key; they must press it on the phone before `expiresAt`.",
+  );
+
+export const LoungeSession = z
+  .object({
+    t: z.literal("lounge.session"),
+    ...Ref,
+    name: z.string().min(1).max(24),
+    openToChat: z.boolean(),
+  })
+  .describe(
+    'Lounge phone: taken over by `name` (show "Hi <name>"). Their speed-dial arrives as `config`.',
+  );
+
+export const LoungeReason = z
+  .enum(["logout", "left", "idle", "replaced", "removed", "offline"])
+  .describe(
+    "`logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = idle timeout; `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected.",
+  );
+
+export const LoungeEnded = z
+  .object({ t: z.literal("lounge.ended"), ...Ref, reason: LoungeReason })
+  .describe(
+    "Lounge phone: the session is over. Forget everything about the person (names, speed-dial, call history) and show the takeover code again.",
+  );
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
   PairDone,
   Config,
+  LoungeIdle,
+  LoungeChallenge,
+  LoungeSession,
+  LoungeEnded,
   CallRinging,
   CallStateMsg,
   RtcConfig,
@@ -261,11 +341,28 @@ export const PresenceSet = z
   .object({ t: z.literal("presence.set"), ...Ref, available: z.boolean() })
   .describe("Whether this person is taking app-to-app calls (persisted).");
 
+export const LoungeClaim = z
+  .object({
+    t: z.literal("lounge.claim"),
+    ...Ref,
+    deviceId: Id,
+    nonce: Base64Url.min(16).max(64),
+  })
+  .describe(
+    "Use a Lounge phone as yourself: `deviceId` and `nonce` from its QR code. The phone then asks for the key proof.",
+  );
+
+export const LoungeAppLeave = z
+  .object({ t: z.literal("lounge.leave"), ...Ref, deviceId: Id })
+  .describe("End your session on a Lounge phone (guardians can end anyone's).");
+
 export const AppToServer = z.discriminatedUnion("t", [
   AppHello,
   CallDial,
   CallUser,
   PresenceSet,
+  LoungeClaim,
+  LoungeAppLeave,
   CallAnswer,
   CallHangup,
   RtcSdp,
@@ -288,6 +385,10 @@ export const DeviceStatus = z
     rssi: Status.shape.rssi,
     power: Status.shape.power,
     lastSeen: EpochMs,
+    lounge: z
+      .object({ userId: Id, name: z.string().min(1).max(24), since: EpochMs })
+      .optional()
+      .describe("Lounge phone: who is using it right now."),
   })
   .describe("Presence and health of a device in the guardian's household.");
 
@@ -308,11 +409,30 @@ export const MemberStatus = z
     userId: Id,
     online: z.boolean().describe("Has at least one open companion session."),
     available: z.boolean().describe("Taking app-to-app calls."),
+    lounge: z
+      .object({ deviceId: Id, label: z.string().min(1).max(24), openToChat: z.boolean() })
+      .optional()
+      .describe("At a Lounge phone (calls to them ring there)."),
   })
   .describe("Presence of another member of the server; sent on connect and on every change.");
 
+export const LoungeProgress = z
+  .object({
+    t: z.literal("lounge.progress"),
+    ...Ref,
+    deviceId: Id,
+    step: z.enum(["press_key", "started", "failed", "ended"]),
+    reason: z
+      .union([z.enum(["expired", "wrong_key", "timeout", "busy", "not_found"]), LoungeReason])
+      .optional()
+      .describe("Why a claim `failed` or a session `ended`."),
+    expiresAt: EpochMs.optional().describe("With `press_key`: when the key proof runs out."),
+  })
+  .describe("Progress of your takeover of a Lounge phone, and the end of your session there.");
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
+  LoungeProgress,
   MemberStatus,
   DeviceStatus,
   VoicemailNew,

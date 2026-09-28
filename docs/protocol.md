@@ -41,6 +41,7 @@ Unpaired device asks for a pairing code to show on its display.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `alg` | `"ed25519"` \| `"p256"` |  | Defaults to `ed25519`. |
+| `kind` | `"kids"` \| `"lounge"` |  | What the phone was set up as (first-run choice); the guardian can override it when pairing. Defaults to `kids`. |
 | `publicKey` | string | yes | Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes. |
 
 ### `auth.proof`
@@ -81,6 +82,32 @@ Periodic health report, forwarded to guardians.
 | `rssi` | integer |  | Wi-Fi signal strength in dBm. |
 | `uptimeS` | integer (≥0) |  |  |
 | `power` | { source: `"default"` \| `"1.5A"` \| `"3A"`, reduced: boolean } |  | USB power source; the Lounge phone needs a ≥1.5 A source for full features. |
+
+### `lounge.press`
+
+Lounge phone: a key pressed while `lounge.challenge` is showing (proximity proof), as a button index.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `index` | integer (≥0, ≤15) | yes |  |
+
+### `lounge.leave`
+
+Lounge phone: MENU → Log out. Ends the session; the phone forgets everything.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
+### `lounge.chat`
+
+Lounge phone: the person here toggles "open to chat" (ends with the session).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `open` | boolean | yes |  |
 
 ### `call.answer`
 
@@ -173,6 +200,45 @@ Sent after authentication and whenever guardians change settings.
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
+
+### `lounge.idle`
+
+Lounge phone: current takeover nonce. Show a QR code for `<server>/lounge#<deviceId>.<nonce>`. Single use; replaced every minute and after each use.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `nonce` | string (len ≥16, len ≤64) | yes |  |
+| `expiresAt` | integer (≥0) | yes |  |
+
+### `lounge.challenge`
+
+Lounge phone: someone scanned the code. Flash this key; they must press it on the phone before `expiresAt`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `index` | integer (≥0, ≤15) | yes | Button index of the key to flash. |
+| `expiresAt` | integer (≥0) | yes |  |
+
+### `lounge.session`
+
+Lounge phone: taken over by `name` (show "Hi <name>"). Their speed-dial arrives as `config`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `name` | string (len ≤24) | yes |  |
+| `openToChat` | boolean | yes |  |
+
+### `lounge.ended`
+
+Lounge phone: the session is over. Forget everything about the person (names, speed-dial, call history) and show the takeover code again.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `reason` | `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` | yes | `logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = idle timeout; `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected. |
 
 ### `call.ringing`
 
@@ -286,6 +352,25 @@ Whether this person is taking app-to-app calls (persisted).
 | `id` | string (len ≤64) |  |  |
 | `available` | boolean | yes |  |
 
+### `lounge.claim`
+
+Use a Lounge phone as yourself: `deviceId` and `nonce` from its QR code. The phone then asks for the key proof.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `deviceId` | string (len ≤64) | yes |  |
+| `nonce` | string (len ≥16, len ≤64) | yes |  |
+
+### `lounge.leave`
+
+End your session on a Lounge phone (guardians can end anyone's).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `deviceId` | string (len ≤64) | yes |  |
+
 ### `call.answer`
 
 Accept an incoming call.
@@ -346,6 +431,18 @@ Companion app authenticated.
 | `id` | string (len ≤64) |  |  |
 | `userId` | string (len ≤64) | yes |  |
 
+### `lounge.progress`
+
+Progress of your takeover of a Lounge phone, and the end of your session there.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `deviceId` | string (len ≤64) | yes |  |
+| `step` | `"press_key"` \| `"started"` \| `"failed"` \| `"ended"` | yes |  |
+| `reason` | `"expired"` \| `"wrong_key"` \| `"timeout"` \| `"busy"` \| `"not_found"` \| `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` |  | Why a claim `failed` or a session `ended`. |
+| `expiresAt` | integer (≥0) |  | With `press_key`: when the key proof runs out. |
+
 ### `member.status`
 
 Presence of another member of the server; sent on connect and on every change.
@@ -356,6 +453,7 @@ Presence of another member of the server; sent on connect and on every change.
 | `userId` | string (len ≤64) | yes |  |
 | `online` | boolean | yes | Has at least one open companion session. |
 | `available` | boolean | yes | Taking app-to-app calls. |
+| `lounge` | { deviceId: string (len ≤64), label: string (len ≤24), openToChat: boolean } |  | At a Lounge phone (calls to them ring there). |
 
 ### `device.status`
 
@@ -370,6 +468,7 @@ Presence and health of a device in the guardian's household.
 | `rssi` | integer |  | Wi-Fi signal strength in dBm. |
 | `power` | { source: `"default"` \| `"1.5A"` \| `"3A"`, reduced: boolean } |  | USB power source; the Lounge phone needs a ≥1.5 A source for full features. |
 | `lastSeen` | integer (≥0) | yes |  |
+| `lounge` | { userId: string (len ≤64), name: string (len ≤24), since: integer (≥0) } |  | Lounge phone: who is using it right now. |
 
 ### `voicemail.new`
 

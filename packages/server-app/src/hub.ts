@@ -11,16 +11,19 @@ import {
   roomStep,
 } from "@openloungephone/core";
 import { type Device, newId, type User } from "@openloungephone/db";
-import type {
-  AppToServer,
-  DeviceToServer,
-  EndReason,
-  ServerToApp,
+import {
+  type AppToServer,
+  type DeviceToServer,
+  type EndReason,
+  type ServerToApp,
+  toBase64Url,
 } from "@openloungephone/protocol";
 import {
   CloseCode,
   CONNECT_TIMEOUT_MS,
   type Conn,
+  LOUNGE_NONCE_TTL_MS,
+  LOUNGE_PROOF_MS,
   type PeerInfo,
   RING_TIMEOUT_MS,
   type RoomSnapshot,
@@ -40,6 +43,30 @@ interface DevicePeer extends Peer {
 }
 
 const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
+
+type LoungeEndReason = "logout" | "left" | "idle" | "replaced" | "removed" | "offline";
+type LoungeFail = "expired" | "wrong_key" | "timeout" | "busy" | "not_found";
+
+/** Something on a Lounge phone's speed-dial while a person uses it. */
+interface LoungeEntry {
+  kind: "user" | "device";
+  id: string;
+  label: string;
+}
+
+/**
+ * The person a phone stands for: whoever is using a Lounge phone right now, or the owner of a
+ * personal phone. Calls to that person ring the phone; household phones stand for nobody.
+ */
+const personOf = (d: PeerInfo): string | undefined => d.lounge?.session?.userId ?? d.owner;
+
+/** A random key (button index 0–9) for the proximity proof. */
+function randomKey(): number {
+  const b = new Uint8Array(1);
+  do crypto.getRandomValues(b);
+  while ((b[0] as number) >= 250);
+  return (b[0] as number) % 10;
+}
 
 interface Room {
   id: string;
@@ -67,6 +94,11 @@ export class HouseholdHub {
   private queue: Promise<unknown> = Promise.resolve();
   private cancelQuietTimer?: () => void;
   private roomsDirty = false;
+  /** Lounge phones' nonce rotation, key-proof and idle timers, by device id. */
+  private readonly loungeTimers = new Map<
+    string,
+    { rotate?: () => void; proof?: () => void; idle?: () => void }
+  >();
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -146,6 +178,7 @@ export class HouseholdHub {
     }
     this.roomsDirty = true;
     this.flushRooms();
+    for (const d of this.devices.values()) if (d.lounge) this.rearmLounge(d);
     return peers;
   }
 
@@ -169,11 +202,16 @@ export class HouseholdHub {
         guardian: false,
         hook: "down",
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
+        ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
       };
+      // A session never outlives the connection it was made on.
+      if (peer.lounge)
+        await this.env.store.endOpenLoungeSessions(device.id, "offline", this.env.now());
       const wasOnline = device.ownerUserId ? this.userOnline(device.ownerUserId) : true;
       this.devices.set(device.id, peer);
       await this.sendConfig(peer, true);
       this.remember(peer);
+      if (peer.lounge) this.rotateNonce(peer);
       this.broadcastStatus(peer, true);
       if (device.ownerUserId && !wasOnline) await this.announceMember(device.ownerUserId);
       await this.scheduleQuietCheck();
@@ -203,16 +241,12 @@ export class HouseholdHub {
       const available = await this.env.store.availability(this.householdId);
       for (const [userId, avail] of available) {
         if (userId === user.id) continue;
-        conn.send({
-          t: "member.status",
-          userId,
-          online: this.userOnline(userId),
-          available: avail,
-        });
+        conn.send(this.memberMessage(userId, avail));
       }
-      if (cameOnline) this.broadcastMember(user.id, true, available.get(user.id) ?? true);
+      if (cameOnline) this.broadcastMember(user.id, available.get(user.id) ?? true);
       for (const d of await this.env.store.listDevices(this.householdId)) {
-        if (!peer.guardian && d.ownerUserId !== user.id) continue;
+        // Everyone sees the Lounge phones (and who is at them).
+        if (!peer.guardian && d.ownerUserId !== user.id && d.kind !== "lounge") continue;
         const live = this.devices.get(d.id);
         conn.send(this.statusMessage(d.id, live, d.lastSeen ?? 0));
       }
@@ -228,6 +262,13 @@ export class HouseholdHub {
     if (peer.kind === "device") {
       if (this.devices.get(peer.id) !== peer) return;
       this.devices.delete(peer.id);
+      this.clearLoungeTimers(peer.id);
+      const session = peer.lounge?.session;
+      if (session) {
+        void this.env.store.endLoungeSession(session.id, "offline", this.env.now());
+        this.tellUser(session.userId, peer.id, "offline");
+        void this.announceMember(session.userId);
+      }
       if (peer.owner && !this.userOnline(peer.owner)) void this.announceMember(peer.owner);
       this.broadcastStatus(peer as DevicePeer, false);
       if (this.devices.size === 0) this.cancelQuietCheck();
@@ -265,9 +306,23 @@ export class HouseholdHub {
         case "hook":
           device.hook = msg.state;
           this.remember(device);
+          if (device.lounge) await this.touchIdle(device);
           return;
         case "button":
           return this.deviceDial(device, msg.index);
+        case "lounge.press":
+          return this.loungePress(device, msg.index);
+        case "lounge.leave":
+          return this.endLoungeSession(device, "logout");
+        case "lounge.chat": {
+          const session = device.lounge?.session;
+          if (!session) return;
+          session.openToChat = msg.open;
+          this.remember(device);
+          device.conn.send({ t: "lounge.session", name: session.name, openToChat: msg.open });
+          await this.announceMember(session.userId);
+          return;
+        }
         case "status":
           device.status = msg;
           this.remember(device);
@@ -302,8 +357,20 @@ export class HouseholdHub {
           return this.userDial(peer, msg.userId);
         case "presence.set":
           await this.env.store.setAvailable(peer.id, msg.available);
-          this.broadcastMember(peer.id, this.apps.has(peer.id), msg.available);
+          this.broadcastMember(peer.id, msg.available);
           return;
+        case "lounge.claim":
+          return this.loungeClaim(peer, msg.deviceId, msg.nonce);
+        case "lounge.leave": {
+          const device = this.devices.get(msg.deviceId);
+          const session = device?.lounge?.session;
+          // Your own session, or (guardians) anyone's.
+          if (!device || !session || (session.userId !== peer.id && !peer.guardian)) {
+            peer.conn.send({ t: "error", code: "not_found", message: "no such session" });
+            return;
+          }
+          return this.endLoungeSession(device, "left");
+        }
         case "ping":
           peer.conn.send({ t: "pong" });
           return;
@@ -341,6 +408,10 @@ export class HouseholdHub {
       if (!peer) return;
       // Name or owner may have changed (e.g. "make this my phone").
       const device = await this.env.store.getDevice(deviceId);
+      const session = peer.lounge?.session;
+      if (session && !(await this.env.store.getUser(session.userId))) {
+        await this.endLoungeSession(peer, "removed");
+      }
       if (device) {
         const before = peer.owner;
         peer.label = device.name;
@@ -354,6 +425,10 @@ export class HouseholdHub {
       }
       await this.sendConfig(peer, true);
       await this.scheduleQuietCheck();
+      // Permissions changed: people on Lounge phones may have gained or lost a key.
+      for (const d of this.devices.values()) {
+        if (d !== peer && d.lounge?.session) await this.sendConfig(d, true);
+      }
     });
   }
 
@@ -390,6 +465,7 @@ export class HouseholdHub {
 
   private async deviceDial(device: DevicePeer, index: number): Promise<void> {
     if (this.busy(device.key)) return;
+    if (device.lounge) return this.loungeDial(device, index);
     const { store } = this.env;
     const [buttons, contacts, schedule] = await Promise.all([
       store.listButtons(device.id),
@@ -413,15 +489,23 @@ export class HouseholdHub {
     }
   }
 
-  private async appDial(user: Peer, deviceId: string): Promise<void> {
+  /**
+   * `user` calls a household phone. From a Lounge phone, `user` is the phone and `as` the person
+   * using it: the call is allowed exactly when that person could make it from their app.
+   */
+  private async appDial(
+    user: Peer,
+    deviceId: string,
+    as: { id: string; label: string } = user,
+  ): Promise<void> {
     const { store } = this.env;
     const device = await store.getDevice(deviceId);
-    if (!device || device.householdId !== this.householdId) {
+    if (!device || device.householdId !== this.householdId || deviceId === user.id) {
       user.conn.send({ t: "error", code: "not_found", message: "no such device" });
       return;
     }
     const [contact, schedule] = await Promise.all([
-      store.getContact(deviceId, user.id),
+      store.getContact(deviceId, as.id),
       device.ownerUserId
         ? store.getSchedule(this.householdId).then((q) => ({ ...q, rules: [] }))
         : store.getSchedule(this.householdId),
@@ -449,8 +533,12 @@ export class HouseholdHub {
    * Grown-up, app-to-app call between two members of this server. Refused unless the callee
    * has an open session and is taking calls; never rings a busy person.
    */
-  private async userDial(caller: Peer, userId: string): Promise<void> {
-    if (userId === caller.id) {
+  private async userDial(
+    caller: Peer,
+    userId: string,
+    as: { id: string; label: string } = caller,
+  ): Promise<void> {
+    if (userId === as.id) {
       caller.conn.send({ t: "error", code: "bad_message", message: "you can't call yourself" });
       return;
     }
@@ -468,14 +556,14 @@ export class HouseholdHub {
     const room = this.openRoom(caller, userKey(userId));
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     for (const t of targets) {
-      t.conn.send({ t: "call.ringing", callId: room.id, from: { label: caller.label } });
+      t.conn.send({ t: "call.ringing", callId: room.id, from: { label: as.label } });
     }
   }
 
   /** Where a person can be rung right now: open app sessions + own phones that are hung up. */
   private reachable(userId: string, except?: Peer): Peer[] {
     const phones = [...this.devices.values()].filter(
-      (d) => d.owner === userId && d !== except && d.hook === "down" && !this.busy(d.key),
+      (d) => personOf(d) === userId && d !== except && d.hook === "down" && !this.busy(d.key),
     );
     return [...(this.apps.get(userId) ?? []), ...phones];
   }
@@ -487,11 +575,35 @@ export class HouseholdHub {
   }
 
   /** Presence of one member, to every other connected member. */
-  private broadcastMember(userId: string, online: boolean, available: boolean): void {
+  private broadcastMember(userId: string, available: boolean): void {
+    const msg = this.memberMessage(userId, available);
     for (const [id, set] of this.apps) {
       if (id === userId) continue;
-      for (const app of set) app.conn.send({ t: "member.status", userId, online, available });
+      for (const app of set) app.conn.send(msg);
     }
+  }
+
+  private memberMessage(
+    userId: string,
+    available: boolean,
+  ): Extract<ServerToApp, { t: "member.status" }> {
+    const lounge = this.loungeOf(userId);
+    return {
+      t: "member.status",
+      userId,
+      online: this.userOnline(userId),
+      available,
+      ...(lounge ? { lounge } : {}),
+    };
+  }
+
+  /** The Lounge phone a person is using, if any. */
+  private loungeOf(userId: string) {
+    for (const d of this.devices.values()) {
+      const s = d.lounge?.session;
+      if (s?.userId === userId) return { deviceId: d.id, label: d.label, openToChat: s.openToChat };
+    }
+    return undefined;
   }
 
   private openRoom(caller: Peer, calleeKey: string): Room {
@@ -516,10 +628,10 @@ export class HouseholdHub {
 
   /** A person's calls ring their open app sessions and their own phones. */
   private answersFor(peer: Peer, calleeKey: string): boolean {
-    return (
-      peer.key === calleeKey ||
-      (peer.kind === "device" && !!peer.owner && userKey(peer.owner) === calleeKey)
-    );
+    if (peer.key === calleeKey) return true;
+    if (peer.kind !== "device") return false;
+    const person = personOf(peer);
+    return !!person && userKey(person) === calleeKey;
   }
 
   /** Everything currently ringing for an unanswered call. */
@@ -528,18 +640,18 @@ export class HouseholdHub {
     const key = room.state.callee;
     if (!key.startsWith("usr:")) return [];
     const userId = idOf(key);
-    const phones = [...this.devices.values()].filter((d) => d.owner === userId);
+    const phones = [...this.devices.values()].filter((d) => personOf(d) === userId);
     return [...(this.apps.get(userId) ?? []), ...phones];
   }
 
-  /** Online = an open companion session or a connected personal phone. */
+  /** Online = an open companion session, a connected personal phone, or a Lounge phone. */
   private userOnline(userId: string): boolean {
-    return this.apps.has(userId) || [...this.devices.values()].some((d) => d.owner === userId);
+    return this.apps.has(userId) || [...this.devices.values()].some((d) => personOf(d) === userId);
   }
 
   private async announceMember(userId: string): Promise<void> {
     const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
-    this.broadcastMember(userId, this.userOnline(userId), available);
+    this.broadcastMember(userId, available);
   }
 
   private async callMessage(
@@ -624,6 +736,10 @@ export class HouseholdHub {
         for (const p of [...both, ...ringing]) {
           p.conn.send({ t: "call.state", callId: room.id, state: "ended", reason });
         }
+        for (const p of both) {
+          const d = this.devices.get(p.id);
+          if (d === p && d.lounge) await this.touchIdle(d);
+        }
         return;
       }
       default:
@@ -635,6 +751,18 @@ export class HouseholdHub {
 
   private async sendConfig(peer: DevicePeer, force: boolean): Promise<void> {
     const { store } = this.env;
+    if (peer.lounge) {
+      // Only the person using it: their speed-dial. Nobody there: nothing at all.
+      if (!force) return;
+      const session = peer.lounge.session;
+      const dir = session ? await this.loungeDirectory(session.userId) : new Map();
+      peer.conn.send({
+        t: "config",
+        buttons: [...dir].map(([index, e]) => ({ index, label: e.label })),
+        quiet: false,
+      });
+      return;
+    }
     const [buttons, contacts, schedule, missed] = await Promise.all([
       store.listButtons(peer.id),
       store.listContacts(peer.id),
@@ -709,15 +837,295 @@ export class HouseholdHub {
       ...(peer?.status?.battery ? { battery: peer.status.battery } : {}),
       ...(peer?.status?.rssi !== undefined ? { rssi: peer.status.rssi } : {}),
       ...(peer?.status?.power ? { power: peer.status.power } : {}),
+      ...(peer?.lounge?.session
+        ? {
+            lounge: {
+              userId: peer.lounge.session.userId,
+              name: peer.lounge.session.name,
+              since: peer.lounge.session.since,
+            },
+          }
+        : {}),
     };
   }
 
-  /** Phone status goes to guardians (all phones) and to a personal phone's owner. */
+  /** Phone status goes to guardians (all phones), a personal phone's owner, and for Lounge
+   * phones to everyone. */
   private broadcastStatus(peer: DevicePeer, online: boolean): void {
     const msg = this.statusMessage(peer.id, online ? peer : undefined, this.env.now());
     for (const set of this.apps.values()) {
-      for (const app of set) if (app.guardian || app.id === peer.owner) app.conn.send(msg);
+      for (const app of set) {
+        if (app.guardian || app.id === peer.owner || peer.lounge) app.conn.send(msg);
+      }
     }
+  }
+
+  // --- Lounge phones ------------------------------------------------------------------
+  //
+  // Takeover: the idle phone shows a QR code with a single-use nonce (replaced every minute and
+  // after every use). A member scans it in the companion and sends `lounge.claim`; the phone
+  // then flashes a random key that must be pressed on the phone within 30 s, so a photographed
+  // code is useless from afar. The phone then stands for that person — it calls and is called
+  // with exactly their permissions — until they log out or leave, it sits idle while hung up, a
+  // new takeover starts, or it disconnects. Only the fact that a session happened is stored.
+
+  private timers(deviceId: string) {
+    let t = this.loungeTimers.get(deviceId);
+    if (!t) {
+      t = {};
+      this.loungeTimers.set(deviceId, t);
+    }
+    return t;
+  }
+
+  private clearLoungeTimers(deviceId: string): void {
+    const t = this.loungeTimers.get(deviceId);
+    t?.rotate?.();
+    t?.proof?.();
+    t?.idle?.();
+    this.loungeTimers.delete(deviceId);
+  }
+
+  /** A live Lounge phone peer, or undefined if it went away meanwhile. */
+  private liveLounge(device: DevicePeer): DevicePeer | undefined {
+    return this.devices.get(device.id) === device && device.lounge ? device : undefined;
+  }
+
+  /** Issues a fresh takeover nonce and schedules the next one. */
+  private rotateNonce(device: DevicePeer): void {
+    const lounge = device.lounge;
+    if (!lounge) return;
+    lounge.nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+    lounge.nonceExpiresAt = this.env.now() + LOUNGE_NONCE_TTL_MS;
+    this.remember(device);
+    device.conn.send({ t: "lounge.idle", nonce: lounge.nonce, expiresAt: lounge.nonceExpiresAt });
+    this.armRotate(device, LOUNGE_NONCE_TTL_MS);
+  }
+
+  private armRotate(device: DevicePeer, ms: number): void {
+    const t = this.timers(device.id);
+    t.rotate?.();
+    t.rotate = this.env.setTimer(
+      () =>
+        void this.run(() => {
+          const d = this.liveLounge(device);
+          if (d) this.rotateNonce(d);
+        }),
+      Math.max(0, ms),
+    );
+  }
+
+  /** After the host slept: timers are gone, the state came back from the socket memo. */
+  private rearmLounge(device: DevicePeer): void {
+    const now = this.env.now();
+    this.armRotate(device, (device.lounge?.nonceExpiresAt ?? now) - now);
+    const challenge = device.lounge?.challenge;
+    if (challenge) this.armProof(device, challenge.expiresAt - now);
+    void this.touchIdle(device);
+  }
+
+  private armProof(device: DevicePeer, ms: number): void {
+    const t = this.timers(device.id);
+    t.proof?.();
+    t.proof = this.env.setTimer(
+      () =>
+        void this.run(() => {
+          const d = this.liveLounge(device);
+          if (d) this.failChallenge(d, "timeout");
+        }),
+      Math.max(0, ms),
+    );
+  }
+
+  private appSession(session: string): Peer | undefined {
+    for (const set of this.apps.values()) for (const p of set) if (p.session === session) return p;
+    return undefined;
+  }
+
+  /** Tells every open session of a person that their Lounge session ended. */
+  private tellUser(userId: string, deviceId: string, reason: LoungeEndReason): void {
+    for (const app of this.apps.get(userId) ?? []) {
+      app.conn.send({ t: "lounge.progress", deviceId, step: "ended", reason });
+    }
+  }
+
+  private async loungeClaim(app: Peer, deviceId: string, nonce: string): Promise<void> {
+    const fail = (reason: LoungeFail) =>
+      app.conn.send({ t: "lounge.progress", deviceId, step: "failed", reason });
+    const device = this.devices.get(deviceId);
+    const lounge = device?.lounge;
+    if (!device || !lounge) return fail("not_found");
+    if (nonce !== lounge.nonce || this.env.now() >= lounge.nonceExpiresAt) return fail("expired");
+    // Single use: the code in any photo of the phone is dead from here on.
+    this.rotateNonce(device);
+    if (this.busy(device.key)) return fail("busy");
+    const earlier = lounge.challenge;
+    if (earlier)
+      this.appSession(earlier.app)?.conn.send({
+        t: "lounge.progress",
+        deviceId,
+        step: "failed",
+        reason: "timeout",
+      });
+    const expiresAt = this.env.now() + LOUNGE_PROOF_MS;
+    lounge.challenge = {
+      userId: app.id,
+      name: app.label,
+      index: randomKey(),
+      expiresAt,
+      app: app.session,
+    };
+    this.remember(device);
+    device.conn.send({ t: "lounge.challenge", index: lounge.challenge.index, expiresAt });
+    app.conn.send({ t: "lounge.progress", deviceId, step: "press_key", expiresAt });
+    this.armProof(device, LOUNGE_PROOF_MS);
+  }
+
+  private failChallenge(device: DevicePeer, reason: LoungeFail): void {
+    const lounge = device.lounge;
+    const challenge = lounge?.challenge;
+    if (!lounge || !challenge) return;
+    delete lounge.challenge;
+    this.timers(device.id).proof?.();
+    this.appSession(challenge.app)?.conn.send({
+      t: "lounge.progress",
+      deviceId: device.id,
+      step: "failed",
+      reason,
+    });
+    // Back to the code (a fresh one: the scanned nonce was used up).
+    this.rotateNonce(device);
+  }
+
+  private async loungePress(device: DevicePeer, index: number): Promise<void> {
+    const challenge = device.lounge?.challenge;
+    if (!challenge) return;
+    if (this.env.now() >= challenge.expiresAt) return this.failChallenge(device, "timeout");
+    if (index !== challenge.index) return this.failChallenge(device, "wrong_key");
+    delete device.lounge?.challenge;
+    this.timers(device.id).proof?.();
+    const user = await this.env.store.getUser(challenge.userId);
+    if (!user || user.householdId !== this.householdId) return this.rotateNonce(device);
+    await this.startLoungeSession(device, user, challenge.app);
+  }
+
+  private async startLoungeSession(device: DevicePeer, user: User, appSession: string) {
+    const lounge = device.lounge;
+    if (!lounge) return;
+    // A new takeover ends the current session, and a person is at one Lounge phone at a time.
+    if (lounge.session) await this.endLoungeSession(device, "replaced");
+    for (const other of this.devices.values()) {
+      if (other.lounge?.session?.userId === user.id) await this.endLoungeSession(other, "replaced");
+    }
+    const now = this.env.now();
+    const id = await this.env.store.startLoungeSession(
+      { householdId: this.householdId, deviceId: device.id, userId: user.id },
+      now,
+    );
+    lounge.session = { id, userId: user.id, name: user.name, since: now, openToChat: false };
+    this.remember(device);
+    device.conn.send({ t: "lounge.session", name: user.name, openToChat: false });
+    await this.sendConfig(device, true);
+    for (const app of this.apps.get(user.id) ?? []) {
+      app.conn.send({ t: "lounge.progress", deviceId: device.id, step: "started" });
+    }
+    if (!this.appSession(appSession)) this.env.log("info", "lounge claimant went away");
+    await this.announceMember(user.id);
+    this.broadcastStatus(device, true);
+    await this.touchIdle(device);
+  }
+
+  /** Ends the session: calls on the phone end, and the phone forgets the person. */
+  private async endLoungeSession(device: DevicePeer, reason: LoungeEndReason): Promise<void> {
+    const lounge = device.lounge;
+    const session = lounge?.session;
+    if (!lounge || !session) return;
+    delete lounge.session;
+    this.timers(device.id).idle?.();
+    this.remember(device);
+    await this.env.store.endLoungeSession(session.id, reason, this.env.now());
+    for (const room of [...this.rooms.values()]) {
+      if (room.caller === device) await this.apply(room, { type: "hangup", by: room.state.caller });
+      else if (room.calleePeer === device) {
+        await this.apply(room, { type: "hangup", by: room.state.callee });
+      } else if (!room.calleePeer && room.state.callee === userKey(session.userId)) {
+        // Was ringing here for the person; it keeps ringing their other sessions.
+        device.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+      }
+    }
+    device.conn.send({ t: "lounge.ended", reason });
+    await this.sendConfig(device, true);
+    this.rotateNonce(device);
+    this.tellUser(session.userId, device.id, reason);
+    await this.announceMember(session.userId);
+    this.broadcastStatus(device, true);
+  }
+
+  /** Restarts the idle clock: it runs only while the phone is hung up and not in a call. */
+  private async touchIdle(device: DevicePeer): Promise<void> {
+    const t = this.timers(device.id);
+    t.idle?.();
+    t.idle = undefined;
+    const session = device.lounge?.session;
+    if (!session || device.hook === "up" || this.busy(device.key)) return;
+    const minutes = await this.env.store.loungeIdleMinutes(this.householdId);
+    t.idle = this.env.setTimer(
+      () =>
+        void this.run(async () => {
+          const d = this.liveLounge(device);
+          if (!d || d.lounge?.session?.id !== session.id) return;
+          if (d.hook === "up" || this.busy(d.key)) return;
+          await this.endLoungeSession(d, "idle");
+        }),
+      minutes * 60_000,
+    );
+  }
+
+  private async loungeDial(device: DevicePeer, index: number): Promise<void> {
+    const session = device.lounge?.session;
+    if (!session) return this.refuse(device, "denied");
+    const entry = (await this.loungeDirectory(session.userId)).get(index);
+    if (!entry) return this.refuse(device, "denied");
+    const as = { id: session.userId, label: session.name };
+    if (entry.kind === "device") return this.appDial(device, entry.id, as);
+    return this.userDial(device, entry.id, as);
+  }
+
+  /**
+   * A person's speed-dial on a Lounge phone: their own phone's keys if they have one, otherwise
+   * the household phones they may call, then the other members. Button index → entry.
+   */
+  private async loungeDirectory(userId: string): Promise<Map<number, LoungeEntry>> {
+    const { store } = this.env;
+    const out = new Map<number, LoungeEntry>();
+    const devices = await store.listDevices(this.householdId);
+    const own = devices.find((d) => d.ownerUserId === userId);
+    if (own) {
+      const [buttons, contacts] = await Promise.all([
+        store.listButtons(own.id),
+        store.listContacts(own.id),
+      ]);
+      const byId = new Map(contacts.map((c) => [c.id, c]));
+      for (const [index, id] of buttons) {
+        const c = byId.get(id);
+        if (c?.deviceCanCall && id !== userId && index < 10) {
+          out.set(index, { kind: "user", id, label: c.label });
+        }
+      }
+      return out;
+    }
+    const entries: LoungeEntry[] = [];
+    for (const d of devices) {
+      if (d.ownerUserId || d.kind === "lounge") continue;
+      if ((await store.getContact(d.id, userId))?.canCallDevice) {
+        entries.push({ kind: "device", id: d.id, label: d.name });
+      }
+    }
+    for (const u of await store.listUsers(this.householdId)) {
+      if (u.id !== userId) entries.push({ kind: "user", id: u.id, label: u.name });
+    }
+    for (const [i, e] of entries.slice(0, 10).entries()) out.set(i, e);
+    return out;
   }
 }
 

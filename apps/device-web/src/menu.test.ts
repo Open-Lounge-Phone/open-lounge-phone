@@ -127,3 +127,32 @@ describe("menuView / menuLines", () => {
     }
   });
 });
+
+describe("Lounge session menu", () => {
+  const lounge = (openToChat: boolean) => ({ ...ctx, lounge: { openToChat } });
+
+  it("offers open to chat and log out only while someone uses a Lounge phone", () => {
+    const state = { screen: "root" as const, lastInput: 0 };
+    expect(menuView(state, DEFAULT_SETTINGS, ctx).labels[9]).toBeUndefined();
+    const labels = menuView(state, DEFAULT_SETTINGS, lounge(false)).labels;
+    expect(labels[5]).toBe("Chat on");
+    expect(labels[9]).toBe("Log out");
+    expect(menuView(state, DEFAULT_SETTINGS, lounge(true)).labels[5]).toBe("Chat off");
+    expect(menuPrompt(state, DEFAULT_SETTINGS, lounge(false))).toMatch(/Press 9 to log out/);
+  });
+
+  it("returns the action and closes the menu", () => {
+    const open = menuStep(undefined, DEFAULT_SETTINGS, menu(), lounge(false));
+    const chat = menuStep(open.state, DEFAULT_SETTINGS, digit(5), lounge(false));
+    expect(chat.action).toEqual({ type: "chat", open: true });
+    expect(chat.state).toBeUndefined();
+    const off = menuStep(open.state, DEFAULT_SETTINGS, digit(5), lounge(true));
+    expect(off.action).toEqual({ type: "chat", open: false });
+    const out = menuStep(open.state, DEFAULT_SETTINGS, digit(9), lounge(true));
+    expect(out.action).toEqual({ type: "logout" });
+    // Without a session, 5 and 9 do nothing.
+    const none = menuStep(open.state, DEFAULT_SETTINGS, digit(9), ctx);
+    expect(none.action).toBeUndefined();
+    expect(none.state?.screen).toBe("root");
+  });
+});

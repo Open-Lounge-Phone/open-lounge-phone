@@ -48,14 +48,34 @@ rings. During quiet hours the caller records a voicemail instead; it is stored i
 transcribed (Workers AI Whisper or a local whisper.cpp), and shown to guardians. The phone never
 rings.
 
+**Any device as a phone.** The browser phone (`apps/device-web`, served at `/device/`) is an
+installable web app with its own manifest and service worker. On a small or installed screen it
+goes full screen with the 12 keys, the status strip and a big lift/hang-up control, keeps the
+screen on (Screen Wake Lock) and redials when the network comes back. Its first-run screen picks
+**Kids phone** or **Lounge phone**; the choice travels in `pair.begin.kind`.
+
+**Lounge phone (takeover).** A device with `kind = 'lounge'` has no allow-list of its own. While
+free it shows a QR code for `<server>/lounge#<deviceId>.<nonce>` (`lounge.idle`); the nonce is
+single-use and rotates every minute. A member scans it and sends `lounge.claim`; the hub rotates
+the nonce, and the phone flashes a random key (`lounge.challenge`) that must be pressed on the
+phone (`lounge.press`) within 30 s — the proximity proof. The phone then *stands for* that
+person (`personOf` in `hub.ts`): calls to them ring it (`reachable`), and its keys dial their
+speed-dial as if they called from their app (`appDial`/`userDial` with the person as the caller
+identity, so `authorizeInbound` and the availability rules decide — exactly their own
+permissions). The session is ephemeral: it ends on MENU → Log out (`lounge.leave`), Leave in the
+app, the household's idle timeout while hung up (`households.lounge_idle_minutes`, default 10),
+a new takeover, or a disconnect; the phone gets `lounge.ended` and forgets everything. The server
+keeps only a `lounge_sessions` row (who, where, when) for guardians. "Open to chat"
+(`lounge.chat`, a MENU item) and the person's location travel in `member.status.lounge`.
+
 ## Phases beyond software
 
 The phone has **no main screen**: keycapped keys with per-key LEDs, a small e-ink status strip,
 handset audio, a ringer speaker, and radios and sensors. Hardware details and part choices live in [hardware/DESIGN.md](../hardware/DESIGN.md).
 
-1. **Lounge variant** — takeover via a printed QR/NFC tag on the base plus a proximity proof
-   (press the flashing key, NFC tap, or mmWave presence), "open to chat" presence on key LEDs,
-   ephemeral sessions with a dead-man logout.
+1. **Lounge variant hardware** — the software flow above works today with the on-screen QR
+   code; hardware adds a printed QR/NFC tag on the base, NFC tap and mmWave presence as further
+   proximity proofs, "open to chat" on key LEDs, and a presence-based dead-man logout.
 2. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
    audio codec, handset earpiece/mic, and MX-style key switches with per-key LEDs, implementing
    the same protocol and the `deviceStep` state machine from `packages/core`.

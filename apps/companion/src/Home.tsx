@@ -52,7 +52,7 @@ export function Home({
   const now = useNow(30_000);
   const myPhone = devices.find((d) => meId && d.ownerUserId === meId);
   // Household phones (e.g. kids'); people's own phones live in their "My phone" card.
-  const household = devices.filter((d) => !d.ownerUserId);
+  const household = devices.filter((d) => !d.ownerUserId && d.kind !== "lounge");
   return (
     <section className="stack">
       <h2>{userName ? `Hi, ${userName}` : "Phones"}</h2>

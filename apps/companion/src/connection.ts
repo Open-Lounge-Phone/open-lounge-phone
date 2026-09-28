@@ -21,12 +21,24 @@ export interface DeviceLive {
   rssi?: number;
   power?: { source: "default" | "1.5A" | "3A"; reduced: boolean };
   lastSeen: number;
+  /** Lounge phone: who is using it. */
+  lounge?: { userId: string; name: string; since: number };
 }
 
 /** Another member of the server, as their app sessions report it. */
 export interface MemberLive {
   online: boolean;
   available: boolean;
+  /** At a Lounge phone right now (calls to them ring there). */
+  lounge?: { deviceId: string; label: string; openToChat: boolean };
+}
+
+/** Your own takeover of a Lounge phone, as the server reports it. */
+export interface LoungeClaim {
+  deviceId: string;
+  step: "sending" | "press_key" | "started" | "failed" | "ended";
+  reason?: string;
+  expiresAt?: number;
 }
 
 export interface Snapshot {
@@ -38,6 +50,8 @@ export interface Snapshot {
   remote?: MediaStream;
   muted: boolean;
   error?: string;
+  /** Your latest Lounge takeover / session event. */
+  lounge?: LoungeClaim;
   /** Latest `voicemail.new`; `seq` changes on every announcement. */
   voicemail?: { seq: number; id: string; deviceId: string; from: string };
 }
@@ -128,6 +142,17 @@ export class Connection {
     return this.socket.send({ t: "presence.set", available });
   }
 
+  /** Take over a Lounge phone (from its QR code); the phone then asks for the key proof. */
+  claimLounge(deviceId: string, nonce: string): boolean {
+    const ok = this.socket.send({ t: "lounge.claim", deviceId, nonce });
+    if (ok) this.set({ lounge: { deviceId, step: "sending" } });
+    return ok;
+  }
+
+  leaveLounge(deviceId: string): boolean {
+    return this.socket.send({ t: "lounge.leave", deviceId });
+  }
+
   async answer(): Promise<void> {
     const call = this.snap.call;
     if (call.phase !== "incoming") return;
@@ -213,6 +238,7 @@ export class Connection {
           ...(msg.battery ? { battery: msg.battery } : {}),
           ...(msg.rssi !== undefined ? { rssi: msg.rssi } : {}),
           ...(msg.power ? { power: msg.power } : {}),
+          ...(msg.lounge ? { lounge: msg.lounge } : {}),
         };
         this.set({ live: { ...this.snap.live, [msg.deviceId]: live } });
         return;
@@ -221,7 +247,21 @@ export class Connection {
         this.set({
           members: {
             ...this.snap.members,
-            [msg.userId]: { online: msg.online, available: msg.available },
+            [msg.userId]: {
+              online: msg.online,
+              available: msg.available,
+              ...(msg.lounge ? { lounge: msg.lounge } : {}),
+            },
+          },
+        });
+        return;
+      case "lounge.progress":
+        this.set({
+          lounge: {
+            deviceId: msg.deviceId,
+            step: msg.step,
+            ...(msg.reason ? { reason: msg.reason } : {}),
+            ...(msg.expiresAt ? { expiresAt: msg.expiresAt } : {}),
           },
         });
         return;

@@ -12,6 +12,8 @@ import { CallOverlay } from "./CallOverlay.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
 import { Home } from "./Home.tsx";
 import { Invite } from "./Invite.tsx";
+import { LoungePhones, LoungeScan } from "./Lounge.tsx";
+import { type LoungeLink, parseLoungeLink } from "./loungeLink.ts";
 import { ManageDevice } from "./ManageDevice.tsx";
 import { Pair } from "./Pair.tsx";
 import { PasskeyOffer } from "./PasskeyOffer.tsx";
@@ -47,6 +49,14 @@ export function App() {
   const [inviteToken, setInviteToken] = useState(() => readInviteToken(location.hash));
   /** A fresh session from first-run setup, waiting on the passkey offer. */
   const [offerFor, setOfferFor] = useState<string>();
+  /** Opened from a Lounge phone's QR code (survives signing in first). */
+  const [loungeLink, setLoungeLink] = useState(() =>
+    parseLoungeLink(location.pathname, location.hash),
+  );
+  const doneLounge = useCallback(() => {
+    history.replaceState(null, "", "/");
+    setLoungeLink(undefined);
+  }, []);
 
   const signIn = useCallback((t: string | null) => {
     saveToken(localStorage, t);
@@ -99,7 +109,14 @@ export function App() {
     );
   }
   if (!token) return <SignedOut onToken={signIn} />;
-  return <SignedIn token={token} onSignOut={() => signIn(null)} />;
+  return (
+    <SignedIn
+      token={token}
+      onSignOut={() => signIn(null)}
+      loungeLink={loungeLink}
+      onLoungeDone={doneLounge}
+    />
+  );
 }
 
 const EMPTY: Snapshot = {
@@ -124,7 +141,17 @@ function useConnection(token: string, householdId: string | undefined, onUnautho
   return { conn, snap };
 }
 
-function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }) {
+function SignedIn({
+  token,
+  onSignOut,
+  loungeLink,
+  onLoungeDone,
+}: {
+  token: string;
+  onSignOut: () => void;
+  loungeLink?: LoungeLink | undefined;
+  onLoungeDone(): void;
+}) {
   const api: Api = useMemo(
     () => createApi({ token, onUnauthorized: onSignOut }),
     [token, onSignOut],
@@ -323,7 +350,16 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
       )}
 
       <main>
-        {welcome && me && (
+        {loungeLink && (
+          <LoungeScan
+            link={loungeLink}
+            snap={snap}
+            conn={conn}
+            devices={devices}
+            onDone={onLoungeDone}
+          />
+        )}
+        {!loungeLink && welcome && me && (
           <Welcome
             householdName={me.household.name}
             meId={me.user.id}
@@ -339,7 +375,20 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
         {!(welcome && me) && route.name === "help" && (
           <WhatsWhat onBack={() => setRoute({ name: "home" })} />
         )}
-        {!(welcome && me) && route.name === "home" && (
+        {!loungeLink && !(welcome && me) && route.name === "home" && (
+          <LoungePhones
+            api={api}
+            devices={devices}
+            live={snap.live}
+            members={snap.members}
+            people={others}
+            meId={me?.user.id}
+            guardian={guardian}
+            conn={conn}
+            onCallPerson={(u) => void conn?.callUser(u.id, u.name)}
+          />
+        )}
+        {!loungeLink && !(welcome && me) && route.name === "home" && (
           <Home
             devices={devices}
             live={snap.live}

@@ -32,8 +32,29 @@ export interface DeviceSummary {
   lastSeen: number | null;
   /** Set when this is a person's own phone (physical or virtual); null for household phones. */
   ownerUserId?: string | null;
+  /** `lounge` = a shared phone people take over by scanning its code. */
+  kind?: "kids" | "lounge";
   /** How this device lists the signed-in user, if at all. */
   contact: ContactEntry | null;
+}
+
+export interface LoungeInfo {
+  idleMinutes: number;
+  phones: {
+    id: string;
+    name: string;
+    online: boolean;
+    session: { userId: string; name: string; since: number } | null;
+  }[];
+  /** Guardians only: that sessions happened (who, where, when) — nothing about calls. */
+  history?: {
+    deviceId: string;
+    userId: string;
+    userName: string;
+    startedAt: number;
+    endedAt: number | null;
+    endReason: string | null;
+  }[];
 }
 
 export interface QuietRule {
@@ -170,12 +191,16 @@ export function createApi(opts: ApiOptions) {
     logout: () => request<void>("POST", "/logout"),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),
-    pair: (code: string, name: string, forMe = false) =>
+    pair: (code: string, name: string, forMe = false, kind?: "kids" | "lounge") =>
       request<{ id: string; name: string }>("POST", "/devices/pair", {
         code,
         name,
         ...(forMe ? { forMe: true } : {}),
+        ...(kind ? { kind } : {}),
       }),
+    lounge: () => request<LoungeInfo>("GET", "/lounge"),
+    setLoungeIdle: (idleMinutes: number) =>
+      request<void>("PUT", "/lounge/settings", { idleMinutes }),
     updateDevice: (deviceId: string, changes: { name?: string; owner?: "me" | "household" }) =>
       request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
     removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),
