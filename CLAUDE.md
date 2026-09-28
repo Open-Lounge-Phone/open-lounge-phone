@@ -204,6 +204,13 @@ Keep this section current when finishing a milestone.
     API/WebSocket, tokens obtained via invite/sign-in links or a redirect "connect this server"
     flow (passkeys are per-domain, so authentication happens on the server's own origin and a
     scoped token is handed back).
+  - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across
+    servers with single-use connection links (`name@host` addresses, server Ed25519 keys at
+    `/.well-known/openloungephone`, RFC 9421 signed requests), default-deny everywhere (each
+    server authorizes its own users/phones), calls signaled over a per-server-pair stream with
+    p2p media, fair rate limits and blocklists, no central directory. Phases F0 (multi-household
+    on one server + one account in several households) → F1 connections → F2 federated calls →
+    F3 phone↔phone → F4 interop tests.
   - **M7 public-good service:** a multi-household instance run by the owner (e.g.
     `hub.openloungephone.app`) for people who don't want to host: open household sign-up with
     abuse controls (Turnstile, rate limits, quotas), privacy policy/retention, backups. The server
