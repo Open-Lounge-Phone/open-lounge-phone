@@ -1,10 +1,10 @@
-main-kids: 286 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
+main-kids: 284 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
 I2C bus (kids): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 main:U18(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 main:U19(ST25DV04K), 0x57 main:U19(ST25DV04K), 0x58 main:U17(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
-main-kids-eink: 286 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
+main-kids-eink: 284 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
 I2C bus (kids-eink): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 main:U18(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 main:U19(ST25DV04K), 0x57 main:U19(ST25DV04K), 0x58 main:U17(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
-main-lounge: 286 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
+main-lounge: 284 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
 I2C bus (lounge): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 main:U18(LTR-303ALS), 0x36 main:U14(MAX17048,DNP), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 main:U19(ST25DV04K), 0x57 main:U19(ST25DV04K), 0x58 main:U17(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
-main-kids-batt: 286 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
+main-kids-batt: 284 parts, 164 nets, 0 check errors; ERC 0 errors / 5 warnings
 I2C bus (kids-batt): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 main:U18(LTR-303ALS), 0x36 main:U14(MAX17048), 0x3C qwiic:SSD1306(optional external), 0x40 main:U7(ES7210), 0x53 main:U19(ST25DV04K), 0x57 main:U19(ST25DV04K), 0x58 main:U17(AW9523B), 0x60 main:U13(ATECC608B,DNP), 0x70 qwiic:HT16K33(optional external)
 cost (kids): $33.59 @1k, $31.84 @10k; one-off $192.02/phone (JLC PCBA, 2 built), $401.52 (OSH Park bare + hand); extended parts 29
 cost (kids-eink): $38.93 @1k, $37.07 @10k; one-off $205.89/phone (JLC PCBA, 2 built), $409.66 (OSH Park bare + hand); extended parts 33

@@ -563,5 +563,6 @@ def test_points(n, GND, VBUS, VSYS, V3V3, V3V0):
     for name in ("USB_DP", "USB_DN", "U0TXD", "U0RXD", "EN", "BOOT", "I2S_BCLK", "I2S_WS",
                  "I2S_DIN", "I2S_DOUT", "I2C_SDA", "I2C_SCL", "HOOK", "PA_EN"):
         TP(n[name])
-    for name in ("SPK_VOP", "SPK_VON", "HS_VBUS", "HS_USB_DP", "HS_USB_DN"):
+    # no test pads on HS_USB_DP/DN: the matched pair is hand-routed on L1 without vias or stubs
+    for name in ("SPK_VOP", "SPK_VON", "HS_VBUS"):
         TP(Net.get(name), name)

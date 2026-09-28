@@ -10443,90 +10443,6 @@
       (component_classes)
       (tstamps "ddac5a84-7612-5b0a-9ce0-520bf6304a8f"))
     (comp
-      (ref "TP27")
-      (value "HS_USB_DP")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP27")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "5ff712df-cfc8-5c25-870f-6800454d8551"))
-    (comp
-      (ref "TP28")
-      (value "HS_USB_DN")
-      (description "test pad, 1.0 mm, bottom side")
-      (footprint "TestPoint:TestPoint_Pad_D1.0mm")
-      (fields
-        (field
-          (name "MPN"))
-        (field
-          (name "Manufacturer"))
-        (field
-          (name "LCSC"))
-        (field
-          (name "Verified") "yes")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "DNP"))
-        (field
-          (name "Note"))
-        (field
-          (name "SpecKey") "_TP")
-        (field
-          (name "BOM") "exclude")
-        (field
-          (name "Description") "test pad, 1.0 mm, bottom side")
-        (field
-          (name "Footprint") "TestPoint:TestPoint_Pad_D1.0mm")
-        (field
-          (name "Datasheet"))
-        (field
-          (name "SKiDL Tag") "TP28")
-        (field
-          (name "SKiDL Line") "lib.py:94"))
-      (libsource
-        (lib "NO_LIB")
-        (part "_TP"))
-      (sheetpath
-        (names "/")
-        (tstamps "/"))
-      (component_classes)
-      (tstamps "289b58db-518f-50d8-9a9c-451a5e89f4d4"))
-    (comp
       (ref "TP3")
       (value "VSYS")
       (description "test pad, 1.0 mm, bottom side")
@@ -13446,10 +13362,6 @@
         (pin "B7")
         (pintype "PASSIVE"))
       (node
-        (ref "TP28")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
         (ref "U1")
         (pin "13")
         (pintype "BIDIRECTIONAL")))
@@ -13468,10 +13380,6 @@
       (node
         (ref "J7")
         (pin "B6")
-        (pintype "PASSIVE"))
-      (node
-        (ref "TP27")
-        (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "U1")

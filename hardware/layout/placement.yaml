@@ -50,7 +50,7 @@ main:
     MK1: [155.0, 58.8, 0]         # base electret (enclosure port position)
   # ---- keys / LEDs / display / NFC (the former deck) -------------------------------------------
   ui:
-    U17: [96.0, 44.0, 0]          # AW9523B (centre: equal reach to both key rows)
+    U17: [92.0, 44.0, 0, bottom]  # AW9523B on the bottom, with the key sockets it serves
     Q7: [46.0, 56.0, 0]           # VLED P-FET gate
     Q8: [46.0, 60.0, 0]
     D21: [128.0, 50.0, 0, bottom] # status SK6812MINI-E (reverse mount, light hole in the lid)

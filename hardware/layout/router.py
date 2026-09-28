@@ -31,6 +31,7 @@ RES = 0.1
 MARGIN = 0.02
 SMALL_W = 0.15            # neck-down width near own pads
 NEAR_PAD = 1.0            # mm from own pads where the neck-down is allowed
+NEAR_PAD_POWER = 0.5      # power nets: neck-down stubs stay short (checks.py: <= 1.05 mm)
 EDGE = 0.3
 AUDIO_SPEAKER = 0.5      # rule file: "audio to speaker 0.5 mm"
 HOLE_CLR = 0.25
@@ -313,7 +314,8 @@ class Router:
         own = np.zeros(shape, dtype=bool)
         for it in self.items:
             if it["net"] == net and it["kind"] == "pad":
-                self.stamp(own, it["geom"], NEAR_PAD)
+                self.stamp(own, it["geom"], NEAR_PAD_POWER if cls in ("Power", "Power3V")
+                           else NEAR_PAD)
                 continue
             if it["net"] == net and net > 0:
                 continue

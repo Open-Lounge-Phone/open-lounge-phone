@@ -119,6 +119,13 @@ def check_nfc(board, cfg, results):
             elif not is_via and (t.GetNetname() == "GND" or
                                  t.GetNet().GetNetClassName() in ("Power", "Power3V", "GND")):
                 bad.append(t)   # supplies would close a turn around the coil
+        bb, eps = ol.BBox(), pcbnew.FromMM(0.05)
+
+        def inside(p):  # strictly inside (the NFC keep-outs are rectangles)
+            if ol.OutlineCount() == 1 and ol.Outline(0).PointCount() == 4:
+                return (bb.GetLeft() + eps < p.x < bb.GetRight() - eps
+                        and bb.GetTop() + eps < p.y < bb.GetBottom() - eps)
+            return ol.Collide(p)
         fills = 0
         for bz in board.Zones():
             if bz.GetIsRuleArea():
@@ -129,8 +136,8 @@ def check_nfc(board, cfg, results):
                 f = bz.GetFilledPolysList(layer)
                 for i in range(f.OutlineCount()):
                     o = f.Outline(i)
-                    pts = [o.CPoint(j) for j in range(0, o.PointCount(), max(1, o.PointCount() // 50))]
-                    if any(ol.Collide(p) for p in pts):
+                    pts = [o.CPoint(j) for j in range(o.PointCount())]
+                    if any(inside(p) for p in pts):   # fill edges ON the keep-out edge are fine
                         fills += 1
                         break
         results.append(("ERROR" if bad or fills else "OK",
@@ -142,13 +149,19 @@ def check_usb(board, results):
     lengths = {n: 0.0 for n in nets}
     vias = 0
     widths = set()
+    # the matched run is the locked hand route (D7 -> U1); the receptacle's A/B rows need a
+    # short flip next to J7, where vias are allowed (within 8 mm of the connector)
+    j7 = board.FindFootprintByReference("J7")
+    jx, jy = unP(j7.GetPosition()) if j7 else (1e9, 1e9)
     for t in board.GetTracks():
         n = t.GetNetname()
         if n not in nets:
             continue
         if t.Type() == pcbnew.PCB_VIA_T:
-            vias += 1
-        else:
+            vx, vy = unP(t.GetPosition())
+            if math.hypot(vx - jx, vy - jy) > 8.0:
+                vias += 1
+        elif t.IsLocked():
             lengths[n] += pcbnew.ToMM(t.GetLength())
             widths.add(round(pcbnew.ToMM(t.GetWidth()), 3))
     if not any(lengths.values()):
@@ -156,7 +169,7 @@ def check_usb(board, results):
     mis = abs(lengths["HS_USB_DP"] - lengths["HS_USB_DN"])
     lvl = "ERROR" if vias or mis > 0.15 else "OK"
     results.append((lvl, f"USB pair: D+ {lengths['HS_USB_DP']:.2f} mm, D- {lengths['HS_USB_DN']:.2f} "
-                         f"mm (mismatch {mis:.2f}), {vias} vias, widths {sorted(widths)}"))
+                         f"mm (mismatch {mis:.2f}, hand route), {vias} vias away from J7, widths {sorted(widths)}"))
 
 
 POWER_PIN_NETS = {"3V3", "3V0", "VSYS", "VBUS", "VLED", "VBAT"}

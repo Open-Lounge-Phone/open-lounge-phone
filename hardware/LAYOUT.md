@@ -6,27 +6,21 @@ License CERN-OHL-S-2.0.
 
 <!-- STATUS -->
 **Status 2026-09-28 (single board):** placed and routed by the grid router; KiCad DRC **0
-violations, 38 unconnected items** (36 connections in 23 nets, `kicad/main/unrouted.txt`), down
-from 572 violations / 480 unconnected (main) + 255 / 231 (deck) for the stacked pair. What is
-left, all in the two dense spots:
+violations, 36 unconnected items** (32 connections in 21 nets, `kicad/main/unrouted.txt`), down
+from 572 violations / 480 unconnected (main) + 255 / 231 (deck) for the stacked pair. Layout
+checks: USB pair matched (161.30 mm each, no vias away from J7), power widths OK, NFC keep-outs
+clean, 13 decoupling findings (WARN). What is left, in the two dense spots:
 
-- **AW9523B U17 (centre):** pins for KEY_6/7/8, KEY_MENU, KEY_BACK, MUTE_SENSE, IRQ, I2C_SDA,
-  AW_RSTN, 3V3 are boxed in by other routes (the router cannot escape them); with those
-  pins unconnected the rest of each net stays open too (e.g. front-row socket → pull-up).
-- **ES7210 U7 / ES8311 U6 (left of centre):** pin ↔ own decoupling-cap links (REFP12/REFQ12,
-  REFP34, MICBIAS_IN, N$13/N$14/N$16, N$5), I2S_MCLK/I2S_DOUT, and BASEMIC_P/N from MK1 on the
-  right end.
-- Checks (`build/main-kids/layout/checks.txt`): the handset USB pair is hand-routed and
-  matched, but the router added branches to the HS_USB test pads (8 vias, 2.2 mm mismatch)
-  — drop those test pads or route them as stubs; 3 neck-downs longer than 1.05 mm (3V3,
-  VBUS_C, VLED); one pour fragment inside the NFC loop on L3/L4; 12 decoupling findings.
+- **Codecs ES7210 U7 / ES8311 U6:** pin ↔ own decoupling-cap links (REFP12/REFQ12/REFP34,
+  N$5-N$16), DAC_OUTP, I2S_MCLK, ES8311_ASDOUT, BASEMIC_N from MK1 at the right end.
+- **Around the AW9523B U17 (now on the bottom with the sockets):** KEY_0, KEY_9, KEY_BACK,
+  MUTE_SENSE, IRQ, I2C_SDA, three 3V3 links.
 
-Next: give U17 a clear escape (move it next to the key rows or split keys across two sides,
-rotate so its key pins face the sockets), spread the codec passives, then `make layout FORCE=1`
-(one full route ≈ 1 h on this machine) or finish the last links by hand in KiCad.
-Tried and reverted: codecs next to the ESP32 + AW9523B at (80, 44) → 41 connections left
-(worse); an incremental `--stage strip` / `reroute` / `finish` pass went from 39 to 36.
-
+Tried: AW9523B on top at the centre (36 connections left), codecs next to the ESP32 (41),
+incremental `--stage strip` / `reroute` / `finish` passes (+3 once, worse the second time: the
+rip-ups cascade). Next: spread the codec decoupling caps (bigger `fine_pitch_gap` or pin them
+by hand), bring MK1's BASEMIC pair closer or give it a reserved L3 channel, then finish the last
+links by hand in KiCad (one full route ≈ 45 min on this machine).
 
 ## 1. How to run
 

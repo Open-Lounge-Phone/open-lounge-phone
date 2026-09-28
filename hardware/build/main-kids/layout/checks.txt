@@ -1,59 +1,58 @@
 OK    DRC: 0 errors
-ERROR unconnected items: 38
-ERROR   unconnected: Zone 'GND_In1.Cu' [GND] on In1.Cu, priority 0; Zone 'GND_F.Cu' [GND] on F.Cu, priority 0
+ERROR unconnected items: 36
 ERROR   unconnected: Zone 'GND_F.Cu' [GND] on F.Cu, priority 0; Zone 'GND_F.Cu' [GND] on F.Cu, priority 0
+ERROR   unconnected: Zone 'GND_F.Cu' [GND] on F.Cu, priority 0; Zone 'GND_B.Cu' [GND] on B.Cu, priority 0
+ERROR   unconnected: Zone 'GND_B.Cu' [GND] on B.Cu, priority 0; Zone 'GND_B.Cu' [GND] on B.Cu, priority 0
 ERROR   unconnected: Zone 'GND_B.Cu' [GND] on B.Cu, priority 0; Zone 'GND_F.Cu' [GND] on F.Cu, priority 0
-ERROR   unconnected: Pad 21 [3V3] of U17 on F.Cu; Pad 1 [3V3] of C69 on F.Cu
-ERROR   unconnected: Pad 22 [IRQ] of U17 on F.Cu; Track [IRQ] on B.Cu, length 0.2000 mm
-ERROR   unconnected: Pad 1 [BASEMIC_P] of C41 on F.Cu; Pad 1 [BASEMIC_P] of C40 on F.Cu
-ERROR   unconnected: Pad 1 [BASEMIC_P] of C40 on F.Cu; Pad 1 [BASEMIC_P] of MK1 on F.Cu
-ERROR   unconnected: Pad 1 [BASEMIC_P] of MK1 on F.Cu; Pad 2 [BASEMIC_P] of R35 on B.Cu
-ERROR   unconnected: Track [I2C_SDA] on B.Cu, length 0.8485 mm; Pad 3 [I2C_SDA] of U7 on F.Cu
-ERROR   unconnected: Track [I2C_SDA] on B.Cu, length 0.2000 mm; Pad 20 [I2C_SDA] of U17 on F.Cu
-ERROR   unconnected: Pad 1 [ES7210_REFQ12] of C30 on F.Cu; Pad 18 [ES7210_REFQ12] of U7 on F.Cu
+ERROR   unconnected: Pad 21 [3V3] of U17 on B.Cu; Track [3V3] on In2.Cu, length 1.4142 mm
+ERROR   unconnected: Pad 2 [3V3] of U12 on F.Cu; Pad 3 [3V3] of U12 on F.Cu
+ERROR   unconnected: Track [3V3] on In2.Cu, length 0.8485 mm; Pad 3 [3V3] of U12 on F.Cu
+ERROR   unconnected: Pad 28 [N$16] of U7 on F.Cu; Pad 1 [N$16] of C48 on F.Cu
+ERROR   unconnected: Track [I2C_SDA] on In2.Cu, length 0.1414 mm; Pad 3 [I2C_SDA] of U7 on F.Cu
+ERROR   unconnected: Pad 20 [I2C_SDA] of U17 on B.Cu; Track [I2C_SDA] on B.Cu, length 18.7000 mm
 ERROR   unconnected: Pad 1 [BASEMIC_N] of NT1 on F.Cu; Pad 1 [BASEMIC_N] of C42 on F.Cu
 ERROR   unconnected: Pad 2 [BASEMIC_N] of MK1 on F.Cu; Pad 1 [BASEMIC_N] of NT1 on F.Cu
+ERROR   unconnected: Track [IRQ] on F.Cu, length 0.1414 mm; Pad 22 [IRQ] of U17 on B.Cu
 ERROR   unconnected: Pad 1 [N$5] of R28 on F.Cu; Pad 11 [N$5] of U7 on F.Cu
-ERROR   unconnected: Pad 1 [ES7210_REFP34] of C31 on F.Cu; Pad 29 [ES7210_REFP34] of U7 on F.Cu
+ERROR   unconnected: Pad 14 [ES8311_DACVREF] of U6 on F.Cu; Pad 1 [ES8311_DACVREF] of C24 on F.Cu
+ERROR   unconnected: Pad 2 [N$7] of U7 on F.Cu; Pad 1 [N$7] of R30 on F.Cu
+ERROR   unconnected: Pad 2 [N$14] of C44 on F.Cu; Pad 31 [N$14] of U7 on F.Cu
+ERROR   unconnected: Pad 1 [DAC_OUTP] of C51 on F.Cu; Pad 1 [DAC_OUTP] of C43 on F.Cu
+ERROR   unconnected: Pad 1 [DAC_OUTP] of C43 on F.Cu; Pad 12 [DAC_OUTP] of U6 on F.Cu
 ERROR   unconnected: Pad 5 [I2S_MCLK] of U7 on F.Cu; Pad 2 [I2S_MCLK] of U6 on F.Cu
 ERROR   unconnected: Pad 9 [I2S_MCLK] of U1 on F.Cu; Pad 5 [I2S_MCLK] of U7 on F.Cu
-ERROR   unconnected: Track [HS_VBUS_EN] on F.Cu, length 0.5657 mm; Pad 15 [HS_VBUS_EN] of U1 on F.Cu
-ERROR   unconnected: Pad 1 [I2S_DOUT] of TP19 on B.Cu; Pad 9 [I2S_DOUT] of U6 on F.Cu
-ERROR   unconnected: Pad 28 [N$16] of U7 on F.Cu; Pad 1 [N$16] of C48 on F.Cu
-ERROR   unconnected: Pad 14 [MUTE_SENSE] of U17 on F.Cu; Pad 1 [MUTE_SENSE] of R59 on F.Cu
-ERROR   unconnected: Pad 1 [MUTE_SENSE] of R59 on F.Cu; Pad 4 [MUTE_SENSE] of D5 on B.Cu
+ERROR   unconnected: Pad 1 [ES7210_REFQ12] of C30 on F.Cu; Pad 18 [ES7210_REFQ12] of U7 on F.Cu
+ERROR   unconnected: Pad 19 [N$12] of U7 on F.Cu; Pad 2 [N$12] of C41 on F.Cu
+ERROR   unconnected: Pad 1 [ES7210_REFP34] of C31 on F.Cu; Pad 29 [ES7210_REFP34] of U7 on F.Cu
+ERROR   unconnected: Pad 17 [N$11] of U6 on F.Cu; Pad 1 [N$11] of C39 on F.Cu
+ERROR   unconnected: Pad 7 [ES8311_ASDOUT] of U6 on F.Cu; Pad 1 [ES8311_ASDOUT] of TP1 on B.Cu
+ERROR   unconnected: Pad 1 [N$10] of C38 on F.Cu; Pad 18 [N$10] of U6 on F.Cu
+ERROR   unconnected: Pad 14 [MUTE_SENSE] of U17 on B.Cu; Pad 1 [MUTE_SENSE] of R59 on B.Cu
+ERROR   unconnected: Pad 14 [MUTE_SENSE] of U17 on B.Cu; Pad 4 [MUTE_SENSE] of D5 on B.Cu
 ERROR   unconnected: Pad 4 [MUTE_SENSE] of D5 on B.Cu; PTH pad 6 [MUTE_SENSE] of SW5
-ERROR   unconnected: Pad 1 [AW_RSTN] of R60 on F.Cu; Pad 1 [AW_RSTN] of C68 on F.Cu
-ERROR   unconnected: Pad 1 [AW_RSTN] of C68 on F.Cu; Pad 23 [AW_RSTN] of U17 on F.Cu
-ERROR   unconnected: Pad 1 [MICBIAS_IN] of C34 on F.Cu; Pad 24 [MICBIAS_IN] of U7 on F.Cu
-ERROR   unconnected: Pad 17 [ES7210_REFP12] of U7 on F.Cu; Pad 1 [ES7210_REFP12] of C29 on F.Cu
-ERROR   unconnected: Pad 2 [N$14] of C44 on F.Cu; Pad 31 [N$14] of U7 on F.Cu
-ERROR   unconnected: Pad 1 [KEY_6] of SW11 on B.Cu; Pad 1 [KEY_6] of R66 on B.Cu
-ERROR   unconnected: Pad 11 [KEY_6] of U17 on F.Cu; Pad 1 [KEY_6] of SW11 on B.Cu
-ERROR   unconnected: Pad 1 [KEY_7] of SW12 on B.Cu; Pad 1 [KEY_7] of R67 on B.Cu
-ERROR   unconnected: Pad 12 [KEY_7] of U17 on F.Cu; Pad 1 [KEY_7] of SW12 on B.Cu
-ERROR   unconnected: Pad 1 [KEY_8] of SW13 on B.Cu; Pad 1 [KEY_8] of R68 on B.Cu
-ERROR   unconnected: Pad 13 [KEY_8] of U17 on F.Cu; Pad 1 [KEY_8] of SW13 on B.Cu
-ERROR   unconnected: Pad 16 [KEY_MENU] of U17 on F.Cu; Track [KEY_MENU] on In2.Cu, length 1.8385 mm
-ERROR   unconnected: Pad 1 [KEY_BACK] of SW17 on B.Cu; Pad 17 [KEY_BACK] of U17 on F.Cu
+ERROR   unconnected: Pad 1 [KEY_0] of SW15 on B.Cu; Pad 2 [KEY_0] of U17 on B.Cu
+ERROR   unconnected: Pad 1 [KEY_0] of R70 on B.Cu; Pad 1 [KEY_0] of SW15 on B.Cu
+ERROR   unconnected: Pad 1 [KEY_BACK] of SW17 on B.Cu; Pad 17 [KEY_BACK] of U17 on B.Cu
 ERROR   unconnected: Pad 1 [KEY_BACK] of R72 on B.Cu; Pad 1 [KEY_BACK] of SW17 on B.Cu
-ERROR   unconnected: Pad 20 [N$13] of U7 on F.Cu; Pad 2 [N$13] of C42 on F.Cu
+ERROR   unconnected: Pad 1 [KEY_9] of SW14 on B.Cu; Pad 1 [KEY_9] of R69 on B.Cu
+ERROR   unconnected: Pad 1 [KEY_9] of U17 on B.Cu; Pad 1 [KEY_9] of SW14 on B.Cu
 OK    antenna: WROOM-1U (U.FL, external antenna on the shell wall)
 OK    NFC_SLIT: 0 disallowed tracks/vias, 0 pour fragments inside
 OK    NFC_LOOP: 0 disallowed tracks/vias, 0 pour fragments inside
-ERROR NFC_LOOP_SIG: 0 disallowed tracks/vias, 1 pour fragments inside
-ERROR USB pair: D+ 169.63 mm, D- 171.86 mm (mismatch 2.23), 8 vias, widths [0.15, 0.27, 0.3]
-WARN  decoupling: 31 supply pins, 12 findings
-WARN    decoupling: U3.1 (VSYS): nearest cap C8 3.6 mm
-WARN    decoupling: U3.4 (VSYS): nearest cap C5 5.4 mm
-WARN    decoupling: U16.4 (3V3): nearest cap C67 7.1 mm
+OK    NFC_LOOP_SIG: 0 disallowed tracks/vias, 0 pour fragments inside
+OK    USB pair: D+ 161.30 mm, D- 161.30 mm (mismatch 0.00, hand route), 0 vias away from J7, widths [0.27]
+WARN  decoupling: 31 supply pins, 13 findings
 WARN    decoupling: U9.6 (VSYS): nearest cap C54 4.2 mm
-WARN    decoupling: U4.1 (VSYS): nearest cap C53 18.0 mm
-WARN    decoupling: U4.3 (VSYS): nearest cap C53 18.5 mm
 WARN    decoupling: U2.2 (VBAT): nearest cap C6 149.4 mm
 WARN    decoupling: U2.3 (VBAT): nearest cap C6 149.4 mm
 WARN    decoupling: U2.5 (VSYS): nearest cap C8 3.1 mm
 WARN    decoupling: U2.11 (VSYS): nearest cap C5 2.6 mm
 WARN    decoupling: U2.13 (VBUS): nearest cap C1 8.1 mm
+WARN    decoupling: U16.4 (3V3): nearest cap C67 7.1 mm
+WARN    decoupling: U3.1 (VSYS): nearest cap C8 3.6 mm
+WARN    decoupling: U3.4 (VSYS): nearest cap C5 5.4 mm
 WARN    decoupling: U1.2 (3V3): nearest cap C15 3.4 mm
-ERROR power widths: {'3V3': 0.15, 'VBUS_C': 0.15, 'VLED': 0.15}
+WARN    decoupling: U4.1 (VSYS): nearest cap C53 18.0 mm
+WARN    decoupling: U4.3 (VSYS): nearest cap C53 18.5 mm
+WARN    decoupling: U17.21 (3V3): nearest cap C69 3.2 mm
+OK    power widths: all >= class minimum
