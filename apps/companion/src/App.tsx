@@ -22,10 +22,14 @@ import { quietStatus } from "./quietStatus.ts";
 import { Setup, SignedOut } from "./Setup.tsx";
 import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
+import { Welcome } from "./Welcome.tsx";
+import { WhatsWhat } from "./WhatsWhat.tsx";
+import { finishWelcome, markWelcomePending, welcomePending } from "./welcomeState.ts";
 
 export type Route =
   | { name: "home" }
-  | { name: "pair" }
+  | { name: "pair"; mine?: boolean }
+  | { name: "help" }
   | { name: "device"; id: string }
   | { name: "quiet" }
   | { name: "people" }
@@ -71,6 +75,7 @@ export function App() {
         onDone={(t) => {
           clearHash();
           setInviteToken(undefined);
+          markWelcomePending(localStorage);
           signIn(t);
         }}
         onCancel={() => {
@@ -87,6 +92,7 @@ export function App() {
         onDone={(t) => {
           clearHash();
           setSetupToken(undefined);
+          markWelcomePending(localStorage);
           setOfferFor(t);
         }}
       />
@@ -194,6 +200,7 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
   // Phone presence reaches guardians live via `device.status`; everyone also re-reads the phone
   // list periodically (own phones' online state), and quickly while a new virtual phone pairs.
   const [pairingSince, setPairingSince] = useState<number>();
+  const [welcome, setWelcome] = useState(() => welcomePending(localStorage));
   const hasOwnPhone = devices.some((d) => me && d.ownerUserId === me.user.id);
   useEffect(() => {
     const fast = pairingSince !== undefined && !hasOwnPhone && Date.now() - pairingSince < 90_000;
@@ -264,6 +271,15 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
           }
           onClick={openLed}
         />
+        <button
+          type="button"
+          className="help-button"
+          aria-label="What's what — help"
+          title="What's what"
+          onClick={() => setRoute({ name: "help" })}
+        >
+          ?
+        </button>
         <nav className="tabs" aria-label="Sections">
           <Tab route={route} name="home" onGo={setRoute}>
             Home
@@ -307,7 +323,23 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
       )}
 
       <main>
-        {route.name === "home" && (
+        {welcome && me && (
+          <Welcome
+            householdName={me.household.name}
+            meId={me.user.id}
+            userName={me.user.name}
+            onAddingPhone={() => setPairingSince(Date.now())}
+            onPairHardware={() => setRoute({ name: "pair", mine: true })}
+            onDone={() => {
+              finishWelcome(localStorage);
+              setWelcome(false);
+            }}
+          />
+        )}
+        {!(welcome && me) && route.name === "help" && (
+          <WhatsWhat onBack={() => setRoute({ name: "home" })} />
+        )}
+        {!(welcome && me) && route.name === "home" && (
           <Home
             devices={devices}
             live={snap.live}
@@ -328,6 +360,8 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
         {route.name === "pair" && (
           <Pair
             api={api}
+            guardian={guardian}
+            defaultMine={route.mine ?? false}
             onDone={() => {
               void refresh();
               setRoute({ name: "home" });
@@ -340,7 +374,14 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
             api={api}
             device={devices.find((d) => d.id === route.id)}
             deviceId={route.id}
+            meId={me?.user.id}
+            guardian={guardian}
             onBack={() => {
+              void refresh();
+              setRoute({ name: "home" });
+            }}
+            onChanged={() => void refresh()}
+            onRemoved={() => {
               void refresh();
               setRoute({ name: "home" });
             }}
@@ -360,6 +401,7 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
             members={snap.members}
             onCall={(u) => void conn?.callUser(u.id, u.name)}
             onBack={() => setRoute({ name: "home" })}
+            householdName={me?.household.name ?? "your household"}
           />
         )}
         {route.name === "account" && (
@@ -370,6 +412,7 @@ function SignedIn({ token, onSignOut }: { token: string; onSignOut: () => void }
             onAvailable={changeAvailable}
             onBack={() => setRoute({ name: "home" })}
             onSignOut={() => void signOut()}
+            onHelp={() => setRoute({ name: "help" })}
           />
         )}
         {route.name === "voicemail" && (

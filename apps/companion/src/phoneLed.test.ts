@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type PhoneLedInput, phoneLed, pickPhone, virtualPhoneUrl } from "./phoneLed.ts";
+import {
+  canManage,
+  type PhoneLedInput,
+  phoneLed,
+  pickPhone,
+  shareLink,
+  virtualPhoneUrl,
+} from "./phoneLed.ts";
 
 const mine = { id: "d1", name: "Jesse's phone", online: true, ownerUserId: "me" };
 const kid = { id: "d2", name: "Maya's phone", online: true, ownerUserId: null };
@@ -31,14 +38,14 @@ describe("phoneLed", () => {
   it("is green when your phone is online", () => {
     expect(phoneLed(base)).toMatchObject({
       color: "green",
-      label: "Your phone: online",
+      label: "Jesse's phone: online",
       deviceId: "d1",
     });
   });
   it("uses live status over the listed one", () => {
     expect(phoneLed({ ...base, live: { d1: { online: false } } })).toMatchObject({
       color: "red",
-      label: "Your phone: offline",
+      label: "Jesse's phone: offline — tap to open it",
     });
   });
   it("pulses blue while ringing, but offline wins", () => {
@@ -64,5 +71,20 @@ describe("virtualPhoneUrl", () => {
       forMe: "1",
       name: "Jesse's phone",
     });
+  });
+});
+
+describe("shareLink / canManage", () => {
+  it("links to the per-user virtual phone on this origin", () => {
+    const u = new URL(shareLink("https://l1.example/", "u1", "Jesse"));
+    expect(u.origin + u.pathname).toBe("https://l1.example/device/");
+    expect(u.searchParams.get("profile")).toBe("me-u1");
+    expect(u.searchParams.get("autopair")).toBe("1");
+  });
+  it("lets guardians manage all phones and members only their own", () => {
+    expect(canManage({ ownerUserId: null }, "u1", true)).toBe(true);
+    expect(canManage({ ownerUserId: "u1" }, "u1", false)).toBe(true);
+    expect(canManage({ ownerUserId: "u2" }, "u1", false)).toBe(false);
+    expect(canManage({ ownerUserId: null }, "u1", false)).toBe(false);
   });
 });

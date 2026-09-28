@@ -7,10 +7,25 @@ interface Props {
   api: Api;
   deviceId: string;
   device: DeviceSummary | undefined;
+  meId: string | undefined;
+  guardian: boolean;
   onBack(): void;
+  /** Name/ownership changed: the caller re-reads the phone list. */
+  onChanged(): void;
+  /** The phone was removed. */
+  onRemoved(): void;
 }
 
-export function ManageDevice({ api, deviceId, device, onBack }: Props) {
+export function ManageDevice({
+  api,
+  deviceId,
+  device,
+  meId,
+  guardian,
+  onBack,
+  onChanged,
+  onRemoved,
+}: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [contacts, setContacts] = useState<ContactEntry[]>([]);
   const [buttons, setButtons] = useState<Record<string, string>>({});
@@ -55,6 +70,17 @@ export function ManageDevice({ api, deviceId, device, onBack }: Props) {
         <p className="error" role="alert">
           {error}
         </p>
+      )}
+      {device && (
+        <PhoneSettings
+          api={api}
+          device={device}
+          meId={meId}
+          guardian={guardian}
+          onChanged={onChanged}
+          onRemoved={onRemoved}
+          onError={setError}
+        />
       )}
 
       <h3>Allowed people</h3>
@@ -191,5 +217,124 @@ function ContactEditor({
         Rings during quiet hours
       </label>
     </li>
+  );
+}
+
+/** Name, whose phone it is, and removal. */
+function PhoneSettings({
+  api,
+  device,
+  meId,
+  guardian,
+  onChanged,
+  onRemoved,
+  onError,
+}: {
+  api: Api;
+  device: DeviceSummary;
+  meId: string | undefined;
+  guardian: boolean;
+  onChanged(): void;
+  onRemoved(): void;
+  onError(msg: string | undefined): void;
+}) {
+  const [name, setName] = useState(device.name);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setName(device.name), [device.name]);
+  const serverMine = !!meId && device.ownerUserId === meId;
+  const someoneElses = !!device.ownerUserId && !serverMine;
+  // Optimistic: reflect the choice immediately, fall back to the server's value on error.
+  const [mine, setMine] = useState(serverMine);
+  useEffect(() => setMine(serverMine), [serverMine]);
+  const setOwner = (me: boolean) => {
+    setMine(me);
+    void act(() => api.updateDevice(device.id, { owner: me ? "me" : "household" }), onChanged).then(
+      () => undefined,
+    );
+  };
+
+  const act = async (fn: () => Promise<unknown>, after: () => void) => {
+    onError(undefined);
+    setBusy(true);
+    try {
+      await fn();
+      after();
+    } catch (e) {
+      onError((e as Error).message);
+      setMine(serverMine);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rename = () => {
+    const next = name.trim();
+    if (!next || next === device.name) return setName(device.name);
+    void act(() => api.updateDevice(device.id, { name: next }), onChanged);
+  };
+
+  return (
+    <div className="card stack">
+      <label>
+        Phone name
+        <input
+          value={name}
+          maxLength={24}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={rename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </label>
+      {!someoneElses && (
+        <fieldset className="stack ownership" disabled={busy}>
+          <legend>Whose phone is this?</legend>
+          <label className="check">
+            <input type="radio" name="owner" checked={mine} onChange={() => setOwner(true)} />
+            <span>This is my phone</span>
+          </label>
+          <label className="check">
+            <input
+              type="radio"
+              name="owner"
+              checked={!mine}
+              disabled={!guardian && !mine}
+              onChange={() => setOwner(false)}
+            />
+            <span>Household phone (e.g. a kid's)</span>
+          </label>
+          <span className="hint">
+            Calls to you ring your own phone. Quiet hours only apply to household phones.
+          </span>
+        </fieldset>
+      )}
+      {someoneElses && <p className="muted small">This is another person's own phone.</p>}
+      {confirming ? (
+        <div className="confirm stack" role="alertdialog" aria-label="Remove this phone?">
+          <p className="small">
+            Removes it from your household. A virtual phone will show a new pairing code.
+          </p>
+          <div className="row">
+            <button type="button" onClick={() => setConfirming(false)} disabled={busy}>
+              Keep it
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy}
+              onClick={() => void act(() => api.removeDevice(device.id), onRemoved)}
+            >
+              {busy ? "Removing…" : "Remove phone"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="link danger" onClick={() => setConfirming(true)}>
+          Remove phone
+        </button>
+      )}
+    </div>
   );
 }

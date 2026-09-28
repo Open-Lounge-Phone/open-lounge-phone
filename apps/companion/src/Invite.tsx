@@ -76,9 +76,9 @@ export function Invite({
                 ? `This link signs you in to ${stage.invite.householdName} on this device.`
                 : `You're invited as ${stage.invite.name}${
                     stage.invite.role === "guardian"
-                      ? ", a guardian who can manage phones and settings."
-                      : ". Once a guardian adds you to a phone, you can call it."
-                  }`}
+                      ? ", a guardian who can also manage phones, people and quiet hours."
+                      : "."
+                  } Joining adds you to ${stage.invite.householdName} in this app, where you can call and be called. Next, you can set up your own phone — a virtual phone in a browser for now.`}
             </p>
             {error && (
               <p className="error" role="alert">

@@ -49,10 +49,12 @@ export function phoneLed(input: PhoneLedInput): PhoneLed {
   const picked = pickPhone(input.devices, input.meId, input.guardian);
   if (!picked) return { color: "grey", pulse: false, label: "No phone yet", mine: false };
   const { device, mine } = picked;
-  const who = mine ? "Your phone" : device.name;
+  const who = device.name;
   const online = input.live[device.id]?.online ?? device.online;
   const base = { deviceId: device.id, mine };
-  if (!online) return { ...base, color: "red", pulse: false, label: `${who}: offline` };
+  if (!online) {
+    return { ...base, color: "red", pulse: false, label: `${who}: offline — tap to open it` };
+  }
   if (input.ringing) return { ...base, color: "blue", pulse: true, label: `${who}: ringing` };
   if (!mine && input.quietNow) {
     return { ...base, color: "purple", pulse: false, label: `${who}: quiet hours` };
@@ -69,4 +71,25 @@ export function virtualPhoneUrl(userId: string, name: string, pair: boolean): st
     q.set("name", `${name}'s phone`.slice(0, 24));
   }
   return `/device/?${q.toString()}`;
+}
+
+/** Shown on an offline phone's card: why a virtual phone goes offline, and what to do. */
+export const OFFLINE_HINT =
+  "Offline — a virtual phone only stays connected while its page is open and visible. On iPhone, open it on another device (a laptop or tablet) and leave it there.";
+
+/**
+ * Link to open your virtual phone on another device. If that browser is signed in to this
+ * server it pairs itself as your phone; otherwise it shows a code to pair from here.
+ */
+export function shareLink(origin: string, userId: string, name: string): string {
+  return `${origin.replace(/\/$/, "")}${virtualPhoneUrl(userId, name, true)}`;
+}
+
+/** Guardians manage every phone; anyone manages their own phone. */
+export function canManage(
+  device: { ownerUserId?: string | null },
+  meId: string | undefined,
+  guardian: boolean,
+): boolean {
+  return guardian || (!!meId && device.ownerUserId === meId);
 }

@@ -10,6 +10,7 @@ interface Props {
   members: Record<string, MemberLive>;
   onCall(u: User): void;
   onBack(): void;
+  householdName: string;
 }
 
 interface Shared {
@@ -19,7 +20,7 @@ interface Shared {
 }
 
 /** Guardians: who's in the household, invite links, sign-in links, and removal. */
-export function People({ api, me, members, onCall, onBack }: Props) {
+export function People({ api, me, members, onCall, onBack, householdName }: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string>();
   const [name, setName] = useState("");
@@ -151,7 +152,9 @@ export function People({ api, me, members, onCall, onBack }: Props) {
       <form className="card stack" onSubmit={(e) => void invite(e)}>
         <h3>Invite someone</h3>
         <p className="muted small">
-          They'll get a link to join. Then add them to a phone's allow-list so they can call.
+          They'll get a link. Opening it adds them to {householdName} in this app, where they can
+          call and be called. They can also set up their own phone (a virtual phone in a browser, or
+          an Open Lounge Phone when the hardware is ready).
         </p>
         <label>
           Name (as it appears on the phone)
@@ -172,7 +175,7 @@ export function People({ api, me, members, onCall, onBack }: Props) {
               checked={role === "contact"}
               onChange={() => setRole("contact")}
             />
-            Contact — can call phones they're allowed on
+            Contact — can call and be called by the phones they're allowed on
           </label>
           <label className="check">
             <input

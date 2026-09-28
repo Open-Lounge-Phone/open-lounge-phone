@@ -16,9 +16,10 @@ interface Props {
   onAvailable(v: boolean): void;
   onBack(): void;
   onSignOut(): void;
+  onHelp(): void;
 }
 
-export function Account({ api, me, available, onAvailable, onBack, onSignOut }: Props) {
+export function Account({ api, me, available, onAvailable, onBack, onSignOut, onHelp }: Props) {
   const [passkeys, setPasskeys] = useState<PasskeySummary[]>([]);
   const [name, setName] = useState(() => defaultPasskeyName(navigator.userAgent));
   const [busy, setBusy] = useState(false);
@@ -119,6 +120,11 @@ export function Account({ api, me, available, onAvailable, onBack, onSignOut }: 
           This browser can't create passkeys here. Passkeys need HTTPS (or localhost).
         </p>
       )}
+
+      <h3>Help</h3>
+      <button type="button" onClick={onHelp}>
+        What's what — plain-language guide
+      </button>
 
       <h3>Session</h3>
       <button type="button" onClick={onSignOut}>

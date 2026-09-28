@@ -966,3 +966,65 @@ button.link.inline {
     animation: none;
   }
 }
+
+/* Offline explanation on phone cards; open-on-another-device helper. */
+.offline-hint {
+  margin: 0.35rem 0 0;
+}
+.open-elsewhere {
+  flex-basis: 100%;
+  margin-top: 0.25rem;
+}
+.open-elsewhere .hint {
+  margin: 0.2rem 0 0;
+}
+.share-note {
+  color: var(--accent, inherit);
+  word-break: break-all;
+}
+fieldset.ownership {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+fieldset.ownership legend {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.confirm {
+  border-top: 1px solid var(--border, #8884);
+  padding-top: 0.6rem;
+}
+
+/* Help: "?" in the header and the What's-what glossary. */
+.help-button {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  padding: 0;
+  font-weight: 700;
+  line-height: 1;
+  flex: none;
+}
+.glossary > div + div {
+  margin-top: 0.85rem;
+}
+.glossary dt {
+  font-weight: 600;
+}
+.glossary dd {
+  margin: 0.15rem 0 0;
+  color: var(--muted, inherit);
+}
+/* Welcome flow. */
+.welcome .choice-card.recommended {
+  border-color: var(--accent, currentColor);
+}
+.badge {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent, #5bb896);
+  color: var(--accent-ink, #0c1f18);
+  vertical-align: middle;
+}

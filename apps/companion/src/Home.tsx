@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
 import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
-import { virtualPhoneUrl } from "./phoneLed.ts";
+import { OFFLINE_HINT, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
@@ -100,6 +100,7 @@ export function Home({
                       ⚠ {powerWarning(l?.power)}
                     </div>
                   )}
+                  {!online && <p className="hint offline-hint">{OFFLINE_HINT}</p>}
                 </div>
               </div>
               <div className="device-actions">
@@ -122,11 +123,9 @@ export function Home({
           );
         })}
       </ul>
-      {guardian && (
-        <button type="button" className="add" onClick={onPair}>
-          + Pair a phone
-        </button>
-      )}
+      <button type="button" className="add" onClick={onPair}>
+        {guardian ? "+ Pair a phone" : "+ Pair my phone"}
+      </button>
       <GrownUps people={people} members={members} onCall={onCallPerson} />
     </section>
   );
@@ -157,13 +156,14 @@ function MyPhone({
     return (
       <div className="card stack my-phone" id="my-phone">
         <div className="device-name">My phone</div>
-        <p className="muted small">
-          You don't have a phone yet. Add a virtual one: it's a phone in your browser — leave it
-          open on a spare laptop or tablet until the real one arrives. Calls to you ring it.
+        <p className="small">
+          No phone yet. Set up a virtual phone — open it on your computer or an always-on tablet and
+          leave it open. (The Open Lounge Phone hardware is on its way.)
         </p>
         <button type="button" className="primary" onClick={() => open(true)}>
-          Add my virtual phone
+          Add my virtual phone here
         </button>
+        <OpenElsewhere meId={meId} userName={userName} />
       </div>
     );
   }
@@ -184,6 +184,7 @@ function MyPhone({
               : `Your phone · offline · last seen ${formatLastSeen(live?.lastSeen ?? phone.lastSeen, now)}`}
             {live?.battery && ` · 🔋 ${formatBattery(live.battery)}`}
           </div>
+          {!online && <p className="hint offline-hint">{OFFLINE_HINT}</p>}
         </div>
       </div>
       <div className="device-actions">
@@ -194,6 +195,39 @@ function MyPhone({
           Open my phone
         </button>
       </div>
+      <OpenElsewhere meId={meId} userName={userName} />
+    </div>
+  );
+}
+
+/** Share/copy the virtual phone's link so it can live on a laptop or tablet. */
+function OpenElsewhere({ meId, userName }: { meId: string; userName: string }) {
+  const [note, setNote] = useState<string>();
+  const url = shareLink(location.origin, meId, userName);
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "My Open Lounge Phone", url });
+        setNote("Shared.");
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setNote("Link copied.");
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setNote(url);
+    }
+  };
+  return (
+    <div className="open-elsewhere">
+      <button type="button" className="link" onClick={() => void share()}>
+        Open on another device
+      </button>
+      <p className="hint">
+        If you're signed in on that device it pairs itself; otherwise it shows a code — pair it here
+        with “This is my own phone” ticked.
+        {note && <span className="share-note"> {note}</span>}
+      </p>
     </div>
   );
 }

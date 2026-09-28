@@ -170,8 +170,15 @@ export function createApi(opts: ApiOptions) {
     logout: () => request<void>("POST", "/logout"),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),
-    pair: (code: string, name: string) =>
-      request<{ id: string; name: string }>("POST", "/devices/pair", { code, name }),
+    pair: (code: string, name: string, forMe = false) =>
+      request<{ id: string; name: string }>("POST", "/devices/pair", {
+        code,
+        name,
+        ...(forMe ? { forMe: true } : {}),
+      }),
+    updateDevice: (deviceId: string, changes: { name?: string; owner?: "me" | "household" }) =>
+      request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
+    removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),
     contacts: (deviceId: string) =>
       request<{ contacts: ContactEntry[]; buttons: Record<string, string> }>(
         "GET",

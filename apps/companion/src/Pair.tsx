@@ -1,9 +1,24 @@
 import { type FormEvent, useState } from "react";
 import type { Api } from "./api.ts";
 
-export function Pair({ api, onDone, onCancel }: { api: Api; onDone(): void; onCancel(): void }) {
+export function Pair({
+  api,
+  guardian,
+  defaultMine = false,
+  onDone,
+  onCancel,
+}: {
+  api: Api;
+  /** Non-guardians can only add their own phone. */
+  guardian: boolean;
+  /** Start with "This is my own phone" ticked (e.g. from the welcome flow). */
+  defaultMine?: boolean;
+  onDone(): void;
+  onCancel(): void;
+}) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [mine, setMine] = useState(!guardian || defaultMine);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -12,7 +27,7 @@ export function Pair({ api, onDone, onCancel }: { api: Api; onDone(): void; onCa
     setBusy(true);
     setError(undefined);
     try {
-      await api.pair(code, name.trim());
+      await api.pair(code, name.trim(), mine || !guardian);
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -58,7 +73,27 @@ export function Pair({ api, onDone, onCancel }: { api: Api; onDone(): void; onCa
             maxLength={24}
             required
           />
-          <span className="hint">You'll be added to its first key automatically.</span>
+          <span className="hint">
+            {mine
+              ? "The other grown-ups go on its keys; calls to you ring it."
+              : "You'll be added to its first key automatically."}
+          </span>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={mine || !guardian}
+            disabled={!guardian}
+            onChange={(e) => setMine(e.target.checked)}
+          />
+          <span>
+            This is my own phone
+            <span className="hint">
+              {guardian
+                ? "Leave unticked for a household phone, e.g. a kid's."
+                : "You can add your own phone; a guardian adds household phones."}
+            </span>
+          </span>
         </label>
         {error && (
           <p className="error" role="alert">
