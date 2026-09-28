@@ -206,6 +206,14 @@ Keep this section current when finishing a milestone.
   on, TURN not yet). The owner's Cloudflare account hosts OTHER projects — only ever touch
   resources named `openloungephone-*`. Root `openloungephone.app` = project site
   (`apps/site`, Astro Starlight).
+- **Phone app + Lounge (2026-09-28, `8dae4be`, `77fb911`; not yet deployed to l1):** `/device/` is
+  an installable phone app (own manifest + service worker, fullscreen touch layout with a big
+  handset button, wake lock, first-run Kids/Lounge choice), so any old phone/tablet can be the
+  phone. Lounge: device `kind: "lounge"` (migration `0005_lounge.sql`), QR takeover with a
+  rotating single-use nonce + press-the-flashing-key proximity proof (30 s), ephemeral sessions
+  (Log out / Leave / idle timeout, default 10 min / new takeover / disconnect) that leave nothing on the
+  phone, "open to chat" presence (MENU → 5), and a companion `/lounge` scan page plus a Lounge phones
+  section. The server keeps only who, where and when.
 - M5 CLI + Tauri — deploy script done (seed of the CLI); rest not started.
 - **Roadmap (owner vision, 2026-09-27):**
   - **M6 multi-server companion:** one companion app (web/PWA, later native) can hold
