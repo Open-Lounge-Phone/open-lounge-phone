@@ -201,7 +201,7 @@ Keep this section current when finishing a milestone.
   invites for non-guardian contacts (today contacts must be created via the store); passkeys;
   voicemail recording + transcription; strip text for "quiet until HH:MM" needs the end time in
   `config`; per-key LED/strip state pushed from the server.
-- **M3 Cloudflare backend** — done locally, **not yet deployed to a real account** (needs the
+- **M3 Cloudflare backend** — done and deployed (l1, hub; was: needs the
   owner's Cloudflare login). `apps/server-cloudflare`: Worker (Hono) + `HouseholdObject` (one DO
   per household, hibernatable WebSockets, alarm for quiet-hours changes, rooms in DO storage) +
   `PairingObject` + D1 (same migrations) + static assets. The shared `tests/e2e/scenario.ts`
@@ -223,7 +223,7 @@ Keep this section current when finishing a milestone.
   on, TURN not yet). The owner's Cloudflare account hosts OTHER projects — only ever touch
   resources named `openloungephone-*`. Root `openloungephone.app` = project site
   (`apps/site`, Astro Starlight).
-- **Phone app + Lounge (2026-09-28, `8dae4be`, `77fb911`; not yet deployed to l1):** `/device/` is
+- **Phone app + Lounge (2026-09-28, `8dae4be`, `77fb911`; deployed to l1):** `/device/` is
   an installable phone app (own manifest + service worker, fullscreen touch layout with a big
   handset button, wake lock, first-run Kids/Lounge choice), so any old phone/tablet can be the
   phone. Lounge: device `kind: "lounge"` (migration `0005_lounge.sql`), QR takeover with a
@@ -240,7 +240,7 @@ Keep this section current when finishing a milestone.
   `deploy.ts --open-signup`; default off), `POST /api/households`, `PUT /api/me/household`,
   `PATCH /api/account` (handle once a day), invite accept while signed in adds a membership.
   Companion: sign-up/invite/sign-in chooser, handle picker, household switcher, "Add a kid's
-  phone / Invite a co-guardian / Add a household". Not yet deployed to l1.
+  phone / Invite a co-guardian / Add a household". Deployed to l1 and the hub.
 - **P1b spaces + handle reservation (2026-09-28):** migration `0007_spaces.sql` (additive:
   `households.type` home|team|org default home; `released_handles`). A household is a **space**
   (table name unchanged; `Space = Household` in the store); `POST /api/spaces {name,type}` (and
@@ -281,7 +281,7 @@ Keep this section current when finishing a milestone.
   voicemail, guest Lounge flow, guardian "guests" toggle. Browser-verified: cross-server call
   (a.localhost ↔ b.localhost) reaches WebRTC `connected` with DTX. Tests: `calls.test.ts`
   (mutation-checked), e2e extended with call + voicemail.
-- **P4 public hub, code only (2026-09-28; NOT deployed):** migration `0010_hub.sql` (additive:
+- **P4 public hub (2026-09-28; LIVE at hub.openloungephone.app since 2026-09-29, operator `jesse`):** migration `0010_hub.sql` (additive:
   `usage`, `call_log`, `accounts.suspended_at`, `accounts.fair_use_exempt`). Owner decisions: the
   hub is **free, donation-funded** (GitHub Sponsors via one `SPONSOR_URL` setting, hidden while
   unset; no paid plan); a **fair-use allowance** (`limits.ts` `FairUse`, `FAIR_USE=hub` +
@@ -332,7 +332,7 @@ Keep this section current when finishing a milestone.
   with a 65 s backstop so the callee's server decides. The CF e2e failure was the harness's 10 s
   message wait vs. a 10 s ring (`socket.next(t, timeout)`); 0012 verified on local D1 with data.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
-  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (code; not deployed) → P5 interop).
+  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (live) → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
   The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across

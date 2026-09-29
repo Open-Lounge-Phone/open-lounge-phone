@@ -3,7 +3,7 @@
 `hub.openloungephone.app` is a public Open Lounge Phone server with open sign-up, run by the
 project owner so anyone can try the service without running their own. It is **free, funded by
 donations**, and it federates with every other server as an equal — there is no paid plan and
-no special treatment. Status: the code is ready; the hub is **not deployed yet**.
+no special treatment. Status: **live** at https://hub.openloungephone.app since 2026-09-29.
 
 ## Always free, with fair use
 

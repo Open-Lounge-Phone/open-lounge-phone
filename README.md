@@ -19,7 +19,7 @@ browser, no games, no strangers.
 </p>
 
 Run it on **your own Cloudflare account** or **self-host it with Docker**, or join the free
-public hub (opening soon). Servers connect to each other, so everyone can reach everyone: you
+public hub at [hub.openloungephone.app](https://hub.openloungephone.app). Servers connect to each other, so everyone can reach everyone: you
 knock on someone's address (`name@server`), and once they accept you can call. Nobody —
 including this project — sits in the middle of your calls, and there is no bridge to the phone
 network, ever.
@@ -35,7 +35,7 @@ The software works end to end today; the hardware is being designed in the open.
 | P1 / P1b | Accounts and handles (`name@server`), several households per account, open sign-up; spaces (home, team, organization); handles reserved 90 days | done |
 | P2 | Connections ("buddies"): knock, accept, decline, block — on one server and across servers (signed server-to-server requests) | done |
 | P3 | Calls across servers, voicemail, opt-in presence, Lounge guests from other servers | done |
-| P4 | The public hub: free, donation-funded, fair-use allowance, Turnstile, operator view, export and account deletion | code done; **not deployed yet** |
+| P4 | The public hub: free, donation-funded, fair-use allowance, Turnstile, operator view, export and account deletion | **live** at hub.openloungephone.app (2026-09-29) |
 | Voicemail everywhere | Unanswered calls go to voicemail for every caller and callee (people, kids' phones, Lounge guests, other servers); greetings (standard, recorded name, custom); ring time; recording the greeting on the phone | done (software) |
 | M5 | One-command deploy CLI and desktop app | deploy script done; the rest not started |
 | P2b, P3.5, P5, P6 | Per-buddy call timeline; rooms (party lines, 3-way calls); interop tests in CI and a versioned federation spec; professional features (directory, hunt groups, business hours) | planned |

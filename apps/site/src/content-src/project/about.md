@@ -41,7 +41,7 @@ and it forgets you when you leave.
 | Lounge phones: QR takeover with a key proof, open to chat | done (software) |
 | Accounts and addresses (`name@server`), households, teams and organizations | done |
 | Connections across servers ("knock, then talk"), calls, voicemail, presence, Lounge guests | done |
-| The free public hub (fair use, operator tools, export and account deletion) | code done; opening soon |
+| The free public hub (fair use, operator tools, export and account deletion) | live at hub.openloungephone.app |
 | Voicemail for every unanswered call, greetings (standard, your name, your own), ring time | done (software) |
 | Per-buddy call timeline; rooms and 3-way calls; interop tests; professional features | planned |
 | One-command deploy (done), desktop app | desktop app next |

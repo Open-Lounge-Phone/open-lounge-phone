@@ -11,7 +11,7 @@ people on any Open Lounge Phone server can knock on, and any device can be a pho
 ## 1. Join the public hub
 
 The public hub, `hub.openloungephone.app`, is free and funded by donations
-([funding](/project/funding/)). *The code is ready; the hub opens soon.*
+([funding](/project/funding/)). It's live: [sign up at hub.openloungephone.app](https://hub.openloungephone.app).
 
 1. Open the hub and choose **Create an account**.
 2. Pick a **handle** — your address will be `handle@hub.openloungephone.app` — and create a
