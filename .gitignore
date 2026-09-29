@@ -21,3 +21,11 @@ apps/server-cloudflare/instances/
 
 # local scratch for agents (screenshots, renders under review)
 .work/
+
+# private notes (Open-Lounge-Phone/notes, cloned to .notes/) and their root symlinks
+.notes/
+/CLAUDE.md
+/AGENTS.md
+
+# logs
+*.log
