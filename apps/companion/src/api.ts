@@ -5,8 +5,37 @@ export type Role = "guardian" | "contact";
 export interface User {
   id: string;
   householdId: string;
+  /** The person's account (the same across their households). */
+  accountId?: string;
   name: string;
   role: Role;
+}
+
+/** You on this server: `handle@host`. */
+export interface AccountInfo {
+  id: string;
+  handle: string;
+  name: string;
+  address: string;
+}
+
+/** One of your households and your role there. */
+export interface Membership {
+  userId: string;
+  householdId: string;
+  householdName: string;
+  name: string;
+  role: Role;
+}
+
+export interface Me {
+  /** Your membership in the active household; null if you're in none yet. */
+  user: User | null;
+  household: Household | null;
+  available?: boolean;
+  account?: AccountInfo;
+  memberships?: Membership[];
+  openSignup?: boolean;
 }
 
 export interface Household {
@@ -74,6 +103,7 @@ export interface InviteCreated {
 }
 
 export interface InvitePreview {
+  householdId?: string;
   householdName: string;
   name: string;
   role: Role;
@@ -85,6 +115,7 @@ export interface SignedInResult {
   token: string;
   user: User;
   household: Household;
+  account?: AccountInfo;
 }
 
 export interface PasskeySummary {
@@ -128,6 +159,8 @@ export interface ApiOptions {
   fetch?: Fetch;
   /** Called on any 401 so the app can drop the session. */
   onUnauthorized?: () => void;
+  /** Act in this one of your households (sent as `x-household`); else the session's active one. */
+  household?: string;
   base?: string;
 }
 
@@ -145,6 +178,7 @@ export function createApi(opts: ApiOptions) {
     if (init.json !== undefined) headers["content-type"] = "application/json";
     if (init.body) headers["content-type"] = init.contentType ?? init.body.type;
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+    if (opts.household) headers["x-household"] = opts.household;
     const res = await doFetch(`${base}${path}`, {
       method,
       headers,
@@ -160,6 +194,7 @@ export function createApi(opts: ApiOptions) {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers["content-type"] = "application/json";
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+    if (opts.household) headers["x-household"] = opts.household;
     const res = await doFetch(`${base}${path}`, {
       method,
       headers,
@@ -187,7 +222,24 @@ export function createApi(opts: ApiOptions) {
       guardianName: string;
       timeZone: string;
     }) => request<{ token: string; user: User; household: Household }>("POST", "/setup", input),
-    me: () => request<{ user: User; household: Household; available?: boolean }>("GET", "/me"),
+    setupStatus: () => request<{ needed: boolean; signup?: boolean }>("GET", "/setup"),
+    me: () => request<Me>("GET", "/me"),
+
+    // Accounts and households
+    signupOptions: (input: {
+      handle: string;
+      name: string;
+      timeZone: string;
+      householdName?: string;
+    }) => request<CeremonyOptions & { address: string }>("POST", "/signup/options", input),
+    signup: (challengeId: string, response: unknown, passkeyName: string) =>
+      request<SignedInResult>("POST", "/signup", { challengeId, response, passkeyName }),
+    createHousehold: (input: { name: string; timeZone?: string }) =>
+      request<{ household: Household; user: User }>("POST", "/households", input),
+    switchHousehold: (householdId: string) =>
+      request<void>("PUT", "/me/household", { householdId }),
+    updateAccount: (changes: { handle?: string; name?: string }) =>
+      request<AccountInfo>("PATCH", "/account", changes),
     logout: () => request<void>("POST", "/logout"),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),

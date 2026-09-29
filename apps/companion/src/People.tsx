@@ -11,6 +11,8 @@ interface Props {
   onCall(u: User): void;
   onBack(): void;
   householdName: string;
+  /** Pre-selects the role in the invite form ("Invite a co-guardian"). */
+  initialRole?: Role;
 }
 
 interface Shared {
@@ -20,11 +22,19 @@ interface Shared {
 }
 
 /** Guardians: who's in the household, invite links, sign-in links, and removal. */
-export function People({ api, me, members, onCall, onBack, householdName }: Props) {
+export function People({
+  api,
+  me,
+  members,
+  onCall,
+  onBack,
+  householdName,
+  initialRole = "contact",
+}: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string>();
   const [name, setName] = useState("");
-  const [role, setRole] = useState<Role>("contact");
+  const [role, setRole] = useState<Role>(initialRole);
   const [busy, setBusy] = useState(false);
   const [shared, setShared] = useState<Shared>();
   const [confirmRemove, setConfirmRemove] = useState<string>();

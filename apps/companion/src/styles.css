@@ -1054,3 +1054,32 @@ fieldset.ownership legend {
   margin: 0;
   padding-left: 18px;
 }
+
+/* --- accounts & households ------------------------------------------------------------------ */
+.household-switch {
+  flex: none;
+  max-width: 45%;
+  min-height: 36px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.get-started h3 {
+  margin: 0;
+}
+.get-started-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.get-started-actions button {
+  flex: 1 1 10rem;
+}
+.address {
+  overflow-wrap: anywhere;
+  font-variant-ligatures: none;
+}

@@ -23,6 +23,14 @@ describe("createApi", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ code: "123456", name: "Kid" });
   });
 
+  it("pins requests to a household when given one", async () => {
+    const fetch = fakeFetch(200, []);
+    await createApi({ token: "t".repeat(20), fetch, household: "hh_home" }).devices();
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({ "x-household": "hh_home" });
+    await createApi({ token: "t".repeat(20), fetch }).devices();
+    expect(fetch.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-household");
+  });
+
   it("omits auth when signed out and handles 204", async () => {
     const fetch = fakeFetch(204);
     const api = createApi({ token: null, fetch });

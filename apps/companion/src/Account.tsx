@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Api, PasskeySummary, User } from "./api.ts";
+import type { AccountInfo, Api, Membership, PasskeySummary, User } from "./api.ts";
 import { AvailabilityToggle } from "./GrownUps.tsx";
+import { YourHouseholds } from "./Households.tsx";
+import { handleHint, normalizeHandle } from "./handles.ts";
 import {
   defaultPasskeyName,
   passkeyErrorText,
@@ -17,9 +19,27 @@ interface Props {
   onBack(): void;
   onSignOut(): void;
   onHelp(): void;
+  account: AccountInfo | undefined;
+  memberships: Membership[];
+  onSwitch(householdId: string): void;
+  onAddHousehold(): void;
+  onAccountChanged(): void;
 }
 
-export function Account({ api, me, available, onAvailable, onBack, onSignOut, onHelp }: Props) {
+export function Account({
+  api,
+  me,
+  available,
+  onAvailable,
+  onBack,
+  onSignOut,
+  onHelp,
+  account,
+  memberships,
+  onSwitch,
+  onAddHousehold,
+  onAccountChanged,
+}: Props) {
   const [passkeys, setPasskeys] = useState<PasskeySummary[]>([]);
   const [name, setName] = useState(() => defaultPasskeyName(navigator.userAgent));
   const [busy, setBusy] = useState(false);
@@ -77,6 +97,15 @@ export function Account({ api, me, available, onAvailable, onBack, onSignOut, on
         <p className="muted">{me.role === "guardian" ? "Guardian" : "Contact"} in this household</p>
       )}
 
+      {account && <AddressCard api={api} account={account} onChanged={onAccountChanged} />}
+
+      <YourHouseholds
+        memberships={memberships}
+        activeId={me?.householdId}
+        onSwitch={onSwitch}
+        onAdd={onAddHousehold}
+      />
+
       <h3>Your passkeys</h3>
       {error && (
         <p className="error" role="alert">
@@ -131,5 +160,84 @@ export function Account({ api, me, available, onAvailable, onBack, onSignOut, on
         Sign out of this device
       </button>
     </section>
+  );
+}
+
+/** Your address (`handle@host`) and changing the handle (the server allows once a day). */
+function AddressCard({
+  api,
+  account,
+  onChanged,
+}: {
+  api: Api;
+  account: AccountInfo;
+  onChanged(): void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [handle, setHandle] = useState(account.handle);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const host = account.address.slice(account.address.indexOf("@") + 1);
+  const hint = handleHint(handle);
+
+  const save = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.updateAccount({ handle });
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card stack">
+      <div>
+        <div className="muted small">Your address</div>
+        <div className="device-name address">{account.address}</div>
+      </div>
+      {editing ? (
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!hint) void save();
+          }}
+        >
+          <label>
+            Handle
+            <input
+              value={handle}
+              onChange={(e) => setHandle(normalizeHandle(e.target.value))}
+              maxLength={30}
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+            <span className="hint">
+              {hint ?? `${handle}@${host} · you can change it once a day`}
+            </span>
+          </label>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" className="primary" disabled={busy || !!hint}>
+            Save handle
+          </button>
+          <button type="button" className="link" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)}>
+          Change handle
+        </button>
+      )}
+    </div>
   );
 }

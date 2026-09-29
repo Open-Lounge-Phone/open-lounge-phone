@@ -4,13 +4,15 @@ import {
   type Api,
   createApi,
   type DeviceSummary,
-  type Household,
+  type Me,
+  type Role,
   type Schedule,
   type User,
 } from "./api.ts";
 import { CallOverlay } from "./CallOverlay.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
 import { Home } from "./Home.tsx";
+import { AddHousehold, GetStarted, HouseholdSwitcher } from "./Households.tsx";
 import { Invite } from "./Invite.tsx";
 import { LoungePhones, LoungeScan } from "./Lounge.tsx";
 import { type LoungeLink, parseLoungeLink } from "./loungeLink.ts";
@@ -21,7 +23,8 @@ import { People } from "./People.tsx";
 import { phoneLed } from "./phoneLed.ts";
 import { QuietHours } from "./QuietHours.tsx";
 import { quietStatus } from "./quietStatus.ts";
-import { Setup, SignedOut } from "./Setup.tsx";
+import { Setup } from "./Setup.tsx";
+import { Start } from "./Start.tsx";
 import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
 import { Welcome } from "./Welcome.tsx";
@@ -34,7 +37,8 @@ export type Route =
   | { name: "help" }
   | { name: "device"; id: string }
   | { name: "quiet" }
-  | { name: "people" }
+  | { name: "people"; role?: Role }
+  | { name: "add-household" }
   | { name: "account" }
   | { name: "voicemail" };
 
@@ -47,6 +51,9 @@ export function App() {
   // Cleared once used, so signing out later shows the signed-out screen, not setup again.
   const [setupToken, setSetupToken] = useState(() => readSetupToken(location.hash));
   const [inviteToken, setInviteToken] = useState(() => readInviteToken(location.hash));
+  /** Bumped to reload everything, e.g. after switching household. */
+  const [generation, setGeneration] = useState(0);
+  const reload = useCallback(() => setGeneration((g) => g + 1), []);
   /** A fresh session from first-run setup, waiting on the passkey offer. */
   const [offerFor, setOfferFor] = useState<string>();
   /** Opened from a Lounge phone's QR code (survives signing in first). */
@@ -82,11 +89,15 @@ export function App() {
     return (
       <Invite
         inviteToken={inviteToken}
-        onDone={(t) => {
+        sessionToken={token}
+        onDone={(t, joinedAsMe) => {
           clearHash();
           setInviteToken(undefined);
-          markWelcomePending(localStorage);
-          signIn(t);
+          if (joinedAsMe) reload();
+          else {
+            markWelcomePending(localStorage);
+            signIn(t);
+          }
         }}
         onCancel={() => {
           clearHash();
@@ -108,9 +119,21 @@ export function App() {
       />
     );
   }
-  if (!token) return <SignedOut onToken={signIn} />;
+  if (!token) {
+    return (
+      <Start
+        onToken={(t, fresh) => {
+          if (fresh) markWelcomePending(localStorage);
+          signIn(t);
+        }}
+        onInvite={setInviteToken}
+      />
+    );
+  }
   return (
     <SignedIn
+      key={generation}
+      onReload={reload}
       token={token}
       onSignOut={() => signIn(null)}
       loungeLink={loungeLink}
@@ -144,20 +167,40 @@ function useConnection(token: string, householdId: string | undefined, onUnautho
 function SignedIn({
   token,
   onSignOut,
+  onReload,
   loungeLink,
   onLoungeDone,
 }: {
   token: string;
   onSignOut: () => void;
+  /** Remounts with fresh data (after switching or joining a household). */
+  onReload: () => void;
   loungeLink?: LoungeLink | undefined;
   onLoungeDone(): void;
 }) {
-  const api: Api = useMemo(
+  // `/me` says which household is active; every other request is pinned to it, so this tab
+  // keeps acting in one household even if another tab switches.
+  const baseApi: Api = useMemo(
     () => createApi({ token, onUnauthorized: onSignOut }),
     [token, onSignOut],
   );
-  const [me, setMe] = useState<{ user: User; household: Household; available?: boolean }>();
-  const { conn, snap } = useConnection(token, me?.household.id, onSignOut);
+  const [meInfo, setMeInfo] = useState<Me>();
+  const householdId = meInfo?.household?.id;
+  const api: Api = useMemo(
+    () =>
+      createApi({
+        token,
+        onUnauthorized: onSignOut,
+        ...(householdId ? { household: householdId } : {}),
+      }),
+    [token, onSignOut, householdId],
+  );
+  const me =
+    meInfo?.user && meInfo.household
+      ? { user: meInfo.user, household: meInfo.household }
+      : undefined;
+  const memberships = meInfo?.memberships ?? [];
+  const { conn, snap } = useConnection(token, householdId, onSignOut);
   const [people, setPeople] = useState<User[]>([]);
   // Your own "taking calls" flag; the server persists it and /api/me reports it.
   const [available, setAvailable] = useState(true);
@@ -166,6 +209,18 @@ function SignedIn({
   const [loadError, setLoadError] = useState<string>();
   const [unheard, setUnheard] = useState(0);
   const [toast, setToast] = useState<string>();
+
+  const switchTo = useCallback(
+    async (id: string) => {
+      try {
+        await baseApi.switchHousehold(id);
+        onReload();
+      } catch (e) {
+        setLoadError((e as Error).message);
+      }
+    },
+    [baseApi, onReload],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -184,17 +239,22 @@ function SignedIn({
     }
   }, [api]);
 
-  useEffect(() => {
-    api.me().then(
+  const loadMe = useCallback(() => {
+    baseApi.me().then(
       (m) => {
-        setMe(m);
+        setMeInfo(m);
         setAvailable(m.available ?? true);
       },
       (e: Error) => setLoadError(e.message),
     );
+  }, [baseApi]);
+  useEffect(() => loadMe(), [loadMe]);
+
+  useEffect(() => {
+    if (!householdId) return;
     void refresh();
     void loadPeople();
-  }, [api, refresh, loadPeople]);
+  }, [householdId, refresh, loadPeople]);
 
   // Someone we haven't listed yet joined the server.
   useEffect(() => {
@@ -230,19 +290,21 @@ function SignedIn({
   const [welcome, setWelcome] = useState(() => welcomePending(localStorage));
   const hasOwnPhone = devices.some((d) => me && d.ownerUserId === me.user.id);
   useEffect(() => {
+    if (!householdId) return;
     const fast = pairingSince !== undefined && !hasOwnPhone && Date.now() - pairingSince < 90_000;
     const t = setInterval(() => void refresh(), fast ? 2_000 : 15_000);
     return () => clearInterval(t);
-  }, [refresh, pairingSince, hasOwnPhone]);
+  }, [refresh, pairingSince, hasOwnPhone, householdId]);
 
   // Household quiet hours, for the header dot (re-evaluated every minute).
   const [schedule, setSchedule] = useState<Schedule>();
   const [minute, setMinute] = useState(() => Date.now());
   useEffect(() => {
+    if (!householdId) return;
     api.quietHours().then(setSchedule, () => {});
     const t = setInterval(() => setMinute(Date.now()), 60_000);
     return () => clearInterval(t);
-  }, [api]);
+  }, [api, householdId]);
   const led = phoneLed({
     devices,
     live: snap.live,
@@ -259,13 +321,13 @@ function SignedIn({
   };
 
   const countUnheard = useCallback(async () => {
-    if (!guardian) return;
+    if (!guardian || !householdId) return;
     try {
       setUnheard((await api.voicemails()).filter((v) => !v.heardAt).length);
     } catch {
       // The inbox shows its own errors.
     }
-  }, [api, guardian]);
+  }, [api, guardian, householdId]);
 
   useEffect(() => {
     void countUnheard();
@@ -289,6 +351,12 @@ function SignedIn({
           <img src="/icon.svg" alt="" width={28} height={28} />
           <span>{me?.household.name ?? "Open Lounge Phone"}</span>
         </button>
+        <HouseholdSwitcher
+          memberships={memberships}
+          activeId={householdId}
+          onSwitch={(id) => void switchTo(id)}
+          onAdd={() => setRoute({ name: "add-household" })}
+        />
         <button
           type="button"
           className={`phone-led led-${led.color}${led.pulse ? " pulse" : ""}${snap.status === "open" ? "" : " socket-down"}`}
@@ -350,7 +418,26 @@ function SignedIn({
       )}
 
       <main>
-        {loungeLink && (
+        {meInfo && !me && route.name !== "add-household" && route.name !== "account" && (
+          <section className="card stack">
+            <h2>You're not in a household yet</h2>
+            <p className="muted">Ask a guardian for an invite link, or start your own household.</p>
+            <button type="button" onClick={() => setRoute({ name: "add-household" })}>
+              Add a household
+            </button>
+            <button type="button" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </section>
+        )}
+        {route.name === "add-household" && (
+          <AddHousehold
+            api={baseApi}
+            onCreated={() => onReload()}
+            onCancel={() => setRoute({ name: "home" })}
+          />
+        )}
+        {me && loungeLink && (
           <LoungeScan
             link={loungeLink}
             snap={snap}
@@ -375,7 +462,14 @@ function SignedIn({
         {!(welcome && me) && route.name === "help" && (
           <WhatsWhat onBack={() => setRoute({ name: "home" })} />
         )}
-        {!loungeLink && !(welcome && me) && route.name === "home" && (
+        {me && !loungeLink && !welcome && route.name === "home" && guardian && (
+          <GetStarted
+            onAddKidPhone={() => setRoute({ name: "pair" })}
+            onInviteGuardian={() => setRoute({ name: "people", role: "guardian" })}
+            onAddHousehold={() => setRoute({ name: "add-household" })}
+          />
+        )}
+        {me && !loungeLink && !welcome && route.name === "home" && (
           <LoungePhones
             api={api}
             devices={devices}
@@ -388,7 +482,7 @@ function SignedIn({
             onCallPerson={(u) => void conn?.callUser(u.id, u.name)}
           />
         )}
-        {!loungeLink && !(welcome && me) && route.name === "home" && (
+        {me && !loungeLink && !welcome && route.name === "home" && (
           <Home
             devices={devices}
             live={snap.live}
@@ -406,7 +500,7 @@ function SignedIn({
             onPair={() => setRoute({ name: "pair" })}
           />
         )}
-        {route.name === "pair" && (
+        {me && route.name === "pair" && (
           <Pair
             api={api}
             guardian={guardian}
@@ -418,7 +512,7 @@ function SignedIn({
             onCancel={() => setRoute({ name: "home" })}
           />
         )}
-        {route.name === "device" && (
+        {me && route.name === "device" && (
           <ManageDevice
             api={api}
             device={devices.find((d) => d.id === route.id)}
@@ -436,15 +530,17 @@ function SignedIn({
             }}
           />
         )}
-        {route.name === "quiet" && (
+        {me && route.name === "quiet" && (
           <QuietHours
             api={api}
             onBack={() => setRoute({ name: "home" })}
             onPhones={() => setRoute({ name: "home" })}
           />
         )}
-        {route.name === "people" && (
+        {me && route.name === "people" && (
           <People
+            key={route.role ?? "any"}
+            {...(route.role ? { initialRole: route.role } : {})}
             api={api}
             me={me?.user}
             members={snap.members}
@@ -453,8 +549,13 @@ function SignedIn({
             householdName={me?.household.name ?? "your household"}
           />
         )}
-        {route.name === "account" && (
+        {meInfo && route.name === "account" && (
           <Account
+            account={meInfo.account}
+            memberships={memberships}
+            onSwitch={(id) => void switchTo(id)}
+            onAddHousehold={() => setRoute({ name: "add-household" })}
+            onAccountChanged={loadMe}
             api={api}
             me={me?.user}
             available={available}
@@ -464,7 +565,7 @@ function SignedIn({
             onHelp={() => setRoute({ name: "help" })}
           />
         )}
-        {route.name === "voicemail" && (
+        {me && route.name === "voicemail" && (
           <VoicemailInbox
             api={api}
             devices={devices}

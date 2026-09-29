@@ -12,11 +12,14 @@ type Stage =
 /** Opened from a `#invite=<token>` link: preview, join, then offer a passkey. */
 export function Invite({
   inviteToken,
+  sessionToken,
   onDone,
   onCancel,
 }: {
   inviteToken: string;
-  onDone(sessionToken: string): void;
+  /** Signed in already: joining adds this household to your account instead of a new person. */
+  sessionToken?: string | null;
+  onDone(sessionToken: string, joinedAsMe: boolean): void;
   onCancel(): void;
 }) {
   const [stage, setStage] = useState<Stage>({ name: "loading" });
@@ -32,15 +35,18 @@ export function Invite({
   }, [inviteToken]);
 
   if (stage.name === "passkey") {
-    return <PasskeyOffer token={stage.token} onDone={() => onDone(stage.token)} />;
+    return <PasskeyOffer token={stage.token} onDone={() => onDone(stage.token, false)} />;
   }
 
   const join = async (invite: InvitePreview) => {
     setStage({ name: "joining", invite });
     setError(undefined);
     try {
-      const res = await createApi({ token: null }).acceptInvite(inviteToken);
-      setStage({ name: "passkey", token: res.token });
+      // A sign-in link is for the person it names; any other invite joins as you if signed in.
+      const asMe = !!sessionToken && !invite.existing;
+      const res = await createApi({ token: asMe ? sessionToken : null }).acceptInvite(inviteToken);
+      if (asMe) onDone(res.token, true);
+      else setStage({ name: "passkey", token: res.token });
     } catch (e) {
       setError((e as Error).message);
       setStage({ name: "preview", invite });
@@ -74,11 +80,15 @@ export function Invite({
             <p>
               {stage.invite.existing
                 ? `This link signs you in to ${stage.invite.householdName} on this device.`
-                : `You're invited as ${stage.invite.name}${
-                    stage.invite.role === "guardian"
-                      ? ", a guardian who can also manage phones, people and quiet hours."
-                      : "."
-                  } Joining adds you to ${stage.invite.householdName} in this app, where you can call and be called. Next, you can set up your own phone — a virtual phone in a browser for now.`}
+                : sessionToken
+                  ? `You're invited as ${stage.invite.name}${
+                      stage.invite.role === "guardian" ? ", a guardian" : ""
+                    }. Joining adds ${stage.invite.householdName} to your account; switch between your households at the top of the app.`
+                  : `You're invited as ${stage.invite.name}${
+                      stage.invite.role === "guardian"
+                        ? ", a guardian who can also manage phones, people and quiet hours."
+                        : "."
+                    } Joining adds you to ${stage.invite.householdName} in this app, where you can call and be called. Next, you can set up your own phone — a virtual phone in a browser for now.`}
             </p>
             {error && (
               <p className="error" role="alert">

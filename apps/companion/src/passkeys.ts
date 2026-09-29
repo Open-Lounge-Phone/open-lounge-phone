@@ -50,3 +50,14 @@ export async function signInWithPasskey(api: Api): Promise<SignedInResult> {
   const response = await startAuthentication({ optionsJSON: options });
   return api.passkeyLoginVerify(challengeId, response);
 }
+
+/** Open sign-up: pick a handle, create a passkey, and get an account with its own household. */
+export async function signUpWithPasskey(
+  api: Api,
+  input: { handle: string; name: string; timeZone: string },
+  passkeyName: string,
+): Promise<SignedInResult> {
+  const { challengeId, options } = await api.signupOptions(input);
+  const response = await startRegistration({ optionsJSON: options });
+  return api.signup(challengeId, response, passkeyName);
+}

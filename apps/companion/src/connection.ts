@@ -87,7 +87,8 @@ export class Connection {
     this.socket = new ProtocolSocket<ServerToApp, AppToServer>({
       url: socketUrl(`/ws/app?household=${encodeURIComponent(householdId)}`),
       decode: decodeServerToApp,
-      onOpen: (send) => send({ t: "app.hello", proto: PROTOCOL_VERSION, token }),
+      onOpen: (send) =>
+        send({ t: "app.hello", proto: PROTOCOL_VERSION, token, household: householdId }),
       onMessage: (msg) => this.onMessage(msg),
       onStatus: (status, detail) => {
         this.set({ status });
