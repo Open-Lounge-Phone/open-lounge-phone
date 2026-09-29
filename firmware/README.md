@@ -23,6 +23,9 @@ emulator (`apps/device-web`) as its reference implementation and test peer.
 - On `wipe`: forget the device id, owner and settings, erase the device key and generate a new
   one, keep Wi-Fi, and go back to "Set me up". The server sends it to a connected phone when it's
   removed, or after a removed phone reconnects and signs the challenge with its old key.
+- MENU → About shows the device fingerprint as four words: `FINGERPRINT_WORDS[b]` for the first
+  four bytes of SHA-256(raw public key), list in `packages/core/src/fingerprint.ts` (copy it
+  verbatim), two words per strip line.
 - An idle Lounge phone may get `config.houseLine` (its keys call as the space) and
   `config.here` ("who's here"); both are off unless the space turns them on.
 

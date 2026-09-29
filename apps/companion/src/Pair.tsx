@@ -24,18 +24,22 @@ export function Pair({
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [mode, setMode] = useState<PhoneMode>(initialMode(modes, null, defaultMine));
+  /** The four words the phone shows under MENU → About, to check it's the one in front of you. */
+  const [words, setWords] = useState<string[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   // Once the code is complete: preselect what the phone was set up as.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when the code changes
   useEffect(() => {
+    setWords(undefined);
     if (code.length !== 6) return;
     let live = true;
     api.pairPreview(code).then(
       (p) => {
         if (!live) return;
         setError(undefined);
+        setWords(p.fingerprint);
         setMode(initialMode(modes, p.mode, defaultMine));
       },
       (e) => live && setError((e as Error).message),
@@ -88,6 +92,13 @@ export function Pair({
             required
           />
         </label>
+        {words && (
+          <div className="fingerprint" role="status">
+            <span className="small">Check these words match the phone (MENU, then 0: About):</span>
+            <strong className="words">{words.join(" ")}</strong>
+            <span className="hint">Different words? Don't pair it: that's another phone.</span>
+          </div>
+        )}
         <label>
           Phone name
           <input

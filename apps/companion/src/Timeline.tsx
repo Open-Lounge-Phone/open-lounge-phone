@@ -75,13 +75,17 @@ export function BuddyTimeline({ api, connectionId, refreshKey, onBack, onCall }:
             value={data.retention.setting}
             onChange={(e) => void setRetention(e.target.value as Retention)}
           >
-            {retentionOptions(inheritedRetention(data.retention.account), "Account default").map(
-              (o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+            {retentionOptions(
+              inheritedRetention(
+                data.retention.account,
+                data.retention.from === "space" ? data.retention.effective : "forever",
               ),
-            )}
+              "Account default",
+            ).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <span className="hint">
             Calls and voicemails with {c?.name} older than this are deleted, audio included. Only

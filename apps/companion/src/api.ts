@@ -71,6 +71,11 @@ export interface DeviceSummary {
   kind?: "kids" | "lounge";
   /** How it's used: a kids' phone, someone's own phone, or a shared Lounge phone. */
   mode?: "kids" | "personal" | "lounge";
+  /** Firmware (or browser-phone app) version and model it last reported. */
+  fw?: string | null;
+  model?: string | null;
+  /** The four words its MENU → About shows (derived from its key). */
+  fingerprint?: string[];
   /** How this device lists the signed-in user, if at all. */
   contact: ContactEntry | null;
 }
@@ -288,6 +293,15 @@ export type TimelineItem =
     }
   | { kind: "voicemail"; id: string; at: number; voicemail: TimelineVoicemail };
 
+/** A space's privacy settings (GET /space/privacy). */
+export interface SpacePrivacyInfo {
+  history: "30d" | "1y" | "forever";
+  voicemail: "30d" | "1y" | "forever";
+  transcription: boolean;
+  /** Whether this server can transcribe at all. */
+  transcriber: boolean;
+}
+
 /** One connection's history (GET /connections/:id/timeline). */
 export interface Timeline {
   connection: ConnectionView;
@@ -295,7 +309,7 @@ export interface Timeline {
     setting: Retention;
     account: Retention;
     effective: Exclude<Retention, "default">;
-    from: "connection" | "account" | "server";
+    from: "connection" | "account" | "space" | "server";
   };
   items: TimelineItem[];
 }
@@ -431,9 +445,17 @@ export function createApi(opts: ApiOptions) {
       }),
     /** Before pairing: what the phone was set up as. */
     pairPreview: (code: string) =>
-      request<{ mode: "kids" | "personal" | "lounge" | null }>("POST", "/devices/pair/preview", {
-        code,
-      }),
+      request<{ mode: "kids" | "personal" | "lounge" | null; fingerprint: string[] }>(
+        "POST",
+        "/devices/pair/preview",
+        { code },
+      ),
+    spacePrivacy: () => request<SpacePrivacyInfo>("GET", "/space/privacy"),
+    setSpacePrivacy: (patch: {
+      history?: SpacePrivacyInfo["history"];
+      voicemail?: SpacePrivacyInfo["voicemail"];
+      transcription?: boolean;
+    }) => request<void>("PUT", "/space/privacy", patch),
     lounge: () => request<LoungeInfo>("GET", "/lounge"),
     /** Use a Lounge phone on another server; this server vouches for you there. */
     remoteLounge: (input: { host: string; deviceId: string; nonce: string }) =>

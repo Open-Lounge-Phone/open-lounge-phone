@@ -14,6 +14,7 @@ import {
 import {
   type DeviceInput,
   type DeviceState,
+  deviceFingerprint,
   deviceStep,
   initialDeviceState,
   PROMPT_TEXT,
@@ -174,6 +175,8 @@ const tones = new TonePlayer();
 /** Greetings and prompts through the handset (on hardware: pre-recorded prompt ids). */
 const voice = browserVoice({ volume: () => settings.volume / 10 });
 const identity = await loadOrCreateIdentity(profile);
+/** MENU → About shows these four words; the app shows the same ones for this phone's key. */
+const fingerprint = await deviceFingerprint(identity.publicKey);
 
 // --- developer log -------------------------------------------------------------
 
@@ -640,6 +643,7 @@ function menuContext() {
   return {
     missedCount: config?.missed?.length ?? 0,
     fw: FW,
+    fingerprint,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
     ...(config?.greeting && variant !== "lounge" ? { greeting: config.greeting } : {}),
   };
@@ -920,6 +924,7 @@ function render(): void {
     ? config.missed.map((m) => m.from).join(", ")
     : "—";
   fact("menu").textContent = menu ? menu.screen : "closed";
+  fact("fingerprint").textContent = fingerprint.join(" ");
   fact("settings").textContent = `volume ${settings.volume}/10 · speakerphone ${
     settings.speakerphone ? "on" : "off"
   } · brightness ${settings.brightness}/5`;
@@ -948,7 +953,7 @@ function renderDisplay(): void {
     : view
       ? displayMode === "segments"
         ? menuLines(view, Date.now())
-        : ([view.title] as [string])
+        : [view.title, ...(view.detail ?? [])]
       : statusLines({
           connection,
           ...(pairingCode ? { pairingCode } : {}),

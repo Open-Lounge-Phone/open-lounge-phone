@@ -40,7 +40,13 @@ export function retentionOptions(
   ];
 }
 
-/** What a connection inherits when set to "default": the account default, else forever. */
-export function inheritedRetention(account: Retention): Exclude<Retention, "default"> {
-  return account === "default" ? "forever" : account;
+/**
+ * What a connection inherits when set to "default": the account default, else what the server
+ * says applies (the space's default, else forever).
+ */
+export function inheritedRetention(
+  account: Retention,
+  fallback: Exclude<Retention, "default"> = "forever",
+): Exclude<Retention, "default"> {
+  return account === "default" ? fallback : account;
 }

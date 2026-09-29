@@ -13,13 +13,17 @@ own infrastructure.
 | Phones: name, public key, allow-lists and speed-dial keys; last time seen | pairing, calls, default-deny access | until the phone is removed |
 | Connections (buddies): their address, name, state (knocked, connected, declined, blocked), the note on a knock | knock-then-talk, blocking | until either side disconnects; declines are kept 30 days, blocks until you remove them |
 | Presence you chose to share | showing your connections if you're available | the latest value only |
-| Call log: who called whom, when, how long, how it ended — **never the audio** | your call history and each buddy's timeline | as long as you choose: per connection, or your account default (30 days, 1 year or forever; forever unless you change it) |
-| Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until a guardian (a phone's) or you (yours) delete it, or — for yours — until the retention you chose for that person runs out |
+| Call log: who called whom, when, how long, how it ended — **never the audio** | your call history and each buddy's timeline | as long as you choose: per connection, or your account default; else the space's default (30 days, 1 year or forever; forever unless someone changes it) |
+| Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until deleted, or until the retention runs out: yours by your setting for that person (else the space's voicemail default), a phone's by the space's |
 | Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
-| Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | kept with the space |
+| Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | by the space's history setting (forever by default) |
+| Phones' software version and model, as they report it | the phone's page in the app | until the phone is removed |
 | Usage counters per month (call minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
 | Rate-limit counters (with IP addresses **hashed**) | stopping abuse | counted per minute, hour or day; stale counters are pruned after about a month |
 | Other servers' public keys and recent signature nonces | federation security | keys while the server is known; nonces ~11 minutes |
+
+**Transcription** can be switched off per space (guardians: Account → Privacy in this space);
+then voicemail audio is never sent to speech-to-text.
 
 **Expiry.** Expired call-log rows and voicemails are deleted with their audio by a sweep: once a
 day on a self-hosted server, and on a Cloudflare server whenever there is activity in the space

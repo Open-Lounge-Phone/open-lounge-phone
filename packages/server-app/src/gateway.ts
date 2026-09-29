@@ -66,7 +66,13 @@ export type GuestClaimResult =
 type DevicePhase =
   | { kind: "hello" }
   | { kind: "unpaired"; code?: string }
-  | { kind: "challenge"; device: Device; nonce: Uint8Array<ArrayBuffer> }
+  | {
+      kind: "challenge";
+      device: Device;
+      nonce: Uint8Array<ArrayBuffer>;
+      /** What it runs, from its hello (shown on the phone's page in the app). */
+      runs: { fw: string; model: string };
+    }
   /** A removed phone came back: once it proves it holds the removed key, it's told to wipe. */
   | {
       kind: "removed";
@@ -301,7 +307,7 @@ export class Gateway implements Coordinator {
             return fail(CloseCode.unauthorized, "unknown device");
           }
           const nonce = crypto.getRandomValues(new Uint8Array(32));
-          phase = { kind: "challenge", device, nonce };
+          phase = { kind: "challenge", device, nonce, runs: { fw: msg.fw, model: msg.model } };
           conn.send({ t: "auth.challenge", nonce: toBase64Url(nonce) });
           return;
         }
@@ -342,7 +348,7 @@ export class Gateway implements Coordinator {
             return fail(CloseCode.unauthorized, "bad signature");
           }
           cancelHello();
-          await this.env.store.touchDevice(device.id, this.env.now());
+          await this.env.store.touchDevice(device.id, this.env.now(), phase.runs);
           const hub = this.hub(device.householdId);
           const peer = await hub.connectDevice(device, conn);
           if (closed()) {

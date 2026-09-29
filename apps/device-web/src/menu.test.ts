@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
+  fingerprintLines,
   MENU_TIMEOUT_MS,
   type MenuEvent,
   type MenuState,
@@ -195,5 +196,29 @@ describe("Lounge session menu", () => {
     const none = menuStep(open.state, DEFAULT_SETTINGS, digit(9), ctx);
     expect(none.action).toBeUndefined();
     expect(none.state?.screen).toBe("root");
+  });
+});
+
+describe("About", () => {
+  it("shows the firmware and the phone's four words, two per line, and says them", () => {
+    const ctx = { missedCount: 0, fw: "0.1.0", fingerprint: ["acorn", "bell", "cedar", "duck"] };
+    const about = menuStep(
+      { screen: "root", lastInput: 0 },
+      DEFAULT_SETTINGS,
+      {
+        type: "digit",
+        digit: 0,
+        now: 1,
+      },
+      ctx,
+    );
+    const view = menuView(about.state as MenuState, DEFAULT_SETTINGS, ctx);
+    expect(view.title).toBe("FW 0.1.0");
+    expect(view.detail).toEqual(["ACORN BELL", "CEDAR DUCK"]);
+    expect(about.say).toContain("acorn, bell, cedar, duck");
+    expect(menuLines(view, 0)).toEqual(["FW 0.1.0", "ACORN BELL"]);
+    expect(menuLines(view, 2000)).toEqual(["FW 0.1.0", "CEDAR DUCK"]);
+    // The longest words still fit a 16-character line.
+    expect(fingerprintLines(["pelican", "unicorn", "a", "b"])[0]).toHaveLength(15);
   });
 });

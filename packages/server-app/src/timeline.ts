@@ -31,13 +31,17 @@ export const retentionDays = (choice: z.infer<typeof RetentionChoice>): number |
 export function effectiveRetention(
   connection: Pick<Connection, "retentionDays">,
   account: Pick<Account, "retentionDays">,
-): { effective: Retention; from: "connection" | "account" | "server" } {
+  /** The space's default for history (null = forever). */
+  space: number | null = null,
+): { effective: Retention; from: "connection" | "account" | "space" | "server" } {
   const [days, from] =
     connection.retentionDays !== null
       ? [connection.retentionDays, "connection" as const]
       : account.retentionDays !== null
         ? [account.retentionDays, "account" as const]
-        : [0, "server" as const];
+        : space !== null
+          ? [space, "space" as const]
+          : [0, "server" as const];
   return { effective: retentionName(days) as Retention, from };
 }
 
@@ -145,12 +149,15 @@ export function timelineRoutes(api: Hono<Vars>, env: ServerEnv): void {
       store.callLogWith(account.id, peers),
       store.personalVoicemailsFrom(account.id, peers),
     ]);
+    // The active space's default applies when neither you nor the connection set one.
+    const member = c.get("member");
+    const space = member ? (await store.spacePrivacy(member.householdId)).historyDays : null;
     return c.json({
       connection: connectionView(connection, host, env.now()),
       retention: {
         setting: retentionName(connection.retentionDays),
         account: retentionName(account.retentionDays),
-        ...effectiveRetention(connection, account),
+        ...effectiveRetention(connection, account, space),
       },
       items: buildTimeline(calls, voicemails),
     });

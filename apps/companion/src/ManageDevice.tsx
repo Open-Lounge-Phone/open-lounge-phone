@@ -12,6 +12,7 @@ import { GreetingEditor } from "./GreetingEditor.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
 import { MODE_TEXT } from "./pairMode.ts";
+import { formatLastSeen } from "./text.ts";
 
 interface Props {
   api: Api;
@@ -346,6 +347,28 @@ function PhoneSettings({
           }}
         />
       </label>
+      <dl className="phone-facts small">
+        <dt>Last seen</dt>
+        <dd>{device.online ? "Online now" : formatLastSeen(device.lastSeen, Date.now())}</dd>
+        {device.fw && (
+          <>
+            <dt>Software</dt>
+            <dd>
+              {device.model === "web-emulator" ? "Browser phone" : (device.model ?? "Phone")}{" "}
+              {device.fw}
+            </dd>
+          </>
+        )}
+        {device.fingerprint && (
+          <>
+            <dt>Its words</dt>
+            <dd>
+              <strong className="words">{device.fingerprint.join(" ")}</strong>
+              <span className="hint"> — the phone shows the same under MENU, 0: About.</span>
+            </dd>
+          </>
+        )}
+      </dl>
       <p className="small">
         <strong>{MODE_TEXT[mode].title}</strong>
         {someoneElses ? " — another person's own phone." : ` — ${MODE_TEXT[mode].hint}`}

@@ -1,4 +1,9 @@
-import { type QuietHoursRule, validateSchedule, type Weekday } from "@openloungephone/core";
+import {
+  deviceFingerprint,
+  type QuietHoursRule,
+  validateSchedule,
+  type Weekday,
+} from "@openloungephone/core";
 import {
   deviceMode,
   type HouseLineKey,
@@ -7,6 +12,8 @@ import {
   type LoungeSessionPolicy,
   newToken,
   type PhoneMode,
+  RETENTION_DAYS,
+  retentionName,
   sha256,
   type User,
 } from "@openloungephone/db";
@@ -31,7 +38,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
-import { timelineRoutes } from "./timeline.ts";
+import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
 
@@ -62,6 +69,18 @@ const PairBody = z.object({
   /** Older apps: `kids` or `lounge` (= `mode`). */
   kind: z.enum(["kids", "lounge"]).optional(),
 });
+/** A space's retention default: 30 days, a year, or forever (no expiry). */
+const SpaceRetention = z.enum(["30d", "1y", "forever"]);
+const PrivacyBody = z
+  .object({
+    history: SpaceRetention.optional(),
+    voicemail: SpaceRetention.optional(),
+    transcription: z.boolean().optional(),
+  })
+  .refine((b) => Object.values(b).some((v) => v !== undefined), { message: "nothing to change" });
+const spaceDays = (r: z.infer<typeof SpaceRetention>) =>
+  r === "forever" ? null : RETENTION_DAYS[r];
+
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 const HouseLineKeyBody = z.object({
   index: z.number().int().min(0).max(9),
@@ -274,6 +293,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           ownerUserId: d.ownerUserId,
           kind: d.kind,
           mode: deviceMode(d),
+          // For the phone's page: what it runs, and the four words its MENU → About shows.
+          fw: d.fw,
+          model: d.model,
+          fingerprint: await deviceFingerprint(d.publicKey),
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
       ),
@@ -289,7 +312,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     const pending = await store.peekPairing(b.code, env.now());
     if (!pending) return c.json({ error: "unknown or expired code" }, 404);
-    return c.json({ mode: pending.mode });
+    // "Check these words match": the phone shows the same four under MENU → About.
+    return c.json({ mode: pending.mode, fingerprint: await deviceFingerprint(pending.publicKey) });
   });
 
   api.post("/devices/pair", async (c) => {
@@ -352,7 +376,15 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       await store.setButton(device.id, 0, user.id);
     }
     await live.notifyPaired(b.code, device);
-    return c.json({ id: device.id, name: device.name, mode }, 201);
+    return c.json(
+      {
+        id: device.id,
+        name: device.name,
+        mode,
+        fingerprint: await deviceFingerprint(device.publicKey),
+      },
+      201,
+    );
   });
 
   api.get("/devices/:id/contacts", async (c) => {
@@ -512,6 +544,33 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     for (const d of await store.listDevices(user.householdId)) {
       await live.refreshDevice(user.householdId, d.id);
     }
+    return c.body(null, 204);
+  });
+
+  // --- privacy: retention defaults and transcription ---------------------------
+
+  /** How long this space keeps history and voicemail, and whether voicemail is transcribed. */
+  api.get("/space/privacy", async (c) => {
+    const p = await store.spacePrivacy(c.get("user").householdId);
+    return c.json({
+      history: retentionName(p.historyDays ?? 0),
+      voicemail: retentionName(p.voicemailDays ?? 0),
+      transcription: p.transcribe,
+      // Whether this server can transcribe at all.
+      transcriber: !!env.transcriber,
+    });
+  });
+
+  api.put("/space/privacy", guardianOnly, async (c) => {
+    const b = await body(c.req.raw, PrivacyBody);
+    if (b instanceof Response) return b;
+    const hh = c.get("user").householdId;
+    await store.setSpacePrivacy(hh, {
+      ...(b.history ? { historyDays: spaceDays(b.history) } : {}),
+      ...(b.voicemail ? { voicemailDays: spaceDays(b.voicemail) } : {}),
+      ...(b.transcription !== undefined ? { transcribe: b.transcription } : {}),
+    });
+    await sweepSpace(env, hh);
     return c.body(null, 204);
   });
 

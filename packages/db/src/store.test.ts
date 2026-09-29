@@ -508,6 +508,13 @@ describe("0013 and later (timeline, device modes, security)", () => {
       idle: { houseLine: { enabled: false, keys: [] }, whosHere: false },
     });
     expect(await s.removedDevice("dev_x")).toBeUndefined();
+    // 0015: privacy defaults keep everything and keep transcribing; phones haven't reported yet.
+    expect(await s.spacePrivacy(hh.id)).toEqual({
+      historyDays: null,
+      voicemailDays: null,
+      transcribe: true,
+    });
+    expect(await s.getDevice(device?.id as string)).toMatchObject({ fw: null, model: null });
     old.db.close();
   });
 });

@@ -52,6 +52,8 @@ export interface MenuContext {
   lounge?: { openToChat: boolean };
   /** The phone's voicemail greeting (absent on Lounge phones). */
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
+  /** The four words of this phone's key (the app shows the same ones: compare them). */
+  fingerprint?: readonly string[];
 }
 
 /** Something the phone must do or tell the server (greetings, Lounge phone items). */
@@ -82,6 +84,14 @@ export interface MenuView {
   /** Label for the MENU and BACK keys on this screen. */
   menuLabel: string;
   backLabel: string;
+  /** Extra lines under the title (About: the four fingerprint words, two per line). */
+  detail?: string[];
+}
+
+/** The four words as two strip lines ("ACORN BELL" / "CEDAR DUCK"); words are ≤ 7 letters. */
+export function fingerprintLines(words: readonly string[]): string[] {
+  const up = words.map((w) => w.toUpperCase());
+  return [up.slice(0, 2).join(" "), up.slice(2, 4).join(" ")].filter(Boolean);
 }
 
 /** Top-level options in keypad order (0 comes last, as on the phone). */
@@ -156,7 +166,12 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         labels: { 1: "Dimmer", 2: "Brighter" },
       };
     case "about":
-      return { ...base, title: `FW ${ctx.fw}`.toUpperCase(), labels: {} };
+      return {
+        ...base,
+        title: `FW ${ctx.fw}`.toUpperCase(),
+        labels: {},
+        ...(ctx.fingerprint ? { detail: fingerprintLines(ctx.fingerprint) } : {}),
+      };
   }
 }
 
@@ -190,8 +205,12 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       return `Speakerphone is ${settings.speakerphone ? "on" : "off"}. Press 1 for on, 2 for off.`;
     case "brightness":
       return `Brightness ${settings.brightness}. Press 1 for dimmer, 2 for brighter.`;
-    case "about":
-      return `Open Lounge Phone, firmware ${ctx.fw}.`;
+    case "about": {
+      const words = ctx.fingerprint
+        ? ` This phone's words are: ${ctx.fingerprint.join(", ")}. The app shows the same four words for this phone.`
+        : "";
+      return `Open Lounge Phone, firmware ${ctx.fw}.${words}`;
+    }
   }
 }
 
@@ -322,9 +341,11 @@ export function menuStep(
  */
 export function menuLines(view: MenuView, now: number): [string] | [string, string] {
   const clip = (s: string) => s.toUpperCase().slice(0, STATUS_WIDTH);
-  const options = Object.entries(view.labels)
-    .sort(([a], [b]) => (a === "0" ? 10 : Number(a)) - (b === "0" ? 10 : Number(b)))
-    .map(([d, label]) => `${d} ${label}`);
+  const options = view.detail?.length
+    ? view.detail
+    : Object.entries(view.labels)
+        .sort(([a], [b]) => (a === "0" ? 10 : Number(a)) - (b === "0" ? 10 : Number(b)))
+        .map(([d, label]) => `${d} ${label}`);
   if (options.length === 0) return [clip(view.title), clip(`${view.backLabel} = BACK`)];
   const current = options[Math.floor(now / 2000) % options.length] as string;
   return [clip(view.title), clip(current)];

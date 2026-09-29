@@ -284,6 +284,19 @@ export interface Device {
   kind: PhoneKind;
   createdAt: number;
   lastSeen: number | null;
+  /** Firmware (or browser-phone app) version and model from its last hello. */
+  fw: string | null;
+  model: string | null;
+}
+
+/** A space's privacy settings (docs/security-model.md). */
+export interface SpacePrivacy {
+  /** Call logs and Lounge usage history, in days; null = forever. */
+  historyDays: number | null;
+  /** Voicemail, in days; null = forever. */
+  voicemailDays: number | null;
+  /** Voicemail is transcribed (when the server has speech-to-text). */
+  transcribe: boolean;
 }
 
 /** Whose voicemail settings: a person (their account) or a household phone. */
@@ -434,6 +447,8 @@ type DeviceRow = {
   kind: PhoneKind;
   created_at: number;
   last_seen: number | null;
+  fw?: string | null;
+  model?: string | null;
 };
 type UserRow = {
   id: string;
@@ -482,6 +497,8 @@ const toDevice = (r: DeviceRow): Device => ({
   kind: r.kind ?? "kids",
   createdAt: r.created_at,
   lastSeen: r.last_seen,
+  fw: r.fw ?? null,
+  model: r.model ?? null,
 });
 const toUser = (r: UserRow): User => ({
   id: r.id,
@@ -807,10 +824,11 @@ export class Store {
   }
 
   /**
-   * Deletes a space's expired history: call-log rows and voicemails older than their retention.
-   * A person's rows follow their connection's setting for that peer, then their account default;
-   * then (the server default) they're kept. `host` names this server in local addresses. Returns
-   * the blob keys of the deleted voicemails, for the caller to delete.
+   * Deletes a space's expired history: call-log rows, voicemails and ended Lounge sessions older
+   * than their retention. A person's rows follow their connection's setting for that peer, then
+   * their account default, then the space's default (history or voicemail); a phone's own rows
+   * and Lounge sessions follow the space's. No setting anywhere = kept. `host` names this server
+   * in local addresses. Returns the blob keys of the deleted voicemails, for the caller to delete.
    */
   async sweepExpired(
     householdId: string,
@@ -831,15 +849,17 @@ export class Store {
         SELECT r.id, r.started_at AS t, COALESCE(
           ${connectionDays("r.account_id", "r.peer")},
           (SELECT a.retention_days FROM accounts a WHERE a.id = r.account_id),
+          (SELECT h.history_days FROM households h WHERE h.id = r.household_id),
           0) AS days
-        FROM call_log r WHERE r.household_id = ? AND r.started_at < ? AND r.account_id IS NOT NULL
+        FROM call_log r WHERE r.household_id = ? AND r.started_at < ?
       ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
     const voicemails = `SELECT id, k FROM (
         SELECT v.id, v.blob_key AS k, v.created_at AS t, COALESCE(
           ${connectionDays("u.account_id", "v.from_address")},
           (SELECT a.retention_days FROM accounts a WHERE a.id = u.account_id),
+          (SELECT h.voicemail_days FROM households h WHERE h.id = v.household_id),
           0) AS days
-        FROM voicemails v JOIN users u ON u.id = v.to_user
+        FROM voicemails v LEFT JOIN users u ON u.id = v.to_user
         WHERE v.household_id = ? AND v.created_at < ?
       ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
     const params = [host, householdId, floor, now];
@@ -848,6 +868,17 @@ export class Store {
     const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
     await this.deleteIds("voicemails", ids(expiredVm));
     await this.deleteIds("call_log", ids(expiredCalls));
+    // The Lounge usage history (who used which phone, when) follows the space's history setting.
+    await this.sql.run(
+      `DELETE FROM lounge_sessions WHERE household_id = ? AND ended_at IS NOT NULL
+         AND ended_at < ? - COALESCE(
+           (SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
+         AND (SELECT history_days FROM households WHERE id = ?) > 0`,
+      householdId,
+      now,
+      householdId,
+      householdId,
+    );
     return {
       calls: expiredCalls.length,
       voicemails: expiredVm.length,
@@ -1269,6 +1300,8 @@ export class Store {
       kind: input.kind ?? (pending.kind === "lounge" ? "lounge" : "kids"),
       createdAt: now,
       lastSeen: null,
+      fw: null,
+      model: null,
     };
     // A key re-paired to a new household replaces its old device record.
     await this.sql.batch([
@@ -1356,8 +1389,49 @@ export class Store {
     await this.sql.run("DELETE FROM removed_devices WHERE id = ?", id);
   }
 
-  async touchDevice(id: string, now: number): Promise<void> {
-    await this.sql.run("UPDATE devices SET last_seen = ? WHERE id = ?", now, id);
+  /** A phone connected: when, and what it runs (its hello's `fw` and `model`). */
+  async touchDevice(id: string, now: number, runs?: { fw: string; model: string }): Promise<void> {
+    await this.sql.run(
+      "UPDATE devices SET last_seen = ?, fw = COALESCE(?, fw), model = COALESCE(?, model) WHERE id = ?",
+      now,
+      runs?.fw ?? null,
+      runs?.model ?? null,
+      id,
+    );
+  }
+
+  // --- space privacy -----------------------------------------------------------------
+
+  async spacePrivacy(householdId: string): Promise<SpacePrivacy> {
+    const r = await this.sql.first<{
+      history_days: number | null;
+      voicemail_days: number | null;
+      transcribe: number | null;
+    }>("SELECT history_days, voicemail_days, transcribe FROM households WHERE id = ?", householdId);
+    return {
+      historyDays: r?.history_days ?? null,
+      voicemailDays: r?.voicemail_days ?? null,
+      transcribe: r?.transcribe !== 0,
+    };
+  }
+
+  async setSpacePrivacy(
+    householdId: string,
+    patch: { historyDays?: number | null; voicemailDays?: number | null; transcribe?: boolean },
+  ): Promise<void> {
+    await this.sql.run(
+      `UPDATE households SET
+         history_days = CASE WHEN ? THEN ? ELSE history_days END,
+         voicemail_days = CASE WHEN ? THEN ? ELSE voicemail_days END,
+         transcribe = COALESCE(?, transcribe)
+       WHERE id = ?`,
+      patch.historyDays !== undefined ? 1 : 0,
+      patch.historyDays ?? null,
+      patch.voicemailDays !== undefined ? 1 : 0,
+      patch.voicemailDays ?? null,
+      patch.transcribe === undefined ? null : patch.transcribe ? 1 : 0,
+      householdId,
+    );
   }
 
   // --- allow-list & buttons -----------------------------------------------

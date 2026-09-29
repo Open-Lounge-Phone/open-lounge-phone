@@ -1164,6 +1164,40 @@ fieldset.ownership legend {
   color: var(--accent-text);
   font-weight: 600;
 }
+/* Phone facts (last seen, software, fingerprint words) and the words at pairing. */
+dl.phone-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+}
+.phone-facts > dt {
+  color: var(--muted, #666);
+}
+.phone-facts > dd {
+  margin: 0;
+}
+.words {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+.fingerprint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border, #8886);
+  border-radius: 0.5rem;
+}
+.house-line .key-digit {
+  display: inline-block;
+  min-width: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
 .admin .counts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));

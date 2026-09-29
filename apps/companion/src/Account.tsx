@@ -10,6 +10,7 @@ import {
   passkeysSupported,
   registerPasskey,
 } from "./passkeys.ts";
+import { SpacePrivacy } from "./SpacePrivacy.tsx";
 import { formatWhen } from "./text.ts";
 
 interface Props {
@@ -106,6 +107,8 @@ export function Account({
         onSwitch={onSwitch}
         onAdd={onAddHousehold}
       />
+
+      {me && <SpacePrivacy api={api} guardian={me.role === "guardian"} />}
 
       <h3>Your passkeys</h3>
       {error && (

@@ -1,5 +1,6 @@
 // Interop scenario between two independent servers (federation): sign-up on each, a knock across
 // servers, accept, and block. Runs against any two servers with open sign-up.
+import { deviceFingerprint } from "@openloungephone/core";
 import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { expect } from "vitest";
 import { fakeRegistration } from "./passkey.ts";
@@ -310,6 +311,8 @@ async function pairPhone(owner: Person, mode: "kids" | "personal" | "lounge") {
   const { code } = await pairing.next("pair.code");
   const preview = await api(owner, "/devices/pair/preview", { body: { code } });
   expect(preview.json.mode).toBe(mode);
+  // The four words the phone would show under MENU → About.
+  expect(preview.json.fingerprint).toEqual(await deviceFingerprint(publicKey));
   const paired = await api(owner, "/devices/pair", { body: { code, name: "Desk" } });
   expect(paired.status).toBe(201);
   const { deviceId } = await pairing.next("pair.done");
@@ -338,6 +341,10 @@ export async function removeAndWipe(bob: Person) {
   const phone = await desk.signIn();
   const config = await phone.next("config");
   expect(config.owner).toMatchObject({ mode: "personal", person: "Bob" });
+  const listed = (await api(bob, "/devices")).json.find(
+    (d: { id: string }) => d.id === desk.deviceId,
+  );
+  expect(listed).toMatchObject({ mode: "personal", fw: "e2e", model: "web-emulator" });
   expect((await api(bob, `/devices/${desk.deviceId}`, { method: "DELETE" })).status).toBe(204);
   expect(await phone.next("wipe")).toMatchObject({ reason: "removed" });
 

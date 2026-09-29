@@ -32,12 +32,15 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
   const [showQr, setShowQr] = useState(false);
   const [open, setOpen] = useState<string>();
   const [retention, setRetention] = useState<Retention>();
+  /** What "Space default" means here (the active space's history setting). */
+  const [spaceDefault, setSpaceDefault] = useState<"30d" | "1y" | "forever">("forever");
 
   const load = useCallback(async () => {
     try {
       const next = await api.connections();
       setInfo(next);
       setRetention((await api.accountRetention()).retention);
+      setSpaceDefault((await api.spacePrivacy().catch(() => undefined))?.history ?? "forever");
       onRequests(groupConnections(next.connections).requests.length);
     } catch (e) {
       setError((e as Error).message);
@@ -141,7 +144,7 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
                   void run(() => api.setAccountRetention(e.target.value as Retention))
                 }
               >
-                {retentionOptions("forever", "Server default").map((o) => (
+                {retentionOptions(spaceDefault, "Space default").map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

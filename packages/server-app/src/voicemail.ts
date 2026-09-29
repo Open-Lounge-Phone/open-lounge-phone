@@ -76,6 +76,8 @@ export async function depositVoicemail(
   if (!householdId) return undefined;
   const blobKey = `voicemail/${householdId}/${newId("vmb")}`;
   await env.blobs.put(blobKey, input.audio, input.mime);
+  // A space can switch transcription off; then the audio is never sent to speech-to-text.
+  const transcribes = !!env.transcriber && (await store.spacePrivacy(householdId)).transcribe;
   const fromLabel = input.fromLabel.slice(0, 24) || "Someone";
   const vm = await store.createVoicemail({
     householdId,
@@ -88,9 +90,9 @@ export async function depositVoicemail(
     durationMs: Math.min(MAX_VOICEMAIL_MS, input.durationMs),
     mime: input.mime.split(";")[0] ?? input.mime,
     blobKey,
-    transcriptStatus: env.transcriber ? "pending" : "unavailable",
+    transcriptStatus: transcribes ? "pending" : "unavailable",
   });
-  env.defer(transcribe(env, vm, input.audio));
+  if (transcribes) env.defer(transcribe(env, vm, input.audio));
   if (input.fromAddress && input.since !== undefined) {
     await store.linkVoicemail(
       {

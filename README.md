@@ -32,6 +32,7 @@ The software works end to end today; the hardware is being designed in the open.
 |---|---|---|
 | M0–M4 | Protocol and core logic; self-hosted server, browser phone, companion app; Cloudflare backend; invites, passkeys, voicemail with transcripts | done |
 | Lounge | QR takeover with a key-press proof, ephemeral sessions, "open to chat" | done (software) |
+| Security (software) | Four-word device fingerprint (phone MENU → About, pairing, the phone's page); phone page with last seen, software version and remove-and-wipe; retention defaults and transcription on/off per space; recording designed (not built) | done (software) |
 | Device lifecycle | Modes at claim (kids, personal desk phone, Lounge); per-space Lounge session length (idle, end of day, until logout); optional house-line keys and "who's here" on idle Lounge phones (off by default); remove = the phone wipes itself | done (server, apps, browser phone); firmware later |
 | P1 / P1b | Accounts and handles (`name@server`), several households per account, open sign-up; spaces (home, team, organization); handles reserved 90 days | done |
 | P2 | Connections ("buddies"): knock, accept, decline, block — on one server and across servers (signed server-to-server requests) | done |
