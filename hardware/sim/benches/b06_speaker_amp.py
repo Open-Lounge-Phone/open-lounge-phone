@@ -1,5 +1,5 @@
 """B6: NS4150B into the 8 Ω speaker: output level vs the ringer (≥ 75 dBA at 1 m) and
-speakerphone (≥ 70 dBA at 0.5 m) targets, clipping, and VSYS droop while ringing."""
+voice-prompt level (no speakerphone since H5), clipping, and VSYS droop while ringing."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import numpy as np
 from benchlib import Bench, Ctx, si, window
 from benches.b01_power_path import P_BUCK_IDLE, P_HANDSET, P_LED_CAP
 
-TITLE = "NS4150B class-D into 8 Ω: ringer / speakerphone SPL, clipping, VSYS droop"
+TITLE = "NS4150B class-D into 8 Ω: ringer SPL, prompt level, clipping, VSYS droop"
 REQS = "HW-ELEC-14, -05, -10; HW-FUNC-04"
 
 DAC_FS = 3.0 / 3.3        # ES8311 full scale AVDD/3.3 Vrms at AVDD 3.0 V (es8311.md, [ES8311 p9])
@@ -34,7 +34,7 @@ def run(ctx: Ctx) -> Bench:
                   "Speaker: Soberton SP-2040, 20 × 40 mm, 8 Ω ± 15 %, 1 W rated / 2 W max, "
                   "SPL 86 dB ± 3 dB at 1 W / 0.5 m (average of 0.8/1.0/1.2/1.5 kHz), F0 650 Hz "
                   "(SP-2040 spec rev B p1, https://www.soberton.com/wp-content/uploads/2020/03/"
-                  "SP-2040-June-2018.pdf). NB 8.4 mm deep (the proto box allows ≤ 5 mm).",
+                  "SP-2040-June-2018.pdf). It is 8.4 mm deep (p1): the H5 proto box grew to take it.",
                   "DAC: ES8311 full scale 0.91 Vrms differential at AVDD 3.0 V (es8311.md).",
                   "VSYS source: `BQ24074_BEH` at the ILIM-min / 4.75 V corner, no pack (as B1).",
               ],
@@ -60,8 +60,8 @@ def run(ctx: Ctx) -> Bench:
                   f"{p:.2f} W → {ring:.1f} dBA", "≥ 75 dBA at 1 m on USB (decision 9)" if ok is not None
                   else "INFO (battery)", ok, "HW-ELEC-14", key=(vcc == 4.3 and rin == 68e3))
         p_sp = min((DAC_FS * 240e3 / rin) ** 2 / RSPK, FW_CAP_W)
-        b.add(f"[{label}] speakerphone headroom at 0.5 m (−3 dB unit)", f"{spl(p_sp, False):.1f} dBA",
-              "≥ 70 dBA at 0.5 m (needs 0.05 W)", spl(p_sp, False) >= 70, "HW-ELEC-14")
+        b.add(f"[{label}] voice-prompt headroom at 0.5 m (−3 dB unit)", f"{spl(p_sp, False):.1f} dBA",
+              "INFO: prompts only (no speakerphone since H5, owner 2026-09-30)", None, "HW-ELEC-14")
     p_need = 10 ** ((75 - (SENS_1M - 3)) / 10)
     b.add("electrical power needed for 75 dBA at 1 m (worst unit)", f"{p_need:.2f} W",
           "INFO: ≤ 1 W rating", None, "HW-ELEC-14")

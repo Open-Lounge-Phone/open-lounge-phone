@@ -34,26 +34,27 @@ sys.path.insert(0, str(HW / "layout"))
 
 import netlist as nl  # noqa: E402
 
-RAILS = {"GND", "3V3", "3V0", "VSYS", "VBUS", "VBUS_C", "VBAT", "VLED", "HS_VIN", "HS_VBUS"}
+RAILS = {"GND", "3V3", "3V0", "VSYS", "VBUS", "VBUS_C", "VBAT", "VLED"}
 
 # Subsystems: anchor parts (by reference or SpecKey). Passives follow the anchor they touch
-# through a non-rail net; the rest land in "Power" (rail-only decoupling).
+# through a non-rail net; the rest land in "Power" (rail-only decoupling). H5 (2026-09-30).
 BLOCKS = [
-    ("Power in: USB-C sink, protection, charger, 3V3 buck, 3V0 LDO, battery, supercap",
-     {"J1", "D1", "D2", "F1", "D3", "U2", "U3", "L1", "U4", "J2", "U14", "D4"}, {"SUPERCAP"}),
-    ("MCU: ESP32-S3-WROOM-1U, reset/boot, USB-UART (CH340C), LED-data buffer, secure element",
-     {"U1", "SW1", "SW2", "U16", "Q5", "Q6", "U5", "U13"}, set()),
-    ("Audio: ES8311 DAC, ES7210 ADC, NS4150B amp, base mic, mic bias + privacy sense",
-     {"U6", "U7", "U9", "J4", "MK1", "Q1"}, {"FB220_2A"}),
-    ("Handset port: USB-C host (UAC), VBUS switch, ESD", {"J7", "D7", "U15", "D8", "D9"}, set()),
-    ("Sensors and radar: hall hook, IR hook option, accelerometer, LD2410C",
-     {"U10", "U11", "U12", "Q4", "J5", "Q2", "Q3"}, set()),
-    ("Side controls: VOL-, VOL+, MUTE (+ ESD)", {"SW3", "SW4", "SW5", "D5"}, set()),
+    ("Power in: USB-C sink + native USB, protection, charger, 3V3 buck, 3V0 LDO, battery",
+     {"J1", "D1", "D2", "F1", "D3", "U2", "U3", "L1", "U4", "J2", "U14"}, set()),
+    ("MCU: ESP32-S3-WROOM-1U, reset/boot, LED-data buffer",
+     {"U1", "SW1", "SW2", "U5"}, set()),
+    ("Audio: ES8311 codec (handset mic ADC, earpiece/speaker DAC), NS4150B speaker amp",
+     {"U6", "U9", "J4"}, set()),
+    ("Handset jack: 3.5 mm TRRS (CTIA), earpiece switch, mic bias, button/insertion sense, ESD",
+     {"J7", "D7", "D8", "D9", "U8", "FB3"}, set()),
+    ("Privacy chain + hook: MUTE AND hook -> MIC_VCC, DRV5032AJ",
+     {"Q5", "Q6", "U10"}, set()),
+    ("Side controls: VOL-, VOL+, MUTE (+ ESD)", {"SW3", "SW4", "SW5", "D4"}, set()),
     ("Keys and LEDs: AW9523B, 12 hot-swap keys, 13 SK6812MINI-E, LED power gate",
-     {"U17"}, {"HOTSWAP", "SK6812MINI-E", "AO3401A", "AO3400A"}),
-    ("E-ink strip: 24-pin FPC + SSD1680 boost (DNP on display = none)",
+     {"U17", "Q2", "Q3"}, {"HOTSWAP", "SK6812MINI-E"}),
+    ("E-ink strip: 24-pin FPC + SSD1680 boost",
      {"J6"}, {"L47u", "EPD_NFET", "MBR0530"}),
-    ("NFC tag, ambient light, privacy LED, Qwiic port", {"U18", "U19", "J3"},
+    ("NFC tag, ambient light, mic lights (x2), recording light", {"U18", "U19"},
      {"NFC_COIL", "LED_RED"}),
 ]
 
@@ -183,12 +184,12 @@ def main() -> int:
         y -= 0.5
         ax.text(0.4, y, "Rails", fontsize=10, weight="bold")
         for line in [
-            "USB-C VBUS_C -> PTC F1 -> VBUS (TVS D3) -> BQ24074 U2 -> VSYS 4.4 V (battery "
-            "B-option on VBAT, supercap on SCAP for Lounge)",
-            "VSYS -> TLV62569 buck U3 -> 3V3 (digital, ESP32, sensors) ; VSYS -> LP5907 U4 -> 3V0 "
-            "(codecs, mic bias)",
-            "VSYS -> P-FET gate -> VLED (13 x SK6812MINI-E) ; VBUS/VSYS diode-OR -> HS_VIN -> "
-            "SY6280 U15 -> HS_VBUS (handset)",
+            "USB-C VBUS_C -> PTC F1 (2 A) -> VBUS (TVS D3) -> BQ24074 U2 -> VSYS 4.4 V (1S pack "
+            "on VBAT); J1 D+/D- -> ESP32 native USB (flash, console)",
+            "VSYS -> TLV62569 buck U3 -> 3V3 3.19 V (digital, ESP32, sensors) ; VSYS -> LP5907 U4 "
+            "-> 3V0 (codec, handset mic)",
+            "3V0 -> 100R/10u -> MUTE SW5 -> Q5 (HOOK) -> MIC_VCC (2 mic lights, mic bias) ; "
+            "VSYS -> Q2 soft start -> VLED (13 x SK6812MINI-E)",
         ]:
             y -= 0.26
             ax.text(0.5, y, line, fontsize=7.5)

@@ -11,6 +11,16 @@ Severity as in H2: **High** breaks a promised guarantee, a core function or prod
 LCSC codes were looked up on JLCPCB/LCSC on 2026-09-29; every new code still goes through
 `make lcsc` in H5.
 
+## H5 status (2026-09-30)
+
+Built into the schematic: **P-01** (as the handset-mic chain: MUTE AND hook → MIC_VCC → two
+lights, D16), **P-02**, **P-05**, **P-06**, **P-07**, **P-08**, **P-09**, **P-10** (+ the
+SP-2040 and a deeper proto box, D18), **P-11** (12 pF fitted; the 7-turn footprint in H6),
+**P-12**, **P-13**, **P-15**. **Superseded** by the owner's second batch (D14/D15): **P-03**
+(handset boost + VBUS switch), **P-04** (USB switch) and **P-14** (base-mic SNR; re-done for the
+handset mic in b07). The benches now judge the H5 schematic ("H5" column in the README); b04,
+b05 and b07 were retargeted to the jack, the new privacy chain and the handset electret.
+
 ## Ranked change list
 
 | # | Sev | Change (values, parts) | Why (bench result) | Req. | Closes |

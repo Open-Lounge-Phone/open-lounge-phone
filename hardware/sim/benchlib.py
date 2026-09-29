@@ -23,7 +23,8 @@ class Check:
     ok: bool | None     # True PASS, False FAIL, None INFO (reported, not judged)
     reqs: str = ""      # requirement IDs this check verifies
     note: str = ""
-    scope: str = "both"  # "current" = today's schematic only, "proposal" = the H5 proposal only,
+    scope: str = "both"  # "current" = the pre-H5 (H3) schematic only, "proposal" = the H5
+    #                      schematic as built (was the H4 proposal),
     #                      "alt" = a rejected alternative, "both" = applies to both
 
     def __post_init__(self):
@@ -60,16 +61,18 @@ class Bench:
         if self.error:
             return "ERROR"
         judged = [c.ok for c in self.checks if c.ok is not None and c.scope in scopes]
+        if not judged:
+            return "n/a"
         return "PASS" if all(judged) else "FAIL"
 
     @property
     def verdict(self) -> str:
-        """Verdict for the H5 proposal (what the board will be)."""
+        """Verdict for the H5 schematic (the H4 proposal, now built)."""
         return self._v(("both", "proposal"))
 
     @property
     def verdict_current(self) -> str:
-        """Verdict for the schematic as it is today."""
+        """Verdict for the pre-H5 (H3) schematic, kept as the before/after record."""
         return self._v(("both", "current"))
 
 

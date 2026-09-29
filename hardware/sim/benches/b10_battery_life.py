@@ -11,14 +11,13 @@ REQS = "HW-ELEC-06; HW-FUNC-13"
 PACK_MAH, V_NOM = 700, 3.7
 USABLE = 0.85            # to the firmware cut-off (≈ 3.4 V) and after protection/aging margin
 ETA_BUCK = 0.88          # TLV62569 at 40-150 mA, 3.7 -> 3.2 V (SLVSDG1C p9-10 efficiency curves)
-ETA_BOOST = 0.88         # TPS61023 3.7 -> 5 V at 0.1 A (SLVSF14B p6 Figure 6-1)
 V3 = 3.19                # proposed 3V3 set point (B2)
 
 
-def p_rail(i33=0.0, i3v0=0.0, ivsys=0.0, ihs=0.0, v=V_NOM) -> float:
-    """Battery-side power in W for loads on 3V3 (A), 3V0 (A, linear from VSYS), VSYS (A) and
-    the handset 5 V (A)."""
-    return (i33 * V3 / ETA_BUCK + i3v0 * v + ivsys * v + ihs * 5.0 / ETA_BOOST
+def p_rail(i33=0.0, i3v0=0.0, ivsys=0.0, v=V_NOM) -> float:
+    """Battery-side power in W for loads on 3V3 (A), 3V0 (A, linear from VSYS) and VSYS (A).
+    H5: the analog handset (earpiece + mic bias) is a 3V0 load; there is no handset boost."""
+    return (i33 * V3 / ETA_BUCK + i3v0 * v + ivsys * v
             + 35e-6 * v + 23e-6 * v + 6.5e-6 * v)   # buck Iq, MAX17048, BQ24074 BAT sleep
 
 
@@ -26,11 +25,11 @@ SCEN = {
     # name: (idle W, talk W, note)
     "budget as written (DESIGN §9.2 idle, LED rail on)": (
         p_rail(i33=0.040 + 0.0005, i3v0=0.001, ivsys=0.013),
-        p_rail(i33=0.140 + 0.0005, i3v0=0.010, ivsys=0.013 + 0.010, ihs=0.100),
-        "ESP32 modem-sleep 40 mA, 13 × 1 mA LED quiescent, handset 100 mA"),
+        p_rail(i33=0.140 + 0.0005, i3v0=0.010 + 0.010, ivsys=0.013 + 0.010),
+        "ESP32 modem-sleep 40 mA, 13 × 1 mA LED quiescent, analog handset 10 mA from 3V0"),
     "proposed battery policy (LED rail off, Wi-Fi power save)": (
         p_rail(i33=0.015 + 0.0005, i3v0=0.0005, ivsys=0.0),
-        p_rail(i33=0.120 + 0.0005, i3v0=0.010, ivsys=0.013 + 0.005, ihs=0.100),
+        p_rail(i33=0.120 + 0.0005, i3v0=0.010 + 0.010, ivsys=0.013 + 0.005),
         "ESP32 automatic light sleep, DTIM3 ≈ 15 mA average (UNVERIFIED, EVT); LEDs on only "
         "during the call"),
 }
@@ -45,11 +44,11 @@ def run(ctx: Ctx) -> Bench:
                   "codecs + mic 25 mA, SK6812 1 mA quiescent each [R17 p6]); quiescent currents: "
                   "TLV62569 35 µA (SLVSDG1C p1), MAX17048 23 µA (max17048.md), BQ24074 BAT sleep "
                   "6.5 µA (SLUS810N p12); converter efficiencies from the TI curves.",
-                  "Handset: 100 mA at 5 V in a call — no qualified handset yet (decision 12: "
-                  "Native Union POP + one generic): UNVERIFIED, measure both.",
+                  "Handset (H5): analog TRRS handset, earpiece ≈ 7 mA rms average speech + mic "
+                  "bias ≤ 1.4 mA → 10 mA from 3V0 (b04); measure with the Opis 60s Micro.",
               ],
               assumptions=["Idle = on-hook, Wi-Fi associated, e-ink static, codecs powered down, "
-                           "amp and handset boost off; talk = handset call over Wi-Fi."])
+                           "amp off; talk = handset call over Wi-Fi."])
     e_use = PACK_MAH / 1000 * V_NOM * USABLE
     b.add("usable pack energy", f"{e_use:.2f} Wh", "INFO", None, "HW-ELEC-06")
     for name, (pi, pt, note) in SCEN.items():

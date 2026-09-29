@@ -1,5 +1,5 @@
 """User-interface block of the single board: keys, key LEDs, e-ink strip, NFC tag, ambient
-light, privacy LED. DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
+light, the two mic lights (on MIC_VCC) and the recording light (GPIO13). DESIGN.md §5 (AW9523B map), §6, §7, §8, §11.
 
 Single board (owner decision 2026-09-27): this used to be the separate deck board behind a
 24-pin FFC; it is now part of the main board's netlist (``board_main.build`` calls ``ui``).
@@ -64,8 +64,8 @@ KEY_PORTS = sorted({p for n, p in AW_PORTS.items() if n.startswith("KEY_")})  # 
 
 
 def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
-    """``n``: the main board's named nets (I2C, IRQ, EPD_*, LED_DATA_BUF, PRIV_LED_K, VOL_*,
-    MUTE_SENSE)."""
+    """``n``: the main board's named nets (I2C, IRQ, EPD_*, LED_DATA_BUF, MIC_VCC, REC_LED,
+    VOL_*, MUTE_SENSE)."""
     # ---- AW9523B I/O expander (C148077), I2C 0x58 = 0x58 + AD1<<1 + AD0 with AD0=AD1=0.
     # Datasheet: AD0/AD1 also select the power-on state of the outputs; tied low the outputs
     # come up low, so LED_PWR_EN (port 1, AW_PORTS) is off and nothing is powered before firmware runs.
@@ -113,16 +113,21 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
     series(led_en, GND, R("100k", note="LEDs off until firmware enables"))
     vled = rail("VLED")
     g = Net("VLED_PFET_G")
-    qp = make("AO3401A", note="LED chain power gate (cuts ~1 mA/LED quiescent)")
+    qp = make("AO3401A", ref="Q2", note="LED chain power gate (cuts ~1 mA/LED quiescent)")
     qp["S"] += VSYS
     qp["D"] += vled
     qp["G"] += g
     series(VSYS, g, R("100k"))
-    qn = make("AO3400A", note="3.3 V logic cannot turn a VSYS P-FET fully off")
-    qn["D"] += g
+    qn = make("AO3400A", ref="Q3", note="3.3 V logic cannot turn a VSYS P-FET fully off")
+    qd = Net("VLED_NFET_D")
+    qn["D"] += qd
     qn["S"] += GND
     qn["G"] += led_en
-    decouple(vled, GND, "22u", "22u")
+    # H4 P-09 soft start: 47k gate resistor + 4.7 nF gate-drain (Miller) cap -> ~85 mA inrush,
+    # 1.7 mV VSYS dip (b09; without it ~26 A and a 1.29 V dip)
+    series(qd, g, R("47k", note="LED switch soft start (gate resistor)"))
+    series(g, vled, C("4.7n", note="LED switch soft start (gate-drain)"))
+    decouple(vled, GND, "10u", note="VLED bulk (P-09: was 2 x 22 uF)")
     din = n["LED_DATA_BUF"]
     for i, name in enumerate(led_chain(v.n_keys), start=1):
         led = make("SK6812MINI-E", note=f"LED {i}: {name}")
@@ -143,12 +148,23 @@ def ui(v: Variant, n: dict, GND, V3V3, VSYS) -> None:
         if port not in used:
             x[port] += NC
 
-    # ---- privacy LED (red): lit by the NPN Q1 (audio()) whenever mic bias is present ----
-    pa = Net("PRIV_LED_A")
-    series(V3V3, pa, R("470", note="~2.5 mA"))
-    pl = make("LED_RED", note="PRIVACY (hardwired to mic bias)")
-    pl["A"] += pa
-    pl["K"] += n["PRIV_LED_K"]
+    # ---- mic lights: two red LEDs in PARALLEL on MIC_VCC, each with its own 1k (owner D1
+    # fallback taken on H4 b05 data; privacy_chain in board_main). Lit whenever - and only when -
+    # the handset mic can be powered; one open LED leaves the other lit. Side by side under one
+    # light hole. ----
+    for i in (1, 2):
+        k = Net(f"MIC_LED{i}_K")
+        pl = make("LED_RED", note=f"MIC LIGHT {i} (powered by the mic supply itself)")
+        pl["A"] += n["MIC_VCC"]
+        pl["K"] += k
+        series(k, GND, R("1k", note=f"mic light {i}: >= 0.7 mA in every corner (b05)"))
+
+    # ---- recording light: separate red LED on its own GPIO (owner D1, security-model) ----
+    rk = Net("REC_LED_A")
+    series(n["REC_LED"], rk, R("680", note="recording light ~1.5 mA from 3.3 V"))
+    rl = make("LED_RED", note="RECORDING light (GPIO13), own light hole")
+    rl["A"] += rk
+    rl["K"] += GND
 
     # ---- LTR-303ALS-01 (C364577) ambient light, I2C 0x29; pins 1 VDD, 2 NC, 3 GND, 4 SCL,
     # 5 INT (open-drain, unused: polled; not on the shared IRQ per §5), 6 SDA ----
@@ -181,7 +197,8 @@ def nfc(n, GND, V3V3):
     coil = make("NFC_COIL", note="PCB coil (est. L in gen_footprints.py), front-left end region")
     coil[1] += ac0
     coil[2] += ac1
-    series(ac0, ac1, C("22p", dnp=True, note="tuning cap placeholder: value set in EVT from the measured coil L"))
+    # H4 P-11: 7-turn coil (3.19 uH) + 12 pF C0G -> 13.56 MHz nominal; trim in EVT (VNA)
+    series(ac0, ac1, C("12p", note="NFC tuning cap (fitted, C0G; trim in EVT)"))
 
 
 def eink(n, GND, V3V3, dnp: bool = False):

@@ -30,7 +30,7 @@ def run(ctx: Ctx) -> Bench:
               provenance=["DRV5032 SLVSDC7H p6 (BOP/BRP per variant), p15 (Hall element 0.65 ± "
                           "0.08 mm below the SOT-23 top); on-axis field of a cylindrical magnet "
                           "(closed form); PROTO_BOX: Ø3 × 1.5 mm N35, 2.0 mm above the sensor "
-                          "on-hook, 8 mm travel."],
+                          "on-hook; H5 captive plunger: 10 mm travel (proto_box.py)."],
               assumptions=["±0.3 mm mechanical stack-up on both positions; N35 Br 1.17–1.21 T; "
                            "the magnet is on the sensor axis (lateral offset lowers both fields)."])
     for travel in (8.0, 10.0):

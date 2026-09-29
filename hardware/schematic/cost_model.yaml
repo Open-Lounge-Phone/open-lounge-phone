@@ -2,7 +2,7 @@
 # should be affordable to build ONE and cheap at scale). Part prices come from lcsc_cache.json
 # (JLCPCB assembly ladder first, then LCSC). Everything in this file is an ESTIMATE (EST) dated
 # below; re-quote before relying on it. JLCPCB is the reference quote, not a requirement.
-date: 2026-09-27
+date: 2026-09-30
 warn_at_scale_usd: 40      # WARN when the 1k-qty electronics total exceeds this
 
 scales: [1000, 10000]
@@ -26,7 +26,7 @@ one_off:
     stencil: {main: 15.8}
     extended_fee: 3.0       # per unique "extended" library part per board
     per_joint: 0.0017
-    joints: {main: 1070}            # EST from pad counts of fitted parts
+    joints: {main: 935}             # EST: 1070 x 633/724 netlist nodes after H5 (was 1070)
   osh_park:                 # published formula (docs.oshpark.com, 2026-09-27): 3 copies
     per_sq_in_4layer: 10.0
     copies: 3
@@ -41,11 +41,14 @@ unpriced:
 off_board:
   mx_switches_x12:   {scale: 3.00, retail: 5.40}
   keycaps:           {scale: 1.44, retail: 3.60}   # 12 printed DSA (digits, MENU, BACK)
-  speaker_20x40_4ohm: {scale: 0.60, retail: 3.00}  # rectangular top-firing
-  # off-the-shelf G-style USB-C (UAC 1.0) handset, not designed here. Retail: Native Union
-  # POP class ~$30; at-scale OEM price is a guess (UNVERIFIED) until a vendor quotes.
-  handset_usbc_uac:  {scale: 7.00, retail: 30.00}
-  # WROOM-1U external antenna: adhesive FPC 2.4 GHz antenna with U.FL pigtail (~100 mm)
-  antenna_fpc_ufl:   {scale: 0.45, retail: 2.50}
+  # Soberton SP-2040, 20 x 40 x 8.4 mm, 8 ohm 1 W, 86 dB/1 W/0.5 m (H4 b06, H5: chosen for the
+  # >= 75 dBA ringer; the proto box grew to its depth). Prices UNVERIFIED (distributor list).
+  speaker_sp2040_8ohm: {scale: 1.10, retail: 2.60}
+  # off-the-shelf analog G-style handset on a 3.5 mm TRRS plug (CTIA), e.g. Opis 60s Micro
+  # (Amazon US $29.90, 2026-09-30); generic OEM retro handsets at scale: guess, UNVERIFIED.
+  handset_trrs_analog: {scale: 4.00, retail: 29.90}
+  # WROOM-1U external antenna: general-purpose 2.4 GHz antenna with U.FL/IPEX (owner F,
+  # 2026-09-30; user-upgradable, same type and gain <= certified, see DESIGN §4)
+  antenna_ipex_2g4:  {scale: 0.45, retail: 2.50}
   eink_panel_gdey029t94: {scale: 4.50, retail: 6.50}
   lipo_1200mah:      {scale: 2.50, retail: 6.00}

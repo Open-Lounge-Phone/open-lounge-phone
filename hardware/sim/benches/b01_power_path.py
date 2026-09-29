@@ -17,13 +17,13 @@ DERATE = {"10u0603@4.4": 0.55, "10u0603@5": 0.5, "100u1206@4.4": 0.4, "22u0805@4
           "1u0603@5": 0.8}
 
 # VSYS loads (W at the rail) for the worst firmware-capped scenario (power_budget.yaml row
-# worst_case_capped = 1113 mA at 5 V, re-split per rail) plus the new handset boost.
+# worst_case_capped, re-split per rail). H5: the analog handset replaces the USB handset + boost.
 P_BUCK_TX = 3.3 * 0.355 / 0.88    # ESP32 TX burst through the buck (355 mA, WROOM p28)
 P_BUCK_IDLE = 3.3 * 0.06 / 0.88
 P_LED_CAP = 4.4 * 0.142           # LEDs capped (budget row ringing_max)
 P_AMP_RING = 1.0 / 0.88           # ringer: 1 W into the SP-2040 (its rating; B6 shows 0.63 W
                                   # meets 75 dBA at 1 m), class-D efficiency 88 % (NS4150B p3)
-P_HANDSET = 5.0 * 0.100 / 0.9     # UAC handset in a call via the 5 V boost (new, decision 5)
+P_HANDSET = 3.0 * 0.015          # analog handset (H5): earpiece <= 14 mA rms + mic bias from 3V0
 
 
 def caps(design: str, derated: bool) -> str:
@@ -89,7 +89,7 @@ def run(ctx: Ctx) -> Bench:
                   "55 % left at 4.4 V, 50 % at 5 V; 100 µF/1206/6.3 V 40 %; 22 µF/0805/25 V 70 %.",
                   "VSYS loads are constant-power (buck and boost regulate), 3.0 V UVLO; worst "
                   "capped profile = ESP32 TX 355 mA bursts (1 ms every 3 ms) + ringing amp "
-                  "(1 kHz tone, 2.07 W average) + LEDs 142 mA + handset 100 mA via the 5 V boost.",
+                  "(1 kHz tone, 2.07 W average) + LEDs 142 mA + analog handset 15 mA from 3V0.",
                   "Pack: 3.7 V, 150 mΩ internal (603040-class incl. protection FETs).",
               ])
 
@@ -167,8 +167,8 @@ def run(ctx: Ctx) -> Bench:
           si(iptc, "A"), "≤ 1.34 A (SMD1206P150 hold at 40 °C, PTTC p4)", iptc <= 1.34,
           "HW-ELEC-04, HW-SAFE-03", "F-07", key=True)
     b.add("PTC current vs hold at 40 °C (proposed: SMD1812P200TF16, C20812)", si(iptc, "A"),
-          "≤ 1.78 A (2.00 A hold × 0.89, the PTTC polymer derating of p4 — UNVERIFIED for 1812)",
-          iptc <= 1.78, "HW-ELEC-04, HW-SAFE-03", "16 V rated, 2 A hold / 4 A trip, 29.9 k at JLC")
+          "≤ 1.80 A (hold at 40 °C, Ruilon SMD1812 SP-PTC-008 rev A6 p6)",
+          iptc <= 1.80, "HW-ELEC-04, HW-SAFE-03", "16 V rated, 2 A hold / 4 A trip (p4), 29.9 k at JLC")
 
     # --- 6. OUT capacitance vs the datasheet range ---------------------------------------------
     for design in ("current", "proposed"):

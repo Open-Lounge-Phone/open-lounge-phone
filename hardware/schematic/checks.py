@@ -174,9 +174,9 @@ def check_i2c_union(per_board: dict) -> list:
     return out
 
 
-# Inputs deliberately left open (explicit NC in the schematic): unused codec mic inputs are
-# biased internally (owner 2026-09-28; [UNVERIFIED] "leave floating" against the datasheets).
-OPEN_INPUTS = {"ES8311": {"MIC1P", "MIC1N"}, "ES7210": {"MIC1P", "MIC1N", "MIC4P", "MIC4N"}}
+# Inputs deliberately left open (explicit NC in the schematic). None since H5: the ES8311 MIC1
+# input records the handset mic and the ES7210 is gone.
+OPEN_INPUTS: dict = {}
 
 
 def check_nets(circuit):
@@ -281,12 +281,136 @@ def check_one_bom(circuit):
     return out
 
 
+# ---------------------------------------------------------------------------------------------
+# Hardware privacy (HW-PRIV-01..03, owner 2026-09-30): the handset mic is powered only through
+# MUTE pole A AND the hook-controlled P-FET, the mic lights hang on that supply, and no GPIO can
+# push current into the mic supply or the mic line.
+
+RAILS = {"GND", "3V3", "3V0", "VSYS", "VBUS", "VBUS_C", "VBAT", "VLED"}
+MIC_NETS = ("MIC_VCC", "MIC_M", "HS_MIC_F", "HS_MIC")  # a DC source here could power the capsule
+ESD_SPECS = {"PESD5V0S2BT", "USBLC6-2SC6", "SRV05-4", "SMF5.0A"}  # off at operating voltage
+
+
+def _key(part) -> str:
+    return part.fields.get("SpecKey", "")
+
+
+def _dc_edges(part):
+    """Pairs of pins a DC current can flow through, as (from, to); diodes and LEDs only A -> K.
+    Worst case: every switch contact and FET channel is taken as closed."""
+    k, pins = _key(part), {p.name: p for p in part.pins}
+    two = lambda a, b: [(pins[a], pins[b]), (pins[b], pins[a])]  # noqa: E731
+    if k.startswith(("_R_", "_NT", "_SJ")) or part.ref_prefix in ("FB", "L", "F"):
+        names = [p.name for p in part.pins]
+        return two(names[0], names[1]) if len(names) == 2 else []
+    if k in ESD_SPECS or k.startswith("_C_") or k.startswith("_TP"):
+        return []
+    if "K" in pins and "A" in pins and part.ref_prefix == "D":
+        return [(pins["A"], pins["K"])]
+    if part.ref_prefix == "Q" and "D" in pins and "S" in pins:
+        return two("D", "S")
+    if k in ("TACT", "SIDE_TACT"):
+        return two("A", "B")
+    if k == "SLIDE_DPDT":
+        return two("1COM", "1A") + two("1COM", "1B") + two("2COM", "2A") + two("2COM", "2B")
+    if k == "TS5A3166":
+        return two("COM", "NO")
+    return []  # ICs, connectors: not traversed
+
+
+def _gpio_nets(circuit):
+    mods = [p for p in circuit.parts if _key(p) == "ESP32-S3-WROOM-1"]
+    return [(pin.name, _net_of(pin)) for m in mods for pin in m.pins
+            if re.fullmatch(r"IO\d+|RXD0|TXD0", pin.name) and _net_of(pin) is not None]
+
+
+def _reach(start_net):
+    """Nets a source on start_net can drive DC current into (rails are sinks, not crossed)."""
+    seen, todo = {start_net.name}, [start_net]
+    while todo:
+        net = todo.pop()
+        for pin in net.pins:
+            for a, b in _dc_edges(pin.part):
+                if a is pin:
+                    nb = _net_of(b)
+                    if nb is not None and nb.name not in seen and nb.name not in RAILS:
+                        seen.add(nb.name)
+                        todo.append(nb)
+    return seen
+
+
+def check_privacy(circuit):
+    out = []
+    nets = {n.name: n for n in circuit.nets}
+    missing = [x for x in ("MIC_VCC", "MIC_M", "MIC_F", "HOOK") if x not in nets]
+    if missing:
+        return [("ERROR", f"privacy chain nets missing: {missing}")]
+    # 1. no GPIO can source current into the mic supply or the mic line
+    for pin, net in _gpio_nets(circuit):
+        hit = sorted(_reach(net) & set(MIC_NETS))
+        if hit:
+            out.append(("ERROR", f"{pin} ({net.name}) has a DC path into {', '.join(hit)}: "
+                                 "firmware could power the handset mic"))
+    # 2. MIC_VCC is fed only by the drain of a P-FET whose source comes from MUTE pole A and
+    #    whose gate is pulled by an N-FET driven by HOOK
+    feeders = [p for p in nets["MIC_VCC"].pins
+               if p.part.ref_prefix == "Q" and p.name == "D"]
+    if len(feeders) != 1 or _key(feeders[0].part) != "AO3401A":
+        out.append(("ERROR", f"MIC_VCC must be fed by exactly one P-FET drain, found "
+                             f"{[f.part.ref for f in feeders]}"))
+    else:
+        q = feeders[0].part
+        src = _net_of(q["S"])
+        if src is None or not any(_key(p.part) == "SLIDE_DPDT" and p.name in ("1A", "1B")
+                                  for p in src.pins):
+            out.append(("ERROR", f"{q.ref} source is not on the MUTE switch (pole A)"))
+        gate = _net_of(q["G"])
+        drivers = [p.part for p in gate.pins if p.part.ref_prefix == "Q" and p.name == "D"]
+        if not any(_name(_net_of(d["G"])) == "HOOK" for d in drivers):
+            out.append(("ERROR", f"{q.ref} gate is not switched by the HOOK sensor"))
+        com = [p.part for p in src.pins if _key(p.part) == "SLIDE_DPDT"]
+        if com and _name(_net_of(com[0]["1COM"])) != "MIC_F":
+            out.append(("ERROR", "MUTE pole A common is not the filtered mic supply MIC_F"))
+    # 3. the HOOK line: driven by the Hall sensor only; the ESP32 sees it through >= 10k
+    hook = nets["HOOK"]
+    if any(_key(p.part) == "ESP32-S3-WROOM-1" for p in hook.pins):
+        out.append(("ERROR", "HOOK is wired straight to an ESP32 pin: firmware could hold it high"))
+    for pin in hook.pins:
+        part = pin.part
+        if part.ref_prefix != "R":
+            continue
+        other = _net_of([q for q in part.pins if q is not pin][0])
+        if other is not None and any(_key(p.part) == "ESP32-S3-WROOM-1" for p in other.pins) \
+                and _parse_ohms(str(part.value)) < 10e3:
+            out.append(("ERROR", f"{part.ref} {part.value} from HOOK to a GPIO is < 10 kOhm"))
+    # 4. mic lights = mic power: >= 2 LED anodes on MIC_VCC, each cathode to GND via a resistor
+    leds = [p.part for p in nets["MIC_VCC"].pins if _key(p.part) == "LED_RED" and p.name == "A"]
+    ok = [led for led in leds if _resistors_to(_net_of(led["K"]), GND_NAMES)]
+    if len(ok) < 2:
+        out.append(("ERROR", f"MIC_VCC needs two mic lights (LED + resistor to GND), found {len(ok)}"))
+    # 5. MIC_VCC holds little charge (lights and mic go dark together)
+    cap = 0.0
+    for p in nets["MIC_VCC"].pins:
+        if _key(p.part).startswith("_C_"):
+            v = str(p.part.value).split()[0].rstrip("F")
+            cap += float(re.sub(r"[pnu]", "", v)) * {"p": 1e-12, "n": 1e-9, "u": 1e-6}[v[-1]]
+    if cap > 1e-6:
+        out.append(("ERROR", f"MIC_VCC carries {cap * 1e6:.2f} uF (> 1 uF keeps the mic live "
+                             "after the lights go out)"))
+    if not out:
+        out.append(("INFO", f"OK: MIC_VCC <- {feeders[0].part.ref} (HOOK) <- MUTE pole A <- MIC_F; "
+                            f"{len(ok)} mic lights; {cap * 1e9:.0f} nF on MIC_VCC; no GPIO DC path "
+                            f"into {', '.join(MIC_NETS)}"))
+    return out
+
+
 def run_all(circuit, board: str = "main", variant=None):
     results = []
     fns = [check_i2c, check_nets, check_sourcing, check_footprints]
     if board == "main":
         fns.insert(0, check_pin_table)
         fns.append(check_power_budget)
+        fns.append(check_privacy)
     fns.append(check_one_bom)
     for fn in fns:
         try:

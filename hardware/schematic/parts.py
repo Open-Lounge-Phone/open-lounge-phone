@@ -43,7 +43,7 @@ spec(
 spec(
     "ES8311", ref="U", mpn="ES8311", manufacturer="Everest Semiconductor", lcsc="C962342",
     footprint="Package_DFN_QFN:QFN-20-1EP_3x3mm_P0.4mm_EP1.65x1.65mm",
-    desc="Mono audio codec (DAC drives 16/32 ohm earpiece differentially); I2C 0x18 (CE=0)",
+    desc="Mono audio codec: ADC = handset mic (MIC1P/N, PGA 0-30 dB), DAC = earpiece (16/32 ohm HP driver) + speaker amp input; I2C 0x18 (CE=0)",
     datasheet="https://dl.espressif.com/dl/schematics/Audio_ES8311.pdf",
     i2c={"I2C": 0x18}, i2c_straps=[("CE", 0)],
     pins=[
@@ -57,30 +57,9 @@ spec(
 )
 
 spec(
-    "ES7210", ref="U", mpn="ES7210", manufacturer="Everest Semiconductor", lcsc="C365743",
-    footprint="Package_DFN_QFN:QFN-32-1EP_4x4mm_P0.4mm_EP2.65x2.65mm",
-    desc="4-ch audio ADC, TDM out; CH1 handset mic, CH2 base mic, CH3 AEC reference; I2C 0x40",
-    datasheet="https://e2e.ti.com/cfs-file/__key/communityserver-discussions-components-files/6/7563.ES7210.pdf",
-    verified="pins 3/4 (CDATA/CCLK) follow the datasheet pinout drawing and Korvo-2 schematic; the "
-             "datasheet pin table lists them swapped",
-    i2c={"I2C": 0x40}, i2c_straps=[("AD0", 0), ("AD1", 1)],
-    pins=[
-        (1, "AD0", "in"), (2, "AD1", "in"), (3, "CDATA", "io"), (4, "CCLK", "in"),
-        (5, "MCLK", "in"), (6, "VDDP", "pwr_in"), (7, "VDDD", "pwr_in"), (8, "GNDD", "pwr_in"),
-        (9, "SCLK", "in"), (10, "LRCK", "in"), (11, "SDOUT1", "out"), (12, "SDOUT2", "io"),
-        (13, "INT", "out"), (14, "DMIC_CLK", "out"), (15, "MIC1N", "in"), (16, "MIC1P", "in"),
-        (17, "REFP12", "pas"), (18, "REFQ12", "pas"), (19, "MIC2P", "in"), (20, "MIC2N", "in"),
-        (21, "GNDA", "pwr_in"), (22, "VDDA", "pwr_in"), (23, "VDDM", "pwr_in"),
-        (24, "MICBIAS12", "pwr_out"), (25, "REFQM", "pas"), (26, "MICBIAS34", "pwr_out"),
-        (27, "MIC4N", "in"), (28, "MIC4P", "in"), (29, "REFP34", "pas"), (30, "REFQ34", "pas"),
-        (31, "MIC3P", "in"), (32, "MIC3N", "in"), (33, "EP", "pwr_in"),
-    ],
-)
-
-spec(
     "NS4150B", ref="U", mpn="NS4150B", manufacturer="Nsiway", lcsc="C189961",
     footprint="Package_SO:MSOP-8_3x3mm_P0.65mm",
-    desc="3 W class-D mono speaker amp; gain = 240k/Rin; CTRL high = on",
+    desc="3 W class-D mono speaker amp (ringer and prompts only); gain = 240k/Rin; CTRL high = on",
     datasheet="https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2209161630_Shenzhen-Nsiway-Tech-NS4150B_C189961.pdf",
     pins=[
         (1, "CTRL", "in"), (2, "BYPASS", "pas"), (3, "INP", "in"), (4, "INN", "in"),
@@ -91,7 +70,10 @@ spec(
 spec(
     "TS5A3166", ref="U", mpn="TS5A3166DCKR", manufacturer="Texas Instruments", lcsc="C133819",
     footprint="Package_TO_SOT_SMD:SOT-353_SC-70-5",
-    desc="SPST analog switch, 0.9 ohm, normally open (IN high = on); EAR_EN",
+    desc="SPST analog switch, 0.9 ohm, normally open (IN high = on): earpiece path, IN = HOOK "
+         "(on only off-hook)",
+    # pin map and IN polarity checked: SCDS186E p3 (1 NO, 2 COM, 3 GND, 4 IN, 5 V+; IN connects
+    # COM to NO); signal range 0..V+ (p3-4), so the switch sits on the DC-biased (VMID) side
     datasheet="https://www.ti.com/lit/ds/symlink/ts5a3166.pdf",
     pins=[(1, "NO", "pas"), (2, "COM", "pas"), (3, "GND", "pwr_in"), (4, "IN", "in"),
           (5, "VCC", "pwr_in")],
@@ -107,29 +89,41 @@ spec(
 )
 
 spec(
-    "RJ9", ref="J", mpn="5301-4P4C", manufacturer="EVERCOM", lcsc="C3097715",
-    footprint="Connector_RJ:RJ9_Evercom_5301-440xxx_Horizontal",
-    desc="4P4C handset jack, right-angle THT",
-    datasheet="https://datasheet.lcsc.com/lcsc/2207051802_EVERCOM-5301-4P4C_C3097715.pdf",
-    verified="official KiCad footprint drawn from this exact part (C3097715); contact order vs "
-             "handset cord not checked on a sample - the 4 solder jumpers cover either pair "
-             "assignment",
-    pins=[(1, "1", "pas"), (2, "2", "pas"), (3, "3", "pas"), (4, "4", "pas")],
+    # Handset jack (owner decision 2026-09-30, supersedes the USB-C handset port): 3.5 mm TRRS,
+    # CTIA (T = left, R1 = right, R2 = GND, S = mic), mounted on the board's BOTTOM side at the
+    # rear edge (body 4.0 mm: too tall for the 3.0 mm under the lid). TN is the normally-closed
+    # contact on the tip spring: it opens when a plug is inserted (insertion detect).
+    "JACK_TRRS", ref="J", mpn="PJ-31060", manufacturer="HOOYA (Haoyu)", lcsc="C2939583",
+    footprint="Connector_Audio:Jack_3.5mm_PJ31060-I_Horizontal",
+    desc="3.5 mm TRRS jack, SMD, 6 pins (T, TN, R1, R1N, R2, S), tip/ring1 NC detect switches; "
+         "handset (CTIA) port",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/7dc9ea9e7b9d02a0df1c6839d34c2747.pdf",
+    verified="HOOYA drawing (rev A2, 2021-11-04, p1) numbers terminals 1-6 and draws 6 pads "
+             "2.0 x 1.5 on the same 11.5 x 10.5 grid as KiCad's PJ31060-I footprint; the mapping "
+             "of HOOYA 1-6 to KiCad's T/TN/R1/R1N/R2/S pads and the plug-axis height are to be "
+             "confirmed on a sample before layout freeze (H6)",
+    pins=[("T", "T", "pas"), ("TN", "TN", "pas"), ("R1", "R1", "pas"), ("R1N", "R1N", "pas"),
+          ("R2", "R2", "pas"), ("S", "S", "pas")],
 )
 
 spec(
-    "ELECTRET", ref="MK", mpn="GMI6027-2C42DB", manufacturer="INGHAi", lcsc="C233885",
-    footprint="OpenLoungePhone:Electret_6mm_SMD_pads",
-    desc="6 mm electret capsule, -42 dB, 2.2k load (base speakerphone mic, in rubber boot)",
-    verified="ground (can) pad identification not checked against drawing",
-    pins=[(1, "OUT", "pas"), (2, "GND", "pas")],
+    "PESD5V0S2BT", ref="D", mpn="PESD5V0S2BT,215", manufacturer="Nexperia", lcsc="C49338",
+    footprint="Package_TO_SOT_SMD:SOT-23",
+    desc="Dual BIDIRECTIONAL ESD diode 5 V, 35 pF, IRM 5 nA (jack lines: the AC-coupled earpiece "
+         "swings below GND)",
+    datasheet="https://assets.nexperia.com/documents/data-sheet/PESD5V0S2BT.pdf",
+    # pinning checked: 1 K1, 2 K2, 3 common (Nexperia product data sheet 23 Aug 2018 p2 Table 2);
+    # IRM 5 nA typ / 100 nA max at 5 V (p4)
+    pins=[(1, "K1", "pas"), (2, "K2", "pas"), (3, "K", "pas")],
 )
 
 spec(
-    "FB600", ref="FB", mpn="BLM18AG601SN1D", manufacturer="Murata", lcsc="C19330",
-    footprint="Inductor_SMD:L_0603_1608Metric", desc="Ferrite bead 600R@100MHz 500mA 0603",
-    datasheet="https://www.murata.com/en-us/products/productdetail?partno=BLM18AG601SN1D",
-    pins=[(1, "1", "pas"), (2, "2", "pas")],
+    "1N4148W", ref="D", mpn="1N4148W", manufacturer="Semtech Electronics", lcsc="C81598",
+    footprint="Diode_SMD:D_SOD-123",
+    desc="Small-signal diode 75 V, IR <= 1 uA at 75 V (mic-line sense: blocks any GPIO current "
+         "INTO the mic line)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/8abd7fc00ebe41ffb03ad1383c10753b.pdf",
+    pins=[(1, "K", "pas"), (2, "A", "pas")],
 )
 
 
@@ -139,7 +133,7 @@ spec(
 spec(
     "USB-C", ref="J", mpn="TYPE-C-31-M-12", manufacturer="HRO (Korean Hroparts)", lcsc="C165948",
     footprint="Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
-    desc="USB-C 16P receptacle (USB 2.0), sink only",
+    desc="USB-C 16P receptacle (USB 2.0): power sink + ESP32 native USB (device: flashing, USB-Serial-JTAG console)",
     datasheet="https://www.lcsc.com/product-detail/C165948.html",
     pins=[
         ("A1", "GND", "pwr_in"), ("A4", "VBUS", "pas"), ("A5", "CC1", "pas"),
@@ -166,9 +160,14 @@ spec(
 )
 
 spec(
-    "PTC1A5", ref="F", mpn="SMD1206P150TFT", manufacturer="PTTC", lcsc="C495353",
-    footprint="Fuse:Fuse_1206_3216Metric", desc="PTC resettable fuse, hold 1.5 A, trip 3 A, 8 V",
-    datasheet="https://www.lcsc.com/product-detail/C495353.html",
+    # H4 P-07: the charger's ILIM-max corner draws 1.56 A; the 1206 1.5 A part holds only
+    # 1.34 A at 40 degC. 1812, 2 A hold / 4 A trip, 16 V (V_max above the 10.5 V charger OVP).
+    "PTC2A", ref="F", mpn="SMD1812P200TF16", manufacturer="Ruilon (PTTC)", lcsc="C20812",
+    footprint="Fuse:Fuse_1812_4532Metric", desc="PTC resettable fuse 1812, hold 2 A, trip 4 A, 16 V",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/cfa74b12b2251ef3c7fa909bdad1e8a9.pdf",
+    # Ruilon SMD1812 series SP-PTC-008 rev A6 (2025-04): SMD1812P200TF/16 hold 2.0 A / trip 4.0 A,
+    # 16 V, Imax 100 A, R 0.02-0.10 ohm (p4); hold at 40 degC 1.80 A (derating chart p6) >
+    # the charger's 1.56 A ILIM-max corner (H4 b01)
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
@@ -284,11 +283,14 @@ spec(
 # Sensors, misc main-board parts
 
 spec(
-    "DRV5032FA", ref="U", mpn="DRV5032FADBZR", manufacturer="Texas Instruments", lcsc="C140921",
+    # H4 P-06 / owner D3: AJ variant (BOP <= 9.5 mT, BRP >= 3.0 mT, SLVSDC7H p6) gives >= 2x
+    # margin both ways with the 10 mm plunger travel (b11: 3.3x / 3.3x). Open-drain output.
+    "DRV5032AJ", ref="U", mpn="DRV5032AJDBZR", manufacturer="Texas Instruments", lcsc="C266120",
     footprint="Package_TO_SOT_SMD:SOT-23",
-    desc="Hall switch, omnipolar, 20 Hz, push-pull, BOP +-3 mT typ (hook)",
+    desc="Hall switch, omnipolar, 20 Hz, OPEN-DRAIN, BOP 9.5 mT max / BRP 3.0 mT min (hook; "
+         "output low = magnet = on-hook)",
     datasheet="https://www.ti.com/lit/ds/symlink/drv5032.pdf",
-    pins=[(1, "VCC", "pwr_in"), (2, "OUT", "out"), (3, "GND", "pwr_in")],
+    pins=[(1, "VCC", "pwr_in"), (2, "OUT", "oc"), (3, "GND", "pwr_in")],
 )
 
 spec(
@@ -298,18 +300,6 @@ spec(
     datasheet="https://www.everlight.com/wp-content/plugins/ItemRelationship/product_files/pdf/ITR8307-F43.pdf",
     verified="pin map from the ITR8307/F43 datasheet; confirm it matches the C63451 variant",
     pins=[(1, "K", "pas"), (2, "A", "pas"), (3, "C", "pas"), (4, "E", "pas")],
-)
-
-spec(
-    "LIS2DH12", ref="U", mpn="LIS2DH12TR", manufacturer="STMicroelectronics", lcsc="C110926",
-    footprint="Package_LGA:LGA-12_2x2mm_P0.5mm",
-    desc="3-axis accelerometer; I2C 0x19 (SA0=1); INT pins push-pull only",
-    datasheet="https://www.st.com/resource/en/datasheet/lis2dh12.pdf",
-    i2c={"I2C": 0x18}, i2c_straps=[("SA0", 0)],
-    pins=[(1, "SCL", "in"), (2, "CS", "in"), (3, "SA0", "in"), (4, "SDA", "io"),
-          (5, "RES", "in"), (6, "GND", "pwr_in"), (7, "GND", "pwr_in"), (8, "GND", "pwr_in"),
-          (9, "VDD", "pwr_in"), (10, "VDD_IO", "pwr_in"), (11, "INT2", "out"),
-          (12, "INT1", "out")],
 )
 
 spec(
@@ -327,27 +317,6 @@ spec(
     footprint="Button_Switch_SMD:SW_Push_1P1T_XKB_TS-1187A",
     desc="Tactile switch 5.1x5.1 mm (pads 1-1 and 2-2 internally joined)",
     pins=[(1, "A", "pas"), (2, "B", "pas")],
-)
-
-spec(
-    "SY6280AAC", ref="U", mpn="SY6280AAC", manufacturer="Silergy", lcsc="C55136",
-    footprint="Package_TO_SOT_SMD:SOT-23-5",
-    desc="Current-limited power switch 2.4-5.5 V, ILIM = 6800/Rset, reverse blocking",
-    datasheet="https://datasheet.lcsc.com/datasheet/pdf/0271e5b2ca2a46b8bb16f65855f12fe2.pdf",
-    pins=[(1, "OUT", "pwr_out"), (2, "GND", "pwr_in"), (3, "ISET", "pas"), (4, "EN", "in"),
-          (5, "IN", "pwr_in")],
-)
-
-spec(
-    "CH340C", ref="U", mpn="CH340C", manufacturer="WCH", lcsc="C84681",
-    footprint="Package_SO:SOIC-16_3.9x9.9mm_P1.27mm",
-    desc="USB 2.0 full-speed to UART bridge, internal oscillator",
-    datasheet="https://datasheet.lcsc.com/datasheet/pdf/e2f14e51aaa60c793f1f0cbc8a5d5faa.pdf",
-    pins=[(1, "GND", "pwr_in"), (2, "TXD", "out"), (3, "RXD", "in"), (4, "V3", "pwr_in"),
-          (5, "UD+", "io"), (6, "UD-", "io"), (7, "NC7", "nc"), (8, "OUT", "out"),
-          # modem inputs have built-in pull-ups, R232 a built-in pull-down: may stay open
-          (9, "CTS", "pas"), (10, "DSR", "pas"), (11, "RI", "pas"), (12, "DCD", "pas"),
-          (13, "DTR", "out"), (14, "RTS", "out"), (15, "R232", "pas"), (16, "VCC", "pwr_in")],
 )
 
 spec(
@@ -415,10 +384,12 @@ spec(
 )
 
 spec(
-    "ST25DV04K", ref="U", mpn="ST25DV04K-IER6S3", manufacturer="STMicroelectronics",
-    lcsc="C155601", footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
-    desc="NFC dynamic tag 4 kbit, I2C 0x53 (user) / 0x57 (system), GPO open-drain",
-    datasheet="https://www.st.com/resource/en/datasheet/st25dv04k.pdf",
+    # F-17: ST25DV04K-IER6S3 is NRND -> ST25DV04KC-IE6S3 (SO8N): same pinout (DS13519 rev 4
+    # p4 Figure 2), same device select A6h/AEh = 0x53/0x57 (p165 Table B.1), CTUN 28.5 pF (p1)
+    "ST25DV04K", ref="U", mpn="ST25DV04KC-IE6S3", manufacturer="STMicroelectronics",
+    lcsc="C3304276", footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+    desc="NFC dynamic tag 4 kbit (KC), I2C 0x53 (user) / 0x57 (system), GPO open-drain",
+    datasheet="https://www.st.com/resource/en/datasheet/st25dv04kc.pdf",
     i2c={"I2C": [0x53, 0x57]},
     pins=[(1, "V_EH", "pwr_out"), (2, "AC0", "pas"), (3, "AC1", "pas"), (4, "VSS", "pwr_in"),
           (5, "SDA", "io"), (6, "SCL", "in"), (7, "GPO", "oc"), (8, "VCC", "pwr_in")],
@@ -427,23 +398,20 @@ spec(
 spec(
     "NFC_COIL", ref="L", mpn="PCB coil (copper)", manufacturer="", lcsc=None,
     footprint="OpenLoungePhone:NFC_Coil_Strip",
-    desc="13.56 MHz PCB antenna in the front-left end region: 9 turns 0.30/0.30 mm, "
-         "26 x 42 mm, ~4.8 uH (filament estimate, layout/footprints/gen_footprints.py; ST25DV "
-         "CTUN 28.5 pF)",
-    verified="inductance is a calculation only: confirm with ST eDesignSuite and a VNA in EVT "
-             "(DNP tuning cap trims it)",
+    desc="13.56 MHz PCB antenna in the front-left end region: 7 turns 0.30/0.30 mm, "
+         "26 x 42 mm, ~3.19 uH (H4 b08; ST25DV CTUN 28.5 pF + 12 pF C0G tuning cap)",
+    verified="inductance is a calculation only (b08): confirm with a VNA in EVT and trim the "
+             "12 pF; the footprint (layout/footprints) still has 9 turns until H6",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
 
 spec(
-    "HOTSWAP", ref="SW", mpn="CPG151101S11-16", manufacturer="Kailh", lcsc="C5156480",
+    # F-24: the Kailh CPG151101S11-16 (C5156480) has had zero stock since 2026-09-27; the
+    # HanElectricity CPG151101S11-2 has the identical body, holes and land (both drawings p1,
+    # components/kailh-cpg151101s11.md), tin- instead of gold-plated contacts.
+    "HOTSWAP", ref="SW", mpn="CPG151101S11-2", manufacturer="HanElectricity", lcsc="C49352235",
     footprint="OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11",
-    desc="Kailh MX hot-swap socket CPG151101S11-16 (switch plugs in; 2 pads)",
-    verified="exact MPN CPG151101S11-16 = LCSC C5156480, OUT OF STOCK at LCSC/JLC on "
-             "2026-09-27. In-stock alternative C49352235 (CPG151101S11-2, 26k stock, listed "
-             "under HanElectricity) is the same socket body per its listing - confirm against "
-             "its drawing before a JLC order; otherwise hand-source Kailh sockets (keyboard "
-             "vendors) and hand-solder (large pads, easy)",
+    desc="MX hot-swap socket CPG151101S11-2 (Kailh CPG151101S11 land; switch plugs in; 2 pads)",
     datasheet="https://datasheet.lcsc.com/datasheet/pdf/5ea75d84e431b4d0c68ab6e4e17d332c.pdf",
     pins=[(1, "1", "pas"), (2, "2", "pas")],
 )
@@ -475,7 +443,7 @@ spec(
 
 spec(
     "LED_RED", ref="D", mpn="KT-0603R", manufacturer="Hubei KENTO", lcsc="C2286",
-    footprint="LED_SMD:LED_0603_1608Metric", desc="Red LED 0603 (privacy indicator)",
+    footprint="LED_SMD:LED_0603_1608Metric", desc="Red LED 0603 (mic lights x2 on MIC_VCC, recording light on GPIO13)",
     verified="cathode mark not checked against the drawing (KiCad pad 1 = K)",
     pins=[(1, "K", "pas"), (2, "A", "pas")],
 )
@@ -514,9 +482,9 @@ spec(
 RES_EXTRA.update({
     ("1.1k", "0603"): ("C22764", "0603WAF1101T5E"),
     ("1.8k", "0603"): ("C4177", "0603WAF1801T5E"),
-    ("20k", "0603"): ("C4184", "0603WAF2002T5E"),
-    ("4.3k", "0603"): ("C23159", "0603WAF4301T5E"),
-    ("150k", "0603"): ("C22807", "0603WAF1503T5E"),
+    # 3V3 feedback divider, 0.1 % thin film (owner D: 3.19 V nominal; H4 b02 P-05)
+    ("105k 0.1%", "0603"): ("C861072", "RT0603BRD07105KL"),
+    ("24.3k 0.1%", "0603"): ("C136968", "RT0603BRD0724K3L"),
     ("3.3k", "0603"): ("C22978", "0603WAF3301T5E"),
     ("2.2", "0603"): ("C22939", "0603WAF220KT5E"),
     ("47", "2512"): ("C15261", "25121WJ0470T4E"),
@@ -526,7 +494,9 @@ CAP_EXTRA.update({
     "470n": ("C1623", "0603", "25V X7R", "CL10B474KA8NNNC"),
     "220n": ("C21120", "0603", "25V X7R", "CL10B224KA8NNNC"),
     "220p": ("C1603", "0603", "50V X7R", "CL10B221KB8NNNC"),  # JLC basic (EMI shunt: X7R ok)
-    "100u": ("C15008", "1206", "6.3V X5R", "CL31A107MQHNNNE"),
+    "4.7n": ("C53987", "0603", "50V X7R", "0603B472K500NT"),   # JLC basic (LED soft start)
+    "10n": ("C57112", "0603", "50V X7R", "0603B103K500NT"),    # JLC basic (mic-sense ADC)
+    "12p": ("C38523", "0603", "50V C0G", "CL10C120JB8NNNC"),   # NFC tuning (P-11), JLC basic
     "4.7u@25V": ("C1779", "0805", "25V X5R", "CL21A475KAQNNNE"),
 })
 
