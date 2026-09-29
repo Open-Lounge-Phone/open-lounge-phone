@@ -51,6 +51,23 @@ export interface Household {
   type?: SpaceType;
 }
 
+/** How rooms carry audio on this server: peer to peer (≤ 4), or through a relay. */
+export type RoomMediaKind = "sfu" | "mesh" | "livekit";
+
+/** A party line or phone room of the active space, with who's in it now. */
+export interface RoomSummary {
+  id: string;
+  kind: "party" | "phone";
+  name: string;
+  /** Phone rooms: `name@host`. */
+  address?: string;
+  access: "space" | "connections";
+  locked: boolean;
+  /** You may change or delete it (its owner, or a guardian). */
+  mine: boolean;
+  people: string[];
+}
+
 export interface ContactEntry {
   /** The contact's user id. */
   id: string;
@@ -479,7 +496,26 @@ export function createApi(opts: ApiOptions) {
         contacts: ContactEntry[];
         buttons: Record<string, string>;
         remote?: RemoteContactInfo[];
+        rooms?: { id: string; roomId: string; label: string }[];
       }>("GET", `/devices/${enc(deviceId)}/contacts`),
+    addRoomToPhone: (deviceId: string, roomId: string, label: string) =>
+      request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/rooms/${enc(roomId)}`, { label }),
+    removeRoomFromPhone: (deviceId: string, contactId: string) =>
+      request<void>("DELETE", `/devices/${enc(deviceId)}/rooms/${enc(contactId)}`),
+
+    // Rooms: party lines and phone rooms of the active space
+    rooms: () => request<{ rooms: RoomSummary[]; media: RoomMediaKind }>("GET", "/rooms"),
+    createRoom: (room: {
+      kind: "party" | "phone";
+      name: string;
+      handle?: string;
+      access?: "space" | "connections";
+    }) => request<RoomSummary>("POST", "/rooms", room),
+    updateRoom: (
+      roomId: string,
+      patch: { name?: string; access?: "space" | "connections"; locked?: boolean },
+    ) => request<void>("PATCH", `/rooms/${enc(roomId)}`, patch),
+    deleteRoom: (roomId: string) => request<void>("DELETE", `/rooms/${enc(roomId)}`),
     putRemoteContact: (deviceId: string, connectionId: string, contact: Omit<ContactEntry, "id">) =>
       request<{ id: string }>(
         "PUT",

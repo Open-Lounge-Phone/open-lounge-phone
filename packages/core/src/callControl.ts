@@ -1,5 +1,6 @@
 // Hold, consult, merge and transfer: which of these one party may do, given their calls. Pure;
 // the hub asks before acting, and phones mirror it in `deviceStep`.
+import type { CallPrompt } from "@openloungephone/protocol";
 import type { RoomPhase } from "./callRoom.ts";
 
 /** One of a party's calls, from that party's point of view. */
@@ -73,3 +74,21 @@ export function controlCheck(calls: readonly PartyCall[], action: ControlAction)
     }
   }
 }
+
+/** What the call and room prompts say (the browser phone speaks them; hardware plays the ids). */
+export const CALL_PROMPT_TEXT: Record<CallPrompt, string> = {
+  "hold.tone": "",
+  "call.on_hold": "You're on hold.",
+  "call.add": "Choose who to add, then press menu to merge.",
+  "call.merged": "You're all together now.",
+  "call.transfer": "Choose who to transfer to.",
+  "call.transferred": "Call transferred.",
+  "room.joined": "You're in the room.",
+  "room.left": "You left the room.",
+  "room.idle": "Still there? Press any key to stay.",
+  "room.removed": "The host removed you from the room.",
+  "room.locked": "That room is locked.",
+  "room.full": "That room is full.",
+  "room.muted": "Muted.",
+  "room.unmuted": "Unmuted.",
+};

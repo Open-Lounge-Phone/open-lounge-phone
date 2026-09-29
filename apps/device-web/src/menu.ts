@@ -2,7 +2,7 @@
  * The phone's on-device menu. MENU opens it; each digit picks the option shown for it on the
  * display (or spoken, on phones without one); BACK steps out. Pure, so firmware can mirror it.
  */
-import { PROMPT_TEXT } from "@openloungephone/core";
+import { CALL_PROMPT_TEXT, type CallAction, PROMPT_TEXT } from "@openloungephone/core";
 import { STATUS_WIDTH } from "./strip.ts";
 
 export type MenuScreen =
@@ -13,7 +13,9 @@ export type MenuScreen =
   | "greeting"
   | "speaker"
   | "brightness"
-  | "about";
+  | "about"
+  /** During a call or in a room: hold / add caller, merge, transfer, mute. */
+  | "call";
 
 export interface MenuState {
   screen: MenuScreen;
@@ -54,6 +56,8 @@ export interface MenuContext {
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
   /** The four words of this phone's key (the app shows the same ones: compare them). */
   fingerprint?: readonly string[];
+  /** In a call or a room: what MENU offers there (see `callActions`), digit 1 upward. */
+  call?: { actions: readonly CallAction[] };
 }
 
 /** Something the phone must do or tell the server (greetings, Lounge phone items). */
@@ -66,7 +70,9 @@ export type MenuAction =
   | { type: "greeting-stop" }
   /** Interrupted (a call, the handset): discard it. */
   | { type: "greeting-cancel" }
-  | { type: "greeting-reset" };
+  | { type: "greeting-reset" }
+  /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
+  | { type: "call"; action: CallAction };
 
 export interface MenuResult {
   /** undefined = menu closed. */
@@ -120,6 +126,40 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
+/** The call screen's labels and what each action says (prompt ids for firmware). */
+const CALL_LABEL: Record<CallAction, string> = {
+  hold: "Add caller",
+  resume: "Resume",
+  merge: "Merge",
+  transfer: "Transfer",
+  mute: "Mute",
+  unmute: "Unmute",
+};
+const CALL_SPOKEN: Record<CallAction, string> = {
+  hold: "put this call on hold and add a caller",
+  resume: "go back to the call on hold",
+  merge: "merge the calls",
+  transfer: "transfer the call",
+  mute: "mute",
+  unmute: "unmute",
+};
+
+/** What the phone says after a call action (`CallPrompt` ids on hardware). */
+export function callActionPrompt(action: CallAction, attended: boolean): string {
+  switch (action) {
+    case "hold":
+      return CALL_PROMPT_TEXT["call.add"];
+    case "transfer":
+      return attended ? CALL_PROMPT_TEXT["call.transferred"] : CALL_PROMPT_TEXT["call.transfer"];
+    case "mute":
+      return CALL_PROMPT_TEXT["room.muted"];
+    case "unmute":
+      return CALL_PROMPT_TEXT["room.unmuted"];
+    default:
+      return "";
+  }
+}
+
 /** Voicemail screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
 const GREETING_LABELS = { 1: "Name", 2: "Greeting", 3: "Default" } as const;
 const GREETING_TEXT = { default: "standard", name: "your name", custom: "your own" } as const;
@@ -165,6 +205,13 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         title: `BRIGHT ${settings.brightness}/5`,
         labels: { 1: "Dimmer", 2: "Brighter" },
       };
+    case "call":
+      return {
+        ...base,
+        title: ctx.call?.actions.some((a) => a === "mute" || a === "unmute") ? "ROOM" : "CALL",
+        labels: Object.fromEntries((ctx.call?.actions ?? []).map((a, i) => [i + 1, CALL_LABEL[a]])),
+        backLabel: "Close",
+      };
     case "about":
       return {
         ...base,
@@ -205,6 +252,12 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       return `Speakerphone is ${settings.speakerphone ? "on" : "off"}. Press 1 for on, 2 for off.`;
     case "brightness":
       return `Brightness ${settings.brightness}. Press 1 for dimmer, 2 for brighter.`;
+    case "call": {
+      const options = (ctx.call?.actions ?? []).map(
+        (a, i) => `Press ${i + 1} to ${CALL_SPOKEN[a]}.`,
+      );
+      return `${options.join(" ")} Press back to leave the menu.`;
+    }
     case "about": {
       const words = ctx.fingerprint
         ? ` This phone's words are: ${ctx.fingerprint.join(", ")}. The app shows the same four words for this phone.`
@@ -250,7 +303,9 @@ export function menuStep(
   };
 
   if (!state) {
-    return event.type === "menu" ? enter("root") : { state, settings };
+    if (event.type !== "menu") return { state, settings };
+    // During a call or in a room, MENU opens what can be done there.
+    return ctx.call?.actions.length ? enter("call") : enter("root");
   }
   const touched = { ...state, lastInput: event.now };
 
@@ -261,9 +316,11 @@ export function menuStep(
 
   if (event.type === "menu") {
     // MENU at the top closes the menu; anywhere else it returns to the top.
+    if (state.screen === "call") return { state: undefined, settings };
     return state.screen === "root" ? { state: undefined, settings } : enter("root");
   }
   if (event.type === "back") {
+    if (state.screen === "call") return { state: undefined, settings };
     return state.screen === "root" ? { state: undefined, settings } : enter("root");
   }
 
@@ -328,6 +385,19 @@ export function menuStep(
         state: touched,
         settings: { ...settings, brightness },
         say: `Brightness ${brightness}`,
+      };
+    }
+    case "call": {
+      const actions = ctx.call?.actions ?? [];
+      const action = actions[d - 1];
+      if (!action) return { state: touched, settings };
+      const attended = actions.includes("merge");
+      const say = callActionPrompt(action, attended);
+      return {
+        state: undefined,
+        settings,
+        ...(say ? { say } : {}),
+        action: { type: "call", action },
       };
     }
     default:

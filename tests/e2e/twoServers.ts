@@ -86,7 +86,7 @@ export async function knockAndAccept(jesse: Person, bob: Person) {
 export async function block(jesse: Person, bob: Person) {
   const [row] = await connections(bob);
   expect((await api(bob, `/connections/${row?.id}/block`, { method: "POST" })).status).toBe(204);
-  expect(await connections(jesse)).toEqual([]);
+  expect((await connections(jesse)).filter((c) => c.address === bob.address)).toEqual([]);
   expect((await api(jesse, "/connections", { body: { to: bob.address } })).status).toBe(202);
   expect((await connections(bob)).map((c) => c.state)).toEqual(["blocked"]);
 }
@@ -352,4 +352,116 @@ export async function removeAndWipe(bob: Person) {
   expect((await api(bob, `/devices/${spare.deviceId}`, { method: "DELETE" })).status).toBe(204);
   const back = await spare.signIn();
   expect(await back.next("wipe")).toMatchObject({ reason: "removed" });
+}
+
+type Sock = Awaited<ReturnType<typeof appSocket>>;
+
+/** Reads room states until one lists `n` people. */
+async function roomWith(app: Sock, n: number) {
+  for (;;) {
+    const st = await app.next("room.state");
+    if ((st.participants as unknown[]).length === n) return st;
+  }
+}
+
+/**
+ * Rooms across servers without a relay (a peer-to-peer mesh): Jesse makes a phone room open to
+ * her connections; Bob (on the other server) joins it by address and mesh signaling crosses the
+ * servers; Jesse locks it, and a second join is refused.
+ */
+export async function roomsAcross(jesse: Person, bob: Person) {
+  const made = await api(jesse, "/rooms", {
+    body: { kind: "phone", name: "Standup", handle: "standup", access: "connections" },
+  });
+  expect(made.status, JSON.stringify(made.json)).toBe(201);
+  const host = new URL(jesse.server.origin).host;
+  expect(made.json.address).toBe(`standup@${host}`);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  jApp.send({ t: "room.join", roomId: made.json.id });
+  const j = await jApp.next("room.state");
+  expect(j).toMatchObject({ media: "mesh", e2ee: true });
+  bApp.send({ t: "room.join", address: `standup@${host}` });
+  const b = await roomWith(bApp, 2);
+  await roomWith(jApp, 2);
+  jApp.send({ t: "rtc.sdp", callId: made.json.id, type: "offer", sdp: "v=0 o", peer: b.you });
+  expect(await bApp.next("rtc.sdp")).toMatchObject({ peer: j.you });
+  // Members see who's in.
+  const list = await api(jesse, "/rooms");
+  expect(list.json.rooms[0].people).toEqual(["Jesse", "Bob"]);
+  jApp.send({ t: "room.lock", roomId: made.json.id, locked: true });
+  bApp.send({ t: "room.leave", roomId: made.json.id });
+  await bApp.next("room.ended");
+  await roomWith(jApp, 1);
+  bApp.send({ t: "room.join", address: `standup@${host}` });
+  expect(await bApp.next("room.ended")).toMatchObject({ reason: "locked" });
+  jApp.send({ t: "room.leave", roomId: made.json.id });
+  await jApp.next("room.ended");
+  jApp.ws.close();
+  bApp.ws.close();
+}
+
+/** A knock and accept between two people on the same server (another household). */
+export async function connectLocally(jesse: Person, carol: Person) {
+  expect((await api(jesse, "/connections", { body: { to: carol.address } })).status).toBe(202);
+  const knock = (await connections(carol)).find((c) => c.address === jesse.address);
+  expect(knock).toMatchObject({ state: "requested", remote: false });
+  expect((await api(carol, `/connections/${knock?.id}/accept`, { method: "POST" })).status).toBe(
+    200,
+  );
+}
+
+/** One side answers, the offer and answer cross, and both are active. */
+async function answered(caller: Sock, callee: Sock) {
+  const ring = await callee.next("call.ringing");
+  const callId = ring.callId as string;
+  callee.send({ t: "call.answer", callId });
+  await caller.next("rtc.config");
+  caller.send({ t: "rtc.sdp", callId, type: "offer", sdp: "v=0 o" });
+  await callee.next("rtc.sdp");
+  callee.send({ t: "rtc.sdp", callId, type: "answer", sdp: "v=0 a" });
+  for (;;) if ((await caller.next("call.state")).state === "active") break;
+  return callId;
+}
+
+/**
+ * 3-way across households and servers: Jesse calls Bob (other server), holds him, calls Carol
+ * (another household on her own server) and merges: all three end up in one room.
+ */
+export async function mergeAcross(jesse: Person, bob: Person, carol: Person) {
+  const toBob = (await connections(jesse)).find((c) => c.address === bob.address);
+  const toCarol = (await connections(jesse)).find((c) => c.address === carol.address);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  const cApp = await appSocket(carol);
+  jApp.send({ t: "call.connection", connectionId: toBob?.id as string });
+  const first = await answered(jApp, bApp);
+  jApp.send({ t: "call.hold", callId: first, hold: true });
+  for (;;) if ((await bApp.next("call.state")).hold === "them") break;
+  jApp.send({ t: "call.connection", connectionId: toCarol?.id as string });
+  const second = await answered(jApp, cApp);
+  jApp.send({ t: "call.merge", callId: first, with: second });
+  for (const app of [bApp, cApp]) {
+    for (;;) {
+      const m = await app.next("call.state");
+      if (m.state === "ended") {
+        expect(m.merged).toBeTruthy();
+        break;
+      }
+    }
+  }
+  const room = await roomWith(jApp, 3);
+  expect(room).toMatchObject({ kind: "call", media: "mesh" });
+  expect((await roomWith(bApp, 3)).roomId).toBe(room.roomId);
+  expect((await roomWith(cApp, 3)).roomId).toBe(room.roomId);
+  // Everyone's audio travels peer to peer: Bob's offer to Carol goes through both servers.
+  const bob3 = (room.participants as { id: string; name: string }[]).find((p) => p.name === "Bob");
+  const carol3 = (room.participants as { id: string; name: string }[]).find(
+    (p) => p.name === "Carol",
+  );
+  bApp.send({ t: "rtc.sdp", callId: room.roomId, type: "offer", sdp: "v=0 b", peer: carol3?.id });
+  expect(await cApp.next("rtc.sdp")).toMatchObject({ peer: bob3?.id, sdp: "v=0 b" });
+  for (const app of [bApp, cApp]) app.send({ t: "room.leave", roomId: room.roomId });
+  expect(await jApp.next("room.ended")).toMatchObject({ reason: "closed" });
+  for (const app of [jApp, bApp, cApp]) app.ws.close();
 }

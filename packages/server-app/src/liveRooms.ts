@@ -501,12 +501,35 @@ export class LiveRooms {
       const same = next.length === p.forward.length && next.every((id) => p.forward.includes(id));
       if (!same) changed = true;
       p.forward = next;
-      if (room.media === "sfu" && !same) this.sync(room, p);
+      // Slots follow `forward` once the participant's own connection is up (it may have been
+      // computed before they had pushed their microphone).
+      if (room.media === "sfu" && p.sfu?.pushed && !this.slotsMatch(p)) this.sync(room, p);
     }
     return changed;
   }
 
   // --- the Cloudflare SFU ---------------------------------------------------------------
+
+  /**
+   * The SFU refuses to pull a track until its publisher's connection is up and sending ("Track
+   * not found on remote peer"), which is normal right after someone joins: try again shortly.
+   */
+  private async retry<T>(work: () => Promise<T>, attempts = 12): Promise<T> {
+    for (let i = 1; ; i++) {
+      try {
+        return await work();
+      } catch (e) {
+        if (i >= attempts || !/not found|not connected|disconnected/i.test(String(e))) throw e;
+        await new Promise<void>((resolve) => this.env.setTimer(resolve, 500 * Math.min(i, 4)));
+      }
+    }
+  }
+
+  /** Whether a participant's SFU slots carry exactly whom they should hear. */
+  private slotsMatch(p: Participant): boolean {
+    const have = Object.values(p.sfu?.slots ?? {});
+    return have.length === p.forward.length && p.forward.every((id) => have.includes(id));
+  }
 
   private sfu(): CloudflareSfu | undefined {
     const relay = this.env.relay;
@@ -619,9 +642,11 @@ export class LiveRooms {
         .map((id) => ({ id, s: room.participants.get(id)?.sfu?.sessionId }))
         .filter((x): x is { id: string; s: string } => !!x.s);
       if (sources.length) {
-        const r = await sfu.pull(
-          session,
-          sources.map((x) => ({ sessionId: x.s, trackName: x.id })),
+        const r = await this.retry(() =>
+          sfu.pull(
+            session,
+            sources.map((x) => ({ sessionId: x.s, trackName: x.id })),
+          ),
         );
         r.mids.forEach((mid, i) => {
           const src = sources[i];
@@ -648,7 +673,13 @@ export class LiveRooms {
     if (sfu && state?.sessionId) {
       const mids = [...(state.localMid ? [state.localMid] : []), ...Object.keys(state.slots)];
       const session = state.sessionId;
-      this.chain(p, () => sfu.close(session, mids).then(() => undefined));
+      // Their connection is usually gone already; the SFU then says so, which is fine.
+      this.chain(p, () =>
+        sfu.close(session, mids).then(
+          () => undefined,
+          () => undefined,
+        ),
+      );
     }
     if (relay?.kind === "livekit") {
       this.env.defer(

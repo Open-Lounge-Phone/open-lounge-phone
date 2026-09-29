@@ -10,9 +10,12 @@ import { afterAll, beforeAll, it } from "vitest";
 import {
   block,
   callAcross,
+  connectLocally,
   knockAndAccept,
+  mergeAcross,
   noAnswerAcross,
   removeAndWipe,
+  roomsAcross,
   type ServerTarget,
   signUp,
   timelineAcross,
@@ -80,7 +83,7 @@ afterAll(() => {
   }
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, block", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, rooms, 3-way, block", async () => {
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
@@ -89,5 +92,10 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe
   await timelineAcross(jesse, bob);
   await removeAndWipe(bob);
   await voicemailAcross(jesse, bob);
+  // Rooms without a relay (a peer-to-peer mesh), and a 3-way merge across households and servers.
+  await roomsAcross(jesse, bob);
+  const carol = await signUp(a, "carol", "Carol");
+  await connectLocally(jesse, carol);
+  await mergeAcross(jesse, bob, carol);
   await block(jesse, bob);
 }, 90_000);

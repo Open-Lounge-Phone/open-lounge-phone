@@ -11,6 +11,9 @@ services:
       - "8787:8787"
     volumes:
       - openloungephone-data:/data
+    # Lets the server reach LiveKit (host networking) at host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # TURN relay so calls connect across NATs and mobile networks. Uses host networking because
   # TURN needs a wide UDP port range. Remove this service for LAN-only installs.
@@ -29,6 +32,17 @@ services:
       - --no-tls
       - --no-dtls
       - --fingerprint
+
+  # Optional media relay for rooms bigger than 4 (docker compose --profile livekit up -d). Set the
+  # LIVEKIT_* variables in .env to match. Host networking for its UDP media ports.
+  livekit:
+    image: livekit/livekit-server:v1.9
+    profiles: [livekit]
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --bind=0.0.0.0
+      - --keys=${LIVEKIT_API_KEY:-openloungephone}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env}
 
 volumes:
   openloungephone-data:

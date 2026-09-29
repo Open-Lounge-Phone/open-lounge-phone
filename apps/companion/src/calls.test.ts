@@ -186,3 +186,75 @@ describe("calls through connections", () => {
     expect(refused).toMatchObject({ phase: "ended", note: expect.stringMatching(/fair use/) });
   });
 });
+
+describe("hold, merge and transfer", () => {
+  const active = callStep(
+    { phase: "connecting", callId: "c1", label: "Gran", offerer: true },
+    { type: "server", msg: { t: "call.state", callId: "c1", state: "active" }, now: 5 },
+  ).view;
+
+  it("shows who's holding and plays the soft tone when they hold you", () => {
+    const held = callStep(active, {
+      type: "server",
+      msg: { t: "call.state", callId: "c1", state: "active", hold: "them" },
+      now: 6,
+    }).view;
+    expect(held).toMatchObject({ phase: "active", hold: "them", startedAt: 5 });
+    expect(toneFor(held)).toBe("hold");
+    const back = callStep(held, {
+      type: "server",
+      msg: { t: "call.state", callId: "c1", state: "active" },
+      now: 7,
+    }).view;
+    expect(back).not.toHaveProperty("hold");
+    expect(toneFor(back)).toBe("none");
+  });
+
+  it("a merged call disappears quietly and names its room", () => {
+    const step = callStep(active, {
+      type: "server",
+      msg: {
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "hangup",
+        merged: { roomId: "r1" },
+      },
+      now: 8,
+    });
+    expect(step).toEqual({ view: { phase: "idle" }, merged: "r1" });
+  });
+
+  it("a transferred call goes on under its new id", () => {
+    const blind = callStep(active, {
+      type: "server",
+      msg: {
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "hangup",
+        transfer: { callId: "c2", ringing: true, offerer: true },
+      },
+      now: 8,
+    });
+    expect(blind.transferred).toBe("c1");
+    expect(blind.view).toMatchObject({ phase: "outgoing", callId: "c2", ringing: true });
+    const attended = callStep(active, {
+      type: "server",
+      msg: {
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "hangup",
+        transfer: { callId: "c3", ringing: false, offerer: false },
+      },
+      now: 8,
+    });
+    expect(attended.view).toEqual({
+      phase: "connecting",
+      callId: "c3",
+      label: "Gran",
+      offerer: false,
+    });
+  });
+});

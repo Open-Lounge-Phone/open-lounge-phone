@@ -222,3 +222,69 @@ describe("About", () => {
     expect(fingerprintLines(["pelican", "unicorn", "a", "b"])[0]).toHaveLength(15);
   });
 });
+
+describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
+  const ctx = (actions: ("hold" | "resume" | "merge" | "transfer" | "mute" | "unmute")[]) => ({
+    missedCount: 0,
+    fw: "t",
+    call: { actions },
+  });
+
+  it("MENU during a call opens the call screen; 1 adds a caller", () => {
+    const open = menuStep(
+      undefined,
+      DEFAULT_SETTINGS,
+      { type: "menu", now: 0 },
+      ctx(["hold", "transfer"]),
+    );
+    expect(open.state?.screen).toBe("call");
+    const view = menuView(
+      open.state as NonNullable<typeof open.state>,
+      DEFAULT_SETTINGS,
+      ctx(["hold", "transfer"]),
+    );
+    expect(view).toMatchObject({ title: "CALL", labels: { 1: "Add caller", 2: "Transfer" } });
+    const add = menuStep(
+      open.state,
+      DEFAULT_SETTINGS,
+      { type: "digit", digit: 1, now: 1 },
+      ctx(["hold", "transfer"]),
+    );
+    expect(add).toMatchObject({ state: undefined, action: { type: "call", action: "hold" } });
+    expect(add.say).toMatch(/Choose who to add/);
+  });
+
+  it("while consulting: 1 merges, 2 transfers (attended)", () => {
+    const c = ctx(["merge", "transfer"]);
+    const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
+    const t = menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 2, now: 1 }, c);
+    expect(t).toMatchObject({
+      action: { type: "call", action: "transfer" },
+      say: "Call transferred.",
+    });
+    const m = menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 1, now: 1 }, c);
+    expect(m.action).toEqual({ type: "call", action: "merge" });
+  });
+
+  it("in a room: MENU mutes; BACK closes", () => {
+    const c = ctx(["mute"]);
+    const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
+    expect(menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, c).title).toBe(
+      "ROOM",
+    );
+    expect(
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "back", now: 1 }, c).state,
+    ).toBeUndefined();
+    expect(
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 1, now: 1 }, c),
+    ).toMatchObject({
+      action: { type: "call", action: "mute" },
+      say: "Muted.",
+    });
+  });
+
+  it("without a call MENU opens the usual menu", () => {
+    const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, ctx([]));
+    expect(open.state?.screen).toBe("root");
+  });
+});

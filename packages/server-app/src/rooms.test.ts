@@ -758,6 +758,49 @@ describe("the relay (Cloudflare Realtime SFU, faked)", () => {
     );
   });
 
+  it("pulls everyone for each participant, even when all joined before anyone's microphone was up", async () => {
+    const sfu = fakeSfu();
+    const s = new TestServer({
+      publicUrl: "https://home.test",
+      env: {
+        relay: {
+          kind: "cloudflare",
+          appId: "app1",
+          appSecret: "s",
+          baseUrl: "https://sfu.test/v1",
+        },
+        fetch: sfu.fetch,
+      },
+    });
+    const mom = await s.person("mom", "Mom");
+    const room = await makeRoom(s, mom.token, { kind: "party", name: "Three" });
+    const conns: FakeConn[] = [];
+    for (let i = 0; i < 3; i++) {
+      const u = await s.store.createUser(
+        { householdId: mom.household.id, name: `P${i}`, role: "contact" },
+        s.timers.now,
+      );
+      const c = autoClient(await s.connectApp(await s.store.createSession(u.id, s.timers.now)));
+      c.write({ t: "room.join", roomId: room.id });
+      await joined(c);
+      conns.push(c);
+    }
+    // Only now do their connections to the relay come up, one after another.
+    for (const c of conns) {
+      c.write({ t: "room.media", roomId: room.id, type: "offer", sdp: SDP_OFFER });
+      await settle();
+    }
+    const pulled = (session: string) =>
+      sfu.calls
+        .filter((x) => x.path === `/sessions/${session}/tracks/new`)
+        .flatMap((x) =>
+          (x.body.tracks as { location: string }[]).filter((t) => t.location === "remote"),
+        ).length;
+    await vi.waitFor(() => {
+      for (const session of ["S1", "S2", "S3"]) expect(pulled(session)).toBe(2);
+    });
+  });
+
   it("stops forwarding a muted participant", async () => {
     const sfu = fakeSfu();
     const s = new TestServer({

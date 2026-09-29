@@ -9,7 +9,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@openloungephone/core": "0.0.0",
     "@openloungephone/protocol": "0.0.0",
-    "@openloungephone/core": "0.0.0"
+    "livekit-client": "^2.22.3"
   }
 }

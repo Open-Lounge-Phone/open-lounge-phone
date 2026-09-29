@@ -97,6 +97,7 @@ export async function start(config: Config) {
     ...(config.publicUrlExplicit ? { publicUrl: config.publicUrl } : {}),
     openSignup: config.openSignup,
     ...(config.fairUse ? { fairUse: config.fairUse } : {}),
+    ...(config.relay ? { relay: config.relay } : {}),
     ...(config.turnstile ? { turnstile: config.turnstile } : {}),
     ...(config.operators.length ? { operators: config.operators } : {}),
     ...(config.hub ? { hub: config.hub } : {}),

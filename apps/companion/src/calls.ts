@@ -22,6 +22,8 @@ export type CallView =
       label: string;
       offerer: boolean;
       startedAt?: number;
+      /** `you` put it on hold; `them` = the other side is holding you (soft tone). */
+      hold?: "you" | "them";
     }
   | {
       phase: "ended";
@@ -52,6 +54,10 @@ export interface CallStep {
   view: CallView;
   /** A second incoming call while busy should be declined with this callId. */
   decline?: string;
+  /** The call became part of this room (3-way): keep its audio until the room's is up. */
+  merged?: string;
+  /** The call was transferred: it goes on as `view`'s new call; drop the old audio. */
+  transferred?: string;
 }
 
 const callIdOf = (v: CallView): string | undefined =>
@@ -125,6 +131,16 @@ function stateFor(
     case "ended":
       // An incoming call answered on another of our sessions just disappears.
       if (view.phase === "incoming") return { view: { phase: "idle" } };
+      if (msg.merged) return { view: { phase: "idle" }, merged: msg.merged.roomId };
+      if (msg.transfer) {
+        const next = msg.transfer;
+        return {
+          transferred: callId,
+          view: next.ringing
+            ? { phase: "outgoing", callId: next.callId, label, ringing: true, person: true }
+            : { phase: "connecting", callId: next.callId, label, offerer: next.offerer },
+        };
+      }
       return {
         view: {
           phase: "ended",
@@ -144,8 +160,13 @@ function stateFor(
     case "connecting":
       if (view.phase === "connecting" || view.phase === "active") return { view };
       return { view: { phase: "connecting", callId, label, offerer } };
-    case "active":
-      if (view.phase === "active") return { view };
+    case "active": {
+      const hold = msg.hold ? { hold: msg.hold } : {};
+      if (view.phase === "active") {
+        if (view.hold === msg.hold) return { view };
+        const { hold: _h, ...rest } = view;
+        return { view: { ...rest, ...hold } };
+      }
       return {
         view: {
           phase: "active",
@@ -153,13 +174,16 @@ function stateFor(
           label,
           offerer: view.phase === "connecting" ? view.offerer : offerer,
           startedAt: now,
+          ...hold,
         },
       };
+    }
   }
 }
 
 export function toneFor(view: CallView): Tone {
   if (view.phase === "incoming") return "ring";
+  if (view.phase === "active" && view.hold === "them") return "hold";
   if (view.phase === "outgoing" && view.ringing) return "ringback";
   return "none";
 }

@@ -26,6 +26,7 @@ import { People } from "./People.tsx";
 import { phoneLed } from "./phoneLed.ts";
 import { QuietHours } from "./QuietHours.tsx";
 import { quietStatus } from "./quietStatus.ts";
+import { RoomPanel, Rooms } from "./Rooms.tsx";
 import { Setup } from "./Setup.tsx";
 import { Start } from "./Start.tsx";
 import { loadToken, readHashLinks, readInviteToken, readSetupToken, saveToken } from "./session.ts";
@@ -45,6 +46,7 @@ export type Route =
   | { name: "add-household" }
   | { name: "account" }
   | { name: "connections" }
+  | { name: "rooms" }
   | { name: "admin" }
   | { name: "voicemail" };
 
@@ -427,6 +429,9 @@ function SignedIn({
               <span className="narrow-only">Quiet</span>
             </Tab>
           )}
+          <Tab route={route} name="rooms" onGo={setRoute}>
+            Rooms
+          </Tab>
           <Tab route={route} name="connections" onGo={setRoute}>
             <span className="wide-only">Connections</span>
             <span className="narrow-only">Connect</span>
@@ -620,6 +625,15 @@ function SignedIn({
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
           />
         )}
+        {me && route.name === "rooms" && (
+          <Rooms
+            api={api}
+            conn={conn}
+            snap={snap}
+            guardian={guardian}
+            onBack={() => setRoute({ name: "home" })}
+          />
+        )}
         {meInfo?.operator && route.name === "admin" && (
           <Admin api={baseApi} onBack={() => setRoute({ name: "home" })} />
         )}
@@ -650,7 +664,8 @@ function SignedIn({
         </div>
       )}
 
-      {conn && <CallOverlay snap={snap} conn={conn} />}
+      {conn && <CallOverlay snap={snap} conn={conn} people={others} api={baseApi} />}
+      {conn && <RoomPanel snap={snap} conn={conn} />}
     </div>
   );
 }

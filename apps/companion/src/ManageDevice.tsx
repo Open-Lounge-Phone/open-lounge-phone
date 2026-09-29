@@ -5,6 +5,7 @@ import type {
   ContactEntry,
   DeviceSummary,
   RemoteContactInfo,
+  RoomSummary,
   User,
 } from "./api.ts";
 import { hostBadge } from "./connectionGroups.ts";
@@ -43,18 +44,24 @@ export function ManageDevice({
   /** Allow-list entries that come from connections, by their `rc_…` id. */
   const [remote, setRemote] = useState<Map<string, RemoteContactInfo>>(new Map());
   const [connections, setConnections] = useState<ConnectionView[]>([]);
+  /** The space's rooms, and which are on this phone (`rk_…` id by room id). */
+  const [spaceRooms, setSpaceRooms] = useState<RoomSummary[]>([]);
+  const [phoneRooms, setPhoneRooms] = useState<{ id: string; roomId: string; label: string }[]>([]);
   /** A fresh copy of the phone (last seen and software change while it's connected). */
   const [fresh, setFresh] = useState<DeviceSummary>();
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
     try {
-      const [u, c, conns, list] = await Promise.all([
+      const [u, c, conns, list, rooms] = await Promise.all([
         api.users(),
         api.contacts(deviceId),
         api.connections().catch(() => undefined),
         api.devices().catch(() => undefined),
+        api.rooms().catch(() => undefined),
       ]);
+      setSpaceRooms(rooms?.rooms ?? []);
+      setPhoneRooms(c.rooms ?? []);
       setFresh(list?.find((d) => d.id === deviceId));
       setUsers(u);
       setContacts(c.contacts);
@@ -89,6 +96,10 @@ export function ManageDevice({
     return run(() => api.putContact(deviceId, c));
   };
   const byId = new Map(contacts.map((c) => [c.id, c]));
+  // Rooms are on the list too (`rk_…`), but they're edited in their own section.
+  const peopleListed = contacts.filter((c) => !c.id.startsWith("rk_"));
+  const onPhone = new Set(phoneRooms.map((r) => r.roomId));
+  const roomsAddable = spaceRooms.filter((r) => !onPhone.has(r.id));
   const others = users.filter((u) => !byId.has(u.id));
   const listed = new Set([...remote.values()].map((r) => r.connectionId));
   const addable = connections.filter((c) => !listed.has(c.id));
@@ -127,7 +138,7 @@ export function ManageDevice({
         The phone can only call, and be called by, the people listed here.
       </p>
       <ul className="stack">
-        {contacts.map((c) => (
+        {peopleListed.map((c) => (
           <ContactEditor
             key={c.id}
             contact={c}
@@ -190,6 +201,45 @@ export function ManageDevice({
             ))}
           </div>
         </div>
+      )}
+
+      {device?.kind !== "lounge" && (
+        <>
+          <h3>Rooms</h3>
+          <p className="muted small">
+            Rooms this phone may join with a key (only rooms of this space). Nobody calls the phone
+            through them.
+          </p>
+          <ul className="stack">
+            {phoneRooms.map((r) => (
+              <li key={r.id} className="row">
+                <span>{r.label}</span>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => void run(() => api.removeRoomFromPhone(deviceId, r.id))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          {roomsAddable.length > 0 && (
+            <div className="chips">
+              {roomsAddable.map((r) => (
+                <button
+                  type="button"
+                  key={r.id}
+                  onClick={() =>
+                    void run(() => api.addRoomToPhone(deviceId, r.id, r.name.slice(0, 24)))
+                  }
+                >
+                  + {r.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <h3>Keys</h3>

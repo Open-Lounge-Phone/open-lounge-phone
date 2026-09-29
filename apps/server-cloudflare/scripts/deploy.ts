@@ -5,7 +5,7 @@
 //                          [--open-signup] [--fair-use hub|none]
 //                          [--turnstile-site-key KEY --turnstile-secret SECRET]
 //                          [--operator handle[,handle]] [--sponsor-url URL]
-//                          [--funding-balance USD]
+//                          [--funding-balance USD] [--sfu-app-id ID --sfu-app-secret SECRET]
 //
 // --open-signup lets anyone create an account on the instance (a public hub). Without it the
 // instance is invite-only; every deploy sets the flag, so omitting it closes sign-up again.
@@ -15,6 +15,10 @@
 // Turnstile protects sign-up when both keys are given; --operator names who sees the admin view;
 // --sponsor-url shows a Sponsor button (hidden while unset); --funding-balance shows the funding
 // card (with the hub's cost model, see docs/hub.md).
+// --sfu-app-id/--sfu-app-secret give rooms a media relay (Cloudflare Realtime SFU app, dashboard →
+// Realtime → SFU), stored as secrets; when not given they're read from instances/sfu.env
+// (SFU_APP_ID=…, SFU_APP_SECRET=…, gitignored) if it exists. Without them rooms are peer to peer
+// and hold 4 people. 1:1 calls never use the relay.
 //
 // The public hub:
 //   node scripts/deploy.ts --instance hub --domain hub.openloungephone.app --open-signup \
@@ -53,6 +57,8 @@ const { values: args } = parseArgs({
     operator: { type: "string" },
     "sponsor-url": { type: "string" },
     "funding-balance": { type: "string" },
+    "sfu-app-id": { type: "string" },
+    "sfu-app-secret": { type: "string" },
   },
 });
 
@@ -77,6 +83,27 @@ interface InstanceState {
   /** TURN_KEY_ID / TURN_KEY_API_TOKEN were set. */
   turnSet?: boolean;
   turnstileSet?: boolean;
+  /** SFU_APP_ID / SFU_APP_SECRET were set (rooms' media relay). */
+  sfuSet?: boolean;
+}
+
+/** SFU credentials from the flags, else from instances/sfu.env (never printed). */
+function sfuCredentials(): { id: string; secret: string } | undefined {
+  if (args["sfu-app-id"] && args["sfu-app-secret"]) {
+    return { id: args["sfu-app-id"], secret: args["sfu-app-secret"] };
+  }
+  const file = `${INSTANCES}/sfu.env`;
+  if (!existsSync(file)) return undefined;
+  const vars = Object.fromEntries(
+    readFileSync(file, "utf8")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#") && l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
+  );
+  return vars.SFU_APP_ID && vars.SFU_APP_SECRET
+    ? { id: vars.SFU_APP_ID, secret: vars.SFU_APP_SECRET }
+    : undefined;
 }
 
 const openSignup = args["open-signup"] === true;
@@ -230,6 +257,13 @@ if (turnNow) {
   wrangler(["secret", "put", "TURN_KEY_API_TOKEN", "-c", configPath], args["turn-key-token"]);
 }
 
+const sfu = sfuCredentials();
+if (sfu) {
+  step("setting the rooms' media relay (SFU) secrets");
+  wrangler(["secret", "put", "SFU_APP_ID", "-c", configPath], sfu.id);
+  wrangler(["secret", "put", "SFU_APP_SECRET", "-c", configPath], sfu.secret);
+}
+
 const state: InstanceState = {
   instance,
   domain,
@@ -242,6 +276,7 @@ const state: InstanceState = {
   fedKeySet,
   turnSet: previous.turnSet === true || turnNow,
   turnstileSet,
+  sfuSet: previous.sfuSet === true || !!sfu,
 };
 writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 
@@ -250,6 +285,11 @@ console.log(
   openSignup
     ? "  Open sign-up is ON: anyone can create an account (fair-use allowance applies)."
     : "  Invite-only (pass --open-signup to let anyone create an account).",
+);
+console.log(
+  state.sfuSet
+    ? "  Rooms: through the Cloudflare Realtime SFU (up to 20 people; encrypted in transit)."
+    : "  Rooms: peer to peer, up to 4 people (add --sfu-app-id/--sfu-app-secret for bigger rooms).",
 );
 if (openSignup && !turnstileSet) {
   console.log("  Tip: add --turnstile-site-key/--turnstile-secret to protect sign-up from bots.");

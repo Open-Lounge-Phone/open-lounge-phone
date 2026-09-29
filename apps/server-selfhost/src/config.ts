@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fairUseFromVars, hubInfoFromVars } from "@openloungephone/server-app";
+import { fairUseFromVars, hubInfoFromVars, relayFromVars } from "@openloungephone/server-app";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const list = (v: string | undefined) =>
@@ -23,6 +23,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     openSignup: env.OPEN_SIGNUP === "1" || env.OPEN_SIGNUP === "true",
     /** Fair-use allowance: FAIR_USE=hub and/or FAIR_USE_* (unlimited when unset). */
     fairUse: fairUseFromVars(env),
+    /** Rooms' media relay: LIVEKIT_URL/_API_KEY/_API_SECRET (or SFU_APP_ID/_SECRET); else mesh. */
+    relay: relayFromVars(env),
     /** Cloudflare Turnstile on sign-up, when both keys are set. */
     turnstile:
       env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET

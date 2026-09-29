@@ -91,6 +91,13 @@ export function ledsFor(input: LedInput): LedState {
       set(s.button, { color: "green", mode: "on" });
       break;
     case "incall":
+      // Held by the other side: the key breathes amber until they're back.
+      set(
+        activeKey,
+        s.heldByThem ? { color: "amber", mode: "breathe" } : { color: "green", mode: "on" },
+      );
+      break;
+    case "inroom":
       set(activeKey, { color: "green", mode: "on" });
       break;
     case "voicemail":

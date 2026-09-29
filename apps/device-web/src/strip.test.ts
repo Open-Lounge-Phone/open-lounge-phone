@@ -229,3 +229,56 @@ describe("trust line", () => {
     expect(low[1]).toBe("LOW BATTERY 10%");
   });
 });
+
+describe("hold, 3-way calls and rooms on the strip", () => {
+  const base = { connection: "online" as const, now: 10_000 };
+
+  it("shows a caller on hold, being held, and the merge hint", () => {
+    expect(statusLines({ ...base, deviceState: { kind: "offhook", held: "c1" } })).toEqual([
+      "CALLER ON HOLD",
+      "PRESS A KEY",
+    ]);
+    expect(
+      statusLines({
+        ...base,
+        activeLabel: "Gran",
+        deviceState: { kind: "incall", callId: "c1", connected: true, heldByThem: true },
+      }),
+    ).toEqual(["ON HOLD", "GRAN"]);
+    expect(
+      statusLines({
+        ...base,
+        activeLabel: "Gran",
+        callStartedAt: 0,
+        deviceState: { kind: "incall", callId: "c2", connected: true, held: "c1" },
+      }),
+    ).toEqual(["GRAN", "MENU: MERGE"]);
+    expect(
+      statusLines({
+        ...base,
+        deviceState: { kind: "incall", callId: "c1", connected: true, transferPending: true },
+      }),
+    ).toEqual(["TRANSFER TO?", "PRESS A KEY"]);
+  });
+
+  it("shows the room, who's in, muted, and the idle warning", () => {
+    expect(statusLines({ ...base, deviceState: { kind: "inroom", muted: false } })).toEqual([
+      "JOINING ROOM",
+    ]);
+    const inRoom = { kind: "inroom" as const, roomId: "r1", muted: true };
+    expect(
+      statusLines({
+        ...base,
+        deviceState: inRoom,
+        room: { name: "Cousins", people: 3, muted: true },
+      }),
+    ).toEqual(["COUSINS", "3 IN ROOM MUTED"]);
+    expect(
+      statusLines({
+        ...base,
+        deviceState: inRoom,
+        room: { name: "Cousins", people: 3, muted: true, idleWarning: true },
+      }),
+    ).toEqual(["STILL THERE?", "PRESS ANY KEY"]);
+  });
+});

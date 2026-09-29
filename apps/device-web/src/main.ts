@@ -5,6 +5,7 @@ import {
   LeaveMessage,
   type LeaveState,
   ProtocolSocket,
+  RoomAudio,
   type SocketStatus,
   socketUrl,
   TonePlayer,
@@ -12,6 +13,8 @@ import {
   VoicemailRecorder,
 } from "@openloungephone/client";
 import {
+  CALL_PROMPT_TEXT,
+  callActions,
   type DeviceInput,
   type DeviceState,
   deviceFingerprint,
@@ -144,7 +147,20 @@ let activeKey: number | undefined;
 let activeLabel: string | undefined;
 const battery = { pct: 100, charging: true };
 const iceByCall = new Map<string, IceServer[]>();
-let call: { callId: string; media?: CallMedia; pending: Signal[] } | undefined;
+/** The call being talked in, and one on hold (MENU → Add caller). Each has its own mic copy. */
+type CallAudio = { callId: string; media?: CallMedia; pending: Signal[]; mic?: MediaStream };
+let call: CallAudio | undefined;
+let heldCall: CallAudio | undefined;
+/** Attended transfer: calls where this phone sends the offer though it didn't dial. */
+const offererFor = new Set<string>();
+/** Calls merged into a room: their audio plays until the room's is connected. */
+const mergedCalls = new Set<string>();
+const lingering: { media?: CallMedia; mic?: MediaStream; el: HTMLAudioElement }[] = [];
+let lingerTimer: ReturnType<typeof setTimeout> | undefined;
+/** The room this phone is in (a party line, a phone room or a 3-way call). */
+let roomAudio: RoomAudio | undefined;
+let roomPending: Extract<ServerToDevice, { t: "room.media" | "rtc.sdp" | "rtc.ice" }>[] = [];
+let room: { name: string; people: number; muted: boolean; idleWarning?: boolean } | undefined;
 let micPromise: Promise<MediaStream> | undefined;
 let unauthorizedStreak = 0;
 let announceTimer: ReturnType<typeof setInterval> | undefined;
@@ -333,7 +349,40 @@ async function handle(msg: ServerToDevice): Promise<void> {
     }
     case "call.ringing":
     case "call.state":
+      if (msg.t === "call.state" && msg.state === "ended") {
+        if (msg.merged) mergedCalls.add(msg.callId);
+        if (msg.transfer?.offerer) offererFor.add(msg.transfer.callId);
+      }
       step({ type: "server", msg });
+      break;
+    case "room.state":
+      step({ type: "server", msg });
+      if (deviceState.kind === "inroom" && deviceState.roomId === msg.roomId) enterRoom(msg);
+      break;
+    case "room.ended": {
+      const was = deviceState.kind === "inroom";
+      step({ type: "server", msg });
+      leaveRoomAudio();
+      if (was || msg.roomId === undefined) {
+        const prompt =
+          msg.reason === "removed"
+            ? CALL_PROMPT_TEXT["room.removed"]
+            : msg.reason === "locked"
+              ? CALL_PROMPT_TEXT["room.locked"]
+              : msg.reason === "full"
+                ? CALL_PROMPT_TEXT["room.full"]
+                : undefined;
+        if (prompt) speak(prompt);
+      }
+      break;
+    }
+    case "room.idle":
+      if (room) room = { ...room, idleWarning: true };
+      speak(CALL_PROMPT_TEXT["room.idle"]);
+      break;
+    case "room.media":
+      if (roomAudio?.roomId === msg.roomId) roomAudio.handle(msg);
+      else roomPending.push(msg);
       break;
     case "rtc.config":
       iceByCall.set(msg.callId, msg.iceServers);
@@ -376,11 +425,19 @@ async function handle(msg: ServerToDevice): Promise<void> {
       forgetPerson();
       break;
     case "rtc.sdp":
-    case "rtc.ice":
-      if (call?.callId !== msg.callId) break;
-      if (call.media) await call.media.handle(msg).catch((e) => log("•", `rtc error: ${e}`));
-      else call.pending.push(msg);
+    case "rtc.ice": {
+      if (msg.peer) {
+        if (roomAudio?.roomId === msg.callId) roomAudio.handle(msg);
+        else roomPending.push(msg);
+        break;
+      }
+      const target =
+        call?.callId === msg.callId ? call : heldCall?.callId === msg.callId ? heldCall : undefined;
+      if (!target) break;
+      if (target.media) await target.media.handle(msg).catch((e) => log("•", `rtc error: ${e}`));
+      else target.pending.push(msg);
       break;
+    }
     case "error":
       if (msg.code === "unauthorized" && getDeviceId(profile)) forgetDeviceId();
       break;
@@ -453,8 +510,41 @@ function step(input: DeviceInput): void {
   if (authed) for (const m of r.send) send(m);
 
   const s = deviceState;
-  // Lifting the handset or an incoming call leaves the menu.
-  if (menu && s.kind !== "idle") applyMenu({ type: "exit" });
+  // Lifting the handset or an incoming call leaves the menu (the call menu: any change of state).
+  if (menu && (menu.screen === "call" ? prev.kind !== s.kind : s.kind !== "idle")) {
+    applyMenu({ type: "exit" });
+  }
+  // We put the call on hold: its audio steps aside (and stops sending).
+  if (prev.kind === "incall" && s.kind === "offhook" && s.held === prev.callId && call) {
+    for (const t of call.mic?.getAudioTracks() ?? []) t.enabled = false;
+    heldCall = call;
+    call = undefined;
+    audioEl.srcObject = null;
+  }
+  // Back from hold.
+  if (s.kind === "incall" && heldCall?.callId === s.callId) {
+    for (const t of heldCall.mic?.getAudioTracks() ?? []) t.enabled = true;
+    call = heldCall;
+    heldCall = undefined;
+    const remote = call.media?.pc.getReceivers()[0]?.track;
+    if (remote) audioEl.srcObject = new MediaStream([remote]);
+  }
+  // Merged into a room: keep the calls' audio until the room's is up.
+  if (s.kind === "inroom") {
+    for (const c of [call, heldCall]) if (c) lingerCall(c);
+    call = undefined;
+    heldCall = undefined;
+  }
+  // The held call ended (the other person hung up).
+  if (heldCall && !("held" in s && s.held === heldCall.callId) && s.kind !== "inroom") {
+    if (!(s.kind === "incall" && s.callId === heldCall.callId)) {
+      if (mergedCalls.has(heldCall.callId)) lingerCall(heldCall);
+      else closeCallAudio(heldCall);
+      heldCall = undefined;
+    }
+  }
+  // Transferred (attended): the call goes on under a new id; the old audio goes.
+  if (s.kind === "incall" && call && call.callId !== s.callId) endCall();
   if (s.kind === "dialing") {
     activeKey = s.button;
     activeLabel = labelFor(s.button);
@@ -472,10 +562,11 @@ function step(input: DeviceInput): void {
     input.msg.state === "connecting" &&
     s.kind === "incall"
   ) {
-    // The party that placed the call sends the offer.
-    void startMedia(s.callId, prev.kind === "dialing");
+    // The party that placed the call sends the offer (or was told to, after a transfer).
+    void startMedia(s.callId, prev.kind === "dialing" || offererFor.delete(s.callId));
   }
   if (s.kind !== "incall" && call) endCall();
+  if (s.kind !== "inroom" && roomAudio) leaveRoomAudio();
   if (s.kind === "voicemail" && prev.kind !== "voicemail") startLeaving(s.offer);
   if (prev.kind === "voicemail" && s.kind !== "voicemail") leaveFlow?.finish(); // hang up to send
   if (s.kind === "incall" && s.connected && callStartedAt === undefined) {
@@ -489,9 +580,13 @@ function step(input: DeviceInput): void {
 }
 
 async function startMedia(callId: string, offerer: boolean): Promise<void> {
-  call = { callId, pending: [] };
-  const mic = await micPromise?.catch(() => undefined);
+  const pending = call?.callId === callId ? call.pending : [];
+  call = { callId, pending };
+  const base = await micPromise?.catch(() => undefined);
   if (call?.callId !== callId) return; // ended while waiting for the microphone
+  // Each call has its own copy of the microphone, so holding one doesn't mute the other.
+  const mic = base ? new MediaStream(base.getAudioTracks().map((t) => t.clone())) : undefined;
+  call.mic = mic;
   if (!mic) {
     log("•", "no microphone available; hanging up");
     send({ t: "call.hangup", callId });
@@ -518,11 +613,82 @@ async function startMedia(callId: string, offerer: boolean): Promise<void> {
   }
 }
 
+function closeCallAudio(c: CallAudio): void {
+  c.media?.close();
+  for (const t of c.mic?.getTracks() ?? []) t.stop();
+  iceByCall.delete(c.callId);
+}
+
 function endCall(): void {
-  call?.media?.close();
-  if (call) iceByCall.delete(call.callId);
+  if (call && mergedCalls.has(call.callId)) lingerCall(call);
+  else if (call) closeCallAudio(call);
   call = undefined;
   audioEl.srcObject = null;
+}
+
+/** A call merged into a room keeps playing until the room's audio is connected. */
+function lingerCall(c: CallAudio): void {
+  mergedCalls.delete(c.callId);
+  for (const t of c.mic?.getAudioTracks() ?? []) t.enabled = true;
+  const el = new Audio();
+  el.autoplay = true;
+  const remote = c.media?.pc.getReceivers()[0]?.track;
+  if (remote) {
+    el.srcObject = new MediaStream([remote]);
+    void el.play().catch(() => {});
+  }
+  lingering.push({ ...(c.media ? { media: c.media } : {}), ...(c.mic ? { mic: c.mic } : {}), el });
+  clearTimeout(lingerTimer);
+  lingerTimer = setTimeout(endLinger, 15_000);
+}
+
+function endLinger(): void {
+  clearTimeout(lingerTimer);
+  for (const l of lingering.splice(0)) {
+    l.media?.close();
+    for (const t of l.mic?.getTracks() ?? []) t.stop();
+    l.el.srcObject = null;
+  }
+}
+
+/** In a room: start (or update) its audio. */
+function enterRoom(msg: Extract<ServerToDevice, { t: "room.state" }>): void {
+  const me = msg.participants.find((p) => p.id === msg.you);
+  const first = !room;
+  room = { name: msg.name, people: msg.participants.length, muted: me?.muted ?? false };
+  activeLabel = msg.name;
+  if (first) speak(CALL_PROMPT_TEXT[msg.kind === "call" ? "call.merged" : "room.joined"]);
+  if (roomAudio?.roomId === msg.roomId) {
+    roomAudio.update(msg);
+    return;
+  }
+  void (async () => {
+    micPromise ??= getMicrophone();
+    const base = await micPromise.catch(() => undefined);
+    if (!base || deviceState.kind !== "inroom" || deviceState.roomId !== msg.roomId) return;
+    roomAudio?.close();
+    roomAudio = new RoomAudio({
+      roomId: msg.roomId,
+      iceServers: iceByCall.get(msg.roomId) ?? [],
+      microphone: new MediaStream(base.getAudioTracks().map((t) => t.clone())),
+      send: (m) => send(m),
+      volume: settings.volume / 10,
+      onConnected: () => {
+        log("•", "room audio connected");
+        endLinger();
+      },
+    });
+    roomAudio.update(msg);
+    for (const m of roomPending.splice(0)) roomAudio.handle(m);
+  })();
+}
+
+function leaveRoomAudio(): void {
+  roomAudio?.close();
+  roomAudio = undefined;
+  roomPending = [];
+  room = undefined;
+  endLinger();
 }
 
 // --- voicemail: leaving a message, recording the greeting ---------------------------------
@@ -608,7 +774,10 @@ function flash(key: KeyId): void {
 }
 
 function canUseMenu(): boolean {
-  return authed && !pairingCode && !hookUp && deviceState.kind === "idle";
+  if (!authed || pairingCode) return false;
+  // In a call or a room, MENU offers hold / add caller, merge, transfer, mute.
+  if (callActions(deviceState).length > 0) return true;
+  return !hookUp && deviceState.kind === "idle";
 }
 
 function pressKey(key: KeyId): void {
@@ -635,6 +804,8 @@ function pressKey(key: KeyId): void {
     applyMenu({ type: "digit", digit, now });
     return;
   }
+  // In a room any key answers "still there?".
+  if (deviceState.kind === "inroom" && room?.idleWarning) room = { ...room, idleWarning: false };
   // Speed dial: digit 1–9 → slot 0–8, digit 0 → slot 9.
   step({ type: "button", index: slotOf(digit) });
 }
@@ -646,6 +817,7 @@ function menuContext() {
     fingerprint,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
     ...(config?.greeting && variant !== "lounge" ? { greeting: config.greeting } : {}),
+    ...(callActions(deviceState).length ? { call: { actions: callActions(deviceState) } } : {}),
   };
 }
 
@@ -671,6 +843,15 @@ function applyMenu(event: MenuEvent): void {
     voice.stop();
   }
   if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
+  if (r.action?.type === "call") {
+    const action = r.action.action;
+    if (action === "mute" || action === "unmute") roomAudio?.setMuted(action === "mute");
+    if (room && (action === "mute" || action === "unmute"))
+      room = { ...room, muted: action === "mute" };
+    step({ type: "action", action });
+    // Call prompts are spoken on every phone (phones without a display already spoke it).
+    if (r.say && displayMode !== "none") speak(r.say);
+  }
   // Phones without a display speak the menu; the others can show it.
   // Greeting results are always spoken; its recording prompt is spoken when recording starts.
   const spoken = displayMode === "none" || event.type === "greeting-done";
@@ -962,6 +1143,7 @@ function renderDisplay(): void {
           ...(activeLabel ? { activeLabel } : {}),
           ...(callStartedAt !== undefined ? { callStartedAt } : {}),
           ...(leaveView() ? { leave: leaveView() } : {}),
+          ...(room ? { room } : {}),
           battery,
           power: powerStatus(variant, powerSource),
           now: Date.now(),

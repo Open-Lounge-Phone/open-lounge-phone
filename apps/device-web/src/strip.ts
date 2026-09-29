@@ -18,6 +18,8 @@ export interface StatusInput {
   power?: { reduced: boolean };
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
+  /** In a room: its name, how many are in, whether you're muted, and an idle warning. */
+  room?: { name: string; people: number; muted: boolean; idleWarning?: boolean };
   /** Leaving a voicemail after an unanswered call (and its outcome, shortly after hang-up). */
   leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
   now: number;
@@ -75,13 +77,27 @@ export function statusLines(input: StatusInput): StatusLines {
       return who.length === 1 ? [who[0], "LIFT TO ANSWER"] : who;
     }
     case "incall":
+      if (s.transferPending) return ["TRANSFER TO?", "PRESS A KEY"];
+      if (s.heldByThem) return name ? ["ON HOLD", clip(name)] : ["ON HOLD"];
+      if (s.held && s.connected) return [clip(name || "IN CALL"), "MENU: MERGE"];
       if (!s.connected || input.callStartedAt === undefined) {
         return name ? ["CONNECTING", clip(name)] : ["CONNECTING"];
       }
       return name
         ? [`IN CALL ${clock(input.now - input.callStartedAt)}`, clip(name)]
         : [`IN CALL ${clock(input.now - input.callStartedAt)}`];
+    case "inroom": {
+      const room = input.room;
+      if (!s.roomId || !room) return ["JOINING ROOM"];
+      if (room.idleWarning) return ["STILL THERE?", "PRESS ANY KEY"];
+      const count = `${room.people} IN ROOM${s.muted ? " MUTED" : ""}`;
+      return [clip(room.name), clip(count)];
+    }
     case "offhook": {
+      if (s.held) {
+        const text = s.lastEnd && s.lastEnd !== "hangup" ? END_TEXT[s.lastEnd] : undefined;
+        return [text ?? "CALLER ON HOLD", "PRESS A KEY"];
+      }
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
     }

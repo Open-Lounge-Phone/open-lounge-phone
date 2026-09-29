@@ -1217,3 +1217,46 @@ dl.phone-facts {
 .turnstile {
   min-height: 65px;
 }
+
+/* Rooms, hold and 3-way calls */
+.held-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  margin-bottom: 0.75rem;
+}
+.picker ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 40vh;
+  overflow: auto;
+}
+.picker button {
+  width: 100%;
+  text-align: left;
+}
+.room-people {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+}
+.room-people .person {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.room-people .person.speaking {
+  font-weight: 600;
+}
+.overlay-room .overlay-actions {
+  flex-wrap: wrap;
+}
