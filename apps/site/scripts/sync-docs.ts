@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
  * render as plain text and the "Source" notes are omitted, so the live site never shows
  * placeholder links. Set it (and src/consts.ts) when the repo goes public.
  */
-export const GITHUB_URL = "";
+export const GITHUB_URL = "https://github.com/Open-Lounge-Phone/open-lounge-phone";
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = resolve(SITE, "../..");

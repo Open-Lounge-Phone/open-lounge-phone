@@ -1,7 +1,7 @@
 import { type FundingConfig, HUB_FUNDING } from "@openloungephone/core";
 
-/** Public repository URL; empty until published (see scripts/sync-docs.ts). */
-export const GITHUB_URL = "";
+/** Public repository URL (see scripts/sync-docs.ts). */
+export const GITHUB_URL = "https://github.com/Open-Lounge-Phone/open-lounge-phone";
 
 const env = (name: string): string | undefined => process.env[name]?.trim() || undefined;
 const num = (name: string, fallback: number): number => {
