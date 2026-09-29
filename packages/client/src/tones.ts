@@ -1,15 +1,18 @@
 /**
  * North American call-progress tones, synthesized with Web Audio so no assets are needed.
  * (Precise tone plan: dial 350+440 Hz continuous; ringback 440+480 Hz 2s on/4s off;
- * busy 480+620 Hz 0.5s on/off; ring is a warbling bell for the phone's ringer.)
+ * busy 480+620 Hz 0.5s on/off; ring is a warbling bell for the phone's ringer; hold is a soft
+ * 440 Hz chirp every 4 s, prompt `hold.tone`, played by your own phone or app while the other
+ * side holds you — nothing is sent over the network.)
  */
-export type Tone = "none" | "dialtone" | "ringback" | "busy" | "ring";
+export type Tone = "none" | "dialtone" | "ringback" | "busy" | "ring" | "hold";
 
 const PLANS: Record<Exclude<Tone, "none">, { freqs: number[]; on: number; off: number }> = {
   dialtone: { freqs: [350, 440], on: 1, off: 0 },
   ringback: { freqs: [440, 480], on: 2, off: 4 },
   busy: { freqs: [480, 620], on: 0.5, off: 0.5 },
   ring: { freqs: [1000, 1250], on: 1.5, off: 3 },
+  hold: { freqs: [440], on: 0.25, off: 3.75 },
 };
 
 export class TonePlayer {
@@ -55,7 +58,7 @@ export class TonePlayer {
       warble.start();
       oscs.push(warble);
     }
-    const level = 0.12;
+    const level = tone === "hold" ? 0.04 : 0.12;
     const period = plan.on + plan.off;
     const schedule = (from: number) => {
       for (let t = from; t < from + 60; t += period) {

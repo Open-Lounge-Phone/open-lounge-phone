@@ -11,6 +11,8 @@ import {
   type LoungeProgressBody,
   type Party,
   parseAddress,
+  type RoomJoinBody,
+  RoomJoinResult,
 } from "@openloungephone/federation";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost } from "./federation.ts";
@@ -34,6 +36,18 @@ export interface RemoteRing {
   /** The caller, for the call log: `handle@host`. */
   address?: string;
   /** For calls between households here: the caller's household. */
+  peerHousehold?: string;
+}
+
+/** Someone elsewhere joins one of this household's phone rooms (see `remoteRoomJoin`). */
+export interface RemoteRoomJoin {
+  /** Their server; '' = another household on this server. */
+  host: string;
+  /** Their side's id for this participation (routes `room.signal`). */
+  leg: string;
+  from: Party;
+  roomId: string;
+  /** Another household here: theirs. */
   peerHousehold?: string;
 }
 
@@ -152,6 +166,43 @@ export class FedCalls implements CallLinks {
 
   ringLocal(householdId: string, req: RemoteRing): Promise<RingResult> {
     return this.live.ringRemote(householdId, req);
+  }
+
+  /**
+   * Someone at `host` (or in another household here) wants into one of our phone rooms. The
+   * room's hub decides (see `HouseholdHub.remoteRoomJoin`).
+   */
+  async receiveRoomJoin(
+    host: string,
+    body: RoomJoinBody,
+    peerHousehold?: string,
+  ): Promise<RoomJoinResult> {
+    const room = await this.env.store.rooms.byHandle(body.room);
+    if (room?.kind !== "phone") return { ok: false, reason: "denied" };
+    await this.register(host, body.leg, room.householdId);
+    return this.live.roomJoin(room.householdId, {
+      host,
+      leg: body.leg,
+      from: body.from,
+      roomId: room.id,
+      ...(peerHousehold ? { peerHousehold } : {}),
+    });
+  }
+
+  async roomJoin(
+    host: string,
+    body: RoomJoinBody,
+    callerHousehold: string,
+  ): Promise<RoomJoinResult> {
+    if (host === LOCAL_HOST) return this.receiveRoomJoin(LOCAL_HOST, body, callerHousehold);
+    try {
+      const res = await fedFetch(this.env, host, "/rooms/join", { json: body });
+      const parsed = RoomJoinResult.safeParse(await res.json());
+      return parsed.success ? parsed.data : { ok: false, reason: "error" };
+    } catch (e) {
+      const status = e instanceof FederationError ? e.status : 0;
+      return { ok: false, reason: status === 429 ? "busy" : "unreachable" };
+    }
   }
 
   async register(host: string, callId: string, householdId: string): Promise<void> {

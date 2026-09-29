@@ -1,5 +1,5 @@
 import type { Device } from "@openloungephone/db";
-import type { FedSignal } from "@openloungephone/federation";
+import type { FedSignal, RoomJoinResult } from "@openloungephone/federation";
 import {
   type AppToServer,
   type DeviceToServer,
@@ -12,6 +12,7 @@ import {
 import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
   CloseCode,
+  type ConferenceSnapshot,
   type Conn,
   type ConnMemo,
   HELLO_TIMEOUT_MS,
@@ -20,7 +21,7 @@ import {
   type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
-import type { RelayDial, RemoteRing } from "./fedCalls.ts";
+import type { RelayDial, RemoteRing, RemoteRoomJoin } from "./fedCalls.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
 
 /** What a transport (Node `ws`, Workers WebSocket) drives for each socket. */
@@ -57,6 +58,12 @@ export interface Coordinator {
     guest: LoungeGuest,
   ): Promise<GuestClaimResult>;
   guestLeave(householdId: string, deviceId: string, host: string, guestId: string): Promise<void>;
+  /** Someone elsewhere asks to join one of the household's phone rooms. */
+  roomJoin(householdId: string, req: RemoteRoomJoin): Promise<RoomJoinResult>;
+  /** Who's in each of the household's live rooms (names by room id). */
+  roomPeople(householdId: string): Promise<Record<string, string[]>>;
+  /** A room was deleted: everyone in it is out. */
+  closeRoom(householdId: string, roomId: string): Promise<void>;
 }
 
 export type GuestClaimResult =
@@ -183,6 +190,19 @@ export class Gateway implements Coordinator {
     await this.hubs.get(householdId)?.guestLeave(deviceId, host, guestId);
   }
 
+  roomJoin(householdId: string, req: RemoteRoomJoin): Promise<RoomJoinResult> {
+    if (!this.allowed(householdId)) return Promise.resolve({ ok: false, reason: "error" });
+    return this.hub(householdId).remoteRoomJoin(req);
+  }
+
+  async roomPeople(householdId: string): Promise<Record<string, string[]>> {
+    return this.hubs.get(householdId)?.roomPeople() ?? {};
+  }
+
+  async closeRoom(householdId: string, roomId: string): Promise<void> {
+    await this.hubs.get(householdId)?.closeRoom(roomId);
+  }
+
   /** Tells a device waiting on `code` that a guardian claimed it. */
   async notifyPaired(code: string, device: Device): Promise<void> {
     const conn = this.waitingToPair.get(code);
@@ -209,6 +229,7 @@ export class Gateway implements Coordinator {
   resume(
     entries: ResumeEntry[],
     rooms: (householdId: string) => RoomSnapshot[],
+    conferences?: (householdId: string) => ConferenceSnapshot | undefined,
   ): ConnectionHandler[] {
     const handlers: ConnectionHandler[] = [];
     const restorable = new Map<string, { index: number; entry: ResumeEntry; memo: ConnMemo }[]>();
@@ -234,6 +255,7 @@ export class Gateway implements Coordinator {
           conn: entry.conn,
         })),
         rooms(householdId),
+        conferences?.(householdId),
       );
       list.forEach(({ index, entry }, k) => {
         const peer = peers[k] as Peer;

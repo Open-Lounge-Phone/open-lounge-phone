@@ -38,6 +38,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
+import { roomRoutes } from "./roomsApi.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
@@ -393,10 +394,11 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.get("/devices/:id/contacts", async (c) => {
     const device = await manageable(c.get("user"), c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    const [contacts, buttons, remote] = await Promise.all([
+    const [contacts, buttons, remote, rooms] = await Promise.all([
       store.listContacts(device.id),
       store.listButtons(device.id),
       store.listRemoteContacts(device.id),
+      store.rooms.onPhone(device.id),
     ]);
     const host = ownHost(env, c.req.url);
     return c.json({
@@ -409,6 +411,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
         address: `${r.connection.peerHandle}@${r.connection.peerHost || host}`,
         name: r.connection.peerName,
       })),
+      // Rooms the phone may join: `rk_…` ids in `contacts`.
+      rooms: rooms.map((r) => ({ id: r.id, roomId: r.roomId, label: r.label })),
     });
   });
 
@@ -744,6 +748,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
+  roomRoutes(api, env, live);
 
   return api;
 }

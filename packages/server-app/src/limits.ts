@@ -46,6 +46,8 @@ export interface FairUse {
   knocksPerMonth?: number;
   phonesPerSpace?: number;
   spacesPerAccount?: number;
+  /** Minutes in rooms (participant-minutes: 3 people for 10 minutes = 30 for the three). */
+  roomMinutesPerMonth?: number;
 }
 
 /** The public hub's allowance (FAIR_USE=hub). */
@@ -56,6 +58,7 @@ export const HUB_FAIR_USE: Required<FairUse> = {
   knocksPerMonth: 100,
   phonesPerSpace: 5,
   spacesPerAccount: 5,
+  roomMinutesPerMonth: 1000,
 };
 
 const FAIR_USE_VARS: Record<keyof FairUse, string> = {
@@ -65,6 +68,7 @@ const FAIR_USE_VARS: Record<keyof FairUse, string> = {
   knocksPerMonth: "FAIR_USE_KNOCKS",
   phonesPerSpace: "FAIR_USE_PHONES_PER_SPACE",
   spacesPerAccount: "FAIR_USE_SPACES_PER_ACCOUNT",
+  roomMinutesPerMonth: "FAIR_USE_ROOM_MINUTES",
 };
 
 /**

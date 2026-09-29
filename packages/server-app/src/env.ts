@@ -1,6 +1,12 @@
 import type { RoomState } from "@openloungephone/core";
 import type { Store } from "@openloungephone/db";
-import type { CallBody, CallResult, FedSignal } from "@openloungephone/federation";
+import type {
+  CallBody,
+  CallResult,
+  FedSignal,
+  RoomJoinBody,
+  RoomJoinResult,
+} from "@openloungephone/federation";
 import type {
   DeviceToServer,
   IceServer,
@@ -34,6 +40,14 @@ export interface CallLinks {
   signal(to: { host: string; householdId?: string }, msg: FedSignal): Promise<void>;
   /** Rings a person in another household on this server, for a call owned here. */
   ringLocal(householdId: string, req: import("./fedCalls.ts").RemoteRing): Promise<RingResult>;
+  /** Someone at `host` asks into one of our phone rooms (`/fed/v1/rooms/join`). */
+  receiveRoomJoin(
+    host: string,
+    body: RoomJoinBody,
+    peerHousehold?: string,
+  ): Promise<RoomJoinResult>;
+  /** Asks a phone room's server (or household, host '') to let one of our people in. */
+  roomJoin(host: string, body: RoomJoinBody, callerHousehold: string): Promise<RoomJoinResult>;
 }
 
 /** Everything the server needs from its host platform. Node and Workers each provide one. */
@@ -85,6 +99,14 @@ export interface ServerEnv {
   wakeAt?(at: number | null): void;
   /** Hosts that can be evicted persist live call rooms so they survive a restart. */
   saveRooms?(householdId: string, rooms: RoomSnapshot[]): void;
+  /** Likewise for live rooms (party lines, phone rooms, 3-way calls) and room legs. */
+  saveConferences?(householdId: string, snap: ConferenceSnapshot): void;
+  /**
+   * A media relay for rooms: the Cloudflare Realtime SFU (`SFU_APP_ID`/`SFU_APP_SECRET`) or a
+   * self-hosted LiveKit (`LIVEKIT_*`). Without one, rooms are a peer-to-peer mesh of ≤ 4 people.
+   * 1:1 calls never use it.
+   */
+  relay?: import("./sfu.ts").RelayConfig;
   /** Calls with other households and servers; without it such calls are unreachable. */
   calls?: CallLinks;
   /**
@@ -193,6 +215,24 @@ export interface RoomSnapshot {
   vm?: { target: import("./vmTickets.ts").VmTarget; from: import("./vmTickets.ts").VmCaller };
   /** A house-line key ringing several members at once (user ids). */
   group?: string[];
+  /** On hold: the party key of whoever put it on hold. */
+  heldBy?: string;
+}
+
+/** One of our people in a room on another server or in another household (their "leg"). */
+export interface RoomLegSnapshot {
+  leg: string;
+  roomId?: string;
+  /** The local peer's session. */
+  session: string;
+  to: { host: string; householdId?: string };
+  joinedAt: number;
+  payer?: string;
+}
+
+export interface ConferenceSnapshot {
+  rooms: import("./liveRooms.ts").LiveRoomSnapshot[];
+  legs: RoomLegSnapshot[];
 }
 
 /** One WebSocket, as seen by the server. */

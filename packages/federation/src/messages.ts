@@ -1,6 +1,21 @@
 // Bodies of the signed `/fed/v1` requests. The sending server is the signature's key id; every
 // `from` is one of that server's accounts, so a server can only speak for its own people.
-import { CallStateMsg, RtcIce, RtcSdp, VoicemailOffer } from "@openloungephone/protocol";
+import {
+  CallStateMsg,
+  RoomEnded,
+  RoomHere,
+  RoomIdle,
+  RoomLeave,
+  RoomLock,
+  RoomMediaMsg,
+  RoomMute,
+  RoomRemove,
+  RoomState,
+  RoomTalk,
+  RtcIce,
+  RtcSdp,
+  VoicemailOffer,
+} from "@openloungephone/protocol";
 import { z } from "zod";
 import { HANDLE_RE } from "./address.ts";
 
@@ -189,7 +204,47 @@ export type GreetingBody = z.infer<typeof GreetingBody>;
 /** `POST /fed/v1/lounge/leave`: `from` leaves the receiving server's Lounge phone. */
 export const LoungeLeaveBody = z.object({ from: Party, deviceId: Id });
 
+/**
+ * A room message between a participant's server (which holds their "room leg") and the room's
+ * server, both ways, in the same shapes as clients use. `callId` is the leg's id.
+ */
+export const RoomSignalMsg = z.union([
+  RoomState,
+  RoomMediaMsg,
+  RoomIdle,
+  RoomEnded,
+  RoomLeave,
+  RoomMute,
+  RoomRemove,
+  RoomLock,
+  RoomTalk,
+  RoomHere,
+  RtcSdp,
+  RtcIce,
+]);
+export type RoomSignalMsg = z.infer<typeof RoomSignalMsg>;
+export const RoomSignal = z.object({ t: z.literal("room.signal"), callId: Id, msg: RoomSignalMsg });
+export type RoomSignal = z.infer<typeof RoomSignal>;
+
+/**
+ * `POST /fed/v1/rooms/join`: `from` wants into the phone room `room` (a handle here). `leg`
+ * names their side; the room's server decides (its space, or an active connection with the
+ * room's owner, then lock and size) and answers `{ok: true, roomId}` or `{ok: false, reason}`.
+ * Everything after that travels as `room.signal` on the server-pair stream.
+ */
+export const RoomJoinBody = z.object({ leg: Id, from: Party, room: Handle });
+export type RoomJoinBody = z.infer<typeof RoomJoinBody>;
+export const RoomJoinResult = z.union([
+  z.object({ ok: z.literal(true), roomId: Id, name: z.string().max(64) }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(["denied", "locked", "full", "unreachable", "busy", "error"]),
+    note: z.string().max(200).optional(),
+  }),
+]);
+export type RoomJoinResult = z.infer<typeof RoomJoinResult>;
+
 /** Call signaling relayed between the two servers of a federated call (same shapes as clients). */
-export const FedSignal = z.discriminatedUnion("t", [CallStateMsg, RtcSdp, RtcIce]);
+export const FedSignal = z.discriminatedUnion("t", [CallStateMsg, RtcSdp, RtcIce, RoomSignal]);
 export type FedSignal = z.infer<typeof FedSignal>;
 export const StreamSignal = z.object({ t: z.literal("signal"), msg: FedSignal });

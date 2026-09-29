@@ -7,6 +7,7 @@ import type {
 } from "@openloungephone/core";
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
+import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
 
 export type Role = "guardian" | "contact";
@@ -92,6 +93,8 @@ export interface Usage {
   voicemails: number;
   voicemailBytes: number;
   knocks: number;
+  /** Minutes people spent in rooms (participant-minutes). */
+  roomMinutes: number;
 }
 
 /** One party's record of a finished call. */
@@ -523,6 +526,15 @@ export interface RemoteContact extends Contact {
   connection: Connection;
 }
 
+/** A room on a phone's allow-list, as an entry it may dial (join) and nobody calls it through. */
+const roomAsContact = (r: RoomContact): Contact => ({
+  id: r.id,
+  label: r.label,
+  canCallDevice: false,
+  deviceCanCall: true,
+  bypassQuietHours: false,
+});
+
 /** Remote allow-list entries have ids with this prefix; local ones are user ids. */
 export const isRemoteContactId = (id: string) => id.startsWith("rc_");
 
@@ -533,10 +545,13 @@ export class Store {
   private readonly sql: Sql;
   /** Connections, knocks, server keys and rate limits. */
   readonly connections: ConnectionStore;
+  /** Party lines, phone rooms, and rooms on phones' allow-lists. */
+  readonly rooms: RoomStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
     this.connections = new ConnectionStore(sql);
+    this.rooms = new RoomStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -629,8 +644,10 @@ export class Store {
   async handleAvailable(handle: string, now: number, accountId?: string): Promise<boolean> {
     const r = await this.sql.first<{ n: number }>(
       `SELECT (SELECT COUNT(*) FROM accounts WHERE handle = ?) +
+              (SELECT COUNT(*) FROM rooms WHERE handle = ?) +
               (SELECT COUNT(*) FROM released_handles
                WHERE handle = ? AND released_at > ? AND account_id != ?) AS n`,
+      handle,
       handle,
       handle,
       now - HANDLE_RESERVE_MS,
@@ -650,13 +667,15 @@ export class Store {
       const { changes } = await this.sql.run(
         `UPDATE accounts SET handle = ?, handle_changed_at = ? WHERE id = ? AND NOT EXISTS
            (SELECT 1 FROM released_handles
-            WHERE handle = ? AND released_at > ? AND account_id != ?)`,
+            WHERE handle = ? AND released_at > ? AND account_id != ?)
+           AND NOT EXISTS (SELECT 1 FROM rooms WHERE handle = ?)`,
         handle,
         now,
         accountId,
         handle,
         now - HANDLE_RESERVE_MS,
         accountId,
+        handle,
       );
       if (changes !== 1) return false;
     } catch (e) {
@@ -691,6 +710,7 @@ export class Store {
       voicemails: number;
       voicemail_bytes: number;
       knocks: number;
+      room_minutes: number;
     }>("SELECT * FROM usage WHERE account_id = ? AND month = ?", accountId, month);
     return {
       month,
@@ -698,6 +718,7 @@ export class Store {
       voicemails: r?.voicemails ?? 0,
       voicemailBytes: r?.voicemail_bytes ?? 0,
       knocks: r?.knocks ?? 0,
+      roomMinutes: r?.room_minutes ?? 0,
     };
   }
 
@@ -708,19 +729,22 @@ export class Store {
     add: Partial<Omit<Usage, "month">>,
   ): Promise<void> {
     await this.sql.run(
-      `INSERT INTO usage (account_id, month, call_minutes, voicemails, voicemail_bytes, knocks)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO usage (account_id, month, call_minutes, voicemails, voicemail_bytes, knocks,
+         room_minutes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account_id, month) DO UPDATE SET
          call_minutes = call_minutes + excluded.call_minutes,
          voicemails = voicemails + excluded.voicemails,
          voicemail_bytes = voicemail_bytes + excluded.voicemail_bytes,
-         knocks = knocks + excluded.knocks`,
+         knocks = knocks + excluded.knocks,
+         room_minutes = room_minutes + excluded.room_minutes`,
       accountId,
       monthOf(now),
       add.callMinutes ?? 0,
       add.voicemails ?? 0,
       add.voicemailBytes ?? 0,
       add.knocks ?? 0,
+      add.roomMinutes ?? 0,
     );
   }
 
@@ -1445,6 +1469,7 @@ export class Store {
   }
 
   async removeContact(deviceId: string, userId: string): Promise<void> {
+    if (isRoomContactId(userId)) return this.rooms.removeFromPhone(deviceId, userId);
     if (isRemoteContactId(userId)) {
       await this.sql.run(
         "DELETE FROM remote_contacts WHERE device_id = ? AND id = ?",
@@ -1466,6 +1491,10 @@ export class Store {
   }
 
   async getContact(deviceId: string, userId: string): Promise<Contact | undefined> {
+    if (isRoomContactId(userId)) {
+      const r = await this.rooms.contact(deviceId, userId);
+      return r && roomAsContact(r);
+    }
     if (isRemoteContactId(userId)) {
       return (await this.listRemoteContacts(deviceId)).find((c) => c.id === userId);
     }
@@ -1477,7 +1506,10 @@ export class Store {
     return r && toContact(r);
   }
 
-  /** The whole allow-list: household members, then people via connections (`rc_…` ids). */
+  /**
+   * The whole allow-list: household members, then people via connections (`rc_…` ids), then
+   * rooms (`rk_…` ids; the phone may join them, nobody calls the phone through them).
+   */
   async listContacts(deviceId: string): Promise<Contact[]> {
     const rows = await this.sql.all<ContactRow>(
       "SELECT * FROM contacts WHERE device_id = ? ORDER BY label",
@@ -1486,7 +1518,8 @@ export class Store {
     const remote = (await this.listRemoteContacts(deviceId)).map(
       ({ connection: _c, connectionId: _i, ...c }) => c,
     );
-    return [...rows.map(toContact), ...remote];
+    const rooms = (await this.rooms.onPhone(deviceId)).map(roomAsContact);
+    return [...rows.map(toContact), ...remote, ...rooms];
   }
 
   /** People from other households or servers on a phone's allow-list (active connections only). */
@@ -1561,12 +1594,25 @@ export class Store {
 
   /** Maps a key to a person on the allow-list (a user id or an `rc_…` id), or clears it. */
   async setButton(deviceId: string, index: number, userId: string | null): Promise<void> {
-    await this.sql.run(
-      "DELETE FROM remote_buttons WHERE device_id = ? AND idx = ?",
-      deviceId,
-      index,
-    );
-    if (userId === null) {
+    await this.sql.batch([
+      {
+        query: "DELETE FROM remote_buttons WHERE device_id = ? AND idx = ?",
+        params: [deviceId, index],
+      },
+      {
+        query: "DELETE FROM room_buttons WHERE device_id = ? AND idx = ?",
+        params: [deviceId, index],
+      },
+    ]);
+    if (userId !== null && isRoomContactId(userId)) {
+      await this.sql.batch([
+        { query: "DELETE FROM buttons WHERE device_id = ? AND idx = ?", params: [deviceId, index] },
+        {
+          query: "INSERT INTO room_buttons (device_id, idx, room_contact_id) VALUES (?, ?, ?)",
+          params: [deviceId, index, userId],
+        },
+      ]);
+    } else if (userId === null) {
       await this.sql.run("DELETE FROM buttons WHERE device_id = ? AND idx = ?", deviceId, index);
     } else if (isRemoteContactId(userId)) {
       await this.sql.batch([
@@ -1591,7 +1637,9 @@ export class Store {
     const rows = await this.sql.all<{ idx: number; user_id: string }>(
       `SELECT idx, user_id FROM buttons WHERE device_id = ?
        UNION ALL SELECT idx, remote_id AS user_id FROM remote_buttons WHERE device_id = ?
+       UNION ALL SELECT idx, room_contact_id AS user_id FROM room_buttons WHERE device_id = ?
        ORDER BY idx`,
+      deviceId,
       deviceId,
       deviceId,
     );

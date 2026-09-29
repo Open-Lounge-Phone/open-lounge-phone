@@ -1,10 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { type Device, Store } from "@openloungephone/db";
 import { d1Sql } from "@openloungephone/db/d1";
-import { type FedSignal, HOST_RE } from "@openloungephone/federation";
+import { type FedSignal, HOST_RE, type RoomJoinResult } from "@openloungephone/federation";
 import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
 import {
   type BlobStore,
+  type ConferenceSnapshot,
   type Conn,
   type ConnectionHandler,
   type ConnMemo,
@@ -23,8 +24,10 @@ import {
   presenceHook,
   type RelayDial,
   type RemoteRing,
+  type RemoteRoomJoin,
   type RingResult,
   type RoomSnapshot,
+  relayFromVars,
   type ServerEnv,
   ServerLink,
   type SocketState,
@@ -73,6 +76,14 @@ export interface Env {
   BASE_COST_USD_PER_MONTH?: string;
   COST_PER_ACTIVE_USER_USD_PER_MONTH?: string;
   SPONSOR_URL?: string;
+  /**
+   * Rooms' media relay: the Cloudflare Realtime SFU app (dashboard → Realtime → SFU). Secrets,
+   * set by `scripts/deploy.ts --sfu-app-id/--sfu-app-secret` (or `instances/sfu.env`). Without
+   * them rooms are a peer-to-peer mesh of at most 4 people.
+   */
+  SFU_APP_ID?: string;
+  SFU_APP_SECRET?: string;
+  FAIR_USE_ROOM_MINUTES?: string;
   /**
    * Local development only (`wrangler dev --var DEV_LOOPBACK:1`): requests to `*.localhost`
    * hosts go to 127.0.0.1, so two local instances can federate (tests/e2e/cloudflare.test.ts).
@@ -177,6 +188,8 @@ function serverEnv(
   if (fairUse) server.fairUse = fairUse;
   const hub = hubInfoFromVars(vars);
   if (hub) server.hub = hub;
+  const relay = relayFromVars(vars);
+  if (relay) server.relay = relay;
   if (env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET) {
     server.turnstile = { siteKey: env.TURNSTILE_SITE_KEY, secret: env.TURNSTILE_SECRET };
   }
@@ -256,12 +269,14 @@ abstract class GatewayObject extends DurableObject<Env> {
       const sockets = ctx.getWebSockets();
       if (sockets.length === 0) return;
       const rooms = (await ctx.storage.get<RoomSnapshot[]>("rooms")) ?? [];
+      const conferences = await ctx.storage.get<ConferenceSnapshot>("conferences");
       const handlers = this.gateway.resume(
         sockets.map((ws) => {
           const a = (ws.deserializeAttachment() ?? { app: false }) as Attachment;
           return { conn: this.conn(ws), memo: a.memo, app: a.app };
         }),
         () => rooms,
+        () => conferences,
       );
       sockets.forEach((ws, i) => {
         const h = handlers[i];
@@ -340,6 +355,9 @@ export class HouseholdObject extends GatewayObject {
         saveRooms: (_hh, rooms) => {
           void ctx.storage.put("rooms", rooms);
         },
+        saveConferences: (_hh, snap) => {
+          void ctx.storage.put("conferences", snap);
+        },
       },
     );
     this.householdId = householdId;
@@ -387,6 +405,18 @@ export class HouseholdObject extends GatewayObject {
 
   guestLeave(deviceId: string, host: string, guestId: string): Promise<void> {
     return this.gateway.guestLeave(this.householdId, deviceId, host, guestId);
+  }
+
+  roomJoin(req: RemoteRoomJoin): Promise<RoomJoinResult> {
+    return this.gateway.roomJoin(this.householdId, req);
+  }
+
+  roomPeople(): Promise<Record<string, string[]>> {
+    return this.gateway.roomPeople(this.householdId);
+  }
+
+  closeRoom(roomId: string): Promise<void> {
+    return this.gateway.closeRoom(this.householdId, roomId);
   }
 }
 
@@ -531,6 +561,9 @@ function coordinator(env: Env): Coordinator {
       env.HOUSEHOLD.getByName(hh).guestClaim(deviceId, nonce, guest),
     guestLeave: (hh, deviceId, host, guestId) =>
       env.HOUSEHOLD.getByName(hh).guestLeave(deviceId, host, guestId),
+    roomJoin: (hh, req) => env.HOUSEHOLD.getByName(hh).roomJoin(req),
+    roomPeople: (hh) => env.HOUSEHOLD.getByName(hh).roomPeople(),
+    closeRoom: (hh, roomId) => env.HOUSEHOLD.getByName(hh).closeRoom(roomId),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));
       for (const m of await store.listMemberships(accountId)) {

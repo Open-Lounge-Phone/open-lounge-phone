@@ -29,6 +29,7 @@ import {
   PresenceBody,
   parseAddress,
   RemoveBody,
+  RoomJoinBody,
   WELL_KNOWN_PATH,
 } from "@openloungephone/federation";
 import { Hono } from "hono";
@@ -685,6 +686,14 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (!env.calls) return c.json({ state: "ended", reason: "unreachable" });
     const result = await env.calls.receive(r.host, r.body);
     return c.json(result.state === "ringing" ? { state: "ringing" } : result);
+  });
+
+  /** Someone there asks into one of our phone rooms. Decided here (see `remoteRoomJoin`). */
+  app.post("/fed/v1/rooms/join", async (c) => {
+    const r = await signed(c.req.raw, RoomJoinBody);
+    if (r instanceof Response) return r;
+    if (!env.calls) return c.json({ ok: false, reason: "unreachable" });
+    return c.json(await env.calls.receiveRoomJoin(r.host, r.body));
   });
 
   app.post("/fed/v1/phones", async (c) => {

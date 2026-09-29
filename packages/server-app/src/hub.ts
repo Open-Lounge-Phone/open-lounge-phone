@@ -1,16 +1,22 @@
 import {
   authorizeInbound,
   authorizeOutbound,
+  type Contact,
+  controlCheck,
   goesToVoicemail,
   isQuietAt,
   localClock,
   loungeDayEnd,
   MAX_RING_SECONDS,
+  type Meeting,
+  mayConnect,
   newRoom,
   nextQuietChange,
+  type PartyCall,
   type RoomEvent,
   type RoomState,
   resolveButton,
+  roomAccess,
   roomStep,
 } from "@openloungephone/core";
 import {
@@ -19,24 +25,36 @@ import {
   deviceMode,
   type HouseLineKey,
   isRemoteContactId,
+  isRoomContactId,
   LOCAL_HOST,
   newId,
+  type Room as StoredRoom,
   type User,
   type VoicemailOwner,
 } from "@openloungephone/db";
-import type { CallBody, FedSignal, Party } from "@openloungephone/federation";
+import {
+  type CallBody,
+  type FedSignal,
+  type Party,
+  parseAddress,
+  type RoomJoinResult,
+  type RoomSignalMsg,
+} from "@openloungephone/federation";
 import {
   type AppToServer,
   type DeviceToServer,
   type EndReason,
+  type RoomEndReason,
   type ServerToApp,
   type ServerToDevice,
+  type TransferTarget,
   toBase64Url,
   type VoicemailOffer,
 } from "@openloungephone/protocol";
 import {
   CloseCode,
   CONNECT_TIMEOUT_MS,
+  type ConferenceSnapshot,
   type Conn,
   LOUNGE_NONCE_TTL_MS,
   LOUNGE_PROOF_MS,
@@ -55,9 +73,11 @@ import {
   primaryHousehold,
   type RelayDial,
   type RemoteRing,
+  type RemoteRoomJoin,
   sendGuestProgress,
 } from "./fedCalls.ts";
 import { ownHost } from "./federation.ts";
+import { type LiveRoom, LiveRooms, type RoomInbound } from "./liveRooms.ts";
 import { SWEEP_EVERY_MS, sweepSpace } from "./timeline.ts";
 import {
   issueGreetingTicket,
@@ -89,8 +109,8 @@ const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
 class FedConn implements Conn {
   private chain: Promise<void> = Promise.resolve();
   private readonly env: ServerEnv;
-  private readonly to: { host: string; householdId?: string };
-  private readonly leg: string | undefined;
+  readonly to: { host: string; householdId?: string };
+  private leg: string | undefined;
   private readonly offers: boolean;
 
   constructor(
@@ -105,7 +125,26 @@ class FedConn implements Conn {
     this.offers = offers;
   }
 
+  /** A call that became a room goes on under the same id (see `merge`). */
+  useLeg(leg: string): void {
+    this.leg ??= leg;
+  }
+
+  /** A room message to or from a participant on the other side (`room.signal`, by leg). */
+  room(msg: RoomSignalMsg): void {
+    const calls = this.env.calls;
+    const leg = this.leg;
+    if (!calls || !leg) return;
+    this.chain = this.chain
+      .then(() => calls.signal(this.to, { t: "room.signal", callId: leg, msg }))
+      .catch((e) => this.env.log("warn", "room signal failed", { error: String(e) }));
+  }
+
   send(msg: ServerToDevice | ServerToApp): void {
+    if (isRoomMessage(msg)) {
+      this.room(msg as RoomSignalMsg);
+      return;
+    }
     if (msg.t !== "call.state" && msg.t !== "rtc.sdp" && msg.t !== "rtc.ice") return;
     if (msg.t === "call.state" && msg.state === "ringing") return;
     // A voicemail offer never crosses to the other server, except to a Lounge phone there where
@@ -127,6 +166,24 @@ class FedConn implements Conn {
 }
 
 const partyOf = (a: Account): Party => ({ handle: a.handle, id: a.id, name: a.name });
+
+/** Room messages (and a mesh room's `rtc.*`, which name a `peer`) travel as `room.signal`. */
+function isRoomMessage(msg: { t: string; peer?: string }): boolean {
+  if (msg.t === "rtc.sdp" || msg.t === "rtc.ice") return msg.peer !== undefined;
+  return msg.t.startsWith("room.") && msg.t !== "rooms.changed";
+}
+
+/** One of our people in a room held elsewhere (another household here, or another server). */
+interface RoomLeg {
+  leg: string;
+  /** The room's id there, once known (from its first `room.state`). */
+  roomId?: string;
+  peer: Peer;
+  conn: FedConn;
+  joinedAt: number;
+  /** Their account: this server meters their room minutes. */
+  payer?: string;
+}
 
 type LoungeEndReason = "logout" | "left" | "idle" | "replaced" | "removed" | "offline";
 type LoungeFail = "expired" | "wrong_key" | "timeout" | "busy" | "not_found";
@@ -179,6 +236,8 @@ interface Room {
   vm?: { target: VmTarget; from: VmCaller };
   /** A house-line key ringing several members (callee key `grp:…`): the first to answer. */
   group?: string[];
+  /** On hold: the party key of whoever put it on hold. */
+  heldBy?: string;
 }
 
 /** Someone signed in at another Lounge phone and open to chat ("who's here"). */
@@ -206,6 +265,11 @@ export class HouseholdHub {
   private readonly loungeTimers = new Map<string, { proof?: () => void; idle?: () => void }>();
   /** When this hub last deleted expired history (see `maybeSweep`). */
   private lastSweep = 0;
+  /** Party lines, phone rooms and 3-way calls held here. */
+  private readonly conf: LiveRooms;
+  /** Our people in rooms held elsewhere, by leg id. */
+  private readonly legs = new Map<string, RoomLeg>();
+  private confDirty = false;
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -213,6 +277,17 @@ export class HouseholdHub {
   constructor(householdId: string, env: ServerEnv) {
     this.householdId = householdId;
     this.env = env;
+    this.conf = new LiveRooms({
+      env,
+      householdId,
+      run: (fn) => this.run(fn),
+      changed: () => {
+        this.confDirty = true;
+      },
+      reschedule: () => void this.scheduleWake(),
+      announce: (room) => this.announceRoom(room),
+      remote: (info) => this.remoteFromInfo(info),
+    });
   }
 
   /** Serializes all state changes so concurrent messages cannot interleave mid-update. */
@@ -249,9 +324,27 @@ export class HouseholdHub {
   }
 
   private flushRooms(): void {
+    if (this.confDirty && this.env.saveConferences) {
+      this.confDirty = false;
+      this.env.saveConferences(this.householdId, this.snapshotConferences());
+    }
     if (!this.roomsDirty || !this.env.saveRooms) return;
     this.roomsDirty = false;
     this.env.saveRooms(this.householdId, this.snapshotRooms());
+  }
+
+  snapshotConferences(): ConferenceSnapshot {
+    return {
+      rooms: this.conf.snapshot(),
+      legs: [...this.legs.values()].map((l) => ({
+        leg: l.leg,
+        ...(l.roomId ? { roomId: l.roomId } : {}),
+        session: l.peer.session,
+        to: l.conn.to,
+        joinedAt: l.joinedAt,
+        ...(l.payer ? { payer: l.payer } : {}),
+      })),
+    };
   }
 
   snapshotRooms(): RoomSnapshot[] {
@@ -266,6 +359,7 @@ export class HouseholdHub {
         ...(r.answered ? { answered: true } : {}),
         ...(r.vm ? { vm: r.vm } : {}),
         ...(r.group ? { group: r.group } : {}),
+        ...(r.heldBy ? { heldBy: r.heldBy } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -278,7 +372,11 @@ export class HouseholdHub {
    * Rebuilds live state after the host slept: re-registers authenticated connections and the
    * rooms that referenced them. Sends nothing. Returns the peers in input order.
    */
-  restore(entries: { info: PeerInfo; conn: Conn }[], rooms: RoomSnapshot[]): Peer[] {
+  restore(
+    entries: { info: PeerInfo; conn: Conn }[],
+    rooms: RoomSnapshot[],
+    conferences?: ConferenceSnapshot,
+  ): Peer[] {
     const peers = entries.map(({ info, conn }) => {
       const peer: Peer = {
         ...info,
@@ -315,9 +413,27 @@ export class HouseholdHub {
         ...(snap.answered ? { answered: true } : {}),
         ...(snap.vm ? { vm: snap.vm } : {}),
         ...(snap.group ? { group: snap.group } : {}),
+        ...(snap.heldBy ? { heldBy: snap.heldBy } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
+    }
+    if (conferences) {
+      const byPeerSession = new Map(peers.map((p) => [p.session, p]));
+      this.conf.restore(conferences.rooms, byPeerSession);
+      for (const l of conferences.legs) {
+        const peer = byPeerSession.get(l.session);
+        if (!peer) continue;
+        this.legs.set(l.leg, {
+          leg: l.leg,
+          ...(l.roomId ? { roomId: l.roomId } : {}),
+          peer,
+          conn: new FedConn(this.env, l.to, l.leg),
+          joinedAt: l.joinedAt,
+          ...(l.payer ? { payer: l.payer } : {}),
+        });
+      }
+      this.confDirty = true;
     }
     this.roomsDirty = true;
     this.flushRooms();
@@ -443,6 +559,10 @@ export class HouseholdHub {
         if (!this.userOnline(peer.id)) void this.announceMember(peer.id);
       }
     }
+    void this.conf.dropPeer(peer);
+    for (const leg of [...this.legs.values()]) {
+      if (leg.peer === peer) void this.endLeg(leg, "left", { tellRoom: true, tellPeer: false });
+    }
     for (const room of [...this.rooms.values()]) {
       if (room.caller === peer) {
         void this.apply(room, { type: "hangup", by: room.state.caller });
@@ -505,9 +625,25 @@ export class HouseholdHub {
           return;
         case "call.answer":
         case "call.hangup":
+          return this.callMessage(peer, msg);
         case "rtc.sdp":
         case "rtc.ice":
+          if (msg.peer) return this.roomMessage(peer, msg);
           return this.callMessage(peer, msg);
+        case "call.hold":
+          return this.hold(peer, msg.callId, msg.hold);
+        case "call.merge":
+          return this.merge(peer, msg.callId, msg.with);
+        case "call.transfer":
+          return this.transfer(peer, msg);
+        case "room.leave":
+        case "room.mute":
+        case "room.remove":
+        case "room.lock":
+        case "room.talk":
+        case "room.here":
+        case "room.media":
+          return this.roomMessage(peer, msg);
         default:
           peer.conn.send({
             t: "error",
@@ -552,9 +688,28 @@ export class HouseholdHub {
           return;
         case "call.answer":
         case "call.hangup":
+          return this.callMessage(peer, msg);
         case "rtc.sdp":
         case "rtc.ice":
+          if (msg.peer) return this.roomMessage(peer, msg);
           return this.callMessage(peer, msg);
+        case "call.hold":
+          return this.hold(peer, msg.callId, msg.hold);
+        case "call.merge":
+          return this.merge(peer, msg.callId, msg.with);
+        case "call.transfer":
+          return this.transfer(peer, msg);
+        case "room.join":
+          if (msg.roomId) return this.joinById(peer, msg.roomId);
+          return this.joinByAddress(peer, msg.address ?? "");
+        case "room.leave":
+        case "room.mute":
+        case "room.remove":
+        case "room.lock":
+        case "room.talk":
+        case "room.here":
+        case "room.media":
+          return this.roomMessage(peer, msg);
         default:
           peer.conn.send({
             t: "error",
@@ -635,17 +790,49 @@ export class HouseholdHub {
       await this.expireOfflineLounges();
       await this.endDayEndSessions();
       await this.env.flushPresence?.(this.householdId);
+      await this.conf.sweepIdle(this.env.now());
       await this.scheduleWake();
     });
   }
 
   // --- dialing ----------------------------------------------------------------
 
+  /** In a call (ringing, held or live) or in a room: not to be rung. */
   private busy(key: string): boolean {
     for (const r of this.rooms.values()) {
       if (r.state.caller === key || r.state.callee === key) return true;
     }
+    if (this.conf.inRoom(key)) return true;
+    for (const l of this.legs.values()) if (l.peer.key === key) return true;
     return false;
+  }
+
+  /** A party's calls as they see them (for hold, consult, merge and transfer rules). */
+  private partyCalls(peer: Peer): PartyCall[] {
+    const out: PartyCall[] = [];
+    for (const r of this.rooms.values()) {
+      if (r.caller !== peer && r.calleePeer !== peer) continue;
+      out.push({
+        callId: r.id,
+        phase: r.state.phase,
+        ...(r.heldBy
+          ? { heldBy: r.heldBy === peer.key ? ("me" as const) : ("other" as const) }
+          : {}),
+      });
+    }
+    return out;
+  }
+
+  /** May this party place a call now: nothing else going on, or a consult while holding one. */
+  private canDial(peer: Peer): boolean {
+    if (this.conf.inRoom(peer.key)) return false;
+    for (const l of this.legs.values()) if (l.peer === peer) return false;
+    // Another session of the same person in a call counts too (one person, one call).
+    for (const r of this.rooms.values()) {
+      const theirs = r.state.caller === peer.key || r.state.callee === peer.key;
+      if (theirs && r.caller !== peer && r.calleePeer !== peer) return false;
+    }
+    return controlCheck(this.partyCalls(peer), { type: "dial" }).ok;
   }
 
   /**
@@ -747,7 +934,7 @@ export class HouseholdHub {
   }
 
   private async deviceDial(device: DevicePeer, index: number): Promise<void> {
-    if (this.busy(device.key)) return;
+    if (!this.canDial(device)) return;
     if (device.lounge) return this.loungeDial(device, index);
     const { store } = this.env;
     const allowance = await this.allowance(device);
@@ -758,11 +945,22 @@ export class HouseholdHub {
       this.scheduleFor(device),
     ]);
     const contact = resolveButton(buttons, new Map(contacts.map((c) => [c.id, c])), index);
+    return this.dialContact(device, contact, schedule, allowance);
+  }
+
+  /** A phone dials an allow-list entry (a speed-dial key, or a transfer from this phone). */
+  private async dialContact(
+    device: DevicePeer,
+    contact: Contact | undefined,
+    schedule: Awaited<ReturnType<HouseholdHub["scheduleFor"]>>,
+    allowance: { payer: string | undefined },
+  ): Promise<void> {
     const decision = authorizeOutbound(contact, {
       quietHours: schedule,
       now: new Date(this.env.now()),
     });
     if (decision.decision === "deny" || !contact) return this.refuse(device, "denied");
+    if (isRoomContactId(contact.id)) return this.joinFromPhone(device, contact.id);
     if (isRemoteContactId(contact.id)) return this.remoteContactDial(device, contact.id);
     const from = await this.vmCaller(device, device.label);
     const vm = from && {
@@ -830,7 +1028,7 @@ export class HouseholdHub {
     if (decision.decision === "voicemail") return this.refuse(user, "voicemail", undefined, vm);
     const peer = this.devices.get(deviceId);
     if (!peer) return this.refuse(user, "unreachable", undefined, vm);
-    if (this.busy(user.key)) return this.refuse(user, "busy");
+    if (!this.canDial(user)) return this.refuse(user, "busy");
     if (this.busy(peer.key) || peer.hook === "up") {
       return this.refuse(user, "busy", undefined, vm);
     }
@@ -878,7 +1076,7 @@ export class HouseholdHub {
       target: { kind: "user" as const, userId, name: callee.name },
       from,
     };
-    if (this.busy(caller.key)) return this.refuse(caller, "busy");
+    if (!this.canDial(caller)) return this.refuse(caller, "busy");
     const targets = this.reachable(userId);
     const plans = await this.branchesFor(userId);
     if (!targets.length && !plans.length) return this.refuse(caller, "unreachable", undefined, vm);
@@ -1373,6 +1571,9 @@ export class HouseholdHub {
       ? await store.connections.nextPresenceDue(this.householdId)
       : undefined;
     if (presenceDue !== undefined) at = at === undefined ? presenceDue : Math.min(at, presenceDue);
+    // Rooms: the next idle warning or drop.
+    const roomDue = this.conf.nextDeadline(now);
+    if (roomDue !== undefined) at = at === undefined ? roomDue : Math.min(at, roomDue);
     this.cancelWakeTimer?.();
     this.cancelWakeTimer = undefined;
     if (at === undefined) {
@@ -2129,7 +2330,7 @@ export class HouseholdHub {
           }
         : undefined;
     if (!calls) return this.refuse(caller, "unreachable");
-    if (this.busy(caller.key)) return this.refuse(caller, "busy");
+    if (!this.canDial(caller)) return this.refuse(caller, "busy");
     if (this.busy(target.key)) return this.refuse(caller, "busy", undefined, vm);
     const allowance = await this.allowance(caller, target.as);
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
@@ -2245,6 +2446,14 @@ export class HouseholdHub {
   /** Signaling from the far end of a call with another household (host '') or server. */
   remoteSignal(host: string, msg: FedSignal): Promise<void> {
     return this.run(async () => {
+      if (msg.t === "room.signal") {
+        // For one of our people in a room held there, or from someone there in a room held here.
+        const leg = this.legs.get(msg.callId);
+        if (leg && leg.conn.to.host === host) return this.legSignal(leg, msg.msg);
+        const here = this.conf.findRemote(host, msg.callId);
+        if (here && isRoomInbound(msg.msg)) return this.conf.message(here.room, here.p, msg.msg);
+        return;
+      }
       let room: Room | undefined;
       let remote: Peer | undefined;
       for (const r of this.rooms.values()) {
@@ -2274,6 +2483,21 @@ export class HouseholdHub {
       }
       const party = remote === room.caller ? "caller" : "callee";
       if (msg.t === "call.state") {
+        if (msg.state === "ended" && msg.merged) {
+          return this.convertToLeg(room, remote, msg.merged.roomId);
+        }
+        if (
+          msg.state === "active" &&
+          room.state.phase === "active" &&
+          (msg.hold !== undefined || room.heldBy === remote.key)
+        ) {
+          // They put the call on hold (or took it back): tell our side, as it is.
+          room.heldBy = msg.hold === "them" ? remote.key : undefined;
+          this.roomsDirty = true;
+          const other = party === "caller" ? room.calleePeer : room.caller;
+          other?.conn.send({ ...msg, callId: room.id });
+          return;
+        }
         if (msg.state === "ended") {
           if (msg.voicemail && party === "callee") this.relayOffer(room, host, msg.voicemail);
           return this.apply(room, { type: "end", reason: msg.reason ?? "hangup" });
@@ -2559,9 +2783,644 @@ export class HouseholdHub {
       return { state: "ringing" };
     });
   }
+
+  // --- hold, 3-way and transfer ---------------------------------------------------------
+
+  /** The other party of a call, from `peer`'s side. */
+  private otherParty(room: Room, peer: Peer): Peer | undefined {
+    if (room.caller === peer) return room.calleePeer;
+    if (room.calleePeer === peer) return room.caller;
+    return undefined;
+  }
+
+  /** The name to show for a party in a room. */
+  private displayName(peer: Peer): string {
+    if (peer.kind === "device") return peer.lounge?.session?.name ?? peer.label;
+    return peer.label;
+  }
+
+  private refuseControl(peer: Peer, message: string): void {
+    peer.conn.send({ t: "error", code: "bad_message", message });
+  }
+
+  /** On hold: the holder's audio stops and the other side hears a soft tone (played locally). */
+  private async hold(peer: Peer, callId: string, hold: boolean): Promise<void> {
+    const room = this.rooms.get(callId);
+    const other = room && this.otherParty(room, peer);
+    if (!room || !other) return this.refuseControl(peer, "no such call");
+    const check = controlCheck(this.partyCalls(peer), { type: "hold", callId, hold });
+    if (!check.ok) return this.refuseControl(peer, check.error);
+    const was = room.heldBy;
+    room.heldBy = hold ? peer.key : undefined;
+    this.roomsDirty = true;
+    if (was === room.heldBy) return;
+    peer.conn.send({ t: "call.state", callId, state: "active", ...(hold ? { hold: "you" } : {}) });
+    other.conn.send({
+      t: "call.state",
+      callId,
+      state: "active",
+      ...(hold ? { hold: "them" } : {}),
+    });
+  }
+
+  /**
+   * How a party counts for the kids'-phone rule: a kids' phone with the keys on its allow-list,
+   * everyone else as the person they are.
+   */
+  private async meeting(p: Peer): Promise<Meeting> {
+    if (p.kind === "device") {
+      const device = p as DevicePeer;
+      if (!device.owner && !device.lounge) {
+        const allowed = new Set<string>();
+        for (const c of await this.env.store.listContacts(device.id)) {
+          if (!isRemoteContactId(c.id) && !isRoomContactId(c.id)) allowed.add(userKey(c.id));
+        }
+        for (const r of await this.env.store.listRemoteContacts(device.id)) {
+          if (r.connection.peerAccount) {
+            allowed.add(`fed:${r.connection.peerHost}:${r.connection.peerAccount}`);
+          }
+        }
+        return { key: p.key, kidsPhone: { allowed } };
+      }
+      const person = personOf(device);
+      return { key: person ? userKey(person) : p.key };
+    }
+    return { key: p.key };
+  }
+
+  private async kidsMayMeet(parties: Peer[]): Promise<boolean> {
+    return mayConnect(await Promise.all(parties.map((p) => this.meeting(p))));
+  }
+
+  /** Ends a call that became part of a room: logged and metered, no end signal to its far end. */
+  private async endMerged(room: Room, roomId: string): Promise<void> {
+    room.cancelTimer?.();
+    this.rooms.delete(room.id);
+    this.roomsDirty = true;
+    await this.closeBooks(room, "hangup");
+    for (const p of [room.caller, room.calleePeer]) {
+      p?.conn.send({
+        t: "call.state",
+        callId: room.id,
+        state: "ended",
+        reason: "hangup",
+        merged: { roomId },
+      });
+    }
+  }
+
+  /** Call log and fair-use metering for a call that's over (however it ended). */
+  private async closeBooks(room: Room, reason: string): Promise<void> {
+    await this.logCall(room, reason).catch((e) =>
+      this.env.log("warn", "call log failed", { error: String(e) }),
+    );
+    if (room.payer && room.activeAt !== undefined) {
+      const minutes = Math.ceil((this.env.now() - room.activeAt) / 60_000);
+      await this.env.store.addUsage(room.payer, this.env.now(), { callMinutes: minutes });
+    }
+  }
+
+  /**
+   * 3-way: the call on hold and the live (consult) call become one room with all three. The old
+   * calls' audio keeps playing until the room's is connected, so nobody hears a gap.
+   */
+  private async merge(peer: Peer, heldId: string, activeId: string): Promise<void> {
+    const r1 = this.rooms.get(heldId);
+    const r2 = this.rooms.get(activeId);
+    const check = controlCheck(this.partyCalls(peer), {
+      type: "merge",
+      held: heldId,
+      active: activeId,
+    });
+    if (!check.ok || !r1 || !r2)
+      return this.refuseControl(peer, check.ok ? "no such call" : check.error);
+    const b = this.otherParty(r1, peer);
+    const c = this.otherParty(r2, peer);
+    if (!b || !c) return this.refuseControl(peer, "no such call");
+    if (!(await this.kidsMayMeet([peer, b, c]))) {
+      return this.refuseControl(peer, "a kids' phone can only be with people on its list");
+    }
+    const payer = (await this.allowance(peer)).payer;
+    const room = this.conf.openCall("3-way call");
+    await this.endMerged(r1, room.id);
+    await this.endMerged(r2, room.id);
+    await this.conf.admit(room, peer, {
+      name: this.displayName(peer),
+      host: true,
+      ...(payer ? { payer } : {}),
+    });
+    for (const [other, call] of [
+      [b, r1],
+      [c, r2],
+    ] as const) {
+      if (other.kind === "remote") {
+        // Same far end, now as a room leg under the call's id (their server converts it).
+        const leg = other.leg ?? call.id;
+        (other.conn as FedConn).useLeg(leg);
+        const remote: Peer = { ...other, leg };
+        await this.conf.admit(room, remote, {
+          name: other.label,
+          ...(other.host ? { remoteHost: other.host } : {}),
+          // Their own server meters them; someone from another server counts against the host.
+          ...(other.host && payer ? { payer } : {}),
+        });
+      } else {
+        const own = (await this.allowance(other)).payer;
+        await this.conf.admit(room, other, {
+          name: this.displayName(other),
+          ...(own ? { payer: own } : {}),
+        });
+      }
+    }
+  }
+
+  /** Transfer: blind (ring a target for them) or attended (connect your two other parties). */
+  private async transfer(
+    peer: Peer,
+    msg: { callId: string; to?: TransferTarget; toCall?: string },
+  ): Promise<void> {
+    if (msg.toCall) return this.transferAttended(peer, msg.callId, msg.toCall);
+    const room = this.rooms.get(msg.callId);
+    const other = room && this.otherParty(room, peer);
+    const check = controlCheck(this.partyCalls(peer), { type: "transfer", callId: msg.callId });
+    if (!room || !other || !check.ok || !msg.to) {
+      return this.refuseControl(peer, check.ok ? "no such call" : check.error);
+    }
+    if (other.kind === "remote") {
+      return this.refuseControl(
+        peer,
+        "transferring someone from another household or server isn't supported yet",
+      );
+    }
+    const target = await this.transferTarget(peer, msg.to);
+    if (!target) return this.refuseControl(peer, "transfer refused: not allowed");
+    // They call the target themselves, with their own permissions: step the call aside, dial
+    // as them, and keep what they'd have been told until it's clear whether it worked.
+    this.rooms.delete(room.id);
+    const real = other.conn;
+    const held: (ServerToDevice | ServerToApp)[] = [];
+    other.conn = {
+      send: (m) => void held.push(m),
+      close: (code, reason) => real.close(code, reason),
+      ...(real.remember ? { remember: (memo) => real.remember?.(memo) } : {}),
+    };
+    const before = new Set(this.rooms.keys());
+    try {
+      await this.dialAs(other, target);
+    } finally {
+      other.conn = real;
+    }
+    const next = [...this.rooms.values()].find((r) => !before.has(r.id) && r.caller === other);
+    if (!next) {
+      this.rooms.set(room.id, room);
+      const why = held.find((m) => m.t === "call.state" && m.state === "ended");
+      const note = why?.t === "call.state" ? (why.note ?? why.reason) : undefined;
+      return this.refuseControl(peer, `transfer refused${note ? `: ${note}` : ""}`);
+    }
+    this.roomsDirty = true;
+    await this.closeBooks(room, "hangup");
+    peer.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+    real.send({
+      t: "call.state",
+      callId: room.id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId: next.id, ringing: true, offerer: true },
+    });
+    for (const m of held) real.send(m);
+  }
+
+  /** What a transfer target means for the person being transferred. */
+  private async transferTarget(
+    by: Peer,
+    to: TransferTarget,
+  ): Promise<{ userId: string } | { deviceId: string } | { connectionId: string } | undefined> {
+    if (!("button" in to)) return to;
+    // A key on the transferring phone: its allow-list entry for that key.
+    if (by.kind !== "device") return undefined;
+    const id = (await this.env.store.listButtons(by.id)).get(to.button);
+    if (!id || isRoomContactId(id)) return undefined;
+    if (isRemoteContactId(id)) {
+      const entry = (await this.env.store.listRemoteContacts(by.id)).find((r) => r.id === id);
+      return entry ? { connectionId: entry.connectionId } : undefined;
+    }
+    return { userId: id };
+  }
+
+  /** Places a call as `who` (the person being transferred), under their own rules. */
+  private async dialAs(
+    who: Peer,
+    target: { userId: string } | { deviceId: string } | { connectionId: string },
+  ): Promise<void> {
+    if (who.kind === "device") {
+      const device = who as DevicePeer;
+      if (device.lounge) {
+        const s = device.lounge.session;
+        if (!s || s.guest) return;
+        const as = { id: s.userId, label: s.name };
+        if ("userId" in target) return this.userDial(device, target.userId, as);
+        if ("deviceId" in target) return this.appDial(device, target.deviceId, as);
+        return this.connectionDial(device, target.connectionId, as);
+      }
+      // A phone may only reach what's on its own allow-list, as if a key were pressed.
+      let contact: Contact | undefined;
+      if ("userId" in target) contact = await this.env.store.getContact(device.id, target.userId);
+      else if ("connectionId" in target) {
+        contact = (await this.env.store.listRemoteContacts(device.id)).find(
+          (r) => r.connectionId === target.connectionId,
+        );
+      }
+      if (!contact) return this.refuse(device, "denied");
+      const allowance = await this.allowance(device);
+      if (allowance.note) return this.refuse(device, "denied", allowance.note);
+      return this.dialContact(device, contact, await this.scheduleFor(device), allowance);
+    }
+    if ("userId" in target) return this.userDial(who, target.userId);
+    if ("deviceId" in target) return this.appDial(who, target.deviceId);
+    return this.connectionDial(who, target.connectionId);
+  }
+
+  /** Attended transfer: your held party and your consult party are connected; you leave both. */
+  private async transferAttended(peer: Peer, heldId: string, activeId: string): Promise<void> {
+    const r1 = this.rooms.get(heldId);
+    const r2 = this.rooms.get(activeId);
+    const check = controlCheck(this.partyCalls(peer), {
+      type: "transfer-attended",
+      held: heldId,
+      active: activeId,
+    });
+    if (!check.ok || !r1 || !r2)
+      return this.refuseControl(peer, check.ok ? "no such call" : check.error);
+    const b = this.otherParty(r1, peer);
+    const c = this.otherParty(r2, peer);
+    if (!b || !c) return this.refuseControl(peer, "no such call");
+    if (b.kind === "remote" || c.kind === "remote") {
+      return this.refuseControl(
+        peer,
+        "transferring someone from another household or server isn't supported yet",
+      );
+    }
+    if (!(await this.kidsMayMeet([b, c]))) {
+      return this.refuseControl(peer, "a kids' phone can only be with people on its list");
+    }
+    for (const r of [r1, r2]) {
+      r.cancelTimer?.();
+      this.rooms.delete(r.id);
+      await this.closeBooks(r, "hangup");
+      peer.conn.send({ t: "call.state", callId: r.id, state: "ended", reason: "hangup" });
+    }
+    const room = this.openRoom(b, c.key);
+    room.payer = r1.payer;
+    room.calleePeer = c;
+    room.answered = true;
+    this.roomsDirty = true;
+    b.conn.send({
+      t: "call.state",
+      callId: r1.id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId: room.id, ringing: false, offerer: true },
+    });
+    c.conn.send({
+      t: "call.state",
+      callId: r2.id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId: room.id, ringing: false, offerer: false },
+    });
+    await this.apply(room, { type: "answer", by: room.state.callee });
+  }
+
+  // --- rooms ------------------------------------------------------------------------------
+
+  /** A participant's message about their room: held here, or relayed to where it's held. */
+  private async roomMessage(peer: Peer, msg: RoomInbound): Promise<void> {
+    const roomId = msg.t === "rtc.sdp" || msg.t === "rtc.ice" ? msg.callId : msg.roomId;
+    const here = this.conf.find(peer, roomId);
+    if (here) return this.conf.message(here.room, here.p, msg);
+    const leg = [...this.legs.values()].find((l) => l.peer === peer && l.roomId === roomId);
+    if (leg) {
+      leg.conn.room(msg as RoomSignalMsg);
+      if (msg.t === "room.leave")
+        await this.endLeg(leg, "left", { tellRoom: false, tellPeer: true });
+      return;
+    }
+    if (msg.t === "room.leave") peer.conn.send({ t: "room.ended", roomId, reason: "left" });
+  }
+
+  /** Refuses a join with a reason (and the server's words, if any). */
+  private refuseRoom(peer: Peer, reason: RoomEndReason, roomId?: string, note?: string): void {
+    peer.conn.send({
+      t: "room.ended",
+      ...(roomId ? { roomId } : {}),
+      reason,
+      ...(note ? { note } : {}),
+    });
+  }
+
+  /** `name@host` of a phone room here. */
+  private roomAddress(r: StoredRoom): string | undefined {
+    return r.handle ? `${r.handle}@${ownHost(this.env)}` : undefined;
+  }
+
+  private async joinById(peer: Peer, roomId: string): Promise<void> {
+    const stored = await this.env.store.rooms.get(roomId);
+    if (!stored || stored.householdId !== this.householdId) {
+      return this.refuseRoom(peer, "denied", roomId);
+    }
+    return this.joinLocal(peer, stored);
+  }
+
+  /** A kids' or personal phone's key for a room on its allow-list. */
+  private async joinFromPhone(device: DevicePeer, contactId: string): Promise<void> {
+    const entry = await this.env.store.rooms.contact(device.id, contactId);
+    const stored = entry ? await this.env.store.rooms.get(entry.roomId) : undefined;
+    // Phones join only their own space's rooms.
+    if (!stored || stored.householdId !== this.householdId)
+      return this.refuseRoom(device, "denied");
+    return this.joinLocal(device, stored);
+  }
+
+  /**
+   * Someone connected to this hub joins one of its space's rooms. Default deny: the space's
+   * members (their apps, own phones, Lounge phones they're at); kids' phones only with the room on
+   * their allow-list. Then lock, size, and the joiner's fair-use allowance.
+   */
+  private async joinLocal(peer: Peer, stored: StoredRoom): Promise<void> {
+    if (this.busy(peer.key)) return this.refuseRoom(peer, "busy", stored.id);
+    const { store } = this.env;
+    let kidsPhone: { allowListed: boolean } | undefined;
+    let account: string | undefined;
+    if (peer.kind === "device") {
+      const device = peer as DevicePeer;
+      const session = device.lounge?.session;
+      if (device.lounge && (!session || session.guest))
+        return this.refuseRoom(peer, "denied", stored.id);
+      const person = personOf(device);
+      if (!person) kidsPhone = { allowListed: await store.rooms.allowedOn(device.id, stored.id) };
+      else account = (await store.getUser(person))?.accountId;
+    } else account = (await store.getUser(peer.id))?.accountId;
+    const live = this.conf.get(stored.id);
+    const media = live?.media ?? this.conf.mediaKind();
+    const decision = roomAccess(
+      {
+        kind: stored.kind,
+        access: stored.access,
+        locked: live?.locked ?? stored.locked,
+        size: live?.participants.size ?? 0,
+        max: this.conf.maxSize(media),
+      },
+      { inSpace: true, connected: false, ...(kidsPhone ? { kidsPhone } : {}) },
+    );
+    if (!decision.ok) return this.refuseRoom(peer, decision.reason, stored.id);
+    const payer = account ?? (kidsPhone ? await store.spaceOwner(this.householdId) : undefined);
+    const note = await fairUseProblem(this.env, payer, "room");
+    if (note) return this.refuseRoom(peer, "denied", stored.id, note);
+    const guardian = peer.kind === "user" && peer.guardian;
+    const address = this.roomAddress(stored);
+    const room = this.conf.open({ ...stored, ...(address ? { address } : {}) });
+    await this.conf.admit(room, peer, {
+      name: this.displayName(peer),
+      // The room's owner hosts it; in a home, guardians may too.
+      host: (!!account && account === stored.ownerAccount) || guardian,
+      ...(payer ? { payer } : {}),
+    });
+  }
+
+  /** Joins a phone room by address: here, in another household here, or on another server. */
+  private async joinByAddress(peer: Peer, address: string): Promise<void> {
+    const { store } = this.env;
+    const addr = parseAddress(address);
+    if (!addr) return this.refuseRoom(peer, "denied");
+    const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
+    let householdId: string | undefined;
+    if (host === LOCAL_HOST) {
+      const stored = await store.rooms.byHandle(addr.handle);
+      if (stored?.kind !== "phone") return this.refuseRoom(peer, "denied");
+      if (stored.householdId === this.householdId) return this.joinLocal(peer, stored);
+      householdId = stored.householdId;
+    }
+    if (this.busy(peer.key)) return this.refuseRoom(peer, "busy");
+    const calls = this.env.calls;
+    if (!calls) return this.refuseRoom(peer, "unreachable");
+    // Only a person joins elsewhere (their app, or a phone that stands for them).
+    const person =
+      peer.kind === "user" ? peer.id : peer.kind === "device" ? personOf(peer) : undefined;
+    const user = person && !person.startsWith("guest:") ? await store.getUser(person) : undefined;
+    const account = user ? await store.getAccount(user.accountId) : undefined;
+    if (!account) return this.refuseRoom(peer, "denied");
+    const note = await fairUseProblem(this.env, account.id, "room");
+    if (note) return this.refuseRoom(peer, "denied", undefined, note);
+    const leg = newId("lg");
+    const to = { host, ...(householdId ? { householdId } : {}) };
+    this.legs.set(leg, {
+      leg,
+      peer,
+      conn: new FedConn(this.env, to, leg),
+      joinedAt: this.env.now(),
+      payer: account.id,
+    });
+    this.confDirty = true;
+    await calls.register(host, leg, this.householdId);
+    // Over the network (or another hub's queue): not inside this hub's queue.
+    void calls
+      .roomJoin(host, { leg, from: partyOf(account), room: addr.handle }, this.householdId)
+      .then(
+        (r) => this.run(() => this.joinAnswered(leg, r)),
+        () => this.run(() => this.joinAnswered(leg, { ok: false, reason: "unreachable" })),
+      );
+  }
+
+  private async joinAnswered(leg: string, r: RoomJoinResult): Promise<void> {
+    const l = this.legs.get(leg);
+    if (!l || r.ok) return;
+    this.legs.delete(leg);
+    this.confDirty = true;
+    this.refuseRoom(l.peer, r.reason, l.roomId, r.ok === false ? r.note : undefined);
+  }
+
+  /** A leg is over: meter it, and tell whoever needs to know. */
+  private async endLeg(
+    leg: RoomLeg,
+    reason: RoomEndReason,
+    tell: { tellRoom: boolean; tellPeer: boolean },
+  ): Promise<void> {
+    if (this.legs.get(leg.leg) !== leg) return;
+    this.legs.delete(leg.leg);
+    this.confDirty = true;
+    const now = this.env.now();
+    if (tell.tellRoom && leg.roomId) leg.conn.room({ t: "room.leave", roomId: leg.roomId });
+    if (tell.tellPeer && leg.roomId) {
+      leg.peer.conn.send({ t: "room.ended", roomId: leg.roomId, reason });
+    }
+    if (leg.payer && leg.roomId) {
+      const minutes = Math.max(1, Math.ceil((now - leg.joinedAt) / 60_000));
+      await this.env.store
+        .addUsage(leg.payer, now, { roomMinutes: minutes })
+        .catch((e) => this.env.log("warn", "room metering failed", { error: String(e) }));
+    }
+  }
+
+  /** A message from the room's server for one of our people in it. */
+  private async legSignal(leg: RoomLeg, msg: RoomSignalMsg): Promise<void> {
+    if (msg.t === "room.state") {
+      if (!leg.roomId) {
+        leg.roomId = msg.roomId;
+        this.confDirty = true;
+        // Their audio goes through our TURN, as for calls.
+        leg.peer.conn.send({
+          t: "rtc.config",
+          callId: msg.roomId,
+          iceServers: await this.env.iceServers(),
+        });
+      }
+      leg.peer.conn.send(msg);
+      return;
+    }
+    if (msg.t === "room.ended") {
+      leg.roomId ??= msg.roomId;
+      await this.endLeg(leg, msg.reason, { tellRoom: false, tellPeer: true });
+      return;
+    }
+    if (
+      msg.t === "room.media" ||
+      msg.t === "room.idle" ||
+      msg.t === "rtc.sdp" ||
+      msg.t === "rtc.ice"
+    ) {
+      leg.peer.conn.send(msg);
+    }
+  }
+
+  /**
+   * One of our calls with someone elsewhere was merged into a room on their side: our person is
+   * now in that room, through a leg under the call's id.
+   */
+  private async convertToLeg(room: Room, remote: Peer, roomId: string): Promise<void> {
+    const local = room.caller === remote ? room.calleePeer : room.caller;
+    room.cancelTimer?.();
+    this.rooms.delete(room.id);
+    this.roomsDirty = true;
+    await this.closeBooks(room, "hangup");
+    if (!local) return;
+    const leg = remote.leg ?? room.id;
+    const conn = remote.conn as FedConn;
+    conn.useLeg(leg);
+    const person = local.kind === "user" ? local.id : personOf(local);
+    const payer =
+      person && !person.startsWith("guest:")
+        ? (await this.env.store.getUser(person))?.accountId
+        : undefined;
+    this.legs.set(leg, {
+      leg,
+      roomId,
+      peer: local,
+      conn,
+      joinedAt: this.env.now(),
+      ...(payer ? { payer } : {}),
+    });
+    this.confDirty = true;
+    local.conn.send({ t: "rtc.config", callId: roomId, iceServers: await this.env.iceServers() });
+    local.conn.send({
+      t: "call.state",
+      callId: room.id,
+      state: "ended",
+      reason: "hangup",
+      merged: { roomId },
+    });
+  }
+
+  /**
+   * Someone elsewhere asks into one of this space's phone rooms. Default deny: a member of this
+   * space (another household here), or — for a room open to connections — someone with an
+   * active connection to its owner. Then lock and size; someone from another server counts
+   * against the owner's fair use (their own server meters them too).
+   */
+  remoteRoomJoin(req: RemoteRoomJoin): Promise<RoomJoinResult> {
+    return this.run(async (): Promise<RoomJoinResult> => {
+      const { store } = this.env;
+      const stored = await store.rooms.get(req.roomId);
+      if (!stored || stored.householdId !== this.householdId || stored.kind !== "phone") {
+        return { ok: false, reason: "denied" };
+      }
+      const inSpace =
+        req.host === LOCAL_HOST && !!(await store.membership(req.from.id, this.householdId));
+      let connected = false;
+      if (stored.ownerAccount && stored.ownerAccount !== req.from.id) {
+        const conn = await store.connections.findPeer(stored.ownerAccount, req.host, req.from);
+        connected =
+          conn?.state === "active" &&
+          conn.peerAccount === req.from.id &&
+          !(await store.connections.blocked(stored.ownerAccount, req.host, req.from));
+      }
+      const live = this.conf.get(stored.id);
+      const media = live?.media ?? this.conf.mediaKind();
+      const decision = roomAccess(
+        {
+          kind: stored.kind,
+          access: stored.access,
+          locked: live?.locked ?? stored.locked,
+          size: live?.participants.size ?? 0,
+          max: this.conf.maxSize(media),
+        },
+        { inSpace, connected },
+      );
+      if (!decision.ok) return { ok: false, reason: decision.reason };
+      const payer = req.host !== LOCAL_HOST ? (stored.ownerAccount ?? undefined) : undefined;
+      const note = await fairUseProblem(this.env, payer, "room");
+      if (note) return { ok: false, reason: "denied", note: note.slice(0, 200) };
+      const address = this.roomAddress(stored);
+      const room = this.conf.open({ ...stored, ...(address ? { address } : {}) });
+      const peer = this.remotePeer({
+        host: req.host,
+        key: `fed:${req.host}:${req.from.id}`,
+        label: req.from.name.slice(0, 24),
+        peerHousehold: req.peerHousehold,
+        leg: req.leg,
+        address: `${req.from.handle}@${req.host || ownHost(this.env)}`,
+      });
+      await this.conf.admit(room, peer, {
+        name: req.from.name,
+        ...(req.host ? { remoteHost: req.host } : {}),
+        ...(payer ? { payer } : {}),
+      });
+      return { ok: true, roomId: room.id, name: room.name };
+    });
+  }
+
+  /** Tells the space's app sessions who's in a stored room now ("members see who's in"). */
+  private announceRoom(room: LiveRoom): void {
+    const people = [...room.participants.values()].map((p) => p.name).slice(0, 32);
+    for (const set of this.apps.values()) {
+      for (const app of set) app.conn.send({ t: "rooms.changed", roomId: room.id, people });
+    }
+  }
+
+  roomPeople(): Promise<Record<string, string[]>> {
+    return this.run(() => this.conf.people());
+  }
+
+  closeRoom(roomId: string): Promise<void> {
+    return this.run(() => this.conf.close(roomId));
+  }
 }
 
 const idOf = (key: string) => key.slice(4);
+
+/** Room messages a participant may send (relayed from their server). */
+function isRoomInbound(msg: RoomSignalMsg): msg is RoomInbound {
+  return (
+    msg.t === "room.leave" ||
+    msg.t === "room.mute" ||
+    msg.t === "room.remove" ||
+    msg.t === "room.lock" ||
+    msg.t === "room.talk" ||
+    msg.t === "room.here" ||
+    msg.t === "room.media" ||
+    msg.t === "rtc.sdp" ||
+    msg.t === "rtc.ice"
+  );
+}
 
 /** A place a person rings besides the household that owns the call. */
 type BranchPlan =

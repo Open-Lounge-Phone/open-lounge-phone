@@ -4,7 +4,7 @@
 import { monthEnds, type Usage } from "@openloungephone/db";
 import type { ServerEnv } from "./env.ts";
 
-export type Metered = "call" | "voicemail" | "knock";
+export type Metered = "call" | "voicemail" | "knock" | "room";
 
 /** "Oct 1": when this month's allowance resets. */
 export function resetsOn(now: number): string {
@@ -44,6 +44,11 @@ export async function fairUseProblem(
     const cap = limits.voicemailMbPerMonth;
     if (cap !== undefined && used.voicemailBytes + (extra.bytes ?? 0) > cap * 1_000_000) {
       return `That's over this month's ${cap} MB of voicemail (fair use). ${until}`;
+    }
+  }
+  if (kind === "room" && limits.roomMinutesPerMonth !== undefined) {
+    if (used.roomMinutes >= limits.roomMinutesPerMonth) {
+      return `You've used this month's ${limits.roomMinutesPerMonth} room minutes (fair use). ${until}`;
     }
   }
   if (kind === "knock" && limits.knocksPerMonth !== undefined) {

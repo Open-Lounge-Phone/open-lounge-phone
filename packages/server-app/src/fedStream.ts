@@ -113,7 +113,7 @@ export class ServerLink {
 
   private async sendNow(msg: FedSignal): Promise<void> {
     this.touch(msg.callId);
-    if (msg.t === "call.state" && msg.state === "ended") await this.forget(msg.callId);
+    if (endsRoute(msg)) await this.forget(msg.callId);
     const text = JSON.stringify({ t: "signal", msg });
     const ready = this.readySocket();
     if (ready) ready.send(text);
@@ -202,7 +202,7 @@ export class ServerLink {
     const householdId = await this.platform.routes.get(msg.callId);
     if (!householdId) return; // not a call of ours (or long over)
     this.touch(msg.callId);
-    if (msg.t === "call.state" && msg.state === "ended") await this.forget(msg.callId);
+    if (endsRoute(msg)) await this.forget(msg.callId);
     this.scheduleIdle();
     await this.platform.deliver(householdId, msg);
   }
@@ -312,4 +312,14 @@ export class ServerLink {
     this.scheduleIdle();
     return this.open;
   }
+}
+
+/**
+ * Whether a signal is the last on its route: a call that ended (not one merged into a room,
+ * which goes on as a room leg under the same id), or a room leg that ended or was left.
+ */
+function endsRoute(msg: FedSignal): boolean {
+  if (msg.t === "call.state") return msg.state === "ended" && !msg.merged;
+  if (msg.t === "room.signal") return msg.msg.t === "room.ended" || msg.msg.t === "room.leave";
+  return false;
 }

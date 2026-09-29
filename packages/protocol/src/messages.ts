@@ -24,8 +24,13 @@ export const RtcSdp = z
     callId: Id,
     type: z.enum(["offer", "answer"]),
     sdp: z.string().min(1),
+    peer: Id.optional().describe(
+      "Rooms without a relay (peer-to-peer mesh): the other participant this is for (sent) or from (received); `callId` is then the room id.",
+    ),
   })
-  .describe("SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).");
+  .describe(
+    "SDP offer/answer, relayed to the other party of a call (or a mesh room's participant).",
+  );
 
 export const RtcIce = z
   .object({
@@ -35,10 +40,238 @@ export const RtcIce = z
     candidate: z.string().nullable().describe("null signals end-of-candidates."),
     sdpMid: z.string().nullable().optional(),
     sdpMLineIndex: z.number().int().nonnegative().nullable().optional(),
+    peer: Id.optional().describe("Mesh rooms: the other participant (see `rtc.sdp`)."),
   })
   .describe("Trickled ICE candidate.");
 
 export const Ping = z.object({ t: z.literal("ping"), ...Ref }).describe("Keep-alive.");
+
+// ---------------------------------------------------------------------------
+// Hold, 3-way (merge into a room), transfer, and rooms. Shared by phones and apps.
+// ---------------------------------------------------------------------------
+
+export const CallHold = z
+  .object({ t: z.literal("call.hold"), ...Ref, callId: Id, hold: z.boolean() })
+  .describe(
+    "Put an answered call on hold (`hold: true`) or take it back. The other side hears a soft tone (played by its own phone or app) and your audio stops; you may then place one more call (consult).",
+  );
+
+export const CallMerge = z
+  .object({
+    t: z.literal("call.merge"),
+    ...Ref,
+    callId: Id.describe("The call on hold."),
+    with: Id.describe("The call you're in now (the consult call)."),
+  })
+  .describe(
+    "3-way: join both calls into one room. Both calls end with `merged` and `room.state` follows; keep the old audio playing until the room's audio is connected, so nobody hears a gap.",
+  );
+
+export const TransferTarget = z
+  .union([
+    z.object({ button: z.number().int().min(0).max(15) }).describe("Phones: a speed-dial key."),
+    z.object({ userId: Id }),
+    z.object({ deviceId: Id }),
+    z.object({ connectionId: Id }),
+  ])
+  .describe("Who to transfer to.");
+export type TransferTarget = z.infer<typeof TransferTarget>;
+
+export const CallTransfer = z
+  .object({
+    t: z.literal("call.transfer"),
+    ...Ref,
+    callId: Id.describe("The call to hand over (the other person in it is transferred)."),
+    to: TransferTarget.optional().describe(
+      "Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves.",
+    ),
+    toCall: Id.optional().describe(
+      "Attended transfer: your other call (consult); the two other people are connected and you leave both calls.",
+    ),
+  })
+  .refine((m) => (m.to === undefined) !== (m.toCall === undefined), {
+    message: "give exactly one of to, toCall",
+  })
+  .describe("Transfer a call: blind (`to`) or attended (`toCall`).");
+
+export const RoomJoin = z
+  .object({
+    t: z.literal("room.join"),
+    ...Ref,
+    roomId: Id.optional().describe("A room of this space (party line or phone room)."),
+    address: z
+      .string()
+      .min(3)
+      .max(300)
+      .optional()
+      .describe("A phone room's address `name@host`, on this server or another one."),
+  })
+  .refine((m) => (m.roomId === undefined) !== (m.address === undefined), {
+    message: "give exactly one of roomId, address",
+  })
+  .describe(
+    "Companion app: join a room. Answered with `room.state` (you're in) or `room.ended` (refused). Phones join with a speed-dial key a guardian set up.",
+  );
+
+export const RoomLeave = z
+  .object({ t: z.literal("room.leave"), ...Ref, roomId: Id })
+  .describe("Leave a room (a phone's hook going down does the same).");
+
+export const RoomMute = z
+  .object({
+    t: z.literal("room.mute"),
+    ...Ref,
+    roomId: Id,
+    muted: z.boolean(),
+    participant: Id.optional().describe(
+      "The host mutes someone else (they may unmute themselves). Default: yourself.",
+    ),
+  })
+  .describe("Mute or unmute. A muted participant's audio isn't forwarded by the relay.");
+
+export const RoomRemove = z
+  .object({ t: z.literal("room.remove"), ...Ref, roomId: Id, participant: Id })
+  .describe("Host only: remove a participant (they get `room.ended` `removed`).");
+
+export const RoomLock = z
+  .object({ t: z.literal("room.lock"), ...Ref, roomId: Id, locked: z.boolean() })
+  .describe("Host only: a locked room lets nobody new in.");
+
+export const RoomTalk = z
+  .object({ t: z.literal("room.talk"), ...Ref, roomId: Id, speaking: z.boolean() })
+  .describe(
+    "Voice activity from your own microphone (send on changes only). Picks the active speakers a relay forwards in big rooms, and counts as activity for the idle rule.",
+  );
+
+export const RoomHere = z
+  .object({ t: z.literal("room.here"), ...Ref, roomId: Id })
+  .describe("Any interaction with the room (e.g. an answer to `room.idle`): you're still here.");
+
+export const RoomMediaMsg = z
+  .object({
+    t: z.literal("room.media"),
+    ...Ref,
+    roomId: Id,
+    type: z
+      .enum(["offer", "answer", "close"])
+      .describe(
+        "`offer`/`answer`: SDP. `close` (server → client): stop the transceivers with these `mids`, then send a new `offer`.",
+      ),
+    sdp: z.string().min(1).optional(),
+    mids: z.array(z.string().min(1).max(8)).max(32).optional(),
+  })
+  .refine((m) => (m.type === "close" ? !!m.mids?.length : !!m.sdp), {
+    message: "offer/answer need sdp; close needs mids",
+  })
+  .describe(
+    "Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.",
+  );
+
+export const RoomRole = z.enum(["host", "member"]);
+
+export const RoomParticipant = z.object({
+  id: Id,
+  name: z.string().min(1).max(24),
+  muted: z.boolean(),
+  speaking: z.boolean().optional(),
+  host: z.boolean().optional(),
+  remote: z.string().max(260).optional().describe("From another server: its host."),
+});
+export type RoomParticipant = z.infer<typeof RoomParticipant>;
+
+export const RoomEndReason = z
+  .enum([
+    "left",
+    "removed",
+    "idle",
+    "closed",
+    "denied",
+    "locked",
+    "full",
+    "unreachable",
+    "busy",
+    "error",
+  ])
+  .describe(
+    "`left` = you left; `removed` = the host removed you; `idle` = 10 minutes of silence and no interaction after a warning; `closed` = the room went away; `denied` = not allowed (default deny) or over the fair-use allowance; `locked` = the host locked it; `full` = no room (a relay-less room holds 4); `unreachable` = its server can't be reached; `busy` = you're in a call.",
+  );
+export type RoomEndReason = z.infer<typeof RoomEndReason>;
+
+export const RoomState = z
+  .object({
+    t: z.literal("room.state"),
+    ...Ref,
+    roomId: Id,
+    name: z.string().min(1).max(40),
+    kind: z
+      .enum(["party", "phone", "call"])
+      .describe(
+        "`party` = a space's always-open party line; `phone` = a named room with an address; `call` = a 3-way call made by merging.",
+      ),
+    address: z.string().max(300).optional().describe("`phone` rooms: `name@host`."),
+    you: Id.describe("Your participant id."),
+    locked: z.boolean(),
+    media: z
+      .enum(["sfu", "mesh", "livekit"])
+      .describe(
+        "`mesh` = peer to peer (≤ 4 people, `rtc.*` with `peer`, end-to-end encrypted); `sfu` = through the room owner's relay (`room.media`); `livekit` = through the owner's LiveKit server (`livekit`). Relayed rooms are encrypted in transit, not end to end (the relay could hear them); end-to-end room encryption (SFrame) is planned.",
+      ),
+    e2ee: z.boolean().describe("Whether only the participants can hear the audio."),
+    participants: z.array(RoomParticipant).max(32),
+    forward: z
+      .array(Id)
+      .max(32)
+      .optional()
+      .describe(
+        "Relayed rooms: whose audio the relay sends you now (top 3 speakers in rooms of more than 4).",
+      ),
+    livekit: z
+      .object({ url: z.string().max(300), token: z.string().max(2048) })
+      .optional()
+      .describe("`media: livekit`: where to connect and your join token (for you only)."),
+    note: z.string().max(200).optional(),
+  })
+  .describe("You're in a room: who's there and how its audio travels. Sent on every change.");
+
+export const RoomIdle = z
+  .object({ t: z.literal("room.idle"), ...Ref, roomId: Id, dropAt: EpochMs })
+  .describe(
+    "10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.",
+  );
+
+export const RoomEnded = z
+  .object({
+    t: z.literal("room.ended"),
+    ...Ref,
+    roomId: Id.optional().describe(
+      "Absent when a join by address was refused before a room was known.",
+    ),
+    reason: RoomEndReason,
+    note: z.string().max(200).optional(),
+  })
+  .describe("You're out of the room (or weren't let in).");
+
+export const CallPrompt = z
+  .enum([
+    "hold.tone",
+    "call.on_hold",
+    "call.add",
+    "call.merged",
+    "call.transfer",
+    "call.transferred",
+    "room.joined",
+    "room.left",
+    "room.idle",
+    "room.removed",
+    "room.locked",
+    "room.full",
+    "room.muted",
+    "room.unmuted",
+  ])
+  .describe(
+    `Audio prompt ids for hold, 3-way calls, transfer and rooms (pre-recorded on hardware; the browser phone speaks them). \`hold.tone\` = the soft on-hold tone (played locally, repeating), \`call.on_hold\` "You're on hold.", \`call.add\` "Choose who to add, then press MENU to merge.", \`call.merged\` "You're all together now.", \`call.transfer\` "Choose who to transfer to.", \`call.transferred\` "Call transferred.", \`room.joined\` "You're in the room.", \`room.left\` "You left the room.", \`room.idle\` "Still there? Press any key to stay.", \`room.removed\` "The host removed you from the room.", \`room.locked\` "That room is locked.", \`room.full\` "That room is full.", \`room.muted\` "Muted.", \`room.unmuted\` "Unmuted."`,
+  );
+export type CallPrompt = z.infer<typeof CallPrompt>;
 
 // ---------------------------------------------------------------------------
 // Voicemail: greetings and the offer that follows an unanswered call.
@@ -246,6 +479,16 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   GreetingReset,
   CallAnswer,
   CallHangup,
+  CallHold,
+  CallMerge,
+  CallTransfer,
+  RoomLeave,
+  RoomMute,
+  RoomLock,
+  RoomRemove,
+  RoomTalk,
+  RoomHere,
+  RoomMediaMsg,
   RtcSdp,
   RtcIce,
   Ping,
@@ -362,6 +605,30 @@ export const CallStateMsg = z
     voicemail: VoicemailOffer.optional().describe(
       "With `ended`, to the caller only: the call went unanswered and a message may be left.",
     ),
+    hold: z
+      .enum(["you", "them"])
+      .optional()
+      .describe(
+        "With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold.",
+      ),
+    merged: z
+      .object({ roomId: Id })
+      .optional()
+      .describe(
+        "With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows.",
+      ),
+    transfer: z
+      .object({
+        callId: Id,
+        ringing: z.boolean().describe("true = blind transfer: the new call is ringing its target."),
+        offerer: z
+          .boolean()
+          .describe("Whether you send the SDP offer in the new call (you're its caller)."),
+      })
+      .optional()
+      .describe(
+        "With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`).",
+      ),
   })
   .describe("Call progress update.");
 
@@ -478,6 +745,10 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   RtcConfig,
   RtcSdp,
   RtcIce,
+  RoomState,
+  RoomMediaMsg,
+  RoomIdle,
+  RoomEnded,
   ErrorMsg,
   Pong,
 ]);
@@ -550,6 +821,17 @@ export const AppToServer = z.discriminatedUnion("t", [
   LoungeAppLeave,
   CallAnswer,
   CallHangup,
+  CallHold,
+  CallMerge,
+  CallTransfer,
+  RoomJoin,
+  RoomLeave,
+  RoomMute,
+  RoomLock,
+  RoomRemove,
+  RoomTalk,
+  RoomHere,
+  RoomMediaMsg,
   RtcSdp,
   RtcIce,
   Ping,
@@ -635,6 +917,18 @@ export const ConnectionsChanged = z
     "Your connections changed (a knock arrived, someone accepted or disconnected); reload them with `GET /api/connections`.",
   );
 
+export const RoomsChanged = z
+  .object({
+    t: z.literal("rooms.changed"),
+    ...Ref,
+    roomId: Id,
+    people: z
+      .array(z.string().min(1).max(24))
+      .max(32)
+      .describe("Who's in the room now (names), for members who aren't in it."),
+  })
+  .describe("Someone came into or left one of your space's rooms (\"members see who's in\").");
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
@@ -648,6 +942,11 @@ export const ServerToApp = z.discriminatedUnion("t", [
   RtcConfig,
   RtcSdp,
   RtcIce,
+  RoomState,
+  RoomMediaMsg,
+  RoomIdle,
+  RoomEnded,
+  RoomsChanged,
   ErrorMsg,
   Pong,
 ]);

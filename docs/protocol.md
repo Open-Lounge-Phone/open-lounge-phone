@@ -152,9 +152,111 @@ Leave (or decline) a call.
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 
+### `call.hold`
+
+Put an answered call on hold (`hold: true`) or take it back. The other side hears a soft tone (played by its own phone or app) and your audio stops; you may then place one more call (consult).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+| `hold` | boolean | yes |  |
+
+### `call.merge`
+
+3-way: join both calls into one room. Both calls end with `merged` and `room.state` follows; keep the old audio playing until the room's audio is connected, so nobody hears a gap.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes | The call on hold. |
+| `with` | string (len ≤64) | yes | The call you're in now (the consult call). |
+
+### `call.transfer`
+
+Transfer a call: blind (`to`) or attended (`toCall`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
+| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
+| `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
+
+### `room.leave`
+
+Leave a room (a phone's hook going down does the same).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+
+### `room.mute`
+
+Mute or unmute. A muted participant's audio isn't forwarded by the relay.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `muted` | boolean | yes |  |
+| `participant` | string (len ≤64) |  | The host mutes someone else (they may unmute themselves). Default: yourself. |
+
+### `room.lock`
+
+Host only: a locked room lets nobody new in.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `locked` | boolean | yes |  |
+
+### `room.remove`
+
+Host only: remove a participant (they get `room.ended` `removed`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `participant` | string (len ≤64) | yes |  |
+
+### `room.talk`
+
+Voice activity from your own microphone (send on changes only). Picks the active speakers a relay forwards in big rooms, and counts as activity for the idle rule.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `speaking` | boolean | yes |  |
+
+### `room.here`
+
+Any interaction with the room (e.g. an answer to `room.idle`): you're still here.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+
+### `room.media`
+
+Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `type` | `"offer"` \| `"answer"` \| `"close"` | yes | `offer`/`answer`: SDP. `close` (server → client): stop the transceivers with these `mids`, then send a new `offer`. |
+| `sdp` | string |  |  |
+| `mids` | string (len ≤8)[] |  |  |
+
 ### `rtc.sdp`
 
-SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
+SDP offer/answer, relayed to the other party of a call (or a mesh room's participant).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -162,6 +264,7 @@ SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
 | `callId` | string (len ≤64) | yes |  |
 | `type` | `"offer"` \| `"answer"` | yes |  |
 | `sdp` | string | yes |  |
+| `peer` | string (len ≤64) |  | Rooms without a relay (peer-to-peer mesh): the other participant this is for (sent) or from (received); `callId` is then the room id. |
 
 ### `rtc.ice`
 
@@ -174,6 +277,7 @@ Trickled ICE candidate.
 | `candidate` | string \| null | yes | null signals end-of-candidates. |
 | `sdpMid` | string \| null |  |  |
 | `sdpMLineIndex` | integer (≥0) \| null |  |  |
+| `peer` | string (len ≤64) |  | Mesh rooms: the other participant (see `rtc.sdp`). |
 
 ### `ping`
 
@@ -321,6 +425,9 @@ Call progress update.
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
 | `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
+| `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
+| `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
+| `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 
 ### `rtc.config`
 
@@ -334,7 +441,7 @@ ICE servers for this call; precedes any `rtc.sdp`.
 
 ### `rtc.sdp`
 
-SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
+SDP offer/answer, relayed to the other party of a call (or a mesh room's participant).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -342,6 +449,7 @@ SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
 | `callId` | string (len ≤64) | yes |  |
 | `type` | `"offer"` \| `"answer"` | yes |  |
 | `sdp` | string | yes |  |
+| `peer` | string (len ≤64) |  | Rooms without a relay (peer-to-peer mesh): the other participant this is for (sent) or from (received); `callId` is then the room id. |
 
 ### `rtc.ice`
 
@@ -354,6 +462,60 @@ Trickled ICE candidate.
 | `candidate` | string \| null | yes | null signals end-of-candidates. |
 | `sdpMid` | string \| null |  |  |
 | `sdpMLineIndex` | integer (≥0) \| null |  |  |
+| `peer` | string (len ≤64) |  | Mesh rooms: the other participant (see `rtc.sdp`). |
+
+### `room.state`
+
+You're in a room: who's there and how its audio travels. Sent on every change.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `name` | string (len ≤40) | yes |  |
+| `kind` | `"party"` \| `"phone"` \| `"call"` | yes | `party` = a space's always-open party line; `phone` = a named room with an address; `call` = a 3-way call made by merging. |
+| `address` | string (len ≤300) |  | `phone` rooms: `name@host`. |
+| `you` | string (len ≤64) | yes | Your participant id. |
+| `locked` | boolean | yes |  |
+| `media` | `"sfu"` \| `"mesh"` \| `"livekit"` | yes | `mesh` = peer to peer (≤ 4 people, `rtc.*` with `peer`, end-to-end encrypted); `sfu` = through the room owner's relay (`room.media`); `livekit` = through the owner's LiveKit server (`livekit`). Relayed rooms are encrypted in transit, not end to end (the relay could hear them); end-to-end room encryption (SFrame) is planned. |
+| `e2ee` | boolean | yes | Whether only the participants can hear the audio. |
+| `participants` | { id: string (len ≤64), name: string (len ≤24), muted: boolean, speaking?: boolean, host?: boolean, remote?: string (len ≤260) }[] | yes |  |
+| `forward` | string (len ≤64)[] |  | Relayed rooms: whose audio the relay sends you now (top 3 speakers in rooms of more than 4). |
+| `livekit` | { url: string (len ≤300), token: string (len ≤2048) } |  | `media: livekit`: where to connect and your join token (for you only). |
+| `note` | string (len ≤200) |  |  |
+
+### `room.media`
+
+Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `type` | `"offer"` \| `"answer"` \| `"close"` | yes | `offer`/`answer`: SDP. `close` (server → client): stop the transceivers with these `mids`, then send a new `offer`. |
+| `sdp` | string |  |  |
+| `mids` | string (len ≤8)[] |  |  |
+
+### `room.idle`
+
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `dropAt` | integer (≥0) | yes |  |
+
+### `room.ended`
+
+You're out of the room (or weren't let in).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) |  | Absent when a join by address was refused before a room was known. |
+| `reason` | `"left"` \| `"removed"` \| `"idle"` \| `"closed"` \| `"denied"` \| `"locked"` \| `"full"` \| `"unreachable"` \| `"busy"` \| `"error"` | yes | `left` = you left; `removed` = the host removed you; `idle` = 10 minutes of silence and no interaction after a warning; `closed` = the room went away; `denied` = not allowed (default deny) or over the fair-use allowance; `locked` = the host locked it; `full` = no room (a relay-less room holds 4); `unreachable` = its server can't be reached; `busy` = you're in a call. |
+| `note` | string (len ≤200) |  |  |
 
 ### `error`
 
@@ -470,9 +632,121 @@ Leave (or decline) a call.
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 
+### `call.hold`
+
+Put an answered call on hold (`hold: true`) or take it back. The other side hears a soft tone (played by its own phone or app) and your audio stops; you may then place one more call (consult).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+| `hold` | boolean | yes |  |
+
+### `call.merge`
+
+3-way: join both calls into one room. Both calls end with `merged` and `room.state` follows; keep the old audio playing until the room's audio is connected, so nobody hears a gap.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes | The call on hold. |
+| `with` | string (len ≤64) | yes | The call you're in now (the consult call). |
+
+### `call.transfer`
+
+Transfer a call: blind (`to`) or attended (`toCall`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
+| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
+| `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
+
+### `room.join`
+
+Companion app: join a room. Answered with `room.state` (you're in) or `room.ended` (refused). Phones join with a speed-dial key a guardian set up.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) |  | A room of this space (party line or phone room). |
+| `address` | string (len ≥3, len ≤300) |  | A phone room's address `name@host`, on this server or another one. |
+
+### `room.leave`
+
+Leave a room (a phone's hook going down does the same).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+
+### `room.mute`
+
+Mute or unmute. A muted participant's audio isn't forwarded by the relay.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `muted` | boolean | yes |  |
+| `participant` | string (len ≤64) |  | The host mutes someone else (they may unmute themselves). Default: yourself. |
+
+### `room.lock`
+
+Host only: a locked room lets nobody new in.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `locked` | boolean | yes |  |
+
+### `room.remove`
+
+Host only: remove a participant (they get `room.ended` `removed`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `participant` | string (len ≤64) | yes |  |
+
+### `room.talk`
+
+Voice activity from your own microphone (send on changes only). Picks the active speakers a relay forwards in big rooms, and counts as activity for the idle rule.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `speaking` | boolean | yes |  |
+
+### `room.here`
+
+Any interaction with the room (e.g. an answer to `room.idle`): you're still here.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+
+### `room.media`
+
+Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `type` | `"offer"` \| `"answer"` \| `"close"` | yes | `offer`/`answer`: SDP. `close` (server → client): stop the transceivers with these `mids`, then send a new `offer`. |
+| `sdp` | string |  |  |
+| `mids` | string (len ≤8)[] |  |  |
+
 ### `rtc.sdp`
 
-SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
+SDP offer/answer, relayed to the other party of a call (or a mesh room's participant).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -480,6 +754,7 @@ SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
 | `callId` | string (len ≤64) | yes |  |
 | `type` | `"offer"` \| `"answer"` | yes |  |
 | `sdp` | string | yes |  |
+| `peer` | string (len ≤64) |  | Rooms without a relay (peer-to-peer mesh): the other participant this is for (sent) or from (received); `callId` is then the room id. |
 
 ### `rtc.ice`
 
@@ -492,6 +767,7 @@ Trickled ICE candidate.
 | `candidate` | string \| null | yes | null signals end-of-candidates. |
 | `sdpMid` | string \| null |  |  |
 | `sdpMLineIndex` | integer (≥0) \| null |  |  |
+| `peer` | string (len ≤64) |  | Mesh rooms: the other participant (see `rtc.sdp`). |
 
 ### `ping`
 
@@ -601,6 +877,9 @@ Call progress update.
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
 | `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
+| `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
+| `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
+| `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 
 ### `rtc.config`
 
@@ -614,7 +893,7 @@ ICE servers for this call; precedes any `rtc.sdp`.
 
 ### `rtc.sdp`
 
-SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
+SDP offer/answer, relayed to the other party of a call (or a mesh room's participant).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -622,6 +901,7 @@ SDP offer/answer. Relayed to the peer (p2p) or to the SFU (cloudflare-realtime).
 | `callId` | string (len ≤64) | yes |  |
 | `type` | `"offer"` \| `"answer"` | yes |  |
 | `sdp` | string | yes |  |
+| `peer` | string (len ≤64) |  | Rooms without a relay (peer-to-peer mesh): the other participant this is for (sent) or from (received); `callId` is then the room id. |
 
 ### `rtc.ice`
 
@@ -634,6 +914,70 @@ Trickled ICE candidate.
 | `candidate` | string \| null | yes | null signals end-of-candidates. |
 | `sdpMid` | string \| null |  |  |
 | `sdpMLineIndex` | integer (≥0) \| null |  |  |
+| `peer` | string (len ≤64) |  | Mesh rooms: the other participant (see `rtc.sdp`). |
+
+### `room.state`
+
+You're in a room: who's there and how its audio travels. Sent on every change.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `name` | string (len ≤40) | yes |  |
+| `kind` | `"party"` \| `"phone"` \| `"call"` | yes | `party` = a space's always-open party line; `phone` = a named room with an address; `call` = a 3-way call made by merging. |
+| `address` | string (len ≤300) |  | `phone` rooms: `name@host`. |
+| `you` | string (len ≤64) | yes | Your participant id. |
+| `locked` | boolean | yes |  |
+| `media` | `"sfu"` \| `"mesh"` \| `"livekit"` | yes | `mesh` = peer to peer (≤ 4 people, `rtc.*` with `peer`, end-to-end encrypted); `sfu` = through the room owner's relay (`room.media`); `livekit` = through the owner's LiveKit server (`livekit`). Relayed rooms are encrypted in transit, not end to end (the relay could hear them); end-to-end room encryption (SFrame) is planned. |
+| `e2ee` | boolean | yes | Whether only the participants can hear the audio. |
+| `participants` | { id: string (len ≤64), name: string (len ≤24), muted: boolean, speaking?: boolean, host?: boolean, remote?: string (len ≤260) }[] | yes |  |
+| `forward` | string (len ≤64)[] |  | Relayed rooms: whose audio the relay sends you now (top 3 speakers in rooms of more than 4). |
+| `livekit` | { url: string (len ≤300), token: string (len ≤2048) } |  | `media: livekit`: where to connect and your join token (for you only). |
+| `note` | string (len ≤200) |  |  |
+
+### `room.media`
+
+Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `type` | `"offer"` \| `"answer"` \| `"close"` | yes | `offer`/`answer`: SDP. `close` (server → client): stop the transceivers with these `mids`, then send a new `offer`. |
+| `sdp` | string |  |  |
+| `mids` | string (len ≤8)[] |  |  |
+
+### `room.idle`
+
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `dropAt` | integer (≥0) | yes |  |
+
+### `room.ended`
+
+You're out of the room (or weren't let in).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) |  | Absent when a join by address was refused before a room was known. |
+| `reason` | `"left"` \| `"removed"` \| `"idle"` \| `"closed"` \| `"denied"` \| `"locked"` \| `"full"` \| `"unreachable"` \| `"busy"` \| `"error"` | yes | `left` = you left; `removed` = the host removed you; `idle` = 10 minutes of silence and no interaction after a warning; `closed` = the room went away; `denied` = not allowed (default deny) or over the fair-use allowance; `locked` = the host locked it; `full` = no room (a relay-less room holds 4); `unreachable` = its server can't be reached; `busy` = you're in a call. |
+| `note` | string (len ≤200) |  |  |
+
+### `rooms.changed`
+
+Someone came into or left one of your space's rooms ("members see who's in").
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `people` | string (len ≤24)[] | yes | Who's in the room now (names), for members who aren't in it. |
 
 ### `error`
 
