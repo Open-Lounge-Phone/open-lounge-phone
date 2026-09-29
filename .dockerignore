@@ -7,3 +7,6 @@ data
 .wrangler
 hardware
 firmware
+.notes
+CLAUDE.md
+AGENTS.md
