@@ -1,0 +1,104 @@
+# Federation interop: two independent servers on different host names run the full scenario
+# (sign-up on each, knock, accept, calls, voicemail, rooms, transfer, block). One job for the
+# self-hosted Node server, one for two local Cloudflare Workers under `wrangler dev`.
+#
+# No secrets and no Cloudflare account: everything runs locally on the runner (local D1, R2 and
+# Durable Objects; Workers AI, TURN and the SFU are off). Starting a server and waiting for the
+# stream's idle close are retried once inside the tests (see tests/e2e/procs.ts); every server's
+# log is printed on failure and uploaded as an artifact.
+name: Interop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  OLP_E2E_LOG_DIR: e2e-logs
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  selfhost:
+    name: Interop (two self-hosted servers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore node_modules
+        id: modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: a.localhost ↔ b.localhost (self-host)
+        run: npx vitest run tests/e2e/twoServers.test.ts --reporter=verbose
+      - name: Server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selfhost-interop-logs
+          path: e2e-logs
+          if-no-files-found: ignore
+
+  cloudflare:
+    name: Interop (two Cloudflare Workers, wrangler dev)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore node_modules
+        id: modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Restore the web app build
+        id: web
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/companion/dist
+            apps/device-web/dist
+          key: web-${{ runner.os }}-${{ hashFiles('package-lock.json', 'apps/companion/src/**', 'apps/companion/public/**', 'apps/companion/*.html', 'apps/companion/*.ts', 'apps/device-web/src/**', 'apps/device-web/public/**', 'apps/device-web/*.html', 'apps/device-web/*.ts', 'packages/*/src/**') }}
+      - if: steps.web.outputs.cache-hit != 'true'
+        run: npm run build
+      - name: Static assets for the Worker
+        run: npm run assets -w apps/server-cloudflare
+      - name: a.localhost ↔ b.localhost (wrangler dev)
+        env:
+          OLP_E2E_CLOUDFLARE: "1"
+        run: npx vitest run tests/e2e/cloudflare.test.ts --reporter=verbose
+      - name: Worker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-interop-logs
+          path: |
+            e2e-logs
+            ~/.config/.wrangler/logs
+          if-no-files-found: ignore

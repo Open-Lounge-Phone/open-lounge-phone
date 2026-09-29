@@ -2,11 +2,11 @@
 // is loopback) federate with each other: the interop scenario from docs/federation.md.
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, it } from "vitest";
+import { afterAll, beforeAll, it, onTestFailed } from "vitest";
+import { freePort, ProcLog, reportLogs, retryOnce, saveLogs } from "./procs.ts";
 import {
   block,
   callAcross,
@@ -24,19 +24,14 @@ import {
 } from "./twoServers.ts";
 
 const MAIN = fileURLToPath(new URL("../../apps/server-selfhost/src/main.ts", import.meta.url));
-const running: { proc: ChildProcess; dir: string }[] = [];
+const running: { proc: ChildProcess; dir: string; log: ProcLog }[] = [];
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve) => {
-    const srv = createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address() as { port: number };
-      srv.close(() => resolve(port));
-    });
-  });
+function stop(entry: { proc: ChildProcess; dir: string }) {
+  entry.proc.kill("SIGTERM");
+  rmSync(entry.dir, { recursive: true, force: true });
 }
 
-async function launch(name: string): Promise<ServerTarget> {
+async function start(name: string, attempt: number): Promise<ServerTarget> {
   const port = await freePort();
   const dir = mkdtempSync(join(tmpdir(), `olp-${name}-`));
   const origin = `http://${name}.localhost:${port}`;
@@ -52,39 +47,54 @@ async function launch(name: string): Promise<ServerTarget> {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  running.push({ proc, dir });
-  let log = "";
+  const log = new ProcLog(`selfhost-${name}${attempt > 1 ? `-try${attempt}` : ""}`);
+  running.push({ proc, dir, log });
+  proc.stdout?.on("data", log.add);
+  proc.stderr?.on("data", log.add);
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${name} didn't start:\n${log}`)), 15_000);
-    const onData = (d: Buffer) => {
-      log += d.toString();
-      if (log.includes("listening on")) {
+    const timer = setTimeout(() => reject(new Error(`${name} didn't start:\n${log.text}`)), 15_000);
+    const onData = () => {
+      if (log.text.includes("listening on")) {
         clearTimeout(timer);
         resolve();
       }
     };
     proc.stdout?.on("data", onData);
     proc.stderr?.on("data", onData);
-    proc.on("exit", (code) => reject(new Error(`${name} exited ${code}:\n${log}`)));
+    proc.on("exit", (code) => reject(new Error(`${name} exited ${code}:\n${log.text}`)));
   });
   return { base: `http://127.0.0.1:${port}`, origin };
 }
+
+/** Starting a server is the timing-sensitive step: one retry, on a fresh port and directory. */
+const launch = (name: string) =>
+  retryOnce(
+    `starting ${name}`,
+    (attempt) => start(name, attempt),
+    () => {
+      for (const r of running) if (r.log.name === `selfhost-${name}`) stop(r);
+    },
+  );
 
 let a: ServerTarget;
 let b: ServerTarget;
 
 beforeAll(async () => {
   [a, b] = await Promise.all([launch("a"), launch("b")]);
-}, 30_000);
+}, 45_000);
 
 afterAll(() => {
-  for (const { proc, dir } of running) {
-    proc.kill("SIGTERM");
-    rmSync(dir, { recursive: true, force: true });
-  }
+  saveLogs(running.map((r) => r.log));
+  for (const entry of running) stop(entry);
 });
 
 it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, rooms, 3-way, block, workplace transfer", async () => {
+  onTestFailed(() =>
+    reportLogs(
+      running.map((r) => r.log),
+      "the two-server scenario failed",
+    ),
+  );
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
