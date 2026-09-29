@@ -86,13 +86,13 @@ describe("spaces", () => {
     const lounge = await s.pairDevice(boss.token, "Lobby", { kind: "lounge" });
     expectStatus(lounge, 201);
     const mine = (await s.store.listDevices(boss.household.id)).find((d) => d.name === "Mine");
-    // Turning your own phone into a household (kid's) phone is refused too.
+    // Turning your own phone into a household (kid's) phone in place is refused too.
     const release = await s.http(`/devices/${mine?.id}`, {
       method: "PATCH",
       token: boss.token,
       body: { owner: "household" },
     });
-    expectStatus(release, 400);
+    expectStatus(release, 409);
     // No quiet hours in a team, and rules that exist anyway are ignored.
     const rules = [{ days: [0, 1, 2, 3, 4, 5, 6] as Weekday[], start: "00:00", end: "23:59" }];
     expectStatus(

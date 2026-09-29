@@ -471,7 +471,7 @@ export function createApi(opts: ApiOptions) {
     setLoungeGuests: (guests: boolean) => request<void>("PUT", "/lounge/settings", { guests }),
     setLoungeSettings: (patch: LoungeSettingsPatch) =>
       request<void>("PUT", "/lounge/settings", patch),
-    updateDevice: (deviceId: string, changes: { name?: string; owner?: "me" | "household" }) =>
+    updateDevice: (deviceId: string, changes: { name: string }) =>
       request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
     removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),
     contacts: (deviceId: string) =>

@@ -118,9 +118,12 @@ const RemoteLoungeBody = z.object({
     .regex(/^[A-Za-z0-9_-]{16,64}$/)
     .optional(),
 });
-const DevicePatch = z
-  .object({ name: Name.optional(), owner: z.enum(["me", "household"]).optional() })
-  .refine((b) => b.name !== undefined || b.owner !== undefined, { message: "nothing to change" });
+/** Only the name can change: an owner or mode change always goes through Remove and wipe. */
+const DevicePatch = z.object({ name: Name }).strict();
+/** Fields that identify who a phone belongs to or how it behaves: never patched in place. */
+const WIPE_ONLY_FIELDS = ["owner", "ownerUserId", "mode", "kind"] as const;
+const wipeFirst =
+  "a phone's owner or mode changes only through Remove and wipe, then pairing it again";
 const ContactBody = z.object({
   label: Name,
   canCallDevice: z.boolean(),
@@ -462,31 +465,24 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.body(null, 204);
   });
 
-  /** Rename a phone and/or make it someone's own phone (or a household phone again). */
+  /**
+   * Rename a phone. Its owner and mode are fixed at pairing (owner decision): changing either
+   * means Remove and wipe, then pairing again, so a phone never silently changes whose it is.
+   */
   api.patch("/devices/:id", async (c) => {
     const user = c.get("user");
     const device = await manageable(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
+    const raw = (await c.req.raw
+      .clone()
+      .json()
+      .catch(() => null)) as Record<string, unknown> | null;
+    if (raw && typeof raw === "object" && WIPE_ONLY_FIELDS.some((f) => f in raw)) {
+      return c.json({ error: wipeFirst }, 409);
+    }
     const b = await body(c.req.raw, DevicePatch);
     if (b instanceof Response) return b;
-    if (b.owner === "me" && device.kind === "lounge") {
-      return c.json({ error: "a Lounge phone can't be someone's own phone" }, 400);
-    }
-    if (b.owner === "household" && device.kind !== "lounge" && !(await isHome(user.householdId))) {
-      return c.json({ error: kidsOnlyAtHome }, 400);
-    }
-    if (b.owner !== undefined) {
-      // You can claim a phone for yourself or release your own; guardians can also release any.
-      const allowed =
-        (b.owner === "me" && (user.role === "guardian" || device.ownerUserId === user.id)) ||
-        (b.owner === "household" && (user.role === "guardian" || device.ownerUserId === user.id));
-      if (!allowed) return c.json({ error: "not allowed" }, 403);
-    }
-    await store.updateDevice(device.id, {
-      ...(b.name !== undefined ? { name: b.name } : {}),
-      ...(b.owner === "me" ? { ownerUserId: user.id } : {}),
-      ...(b.owner === "household" ? { ownerUserId: null } : {}),
-    });
+    await store.renameDevice(device.id, b.name);
     await live.refreshDevice(user.householdId, device.id);
     return c.body(null, 204);
   });

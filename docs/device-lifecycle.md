@@ -62,7 +62,9 @@ the phone.
      its first-run choice, and starts over.
    - **Factory reset** (MENU+BACK held at power-on): wipes Wi-Fi, owner and keys, and generates a new
      device key.
-   - **Changing mode or owner:** always goes through a wipe. No data ever carries over.
+   - **Changing mode or owner:** always goes through a wipe. No data ever carries over. The server
+     enforces it: `PATCH /api/devices/:id` only renames a phone and answers `409` to any owner or
+     mode field.
    - **No claim lock (owner decision).** A removed phone holds nothing of value (no contacts, no
      history, no keys that still work), so anyone can reset it and claim it again. That keeps
      second-hand and handed-down phones easy.

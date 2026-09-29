@@ -1046,18 +1046,13 @@ describe("personal phones", () => {
 });
 
 describe("managing phones", () => {
-  it("renames, claims as my phone, releases, and removes a phone", async () => {
+  it("renames and removes a phone", async () => {
     const { deviceId, device, token, app } = await household();
     expect(
       (await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { name: "Kitchen" } }))
         .status,
     ).toBe(204);
-    await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { owner: "me" } });
-    let list = (await http("/devices", { token })).json;
-    expect(list[0]).toMatchObject({ name: "Kitchen", ownerUserId: expect.any(String) });
-    await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { owner: "household" } });
-    list = (await http("/devices", { token })).json;
-    expect(list[0].ownerUserId).toBeNull();
+    expect((await http("/devices", { token })).json[0]).toMatchObject({ name: "Kitchen" });
 
     expect((await http(`/devices/${deviceId}`, { method: "DELETE", token })).status).toBe(204);
     await vi.waitFor(() => expect(device.closed?.code).toBe(CloseCode.unauthorized));
@@ -1065,6 +1060,30 @@ describe("managing phones", () => {
     let s = await app.next("device.status");
     while (s.online) s = await app.next("device.status");
     expect(s).toMatchObject({ deviceId, online: false });
+  });
+
+  it("never changes a phone's owner or mode in place: that takes Remove and wipe", async () => {
+    const { deviceId, token } = await household();
+    const before = (await http("/devices", { token })).json[0];
+    for (const change of [
+      { owner: "me" },
+      { owner: "household" },
+      { ownerUserId: "someone" },
+      { mode: "lounge" },
+      { kind: "personal" },
+      { name: "Kitchen", owner: "me" },
+      { name: "Kitchen", mode: "personal" },
+    ]) {
+      const r = await http(`/devices/${deviceId}`, { method: "PATCH", token, body: change });
+      expect(r.status).toBe(409);
+      expect(r.json.error).toMatch(/Remove and wipe/);
+    }
+    // Unknown fields are refused too, and nothing changed.
+    expect(
+      (await http(`/devices/${deviceId}`, { method: "PATCH", token, body: { color: "red" } }))
+        .status,
+    ).toBe(400);
+    expect((await http("/devices", { token })).json[0]).toEqual(before);
   });
 
   it("lets a member manage only their own phone", async () => {
@@ -1079,7 +1098,7 @@ describe("managing phones", () => {
         await http(`/devices/${deviceId}`, {
           method: "PATCH",
           token: dadToken,
-          body: { owner: "me" },
+          body: { name: "Mine now" },
         })
       ).status,
     ).toBe(404);
@@ -1140,13 +1159,13 @@ describe("Lounge phones", () => {
     phone.write({ t: "hook", state: "up" });
     phone.write({ t: "button", index: 0 });
     expect(await phone.nextState("ended")).toMatchObject({ reason: "denied" });
-    // It can't become someone's own phone either.
+    // It can't become someone's own phone in place either (that takes a wipe).
     const patch = await http(`/devices/${deviceId}`, {
       method: "PATCH",
       token,
       body: { owner: "me" },
     });
-    expect(patch.status).toBe(400);
+    expect(patch.status).toBe(409);
   });
 
   it("takes over with the key proof: Hi Dad, his speed-dial, recorded for guardians", async () => {
