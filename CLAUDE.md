@@ -19,6 +19,12 @@ charger + fuel gauge all populated. No build variants and no separate deck board
 boards were left over from the old long base). Removed: LD2410C radar (Lounge presence is deferred
 to a possible future board), ATECC (flash encryption + eFuse HMAC instead), Qwiic port, supercap.
 Perfect this one board; don't design options.
+**Device modes (owner, 2026-09-28; `docs/device-lifecycle.md`, `docs/security-model.md`):**
+- Three modes: Kids (always the child), Personal/desk (always one person) and Lounge.
+- Lounge is dead until someone signs in by default. The per-space idle configs (house-line keys,
+  who's here) are all off by default.
+- Session length is a per-space setting managed by the space's operators/admins.
+- No claim lock: removing a phone wipes it, and anyone can re-claim it.
 **Layout method (owner, 2026-09-28):** placement comes first, laid out as a standard board.
 - Blocks are local hubs next to what they connect to. GND is the L2 plane and power runs on L3 pours, reached by vias.
 - Buses run in planned lanes: keys as parallel row buses into the AW9523B at the row ends, the I2C spine, and the I2S/SPI bundles.
