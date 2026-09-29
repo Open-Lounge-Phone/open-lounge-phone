@@ -1,7 +1,0 @@
-PASS  bed fit tray: 187.0 x 95.0 x 13.6 mm (bed 220)
-PASS  bed fit lid: 187.0 x 95.0 x 12.0 mm (bed 220)
-PASS  bed fit plunger: 9.6 x 9.6 x 20.0 mm (bed 220)
-PASS  bed fit sleeve: 12.0 x 12.0 x 19.2 mm (bed 220)
-PASS  walls: wall 2.5, floor 2.0, lid 2.0; thinnest lid: key clip 1.5, e-ink rim 1.0
-PASS  MX stack: board top z 10.6, plate top z 15.6 (+5.0), space under the lid 3.0, under the board 7.0
-WARN  board data: no board_parts.json: fit checks against parts skipped
