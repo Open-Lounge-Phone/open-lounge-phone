@@ -1,6 +1,7 @@
 export * from "./connections.ts";
 export * from "./deviceAuth.ts";
 export * from "./env.ts";
+export * from "./fairUse.ts";
 export * from "./fedCalls.ts";
 export * from "./federation.ts";
 export * from "./fedLinks.ts";
@@ -9,6 +10,7 @@ export * from "./gateway.ts";
 export * from "./http.ts";
 export * from "./httpUtil.ts";
 export * from "./hub.ts";
+export * from "./hubAdmin.ts";
 export * from "./ice.ts";
 export * from "./limits.ts";
 export * from "./people.ts";

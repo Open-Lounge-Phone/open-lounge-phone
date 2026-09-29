@@ -1,6 +1,7 @@
 import { newId, type Voicemail } from "@openloungephone/db";
 import type { Hono } from "hono";
 import type { ServerEnv } from "./env.ts";
+import { fairUseProblem } from "./fairUse.ts";
 import type { Coordinator } from "./gateway.ts";
 import { guardianOnly, type Vars } from "./httpUtil.ts";
 
@@ -103,11 +104,18 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
 
     const rec = await readRecording(c.req.raw, c.req.query("durationMs"));
     if (rec instanceof Response) return rec;
+    const account = c.get("account").id;
+    const over = await fairUseProblem(env, account, "voicemail", { bytes: rec.audio.byteLength });
+    if (over) return c.json({ error: over }, 429);
     const vm = await depositVoicemail(env, live, {
       device,
       fromUser: user.id,
       fromLabel: contact.label,
       ...rec,
+    });
+    await store.addUsage(account, env.now(), {
+      voicemails: 1,
+      voicemailBytes: rec.audio.byteLength,
     });
     return c.json({ id: vm.id }, 201);
   });

@@ -39,6 +39,12 @@ Configuration is by environment variable:
 | `TRANSCRIBE_URL` | unset | OpenAI-compatible `/v1/audio/transcriptions` endpoint for voicemail transcripts |
 | `TRANSCRIBE_MODEL`, `TRANSCRIBE_API_KEY` | `whisper-1`, unset | Passed to that endpoint |
 | `OPEN_SIGNUP` | unset (off) | `1` lets anyone create an account (a passkey, a handle and their own household). Off: people join only through invites; the first-run setup link still creates the first household |
+| `FEDERATION` | on | Connect with people on other Open Lounge Phone servers. `0` turns it off. Needs `PUBLIC_URL` to be the `https://` name other servers reach you at. The server key lives in `DATA_DIR/federation-key.jwk` (back it up; other servers pin it) |
+| `FAIR_USE`, `FAIR_USE_*` | unset (unlimited) | A fair-use allowance for a public server: `FAIR_USE=hub` applies the hub's defaults; `FAIR_USE_CALL_MINUTES`, `_VOICEMAILS`, `_VOICEMAIL_MB`, `_KNOCKS`, `_PHONES_PER_SPACE`, `_SPACES_PER_ACCOUNT` set or override one (a number, or `unlimited`). See [hub.md](hub.md) |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET` | unset | Cloudflare Turnstile on sign-up (both needed) |
+| `OPERATORS` | unset | Comma-separated handles who see the Operator view |
+| `FUNDING_BALANCE_USD`, `SPONSOR_URL` | unset | Funding card and Sponsor button (public hubs; see [hub.md](hub.md)) |
+| `TRUST_PROXY` | unset | `1` behind your own reverse proxy: take the client address from `X-Forwarded-For` for per-IP limits |
 
 Passkeys are tied to the site's host name. If you reach the server through a reverse proxy or
 several names, set `PUBLIC_URL` to the one address people use.
@@ -57,5 +63,6 @@ Until hardware exists, open `/device/` in a browser to get an emulated phone. Ad
 
 ## Backups
 
-Everything lives in `DATA_DIR`: the database `openloungephone.sqlite` and voicemail audio under
-`blobs/` (the `openloungephone-data` volume with Docker).
+Everything lives in `DATA_DIR`: the database `openloungephone.sqlite`, voicemail audio under
+`blobs/`, and the federation key `federation-key.jwk` (the `openloungephone-data` volume with
+Docker). Keep the key: if it changes, other servers refuse yours until their operators re-trust it.

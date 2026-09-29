@@ -238,6 +238,13 @@ export const CallStateMsg = z
     callId: Id,
     state: CallState,
     reason: EndReason.optional().describe("Present when `state` is `ended`."),
+    note: z
+      .string()
+      .max(200)
+      .optional()
+      .describe(
+        "With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached).",
+      ),
   })
   .describe("Call progress update.");
 

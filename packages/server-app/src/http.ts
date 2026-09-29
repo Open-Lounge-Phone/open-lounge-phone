@@ -13,9 +13,13 @@ import {
 } from "./accounts.ts";
 import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
+import { capReached } from "./fairUse.ts";
 import { FederationError, fedFetch, ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
+import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
+import { leavingRoutes } from "./leaving.ts";
+import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
 import { voicemailRoutes } from "./voicemail.ts";
 
@@ -110,7 +114,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   // `signup`: the server has open sign-up, so the companion offers "Create an account".
   api.get("/setup", async (c) =>
-    c.json({ needed: (await store.countHouseholds()) === 0, signup: env.openSignup === true }),
+    c.json({
+      needed: (await store.countHouseholds()) === 0,
+      signup: env.openSignup === true,
+      // Cloudflare Turnstile on sign-up (public hubs); absent = no check.
+      ...(env.turnstile ? { turnstileSiteKey: env.turnstile.siteKey } : {}),
+    }),
   );
 
   api.post("/setup", async (c) => {
@@ -146,6 +155,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   signupRoutes(api, env);
   publicPeopleRoutes(api, env);
+  publicHubRoutes(api, env);
 
   // --- authenticated --------------------------------------------------------
 
@@ -159,7 +169,17 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       env.now(),
     );
     if (session === "unauthorized") return c.json({ error: "unauthorized" }, 401);
+    if (session === "suspended") return c.json({ error: "this account is suspended" }, 403);
     if (session === "not_member") return c.json({ error: "not a member of that household" }, 403);
+    // A fair per-account pace for changes (reads are free).
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      const perMinute = limitsOf(env).writesPerAccountPerMinute;
+      if (
+        !(await store.connections.hit(`writes:${session.account.id}`, 60_000, perMinute, env.now()))
+      ) {
+        return c.json({ error: "slow down" }, 429, { "retry-after": "60" });
+      }
+    }
     c.set("account", session.account);
     c.set("member", session.member);
     c.set("token", token);
@@ -167,6 +187,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   accountRoutes(api, env, live);
+  hubRoutes(api, env);
+  leavingRoutes(api, env, live);
   connectionRoutes(api, env, live);
 
   // Everything below acts inside the active household.
@@ -228,6 +250,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!b.forMe && b.kind !== "lounge" && !(await isHome(user.householdId))) {
       // A household phone without an owner is a kid's phone; those belong in a home.
       return c.json({ error: kidsOnlyAtHome }, 400);
+    }
+    const phones = (await store.listDevices(user.householdId)).length;
+    const owner = await store.spaceOwner(user.householdId);
+    const cap = await capReached(env, owner, "phonesPerSpace", phones);
+    if (cap !== undefined) {
+      return c.json({ error: `a space can have ${cap} phones on this server (fair use)` }, 403);
     }
     const device = await store.claimPairing(
       {

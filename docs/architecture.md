@@ -71,6 +71,14 @@ side uses its own TURN; clients use Opus DTX. `packages/federation` holds
 the web-standard crypto and message schemas; `packages/server-app/src/connections.ts` and
 `federation.ts` the server side.
 
+**Running a public server.** Open sign-up can be protected with Cloudflare Turnstile, per-IP and
+per-account rate limits, and a monthly **fair-use allowance** (`FAIR_USE=hub`; checked when a call,
+voicemail or knock starts, metered in the `usage` table when it ends; calls in progress are never
+cut off). Every call writes a **call log** row per party (`call_log`), the base for a per-buddy
+timeline. Operators (`OPERATORS`) get an admin view to suspend or exempt accounts and block
+servers. People can download their data (`GET /api/account/export`, [export.md](export.md)) and
+delete their account. See [hub.md](hub.md) and [privacy.md](privacy.md).
+
 Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decide every call, and
 calls stay inside one household until federated connections (see
 [federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted

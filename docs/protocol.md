@@ -268,6 +268,7 @@ Call progress update.
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
+| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
 
 ### `rtc.config`
 
@@ -537,6 +538,7 @@ Call progress update.
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
+| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
 
 ### `rtc.config`
 

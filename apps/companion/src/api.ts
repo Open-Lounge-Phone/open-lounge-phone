@@ -39,6 +39,8 @@ export interface Me {
   account?: AccountInfo;
   memberships?: Membership[];
   openSignup?: boolean;
+  /** You run this server (the admin view). */
+  operator?: boolean;
 }
 
 export interface Household {
@@ -164,6 +166,42 @@ export interface RemoteContactInfo {
   name: string;
 }
 
+/** The fair-use allowance (unset limits = unlimited). */
+export interface FairUseLimits {
+  callMinutesPerMonth?: number;
+  voicemailsPerMonth?: number;
+  voicemailMbPerMonth?: number;
+  knocksPerMonth?: number;
+  phonesPerSpace?: number;
+  spacesPerAccount?: number;
+}
+
+export interface UsageInfo {
+  month: string;
+  callMinutes: number;
+  voicemails: number;
+  voicemailBytes: number;
+  knocks: number;
+  resetsAt: number;
+  resetsOn: string;
+  limits: FairUseLimits | null;
+  exempt: boolean;
+}
+
+export interface HubInfo {
+  fairUse: FairUseLimits | null;
+  funding: {
+    balanceUsd: number;
+    summary: {
+      balanceUsd: number;
+      peoplePerDollarPerMonth: number;
+      peopleForAYear: number;
+      peopleForSixMonths: number;
+    };
+  } | null;
+  sponsorUrl: string | null;
+}
+
 export interface PasskeySummary {
   id: string;
   name: string;
@@ -268,7 +306,11 @@ export function createApi(opts: ApiOptions) {
       guardianName: string;
       timeZone: string;
     }) => request<{ token: string; user: User; household: Household }>("POST", "/setup", input),
-    setupStatus: () => request<{ needed: boolean; signup?: boolean }>("GET", "/setup"),
+    setupStatus: () =>
+      request<{ needed: boolean; signup?: boolean; turnstileSiteKey?: string }>("GET", "/setup"),
+    /** Public: the server's fair-use allowance, funding and Sponsor link (hubs). */
+    hubInfo: () => request<HubInfo>("GET", "/hub"),
+    usage: () => request<UsageInfo>("GET", "/usage"),
     me: () => request<Me>("GET", "/me"),
 
     // Accounts and households
@@ -277,6 +319,7 @@ export function createApi(opts: ApiOptions) {
       name: string;
       timeZone: string;
       householdName?: string;
+      turnstileToken?: string;
     }) => request<CeremonyOptions & { address: string }>("POST", "/signup/options", input),
     signup: (challengeId: string, response: unknown, passkeyName: string) =>
       request<SignedInResult>("POST", "/signup", { challengeId, response, passkeyName }),
@@ -287,6 +330,9 @@ export function createApi(opts: ApiOptions) {
     updateAccount: (changes: { handle?: string; name?: string; sharePresence?: boolean }) =>
       request<AccountInfo>("PATCH", "/account", changes),
     logout: () => request<void>("POST", "/logout"),
+    /** Everything this server holds about your account (JSON, docs/export.md). */
+    exportAccount: async () => (await send("GET", "/account/export")).blob(),
+    deleteAccount: (confirm: string) => request<void>("DELETE", "/account", { confirm }),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),
     pair: (code: string, name: string, forMe = false, kind?: "kids" | "lounge") =>
@@ -324,6 +370,32 @@ export function createApi(opts: ApiOptions) {
         `/devices/${enc(deviceId)}/remote-contacts/${enc(connectionId)}`,
         contact,
       ),
+
+    // Operators (the hub's admin view)
+    adminOverview: () =>
+      request<{
+        counts: Record<string, number>;
+        blockedServers: { host: string; reason: string | null; createdAt: number }[];
+        keyAlerts: { host: string; rejectedAt: number }[];
+      }>("GET", "/admin/overview"),
+    adminFindAccount: (handle: string) =>
+      request<{
+        id: string;
+        handle: string;
+        name: string;
+        createdAt: number;
+        suspended: boolean;
+        exempt: boolean;
+        spaces: number;
+        usage: { callMinutes: number; voicemails: number; knocks: number };
+      }>("GET", `/admin/accounts?handle=${enc(handle)}`),
+    adminSuspend: (accountId: string, suspended: boolean) =>
+      request<void>("POST", `/admin/accounts/${enc(accountId)}/suspend`, { suspended }),
+    adminExempt: (accountId: string, exempt: boolean) =>
+      request<void>("POST", `/admin/accounts/${enc(accountId)}/exempt`, { exempt }),
+    adminBlockServer: (host: string, reason?: string) =>
+      request<void>("POST", "/admin/servers/block", { host, ...(reason ? { reason } : {}) }),
+    adminUnblockServer: (host: string) => request<void>("DELETE", `/admin/servers/${enc(host)}`),
 
     // Connections (knock, then talk)
     connections: () => request<ConnectionsInfo>("GET", "/connections"),

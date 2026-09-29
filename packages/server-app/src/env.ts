@@ -59,6 +59,16 @@ export interface ServerEnv {
   fetch?: (request: Request) => Promise<Response>;
   /** Overrides for rate limits (see `DEFAULT_LIMITS`). */
   limits?: Partial<import("./limits.ts").Limits>;
+  /** The fair-use allowance; undefined = unlimited (see `fairUseFromVars`). */
+  fairUse?: import("./limits.ts").FairUse;
+  /** Cloudflare Turnstile on sign-up; skipped when unset. */
+  turnstile?: { siteKey: string; secret: string };
+  /** Handles of the server's operators (the admin view). */
+  operators?: string[];
+  /** Public-hub details: funding transparency, Sponsor link. */
+  hub?: import("./limits.ts").HubInfo;
+  /** Trust X-Forwarded-For for the client's IP (behind your own reverse proxy). */
+  trustProxy?: boolean;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;
@@ -138,6 +148,8 @@ export interface PeerInfo {
   peerHousehold?: string;
   /** Remote peers: the call's id on their server, when it differs from the room's. */
   leg?: string;
+  /** Remote peers: who they are, for the call log (`handle@host` or `device:<id>@host`). */
+  address?: string;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */
@@ -151,6 +163,12 @@ export interface RoomSnapshot {
   callee?: string;
   /** Far ends in another household or on another server (they have no socket to restore). */
   remotes?: PeerInfo[];
+  /** Fair-use metering: who pays, and when media started. */
+  payer?: string;
+  activeAt?: number;
+  /** For the call log. */
+  startedAt?: number;
+  answered?: boolean;
 }
 
 /** One WebSocket, as seen by the server. */

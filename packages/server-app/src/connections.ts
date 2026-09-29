@@ -32,6 +32,7 @@ import {
 import { Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
+import { fairUseProblem } from "./fairUse.ts";
 import { primaryHousehold, receiveGuestDial } from "./fedCalls.ts";
 import {
   DAY_MS,
@@ -104,7 +105,7 @@ export class Connections {
     const now = this.env.now();
     const conns = this.store.connections;
     const recipient = await this.store.accountByHandle(toHandle);
-    if (!recipient) return;
+    if (!recipient || recipient.suspendedAt !== null) return;
     if (from.host === LOCAL_HOST && from.id === recipient.id) return;
     if (await conns.blocked(recipient.id, from.host, from)) return;
     if (
@@ -243,6 +244,8 @@ export class Connections {
         return { connection: await this.accept(me, existing), status: "connected" as const };
       }
     }
+    const monthly = await fairUseProblem(this.env, me.id, "knock");
+    if (monthly) throw new FederationError(429, monthly);
     const perDay = limitsOf(this.env).knocksPerDay;
     if (!(await conns.hit(`knock:${me.id}`, DAY_MS, perDay, now))) {
       throw new FederationError(429, `you can knock ${perDay} times a day`);
@@ -267,6 +270,7 @@ export class Connections {
       await conns.delete(mine.id);
       throw e;
     }
+    await this.store.addUsage(me.id, now, { knocks: 1 });
     return {
       connection: (await conns.get(mine.id)) as Connection,
       status: "sent" as const,
@@ -530,9 +534,19 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
     }
     const rec = await readRecording(c.req.raw, c.req.query("durationMs"));
     if (rec instanceof Response) return rec;
+    const over = await fairUseProblem(env, account.id, "voicemail", {
+      bytes: rec.audio.byteLength,
+    });
+    if (over) return c.json({ error: over }, 429);
+    const charge = () =>
+      store.addUsage(account.id, env.now(), {
+        voicemails: 1,
+        voicemailBytes: rec.audio.byteLength,
+      });
     const from = partyOf(account);
     if (row.peerHost === LOCAL_HOST) {
       const ok = await receiveVoicemail(env, live, { ...from, host: LOCAL_HOST }, deviceId, rec);
+      if (ok) await charge();
       return ok ? c.json({ ok: true }, 201) : c.json({ error: "not allowed" }, 403);
     }
     const q = new URLSearchParams({
@@ -547,6 +561,7 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
         body: new Uint8Array(rec.audio),
         contentType: rec.mime,
       });
+      await charge();
       return c.json({ ok: true }, 201);
     } catch (e) {
       return fail(e);

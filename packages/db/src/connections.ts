@@ -298,6 +298,10 @@ export class ConnectionStore {
    */
   async hit(bucket: string, windowMs: number, limit: number, now: number): Promise<boolean> {
     const start = now - windowMs;
+    // Now and then, forget counters nobody has touched for over a month.
+    if (Math.random() < 0.01) {
+      await this.sql.run("DELETE FROM rate_limits WHERE window_start < ?", now - 35 * 86_400_000);
+    }
     const r = await this.sql.first<{ count: number }>(
       `INSERT INTO rate_limits (bucket, window_start, count) VALUES (?, ?, 1)
        ON CONFLICT(bucket) DO UPDATE SET

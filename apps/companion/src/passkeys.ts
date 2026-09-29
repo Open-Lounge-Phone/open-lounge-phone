@@ -54,7 +54,7 @@ export async function signInWithPasskey(api: Api): Promise<SignedInResult> {
 /** Open sign-up: pick a handle, create a passkey, and get an account with its own household. */
 export async function signUpWithPasskey(
   api: Api,
-  input: { handle: string; name: string; timeZone: string },
+  input: { handle: string; name: string; timeZone: string; turnstileToken?: string },
   passkeyName: string,
 ): Promise<SignedInResult> {
   const { challengeId, options } = await api.signupOptions(input);

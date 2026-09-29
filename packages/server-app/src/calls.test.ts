@@ -72,9 +72,25 @@ describe("calls across servers", () => {
     expect(cfgB.iceServers[0]?.urls).toBe("turn:turn.b.test");
     // One stream between the two servers carried it all; b dialed it (it spoke first).
     expect(net.streams).toEqual([{ from: "b.test", to: "a.test", closed: false }]);
+    net.timers.advance(90_000);
     bApp.write({ t: "call.hangup", callId: ringing.callId });
     expect(await jApp.nextState("ended")).toMatchObject({ reason: "hangup" });
     await bApp.nextState("ended");
+    // Each server logs its own person's side, keyed by the other's address (buddy timeline).
+    await vi.waitFor(async () =>
+      expect(await a.store.callLog(jesse.account.id, "bob@b.test")).toMatchObject([
+        {
+          direction: "out",
+          peerLabel: "Bob",
+          answered: true,
+          durationMs: 90_000,
+          endReason: "hangup",
+        },
+      ]),
+    );
+    expect(await b.store.callLog(bob.account.id, "jesse@a.test")).toMatchObject([
+      { direction: "in", peerLabel: "Jesse", answered: true, durationMs: 90_000 },
+    ]);
   });
 
   it("closes the idle stream after a minute, and reopens it for the next call", async () => {

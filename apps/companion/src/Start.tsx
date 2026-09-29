@@ -9,6 +9,7 @@ import {
   signUpWithPasskey,
 } from "./passkeys.ts";
 import { defaultTimeZone } from "./session.ts";
+import { Turnstile } from "./Turnstile.tsx";
 
 type Choice = "menu" | "signup" | "invite";
 
@@ -25,6 +26,7 @@ export function Start({
 }) {
   const [choice, setChoice] = useState<Choice>("menu");
   const [signupOpen, setSignupOpen] = useState(false);
+  const [turnstileKey, setTurnstileKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [devToken, setDevToken] = useState("");
@@ -34,7 +36,10 @@ export function Start({
     createApi({ token: null })
       .setupStatus()
       .then(
-        (s) => setSignupOpen(s.signup === true),
+        (s) => {
+          setSignupOpen(s.signup === true);
+          setTurnstileKey(s.turnstileSiteKey);
+        },
         () => {},
       );
   }, []);
@@ -52,7 +57,13 @@ export function Start({
   };
 
   if (choice === "signup") {
-    return <SignUp onToken={(t) => onToken(t, true)} onBack={() => setChoice("menu")} />;
+    return (
+      <SignUp
+        turnstileKey={turnstileKey}
+        onToken={(t) => onToken(t, true)}
+        onBack={() => setChoice("menu")}
+      />
+    );
   }
   if (choice === "invite") {
     return <PasteInvite onInvite={onInvite} onBack={() => setChoice("menu")} />;
@@ -165,7 +176,17 @@ function PasteInvite({ onInvite, onBack }: { onInvite(token: string): void; onBa
 }
 
 /** Open sign-up: your name, a handle (your address here), then a passkey. */
-function SignUp({ onToken, onBack }: { onToken(token: string): void; onBack(): void }) {
+function SignUp({
+  turnstileKey,
+  onToken,
+  onBack,
+}: {
+  /** Set when the server asks for a Turnstile check. */
+  turnstileKey?: string | undefined;
+  onToken(token: string): void;
+  onBack(): void;
+}) {
+  const [check, setCheck] = useState<string>();
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [handleTouched, setHandleTouched] = useState(false);
@@ -187,7 +208,7 @@ function SignUp({ onToken, onBack }: { onToken(token: string): void; onBack(): v
     try {
       const res = await signUpWithPasskey(
         createApi({ token: null }),
-        { handle: shown, name: name.trim(), timeZone },
+        { handle: shown, name: name.trim(), timeZone, ...(check ? { turnstileToken: check } : {}) },
         defaultPasskeyName(navigator.userAgent),
       );
       onToken(res.token);
@@ -250,12 +271,13 @@ function SignUp({ onToken, onBack }: { onToken(token: string): void; onBack(): v
           <input value={timeZone} onChange={(e) => setTimeZone(e.target.value)} required />
           <span className="hint">Used for quiet hours.</span>
         </label>
+        {turnstileKey && <Turnstile siteKey={turnstileKey} onToken={setCheck} />}
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
-        <button type="submit" className="primary" disabled={busy}>
+        <button type="submit" className="primary" disabled={busy || (!!turnstileKey && !check)}>
           {busy ? "Waiting for your device…" : "Create account with a passkey"}
         </button>
         <button type="button" className="link" onClick={onBack}>

@@ -1,0 +1,66 @@
+---
+// How far the public hub's donations go. Every number comes from fundingSummary() and the
+// build's configuration (src/consts.ts), never from hand-written text.
+import { formatCount, fundingSummary } from "@openloungephone/core";
+import { FUNDING, SPONSOR_URL } from "../consts.ts";
+
+interface Props {
+  /** `card`: a short box for the home page; `full`: the funding page's figures. */
+  variant?: "card" | "full";
+}
+const { variant = "full" } = Astro.props;
+const s = fundingSummary(FUNDING);
+const usd = (n: number) => `$${formatCount(n)}`;
+---
+
+<div class={`olp-funding olp-funding-${variant}`}>
+  <p class="olp-funding-lead"><strong>{usd(s.balanceUsd)}</strong> in funding</p>
+  <ul>
+    <li>Every $1/month covers about <strong>{formatCount(s.peoplePerDollarPerMonth)} people</strong>.</li>
+    <li>
+      {usd(s.balanceUsd)} keeps the hub running for <strong>~{formatCount(s.peopleForAYear)} people for a
+      year</strong> (or ~{formatCount(s.peopleForSixMonths)} people for 6 months).
+    </li>
+  </ul>
+  {
+    variant === "full" && (
+      <p class="olp-funding-basis">
+        Based on ${FUNDING.baseCostUsdPerMonth}/month for Cloudflare Workers Paid plus about $
+        {FUNDING.costPerActiveUserUsdPerMonth} per active person per month.
+      </p>
+    )
+  }
+  {SPONSOR_URL && (
+    <p>
+      <a class="olp-sponsor" href={SPONSOR_URL} rel="noopener">Sponsor on GitHub</a>
+    </p>
+  )}
+</div>
+
+<style>
+  .olp-funding {
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+  }
+  .olp-funding ul {
+    margin: 0.5rem 0;
+  }
+  .olp-funding-lead {
+    font-size: 1.25rem;
+    margin: 0;
+  }
+  .olp-funding-basis {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .olp-sponsor {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: var(--sl-color-accent);
+    color: var(--sl-color-black);
+    text-decoration: none;
+    font-weight: 600;
+  }
+</style>

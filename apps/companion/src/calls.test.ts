@@ -123,3 +123,33 @@ describe("voicemail after a quiet-hours refusal", () => {
     expect(canLeaveVoicemail(ended("voicemail"))).toBe(false);
   });
 });
+
+describe("calls through connections", () => {
+  it("keeps the connection for a voicemail, and the server's note for a refusal", () => {
+    const { view } = run([
+      { type: "dial", label: "Kid phone", deviceId: "dev_1", via: "con_1" },
+      {
+        type: "server",
+        now: 1000,
+        msg: { t: "call.state", callId: "c9", state: "ended", reason: "voicemail" },
+      },
+    ]);
+    expect(view).toMatchObject({ phase: "ended", deviceId: "dev_1", via: "con_1" });
+    expect(canLeaveVoicemail(view)).toBe(true);
+    const refused = run([
+      { type: "dial", label: "Bob", person: true, via: "con_2" },
+      {
+        type: "server",
+        now: 1000,
+        msg: {
+          t: "call.state",
+          callId: "c8",
+          state: "ended",
+          reason: "denied",
+          note: "You've used this month's 1000 call minutes (fair use).",
+        },
+      },
+    ]).view;
+    expect(refused).toMatchObject({ phase: "ended", note: expect.stringMatching(/fair use/) });
+  });
+});

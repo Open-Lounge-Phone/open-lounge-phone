@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Account } from "./Account.tsx";
+import { Admin } from "./Admin.tsx";
 import {
   type Api,
   createApi,
@@ -44,6 +45,7 @@ export type Route =
   | { name: "add-household" }
   | { name: "account" }
   | { name: "connections" }
+  | { name: "admin" }
   | { name: "voicemail" };
 
 function clearHash() {
@@ -423,6 +425,11 @@ function SignedIn({
           <Tab route={route} name="account" onGo={setRoute}>
             Account
           </Tab>
+          {meInfo?.operator && (
+            <Tab route={route} name="admin" onGo={setRoute}>
+              Operator
+            </Tab>
+          )}
         </nav>
       </header>
 
@@ -602,6 +609,9 @@ function SignedIn({
             onCall={(c) => void conn?.callConnection(c.id, c.name)}
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
           />
+        )}
+        {meInfo?.operator && route.name === "admin" && (
+          <Admin api={baseApi} onBack={() => setRoute({ name: "home" })} />
         )}
         {me && route.name === "voicemail" && (
           <VoicemailInbox

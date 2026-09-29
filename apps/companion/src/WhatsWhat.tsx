@@ -1,3 +1,4 @@
+import { Credit } from "./HubCards.tsx";
 /** Plain-language glossary: what each thing in Open Lounge Phone is. */
 export const TERMS: { term: string; means: string }[] = [
   {
@@ -41,6 +42,26 @@ export const TERMS: { term: string; means: string }[] = [
       "When it's on, people can call you while your phone or this app is connected. Turn it off to stop calls without unplugging anything.",
   },
   {
+    term: "Connections (buddies)",
+    means:
+      "Grown-ups you can call who aren't in your household — on this server or any other Open Lounge Phone server. You knock on their address (name@server); they accept, decline or block. Nobody can call you until you accept.",
+  },
+  {
+    term: "Your address",
+    means:
+      "name@server — share it like a phone number written on paper. There's no directory, and no phone numbers: this network never connects to the phone system.",
+  },
+  {
+    term: "Team or organization",
+    means:
+      "A space for grown-ups (a studio, a club, a venue) instead of a household: their own phones and shared Lounge phones, no kids' phones or quiet hours.",
+  },
+  {
+    term: "Fair use",
+    means:
+      "On the free public hub, a generous monthly allowance (call minutes, voicemails, knocks) keeps things fair for everyone. Calls in progress are never cut off. Your own server has no limits.",
+  },
+  {
     term: "Quiet hours",
     means:
       "Times when household phones don't ring and can't call out; callers can leave a voicemail. Your own phone isn't affected.",
@@ -62,6 +83,7 @@ export function WhatsWhat({ onBack }: { onBack(): void }) {
           </div>
         ))}
       </dl>
+      <Credit />
     </section>
   );
 }

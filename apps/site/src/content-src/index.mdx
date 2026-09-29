@@ -7,16 +7,17 @@ hero:
   image:
     file: ../../logo.svg
   actions:
-    - text: Try it on your computer
+    - text: Get started
       link: /getting-started/
       icon: right-arrow
-    - text: Deploy your own
+    - text: Run your own server
       link: /how-to/deploy-cloudflare/
       icon: rocket
       variant: minimal
 ---
 
 import { Aside, Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import Funding from "../../components/Funding.astro";
 
 <Aside type="note" title="Where things stand">
   **The software works today, end to end.** Run your own server, pair a phone, make real calls,
@@ -37,9 +38,10 @@ import { Aside, Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
     can call the kids' phone and each other, and they only ring when they've said they're
     available.
   </Card>
-  <Card title="Your own server" icon="setting">
-    Deploy to your own free Cloudflare account or self-host with Docker. Nobody — including this
-    project — sits in the middle of your calls.
+  <Card title="Your own server — or the free hub" icon="setting">
+    Deploy to your own Cloudflare account or self-host with Docker, or join the free public hub.
+    Servers connect to each other, so everyone can reach everyone — and nobody sits in the middle
+    of your calls.
   </Card>
 </CardGrid>
 
@@ -52,14 +54,32 @@ import { Aside, Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 ## What works today
 
-- **Calls** between the phone and the grown-ups' companion app, peer to peer (audio never passes
+- **Calls** between phones and the grown-ups' companion app, peer to peer (audio never passes
   through the server).
 - **Default-deny contacts:** a guardian decides exactly who can call the phone and who it can call.
 - **Quiet hours** per household, with a clear "quiet until 7:00" on the phone.
 - **Voicemail** recorded by the caller, with automatic transcripts for the grown-ups.
-- **Invites and passkeys:** add family by link; sign in with a passkey, no passwords or email.
+- **Accounts, passkeys and invites:** your own address (`name@server`), households, teams and
+  organizations; add family by link; sign in with a passkey, no passwords or email.
+- **Connections across servers ("knock, then talk"):** knock on someone's address on any Open
+  Lounge Phone server; once they accept you can call, and a guardian can let them call a kid's
+  phone. Blocking, limits and signed server-to-server requests keep it spam-free. No phone
+  numbers and no bridge to the phone network, ever.
+- **Lounge phones:** a shared phone anyone takes over as themselves — scan its code, press the key
+  it flashes — even people from other servers, and it forgets them afterwards.
+- **Any device as a phone:** open `/device/` on an old phone or tablet and add it to the home
+  screen.
 - **Two ways to run it:** your own Cloudflare account (Workers, Durable Objects, D1, R2) or a
   self-hosted Node server with SQLite.
+
+## A free public hub
+
+For people who don't want to run a server, the public hub is **free, funded by donations** —
+most calls go straight between the two people, so it costs little to run. It opens soon.
+
+<Funding variant="card" />
+
+[How the hub is funded](/project/funding/) · [Privacy](/project/privacy/)
 
 ## The hardware (in design)
 
@@ -73,9 +93,10 @@ layout and enclosure are all code in the repository, so anyone can build or modi
 along in [Build the hardware](/how-to/build-the-hardware/).
 
 <CardGrid>
-  <Card title="Lounge phone (later)" icon="rocket">
+  <Card title="Lounge phone" icon="rocket">
     A shared booth phone for hospitality spaces: take it over with your own contacts, see who's
-    open to chat, and it forgets you the moment you walk away.
+    open to chat, and it forgets you the moment you walk away. Works today in the browser phone;
+    Lounge hardware comes with the board.
   </Card>
   <Card title="Open" icon="github">
     Software under AGPL-3.0-or-later, hardware under CERN-OHL-S-2.0. No accounts with us, no
@@ -84,8 +105,8 @@ along in [Build the hardware](/how-to/build-the-hardware/).
 </CardGrid>
 
 <CardGrid>
-  <LinkCard title="Try it on your computer" href="/getting-started/" description="Run the server, the phone in a browser tab and the companion app in five minutes." />
-  <LinkCard title="Deploy your own" href="/how-to/deploy-cloudflare/" description="Your household on your own Cloudflare account." />
+  <LinkCard title="Get started" href="/getting-started/" description="Join the hub, run your own server, or open an invite — or try it all on your computer." />
+  <LinkCard title="Deploy your own" href="/how-to/deploy-cloudflare/" description="Your own server on your own Cloudflare account, federated with everyone." />
   <LinkCard title="Build the hardware" href="/how-to/build-the-hardware/" description="Open hardware: schematic, board layout, enclosure — in progress." />
   <LinkCard title="About the project" href="/project/about/" description="Why it exists, principles, and status." />
 </CardGrid>

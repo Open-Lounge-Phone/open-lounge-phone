@@ -63,6 +63,45 @@ export interface Account {
   handleChangedAt: number | null;
   /** Shares availability with connections ("Share my availability"). */
   sharePresence: boolean;
+  /** Set by an operator: no sign-in, calls or knocks. */
+  suspendedAt: number | null;
+  /** Not held to the fair-use allowance (set by an operator, e.g. for a venue). */
+  fairUseExempt: boolean;
+}
+
+/** One account's metered use in one calendar month (UTC). */
+export interface Usage {
+  month: string;
+  callMinutes: number;
+  voicemails: number;
+  voicemailBytes: number;
+  knocks: number;
+}
+
+/** One party's record of a finished call. */
+export interface CallLogEntry {
+  householdId: string;
+  accountId: string | null;
+  deviceId: string | null;
+  /** `handle@host`, `user:<id>` or `device:<id>`. */
+  peer: string;
+  peerLabel: string;
+  direction: "in" | "out";
+  startedAt: number;
+  answered: boolean;
+  durationMs: number;
+  endReason: string | null;
+  voicemailId?: string | null;
+  expiresAt?: number | null;
+}
+
+/** 'YYYY-MM' (UTC) for a time. */
+export const monthOf = (now: number): string => new Date(now).toISOString().slice(0, 7);
+
+/** When the month containing `now` ends (UTC): the allowance resets then. */
+export function monthEnds(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
 }
 
 /** One of an account's households, with its role there. */
@@ -296,6 +335,8 @@ type AccountRow = {
   created_at: number;
   handle_changed_at: number | null;
   share_presence?: number;
+  suspended_at?: number | null;
+  fair_use_exempt?: number;
 };
 const toAccount = (r: AccountRow): Account => ({
   id: r.id,
@@ -304,6 +345,8 @@ const toAccount = (r: AccountRow): Account => ({
   createdAt: r.created_at,
   handleChangedAt: r.handle_changed_at,
   sharePresence: r.share_presence === 1,
+  suspendedAt: r.suspended_at ?? null,
+  fairUseExempt: r.fair_use_exempt === 1,
 });
 type ContactRow = {
   user_id: string;
@@ -417,6 +460,8 @@ export class Store {
           createdAt: now,
           handleChangedAt: null,
           sharePresence: false,
+          suspendedAt: null,
+          fairUseExempt: false,
         };
       }
     }
@@ -501,6 +546,170 @@ export class Store {
       },
     ]);
     return true;
+  }
+
+  // --- hub: usage, suspension, exemption ------------------------------------------------
+
+  async usage(accountId: string, now: number): Promise<Usage> {
+    const month = monthOf(now);
+    const r = await this.sql.first<{
+      call_minutes: number;
+      voicemails: number;
+      voicemail_bytes: number;
+      knocks: number;
+    }>("SELECT * FROM usage WHERE account_id = ? AND month = ?", accountId, month);
+    return {
+      month,
+      callMinutes: r?.call_minutes ?? 0,
+      voicemails: r?.voicemails ?? 0,
+      voicemailBytes: r?.voicemail_bytes ?? 0,
+      knocks: r?.knocks ?? 0,
+    };
+  }
+
+  /** Adds to this month's metered use. */
+  async addUsage(
+    accountId: string,
+    now: number,
+    add: Partial<Omit<Usage, "month">>,
+  ): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO usage (account_id, month, call_minutes, voicemails, voicemail_bytes, knocks)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(account_id, month) DO UPDATE SET
+         call_minutes = call_minutes + excluded.call_minutes,
+         voicemails = voicemails + excluded.voicemails,
+         voicemail_bytes = voicemail_bytes + excluded.voicemail_bytes,
+         knocks = knocks + excluded.knocks`,
+      accountId,
+      monthOf(now),
+      add.callMinutes ?? 0,
+      add.voicemails ?? 0,
+      add.voicemailBytes ?? 0,
+      add.knocks ?? 0,
+    );
+  }
+
+  async setSuspended(accountId: string, at: number | null): Promise<void> {
+    await this.sql.run("UPDATE accounts SET suspended_at = ? WHERE id = ?", at, accountId);
+  }
+
+  async setFairUseExempt(accountId: string, exempt: boolean): Promise<void> {
+    await this.sql.run(
+      "UPDATE accounts SET fair_use_exempt = ? WHERE id = ?",
+      exempt ? 1 : 0,
+      accountId,
+    );
+  }
+
+  /** Records one party's view of a finished call (see migration 0010). */
+  async logCall(entry: CallLogEntry): Promise<string> {
+    const id = newId("cl");
+    await this.sql.run(
+      `INSERT INTO call_log (id, household_id, account_id, device_id, peer, peer_label, direction,
+         started_at, answered, duration_ms, end_reason, voicemail_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      entry.householdId,
+      entry.accountId,
+      entry.deviceId,
+      entry.peer,
+      entry.peerLabel,
+      entry.direction,
+      entry.startedAt,
+      entry.answered ? 1 : 0,
+      entry.durationMs,
+      entry.endReason,
+      entry.voicemailId ?? null,
+      entry.expiresAt ?? null,
+    );
+    return id;
+  }
+
+  /** An account's calls with one peer (newest first), or all of its calls. */
+  async callLog(accountId: string, peer?: string, limit = 100): Promise<CallLogEntry[]> {
+    const rows = await this.sql.all<{
+      household_id: string;
+      account_id: string | null;
+      device_id: string | null;
+      peer: string;
+      peer_label: string;
+      direction: "in" | "out";
+      started_at: number;
+      answered: number;
+      duration_ms: number;
+      end_reason: string | null;
+      voicemail_id: string | null;
+      expires_at: number | null;
+    }>(
+      `SELECT * FROM call_log WHERE account_id = ? ${peer ? "AND peer = ?" : ""}
+       ORDER BY started_at DESC LIMIT ?`,
+      ...(peer ? [accountId, peer, limit] : [accountId, limit]),
+    );
+    return rows.map((r) => ({
+      householdId: r.household_id,
+      accountId: r.account_id,
+      deviceId: r.device_id,
+      peer: r.peer,
+      peerLabel: r.peer_label,
+      direction: r.direction,
+      startedAt: r.started_at,
+      answered: r.answered === 1,
+      durationMs: r.duration_ms,
+      endReason: r.end_reason,
+      voicemailId: r.voicemail_id,
+      expiresAt: r.expires_at,
+    }));
+  }
+
+  /** Deletes a space and everything in it (members, phones, voicemail rows, logs). */
+  async deleteHousehold(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM households WHERE id = ?", id);
+  }
+
+  /** Deletes an account (sessions, passkeys, connections, usage go with it); its handle is reserved. */
+  async deleteAccount(id: string, now: number): Promise<void> {
+    await this.sql.batch([
+      {
+        query: `INSERT OR REPLACE INTO released_handles (handle, account_id, released_at)
+          SELECT handle, id, ? FROM accounts WHERE id = ?`,
+        params: [now, id],
+      },
+      { query: "DELETE FROM users WHERE account_id = ?", params: [id] },
+      { query: "DELETE FROM accounts WHERE id = ?", params: [id] },
+    ]);
+  }
+
+  /** How many guardians a space has. */
+  async guardianCount(householdId: string): Promise<number> {
+    const r = await this.sql.first<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM users WHERE household_id = ? AND role = 'guardian'",
+      householdId,
+    );
+    return r?.n ?? 0;
+  }
+
+  /** The account that answers for a space: its first guardian. */
+  async spaceOwner(householdId: string): Promise<string | undefined> {
+    const r = await this.sql.first<{ account_id: string }>(
+      `SELECT account_id FROM users WHERE household_id = ? AND role = 'guardian'
+       ORDER BY created_at, rowid LIMIT 1`,
+      householdId,
+    );
+    return r?.account_id;
+  }
+
+  /** Counts for the operator's overview. */
+  async hubCounts(): Promise<Record<string, number>> {
+    const r = await this.sql.first<Record<string, number>>(
+      `SELECT (SELECT COUNT(*) FROM accounts) AS accounts,
+         (SELECT COUNT(*) FROM households) AS spaces,
+         (SELECT COUNT(*) FROM devices) AS phones,
+         (SELECT COUNT(*) FROM accounts WHERE suspended_at IS NOT NULL) AS suspended,
+         (SELECT COUNT(*) FROM accounts WHERE fair_use_exempt = 1) AS exempt,
+         (SELECT COUNT(*) FROM connections WHERE state = 'active') AS connections`,
+    );
+    return r ?? {};
   }
 
   async setSharePresence(accountId: string, share: boolean): Promise<void> {

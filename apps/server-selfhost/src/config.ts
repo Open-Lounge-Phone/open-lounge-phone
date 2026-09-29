@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fairUseFromVars, hubInfoFromVars } from "@openloungephone/server-app";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const list = (v: string | undefined) =>
@@ -20,6 +21,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     publicUrlExplicit: env.PUBLIC_URL !== undefined,
     /** OPEN_SIGNUP=1: anyone can create an account (and their own household). Off by default. */
     openSignup: env.OPEN_SIGNUP === "1" || env.OPEN_SIGNUP === "true",
+    /** Fair-use allowance: FAIR_USE=hub and/or FAIR_USE_* (unlimited when unset). */
+    fairUse: fairUseFromVars(env),
+    /** Cloudflare Turnstile on sign-up, when both keys are set. */
+    turnstile:
+      env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET
+        ? { siteKey: env.TURNSTILE_SITE_KEY, secret: env.TURNSTILE_SECRET }
+        : undefined,
+    /** Handles of this server's operators (the admin view). */
+    operators: list(env.OPERATORS).map((h) => h.toLowerCase()),
+    /** Funding transparency and the Sponsor link (public hubs). */
+    hub: hubInfoFromVars(env),
+    /** Trust X-Forwarded-For for client IPs (only behind your own reverse proxy). */
+    trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
     /** Federation (connections with other servers) is on unless FEDERATION=0. */
     federation: env.FEDERATION !== "0" && env.FEDERATION !== "false",
     transcribe: env.TRANSCRIBE_URL

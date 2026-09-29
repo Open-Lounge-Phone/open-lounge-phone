@@ -15,8 +15,10 @@ import type { Context, Hono } from "hono";
 import { z } from "zod";
 import { Connections } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
+import { capReached } from "./fairUse.ts";
 import type { Coordinator } from "./gateway.ts";
-import { body, HOUSEHOLD_HEADER, relyingParty, type Vars } from "./httpUtil.ts";
+import { body, clientIp, HOUSEHOLD_HEADER, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
+import { limitsOf } from "./limits.ts";
 
 /** Households one account may be a guardian of (a cheap guard until P4's quotas). */
 export const MAX_GUARDIANSHIPS_PER_ACCOUNT = 10;
@@ -30,7 +32,35 @@ const SignupOptionsBody = z.object({
   name: Name,
   householdName: HouseholdName.optional(),
   timeZone: z.string().min(1).max(64),
+  /** Cloudflare Turnstile response, required when the server has Turnstile keys. */
+  turnstileToken: z.string().max(4096).optional(),
 });
+
+/** Verifies a Turnstile response with Cloudflare (siteverify). */
+export async function turnstileOk(
+  env: ServerEnv,
+  token: string | undefined,
+  ip: string,
+): Promise<boolean> {
+  if (!env.turnstile) return true;
+  if (!token) return false;
+  const form = new FormData();
+  form.append("secret", env.turnstile.secret);
+  form.append("response", token);
+  if (ip !== "unknown") form.append("remoteip", ip);
+  try {
+    const request = new Request("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: form,
+    });
+    const res = await (env.fetch ?? ((r: Request) => fetch(r)))(request);
+    const result = (await res.json()) as { success?: boolean };
+    return result.success === true;
+  } catch (e) {
+    env.log("warn", "turnstile check failed", { error: String(e) });
+    return false;
+  }
+}
 const SignupBody = z.object({
   challengeId: Id,
   passkeyName: z.string().trim().min(1).max(40).default("Passkey"),
@@ -92,9 +122,12 @@ export async function resolveSession(
   token: string,
   householdHint: string | undefined,
   now: number,
-): Promise<{ account: Account; member: User | undefined } | "unauthorized" | "not_member"> {
+): Promise<
+  { account: Account; member: User | undefined } | "unauthorized" | "not_member" | "suspended"
+> {
   const session = token ? await store.sessionForToken(token, now) : undefined;
   if (!session) return "unauthorized";
+  if (session.account.suspendedAt !== null) return "suspended";
   if (!householdHint) return { account: session.account, member: session.user };
   const member = await store.membership(session.account.id, householdHint);
   return member ? { account: session.account, member } : "not_member";
@@ -113,6 +146,15 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
     if (!env.openSignup) return closed();
     const b = await body(c.req.raw, SignupOptionsBody);
     if (b instanceof Response) return b;
+    const ip = clientIp(env, c);
+    const perHour = limitsOf(env).signupsPerIpPerHour;
+    const bucket = await ipBucket("signup-ip", ip);
+    if (!(await store.connections.hit(bucket, 3_600_000, perHour, env.now()))) {
+      return c.json({ error: "too many sign-ups from here; try again in an hour" }, 429);
+    }
+    if (env.turnstile && !(await turnstileOk(env, b.turnstileToken, ip))) {
+      return c.json({ error: "please complete the check that you're a person" }, 403);
+    }
     const problem = handleProblem(b.handle) ?? timeZoneProblem(b.timeZone);
     if (problem) return c.json({ error: problem }, 400);
     if (!(await store.handleAvailable(b.handle, env.now()))) {
@@ -229,6 +271,8 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
         role: m.user.role,
       })),
       openSignup: env.openSignup === true,
+      operator: isOperator(env, account),
+      sharePresence: account.sharePresence,
     });
   });
 
@@ -262,6 +306,10 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
     }
     if (guardianships >= MAX_GUARDIANSHIPS_PER_ACCOUNT) {
       return c.json({ error: "that's as many households as one account can run" }, 403);
+    }
+    const cap = await capReached(env, account.id, "spacesPerAccount", guardianships);
+    if (cap !== undefined) {
+      return c.json({ error: `one account can run ${cap} spaces on this server (fair use)` }, 403);
     }
     const member = c.get("member");
     const current = member ? await store.getHousehold(member.householdId) : undefined;
@@ -323,6 +371,10 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
     });
   });
 }
+
+/** Whether an account runs this server (`OPERATORS`, by handle). */
+export const isOperator = (env: ServerEnv, account: Account) =>
+  (env.operators ?? []).includes(account.handle);
 
 /** Reads the household hint a companion sends with each request. */
 export const householdHint = (header: (name: string) => string | undefined) =>

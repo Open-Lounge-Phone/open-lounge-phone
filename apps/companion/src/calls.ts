@@ -31,6 +31,8 @@ export type CallView =
       deviceId?: string;
       person?: boolean;
       via?: string;
+      /** The server's own explanation, if it gave one (e.g. a fair-use allowance). */
+      note?: string;
     };
 
 export type CallEvent =
@@ -129,6 +131,7 @@ function stateFor(
           ...(view.phase === "outgoing" && view.deviceId ? { deviceId: view.deviceId } : {}),
           ...(view.phase === "outgoing" && view.person ? { person: true } : {}),
           ...(view.phase === "outgoing" && view.via ? { via: view.via } : {}),
+          ...(msg.note ? { note: msg.note } : {}),
         },
       };
     case "requesting":

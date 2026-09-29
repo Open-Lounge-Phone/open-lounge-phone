@@ -27,6 +27,8 @@ export interface RemoteRing {
   target:
     | { kind: "person"; userId: string }
     | { kind: "phone"; deviceId: string; contactId: string };
+  /** The caller, for the call log: `handle@host`. */
+  address?: string;
   /** For calls between households here: the caller's household. */
   peerHousehold?: string;
 }
@@ -76,7 +78,8 @@ export class FedCalls implements CallLinks {
     const key = `fed:${host}:${from.id}`;
     if (body.to.kind === "person") {
       const account = await store.accountByHandle(body.to.handle);
-      if (!account || (host === LOCAL_HOST && account.id === from.id)) return deny;
+      if (!account || account.suspendedAt !== null) return deny;
+      if (host === LOCAL_HOST && account.id === from.id) return deny;
       const conn = await store.connections.findPeer(account.id, host, from);
       if (conn?.state !== "active" || conn.peerAccount !== from.id) return deny;
       if (await store.connections.blocked(account.id, host, from)) return deny;
@@ -89,6 +92,7 @@ export class FedCalls implements CallLinks {
         callId: body.callId,
         host,
         key,
+        address: `${from.handle}@${host || ownHost(this.env)}`,
         label: label.slice(0, 24),
         target: { kind: "person", userId: home.user.id },
         ...(peerHousehold ? { peerHousehold } : {}),
@@ -105,6 +109,7 @@ export class FedCalls implements CallLinks {
       callId: body.callId,
       host,
       key,
+      address: `${from.handle}@${host || ownHost(this.env)}`,
       label: entry.label,
       target: { kind: "phone", deviceId: device.id, contactId: entry.id },
       ...(peerHousehold ? { peerHousehold } : {}),

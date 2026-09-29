@@ -386,7 +386,8 @@ export class Gateway implements Coordinator {
       }
       // The household comes from the hello, else the object's own household (Cloudflare routes
       // by `?household=`), else the session's active one. It must be one of the account's.
-      const session = await this.env.store.sessionForToken(msg.token, this.env.now());
+      const found = await this.env.store.sessionForToken(msg.token, this.env.now());
+      const session = found?.account.suspendedAt === null ? found : undefined;
       const target = msg.household ?? this.household;
       const user =
         session && target

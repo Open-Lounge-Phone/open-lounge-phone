@@ -42,6 +42,7 @@ import {
   type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
+import { fairUseProblem } from "./fairUse.ts";
 import {
   placeGuestDial,
   primaryHousehold,
@@ -49,6 +50,7 @@ import {
   type RemoteRing,
   sendGuestProgress,
 } from "./fedCalls.ts";
+import { ownHost } from "./federation.ts";
 
 /** A live, authenticated connection: a device or one companion-app session of a user. */
 export interface Peer extends PeerInfo {
@@ -129,6 +131,13 @@ function randomKey(): number {
 interface Room {
   id: string;
   state: RoomState;
+  /** The account whose fair-use allowance the call's minutes count against. */
+  payer?: string;
+  /** When media started flowing (for metering). */
+  activeAt?: number;
+  /** For the call log. */
+  startedAt?: number;
+  answered?: boolean;
   caller: Peer;
   /** Known once the callee is a device (immediately) or a user answers from one session. */
   calleePeer?: Peer;
@@ -194,6 +203,10 @@ export class HouseholdHub {
       return {
         id: r.id,
         state: r.state,
+        ...(r.payer ? { payer: r.payer } : {}),
+        ...(r.activeAt !== undefined ? { activeAt: r.activeAt } : {}),
+        ...(r.startedAt !== undefined ? { startedAt: r.startedAt } : {}),
+        ...(r.answered ? { answered: true } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -233,6 +246,10 @@ export class HouseholdHub {
       this.rooms.set(snap.id, {
         id: snap.id,
         state: snap.state,
+        ...(snap.payer ? { payer: snap.payer } : {}),
+        ...(snap.activeAt !== undefined ? { activeAt: snap.activeAt } : {}),
+        ...(snap.startedAt !== undefined ? { startedAt: snap.startedAt } : {}),
+        ...(snap.answered ? { answered: true } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -555,14 +572,39 @@ export class HouseholdHub {
   }
 
   /** Reports a call that never got a room (denied, busy, unreachable) to the caller. */
-  private refuse(peer: Peer, reason: EndReason): void {
-    peer.conn.send({ t: "call.state", callId: newId("call"), state: "ended", reason });
+  private refuse(peer: Peer, reason: EndReason, note?: string): void {
+    peer.conn.send({
+      t: "call.state",
+      callId: newId("call"),
+      state: "ended",
+      reason,
+      ...(note ? { note } : {}),
+    });
+  }
+
+  /**
+   * Who pays for a call `peer` starts (as `as`), and why they can't if they're over the
+   * fair-use allowance: the person calling; for a household phone, the space's first guardian.
+   */
+  private async allowance(
+    peer: Peer,
+    as?: { id: string },
+  ): Promise<{ payer: string | undefined; note: string | undefined }> {
+    const { store } = this.env;
+    const person =
+      as && as.id !== peer.id ? as.id : peer.kind === "user" ? peer.id : personOf(peer);
+    let payer: string | undefined;
+    if (person && !person.startsWith("guest:")) payer = (await store.getUser(person))?.accountId;
+    else if (peer.kind === "device" && !person) payer = await store.spaceOwner(this.householdId);
+    return { payer, note: await fairUseProblem(this.env, payer, "call") };
   }
 
   private async deviceDial(device: DevicePeer, index: number): Promise<void> {
     if (this.busy(device.key)) return;
     if (device.lounge) return this.loungeDial(device, index);
     const { store } = this.env;
+    const allowance = await this.allowance(device);
+    if (allowance.note) return this.refuse(device, "denied", allowance.note);
     const [buttons, contacts, schedule] = await Promise.all([
       store.listButtons(device.id),
       store.listContacts(device.id),
@@ -580,6 +622,7 @@ export class HouseholdHub {
     if (this.busy(userKey(contact.id))) return this.refuse(device, "busy");
 
     const room = this.openRoom(device, userKey(contact.id));
+    room.payer = allowance.payer;
     device.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     for (const t of targets) {
       t.conn.send({ t: "call.ringing", callId: room.id, from: { label: device.label } });
@@ -618,8 +661,11 @@ export class HouseholdHub {
     if (this.busy(peer.key) || this.busy(user.key) || peer.hook === "up") {
       return this.refuse(user, "busy");
     }
+    const allowance = await this.allowance(user, as);
+    if (allowance.note) return this.refuse(user, "denied", allowance.note);
 
     const room = this.openRoom(user, peer.key);
+    room.payer = allowance.payer;
     room.calleePeer = peer;
     this.roomsDirty = true;
     user.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
@@ -649,8 +695,11 @@ export class HouseholdHub {
     const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
     if (!available) return this.refuse(caller, "unavailable");
     if (this.busy(caller.key) || this.busy(userKey(userId))) return this.refuse(caller, "busy");
+    const allowance = await this.allowance(caller, as);
+    if (allowance.note) return this.refuse(caller, "denied", allowance.note);
 
     const room = this.openRoom(caller, userKey(userId));
+    room.payer = allowance.payer;
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     for (const t of targets) {
       t.conn.send({ t: "call.ringing", callId: room.id, from: { label: as.label } });
@@ -705,7 +754,12 @@ export class HouseholdHub {
   }
 
   private openRoom(caller: Peer, calleeKey: string, id = newId("call")): Room {
-    const room: Room = { id, state: newRoom(caller.key, calleeKey), caller };
+    const room: Room = {
+      id,
+      state: newRoom(caller.key, calleeKey),
+      caller,
+      startedAt: this.env.now(),
+    };
     this.rooms.set(room.id, room);
     this.roomsDirty = true;
     room.cancelTimer = this.env.setTimer(
@@ -809,6 +863,7 @@ export class HouseholdHub {
 
     switch (r.state.phase) {
       case "connecting": {
+        room.answered = true;
         room.cancelTimer?.();
         room.cancelTimer = this.env.setTimer(
           () => void this.run(() => this.apply(room, { type: "timeout" })),
@@ -824,11 +879,20 @@ export class HouseholdHub {
       case "active":
         room.cancelTimer?.();
         room.cancelTimer = undefined;
+        room.activeAt = this.env.now();
         for (const p of both) p.conn.send({ t: "call.state", callId: room.id, state: "active" });
         return;
       case "ended": {
         room.cancelTimer?.();
         this.rooms.delete(room.id);
+        await this.logCall(room, r.state.reason ?? "hangup").catch((e) =>
+          this.env.log("warn", "call log failed", { error: String(e) }),
+        );
+        if (room.payer && room.activeAt !== undefined) {
+          // Metered at the end, rounded up to whole minutes; enforced only when calls start.
+          const minutes = Math.ceil((this.env.now() - room.activeAt) / 60_000);
+          await this.env.store.addUsage(room.payer, this.env.now(), { callMinutes: minutes });
+        }
         const reason = r.state.reason ?? "hangup";
         const ringing = this.ringTargets(room);
         for (const p of [...both, ...ringing]) {
@@ -1298,6 +1362,79 @@ export class HouseholdHub {
     return out;
   }
 
+  /** Who a party is, from the other side's point of view (for the call log). */
+  private async describe(
+    peer: Peer | undefined,
+    key: string,
+  ): Promise<{ peer: string; label: string }> {
+    if (peer?.kind === "remote") {
+      return { peer: peer.address ?? (peer.host || ownHost(this.env)), label: peer.label };
+    }
+    if (peer?.kind === "device") return { peer: `device:${peer.id}`, label: peer.label };
+    const userId = peer?.kind === "user" ? peer.id : key.startsWith("usr:") ? idOf(key) : undefined;
+    if (!userId) return { peer: key, label: peer?.label ?? "" };
+    const user = await this.env.store.getUser(userId);
+    return { peer: `user:${userId}`, label: user?.name ?? peer?.label ?? "" };
+  }
+
+  /** One call-log row for each party on this server (a person's, or a phone's own). */
+  private async logCall(room: Room, reason: string): Promise<void> {
+    const { store } = this.env;
+    const now = this.env.now();
+    const durationMs = room.activeAt !== undefined ? now - room.activeAt : 0;
+    const sides = [
+      {
+        self: room.caller as Peer | undefined,
+        selfKey: room.state.caller,
+        other: room.calleePeer,
+        otherKey: room.state.callee,
+        direction: "out" as const,
+      },
+      {
+        self: room.calleePeer,
+        selfKey: room.state.callee,
+        other: room.caller as Peer | undefined,
+        otherKey: room.state.caller,
+        direction: "in" as const,
+      },
+    ];
+    for (const side of sides) {
+      if (side.self?.kind === "remote") continue;
+      let accountId: string | null = null;
+      let deviceId: string | null = null;
+      if (side.self?.kind === "device") {
+        deviceId = side.self.id;
+        const person = personOf(side.self);
+        if (person && !person.startsWith("guest:")) {
+          accountId = (await store.getUser(person))?.accountId ?? null;
+        }
+      } else {
+        const userId =
+          side.self?.kind === "user"
+            ? side.self.id
+            : side.selfKey.startsWith("usr:")
+              ? idOf(side.selfKey)
+              : undefined;
+        if (!userId) continue;
+        accountId = (await store.getUser(userId))?.accountId ?? null;
+        if (!accountId) continue;
+      }
+      const other = await this.describe(side.other, side.otherKey);
+      await store.logCall({
+        householdId: this.householdId,
+        accountId,
+        deviceId,
+        peer: other.peer,
+        peerLabel: other.label,
+        direction: side.direction,
+        startedAt: room.startedAt ?? now,
+        answered: room.answered === true,
+        durationMs,
+        endReason: reason,
+      });
+    }
+  }
+
   // --- calls with other households and servers ------------------------------------------------
 
   private remotePeer(info: {
@@ -1306,6 +1443,7 @@ export class HouseholdHub {
     label: string;
     peerHousehold?: string | undefined;
     leg?: string;
+    address?: string;
   }): Peer {
     return this.remoteFromInfo({
       session: newId("s"),
@@ -1317,6 +1455,7 @@ export class HouseholdHub {
       host: info.host,
       ...(info.peerHousehold ? { peerHousehold: info.peerHousehold } : {}),
       ...(info.leg ? { leg: info.leg } : {}),
+      ...(info.address ? { address: info.address } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
     } as PeerInfo);
@@ -1364,6 +1503,7 @@ export class HouseholdHub {
     }
     const account = (await store.getAccount(user.accountId)) as Account;
     return this.dialRemote(caller, {
+      as,
       host: conn.peerHost,
       key: `fed:${conn.peerHost}:${conn.peerAccount}`,
       label: (conn.peerName || conn.peerHandle).slice(0, 24),
@@ -1438,13 +1578,23 @@ export class HouseholdHub {
       label: string;
       peerHousehold: string | undefined;
       body: Omit<CallBody, "callId">;
+      /** The person calling, when `caller` is a phone they're using. */
+      as?: { id: string };
     },
   ): Promise<void> {
     const calls = this.env.calls;
     if (!calls) return this.refuse(caller, "unreachable");
     if (this.busy(caller.key) || this.busy(target.key)) return this.refuse(caller, "busy");
-    const remote = this.remotePeer(target);
+    const allowance = await this.allowance(caller, target.as);
+    if (allowance.note) return this.refuse(caller, "denied", allowance.note);
+    const to = target.body.to;
+    const host = target.host || ownHost(this.env);
+    const remote = this.remotePeer({
+      ...target,
+      address: to.kind === "person" ? `${to.handle}@${host}` : `device:${to.deviceId}@${host}`,
+    });
     const room = this.openRoom(caller, remote.key);
+    room.payer = allowance.payer;
     room.calleePeer = remote;
     this.roomsDirty = true;
     await calls.register(target.host, room.id, this.householdId);
@@ -1481,6 +1631,7 @@ export class HouseholdHub {
         key: req.key,
         label: req.label,
         peerHousehold: req.peerHousehold,
+        ...(req.address ? { address: req.address } : {}),
       });
       if (req.target.kind === "person") {
         const userId = req.target.userId;
@@ -1672,6 +1823,7 @@ export class HouseholdHub {
       // Not the guest's person key: they may be called back here in the same breath.
       key: `fed:${guest.host}:via-lounge:${device.id}`,
       label: entry.label,
+      address: entry.id,
     });
     const room = this.openRoom(device, remote.key);
     room.calleePeer = remote;
@@ -1710,9 +1862,13 @@ export class HouseholdHub {
         key: `fed:${req.host}:lounge:${req.deviceId}`,
         label: req.deviceLabel,
         leg: req.callId,
+        address: `device:${req.deviceId}@${req.host}`,
       });
       if (this.busy(caller.key)) return { state: "ended", reason: "busy" };
       const account = (await store.getAccount(conn.accountId)) as Account;
+      if (await fairUseProblem(this.env, account.id, "call")) {
+        return { state: "ended", reason: "denied" };
+      }
       let peerHousehold: string | undefined;
       if (conn.peerHost === LOCAL_HOST) {
         const here = await store.membership(conn.peerAccount, this.householdId);
@@ -1722,6 +1878,7 @@ export class HouseholdHub {
           if (!targets.length) return { state: "ended", reason: "unreachable" };
           if (this.busy(userKey(here.id))) return { state: "ended", reason: "busy" };
           const room = this.openRoom(caller, userKey(here.id));
+          room.payer = account.id;
           await calls.register(req.host, req.callId, this.householdId);
           for (const t of targets) {
             t.conn.send({
@@ -1742,9 +1899,11 @@ export class HouseholdHub {
         label: (conn.peerName || conn.peerHandle).slice(0, 24),
         peerHousehold,
         leg,
+        address: `${conn.peerHandle}@${conn.peerHost || ownHost(this.env)}`,
       });
       if (this.busy(callee.key)) return { state: "ended", reason: "busy" };
       const room = this.openRoom(caller, callee.key);
+      room.payer = account.id;
       room.calleePeer = callee;
       this.roomsDirty = true;
       await calls.register(req.host, req.callId, this.householdId);

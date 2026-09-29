@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.4",
-    "astro": "7.3.5"
+    "astro": "7.3.5",
+    "@openloungephone/core": "0.0.0"
   }
 }

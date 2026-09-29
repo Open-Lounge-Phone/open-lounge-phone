@@ -64,7 +64,7 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
       <button type="button" className="link back" onClick={onBack}>
         ← Back
       </button>
-      <h2>Connections</h2>
+      <h2>Connections (buddies)</h2>
       <p className="muted">
         Grown-ups you can call, on this server or any other Open Lounge Phone server. Share your
         address; people knock, and you decide. Nobody can call you until you accept.

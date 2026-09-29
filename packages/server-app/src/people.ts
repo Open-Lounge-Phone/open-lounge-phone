@@ -11,7 +11,8 @@ import { z } from "zod";
 import { accountView, resolveSession, serverHost } from "./accounts.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
-import { body, guardianOnly, relyingParty, type Vars } from "./httpUtil.ts";
+import { body, clientIp, guardianOnly, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
+import { limitsOf } from "./limits.ts";
 
 const Name = z.string().trim().min(1).max(24);
 
@@ -88,6 +89,11 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
   });
 
   api.post("/passkeys/login/options", async (c) => {
+    const perMinute = limitsOf(env).signInsPerIpPerMinute;
+    const bucket = await ipBucket("signin-ip", clientIp(env, c));
+    if (!(await store.connections.hit(bucket, 60_000, perMinute, env.now()))) {
+      return c.json({ error: "too many attempts; wait a minute" }, 429);
+    }
     const { rpID } = relyingParty(env, c.req.url);
     // No allowCredentials: the browser offers any discoverable passkey for this site.
     const options = await generateAuthenticationOptions({ rpID, userVerification: "preferred" });
@@ -127,6 +133,8 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
       env.log("warn", "passkey sign-in rejected", { error: String(e) });
       return c.json({ error: "sign-in failed; try again" }, 401);
     }
+    const account = await store.getAccount(passkey.accountId);
+    if (account?.suspendedAt != null) return c.json({ error: "this account is suspended" }, 403);
     const [user] = (await store.listMemberships(passkey.accountId)).map((m) => m.user);
     if (!user) return c.json({ error: "sign-in failed; try again" }, 401);
     return c.json(await signIn(env, c.req.url, user, now));

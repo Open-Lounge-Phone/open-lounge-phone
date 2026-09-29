@@ -2,10 +2,25 @@
 //
 //   node scripts/deploy.ts --instance l1 --domain l1.openloungephone.app [--no-ai]
 //                          [--turn-key-id ID --turn-key-token TOKEN] [--new-setup-token]
-//                          [--open-signup]
+//                          [--open-signup] [--fair-use hub|none]
+//                          [--turnstile-site-key KEY --turnstile-secret SECRET]
+//                          [--operator handle[,handle]] [--sponsor-url URL]
+//                          [--funding-balance USD]
 //
 // --open-signup lets anyone create an account on the instance (a public hub). Without it the
 // instance is invite-only; every deploy sets the flag, so omitting it closes sign-up again.
+// A public instance needs TURN (people on different networks must be able to talk), so
+// --open-signup refuses to deploy until a TURN key was given (now or on an earlier run). It also
+// turns on the hub's fair-use allowance (FAIR_USE=hub; `--fair-use none` for unlimited).
+// Turnstile protects sign-up when both keys are given; --operator names who sees the admin view;
+// --sponsor-url shows a Sponsor button (hidden while unset); --funding-balance shows the funding
+// card (with the hub's cost model, see docs/hub.md).
+//
+// The public hub:
+//   node scripts/deploy.ts --instance hub --domain hub.openloungephone.app --open-signup \
+//     --turn-key-id <id> --turn-key-token <token> \
+//     --turnstile-site-key <key> --turnstile-secret <secret> \
+//     --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>]
 //
 // Idempotent: creates the D1 database and R2 bucket only if missing, applies pending
 // migrations, deploys the Worker on the custom domain, and on first run sets a one-time
@@ -32,6 +47,12 @@ const { values: args } = parseArgs({
     "turn-key-token": { type: "string" },
     "new-setup-token": { type: "boolean", default: false },
     "open-signup": { type: "boolean", default: false },
+    "fair-use": { type: "string" },
+    "turnstile-site-key": { type: "string" },
+    "turnstile-secret": { type: "string" },
+    operator: { type: "string" },
+    "sponsor-url": { type: "string" },
+    "funding-balance": { type: "string" },
   },
 });
 
@@ -53,6 +74,21 @@ interface InstanceState {
   setupTokenSet: boolean;
   /** FED_PRIVATE_KEY was set (never regenerated: other servers have the public key pinned). */
   fedKeySet?: boolean;
+  /** TURN_KEY_ID / TURN_KEY_API_TOKEN were set. */
+  turnSet?: boolean;
+  turnstileSet?: boolean;
+}
+
+const openSignup = args["open-signup"] === true;
+const sponsorUrl = args["sponsor-url"]?.trim();
+if (sponsorUrl && !/^https:\/\/\S+$/.test(sponsorUrl)) {
+  console.error("--sponsor-url must be an https:// link");
+  process.exit(2);
+}
+const funding = args["funding-balance"];
+if (funding !== undefined && !Number.isFinite(Number(funding))) {
+  console.error("--funding-balance must be a number of US dollars");
+  process.exit(2);
 }
 
 const statePath = `${INSTANCES}/${instance}.json`;
@@ -61,6 +97,16 @@ mkdirSync(INSTANCES, { recursive: true });
 const previous: Partial<InstanceState> = existsSync(statePath)
   ? JSON.parse(readFileSync(statePath, "utf8"))
   : {};
+
+const turnNow = !!(args["turn-key-id"] && args["turn-key-token"]);
+if (openSignup && !turnNow && !previous.turnSet) {
+  console.error(
+    "A public instance (--open-signup) needs TURN so people on different networks can talk.\n" +
+      "Create a TURN key in the Cloudflare dashboard (Realtime → TURN) and pass\n" +
+      "--turn-key-id <id> --turn-key-token <token>.",
+  );
+  process.exit(2);
+}
 
 function wrangler(argv: string[], input?: string): string {
   const res = spawnSync("npx", ["wrangler", ...argv], {
@@ -131,8 +177,14 @@ const config = {
   ...(ai ? { ai: { binding: "AI" } } : {}),
   vars: {
     ...(base.vars as object | undefined),
-    OPEN_SIGNUP: args["open-signup"] ? "1" : "0",
+    OPEN_SIGNUP: openSignup ? "1" : "0",
     PUBLIC_URL: `https://${domain}`,
+    // Public instances get the hub's fair-use allowance unless told otherwise.
+    ...(openSignup && args["fair-use"] !== "none" ? { FAIR_USE: "hub" } : {}),
+    ...(args["turnstile-site-key"] ? { TURNSTILE_SITE_KEY: args["turnstile-site-key"] } : {}),
+    ...(args.operator ? { OPERATORS: args.operator } : {}),
+    ...(sponsorUrl ? { SPONSOR_URL: sponsorUrl } : {}),
+    ...(funding !== undefined ? { FUNDING_BALANCE_USD: funding } : {}),
   },
   routes: [{ pattern: domain, custom_domain: true }],
   workers_dev: false,
@@ -166,7 +218,13 @@ if (!fedKeySet) {
   wrangler(["secret", "put", "FED_PRIVATE_KEY", "-c", configPath], await generateServerKey());
   fedKeySet = true;
 }
-if (args["turn-key-id"] && args["turn-key-token"]) {
+let turnstileSet = previous.turnstileSet === true;
+if (args["turnstile-secret"]) {
+  step("setting the Turnstile secret");
+  wrangler(["secret", "put", "TURNSTILE_SECRET", "-c", configPath], args["turnstile-secret"]);
+  turnstileSet = true;
+}
+if (turnNow) {
   step("setting TURN secrets");
   wrangler(["secret", "put", "TURN_KEY_ID", "-c", configPath], args["turn-key-id"]);
   wrangler(["secret", "put", "TURN_KEY_API_TOKEN", "-c", configPath], args["turn-key-token"]);
@@ -179,23 +237,28 @@ const state: InstanceState = {
   database: { name: dbName, id: db.uuid },
   bucket,
   ai,
-  openSignup: args["open-signup"] === true,
+  openSignup,
   setupTokenSet: previous.setupTokenSet || setupToken !== undefined,
   fedKeySet,
+  turnSet: previous.turnSet === true || turnNow,
+  turnstileSet,
 };
 writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 
 console.log(`\n✔ Open Lounge Phone "${instance}" is live at https://${domain}`);
 console.log(
-  args["open-signup"]
-    ? "  Open sign-up is ON: anyone can create an account."
+  openSignup
+    ? "  Open sign-up is ON: anyone can create an account (fair-use allowance applies)."
     : "  Invite-only (pass --open-signup to let anyone create an account).",
 );
+if (openSignup && !turnstileSet) {
+  console.log("  Tip: add --turnstile-site-key/--turnstile-secret to protect sign-up from bots.");
+}
 if (setupToken) {
   console.log(`\n  Create your household (works once, until the first household exists):`);
   console.log(`\n    https://${domain}/#setup=${setupToken}\n`);
 }
-if (!args["turn-key-id"]) {
+if (!turnNow && !previous.turnSet) {
   console.log(
     "  Calls between different networks need TURN: create a key in the Cloudflare dashboard\n" +
       "  (Realtime → TURN) and re-run with --turn-key-id <id> --turn-key-token <token>.",

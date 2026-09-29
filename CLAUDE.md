@@ -270,8 +270,26 @@ Keep this section current when finishing a milestone.
   voicemail, guest Lounge flow, guardian "guests" toggle. Browser-verified: cross-server call
   (a.localhost ↔ b.localhost) reaches WebRTC `connected` with DTX. Tests: `calls.test.ts`
   (mutation-checked), e2e extended with call + voicemail.
+- **P4 public hub, code only (2026-09-28; NOT deployed):** migration `0010_hub.sql` (additive:
+  `usage`, `call_log`, `accounts.suspended_at`, `accounts.fair_use_exempt`). Owner decisions: the
+  hub is **free, donation-funded** (GitHub Sponsors via one `SPONSOR_URL` setting, hidden while
+  unset; no paid plan); a **fair-use allowance** (`limits.ts` `FairUse`, `FAIR_USE=hub` +
+  `FAIR_USE_*`, unlimited when unset; hub defaults 1,000 min / 100 voicemails / 100 MB / 100 knocks
+  per month, 5 phones per space, 5 spaces per account) checked at start, metered at end
+  (`fairUse.ts`, hub `allowance`/`payer`), operators can exempt; `call.state.note` (additive)
+  explains refusals. Turnstile on sign-up (`TURNSTILE_SITE_KEY/SECRET`), per-IP (hashed) and
+  per-account limits, suspension, operator view (`OPERATORS`, `hubAdmin.ts`), `/api/usage`,
+  `/api/hub` (funding via `packages/core` `fundingSummary`, tested), `call_log` rows at every call
+  end (by account + peer, for the P2b buddy timeline), export + delete account (`leaving.ts`,
+  `docs/export.md`). Companion: Turnstile widget, fair-use and funding cards, Sponsor button,
+  "Proudly supported by unsubscribe.llc" credit, Operator tab, Your data (download / delete),
+  "Connections (buddies)". deploy.ts: `--open-signup` requires TURN and sets `FAIR_USE=hub`;
+  `--turnstile-*`, `--operator`, `--funding-balance`, `--sponsor-url`. Site: three-path Getting
+  started, funding page + home card (computed), hub/privacy/export/federation pages, footer
+  credit (+ Sponsor when `SPONSOR_URL` is set at build). Docs: `docs/hub.md` (costs, allowance),
+  `docs/privacy.md`, `docs/export.md`. Tests: `hub.test.ts` (mutation-checked), `funding.test.ts`.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
-  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub → P5 interop).
+  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (code; not deployed) → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
   The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across

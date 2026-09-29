@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AccountInfo, Api, Membership, PasskeySummary, User } from "./api.ts";
 import { AvailabilityToggle } from "./GrownUps.tsx";
 import { YourHouseholds } from "./Households.tsx";
+import { Credit, FairUseCard, FundingCard } from "./HubCards.tsx";
 import { handleHint, normalizeHandle } from "./handles.ts";
 import {
   defaultPasskeyName,
@@ -150,6 +151,9 @@ export function Account({
         </p>
       )}
 
+      <FairUseCard api={api} />
+      <FundingCard api={api} />
+
       <h3>Help</h3>
       <button type="button" onClick={onHelp}>
         What's what — plain-language guide
@@ -159,6 +163,8 @@ export function Account({
       <button type="button" onClick={onSignOut}>
         Sign out of this device
       </button>
+      {account && <LeaveCard api={api} handle={account.handle} onDeleted={onSignOut} />}
+      <Credit />
     </section>
   );
 }
@@ -239,5 +245,73 @@ function AddressCard({
         </button>
       )}
     </div>
+  );
+}
+
+/** Take your data with you, or delete your account (docs/privacy.md). */
+function LeaveCard({ api, handle, onDeleted }: { api: Api; handle: string; onDeleted(): void }) {
+  const [confirm, setConfirm] = useState("");
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string>();
+  const download = async () => {
+    setError(undefined);
+    try {
+      const blob = await api.exportAccount();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${handle}@${location.host}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const remove = async () => {
+    setError(undefined);
+    try {
+      await api.deleteAccount(confirm);
+      onDeleted();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <details
+      className="card stack leave"
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>Your data</summary>
+      <p className="small muted">
+        Download everything this server keeps about your account (connections, spaces, phones, call
+        log) as a file. Voicemail audio stays in the Voicemail tab.
+      </p>
+      <button type="button" onClick={() => void download()}>
+        Download my data
+      </button>
+      <p className="small muted">
+        Deleting your account removes it and every space where you're the only guardian (their
+        phones and voicemail too). Your connections are told you've left. Your handle stays reserved
+        for 90 days.
+      </p>
+      <label>
+        Type your handle ({handle}) to confirm
+        <input value={confirm} onChange={(e) => setConfirm(e.target.value)} autoCapitalize="none" />
+      </label>
+      <button
+        type="button"
+        className="danger"
+        disabled={confirm.trim().toLowerCase() !== handle}
+        onClick={() => void remove()}
+      >
+        Delete my account
+      </button>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </details>
   );
 }

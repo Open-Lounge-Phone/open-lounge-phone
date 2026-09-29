@@ -13,6 +13,8 @@ export default defineConfig({
       logo: { src: "./src/logo.svg" },
       favicon: "/favicon.svg",
       customCss: ["./src/styles/theme.css"],
+      // The project credit and the (optional) Sponsor link under every page.
+      components: { Footer: "./src/components/Footer.astro" },
       lastUpdated: false,
       pagination: true,
       sidebar: [

@@ -19,6 +19,9 @@ Owner decisions (2026-09-28):
   sign-up; anyone can still run their own server. Both federate as equals.
 - **One account on one home server reaches everyone**, so the earlier "multi-server companion"
   idea (M6) is dropped: a companion talks only to its own home server.
+- **The hub is free, funded by donations** (owner, 2026-09-28), with a fair-use allowance that
+  stops abuse; see [hub.md](hub.md). Its code is ready (plan phase P4); it isn't deployed yet.
+- In the UI, connections are also called **buddies**. There is no text chat.
 
 ## Principles
 

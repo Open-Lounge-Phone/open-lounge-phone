@@ -1,14 +1,52 @@
 ---
 title: Getting started
-description: Run Open Lounge Phone on your computer in five minutes — a server, an emulated phone and the companion app.
+description: Three ways in — the public hub, your own server, or an invite — and trying everything on your own computer in five minutes.
 sidebar:
   order: 2
 ---
 
-Everything runs on an ordinary computer before any hardware exists: a server, a browser emulator
-that behaves exactly like the phone, and the companion app guardians use.
+There are three ways to start. Whichever you pick, you get an **address** (`name@server`) that
+people on any Open Lounge Phone server can knock on, and any device can be a phone.
 
-## 1. Start the server
+## 1. Join the public hub
+
+The public hub, `hub.openloungephone.app`, is free and funded by donations
+([funding](/project/funding/)). *The code is ready; the hub opens soon.*
+
+1. Open the hub and choose **Create an account**.
+2. Pick a **handle** — your address will be `handle@hub.openloungephone.app` — and create a
+   **passkey** on your device. No email, no phone number, no password.
+3. Use any device as a phone: open `hub.openloungephone.app/device/` on an old phone, tablet or
+   laptop and choose **Add to Home Screen**. Or pair phone hardware when it exists.
+4. Knock on the people you want to call under **Connections (buddies)**.
+
+The hub has a generous fair-use allowance; for full control of your data and keys, run your own
+server instead (below) — it reaches everyone just the same.
+
+## 2. Run your own server
+
+- **On your own Cloudflare account:** one command, free plan is enough for a household —
+  [deploy guide](/how-to/deploy-cloudflare/).
+- **With Docker** on a spare computer, NAS or small server — [self-hosting](/how-to/self-host/).
+
+Federation is **on by default**: people on your server can connect with (and call) people on the
+hub and on every other server. It's also how you try everything on your own computer first — see
+below.
+
+## 3. Got an invite?
+
+A guardian sent you a link? Just open it: it adds you to their household (or signs you in there).
+If you already have an account on that server, open it while signed in and the household is added
+to your account.
+
+---
+
+## Try it on your computer
+
+Everything runs on an ordinary computer: a server, a browser phone that behaves exactly like the
+hardware, and the companion app guardians use.
+
+### 1. Start the server
 
 You need [Node.js](https://nodejs.org) 22 or newer.
 
@@ -20,12 +58,12 @@ npm start
 The server builds the web apps and starts on port 8787. On first start it prints a **one-time
 setup link** like `http://localhost:8787/#setup=…`.
 
-## 2. Create your household
+### 2. Create your household
 
 Open the setup link, name your household and yourself. You're now its first guardian. The app
 offers to add a passkey so you can sign in again later without a password.
 
-## 3. Open an emulated phone
+### 3. Open a phone in the browser
 
 Open `http://localhost:8787/device/` in another tab. The first time, it asks what the phone will
 be — choose **Kids phone** — then one tap starts it (that tap lets it make sound and use the
@@ -50,12 +88,12 @@ status strip and a big **Lift handset** button, keeps the screen on, and reconne
 after Wi-Fi hiccups. Leave it plugged in.
 :::
 
-## 4. Pair it
+### 4. Pair it
 
 Lift the handset (<kbd>Space</kbd>): the phone reads a six-digit code aloud and shows it on its
 display. In the companion app choose **+ Pair a phone** and enter the code.
 
-## 5. Call
+### 5. Call
 
 Lift the handset and press <kbd>1</kbd> — the pairing guardian is on speed dial 1 — and answer in
 the companion app. Or press **Call** in the app and lift the phone's handset to answer.
@@ -63,5 +101,6 @@ the companion app. Or press **Call** in the app and lift the phone's handset to 
 ## Next
 
 - [Add family and quiet hours](/how-to/family-and-quiet-hours/)
-- [Deploy your own on Cloudflare](/how-to/deploy-cloudflare/) or [self-host with Docker](/how-to/self-host/)
-- [How it works](/reference/architecture/)
+- [Lounge phones](/how-to/lounge-phone/)
+- [How it works](/reference/architecture/) and [how servers connect](/reference/federation/)
+- [Privacy and retention](/project/privacy/)
