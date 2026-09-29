@@ -30,14 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - name: Restore node_modules
         id: modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             node_modules
@@ -50,7 +50,7 @@ jobs:
         run: npx vitest run tests/e2e/twoServers.test.ts --reporter=verbose
       - name: Server logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: selfhost-interop-logs
           path: e2e-logs
@@ -61,14 +61,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - name: Restore node_modules
         id: modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             node_modules
@@ -79,7 +79,7 @@ jobs:
         run: npm ci
       - name: Restore the web app build
         id: web
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             apps/companion/dist
@@ -95,7 +95,7 @@ jobs:
         run: npx vitest run tests/e2e/cloudflare.test.ts --reporter=verbose
       - name: Worker logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cloudflare-interop-logs
           path: |

@@ -28,7 +28,8 @@
 | Server-to-server federation (signatures, keys, `/fed/v1` schemas) | `packages/federation` | servers |
 | Call and room media: 1:1 calls peer to peer (STUN/TURN); rooms as a peer-to-peer mesh (≤ 4) or through a relay (Cloudflare Realtime SFU, or a self-hosted LiveKit) | `packages/client` (`CallMedia`, `RoomAudio`), `packages/server-app` (`liveRooms.ts`, `sfu.ts`) | clients, servers |
 | Entry points | `apps/server-selfhost`, `apps/server-cloudflare` | Node / Workers |
-| Clients | `apps/device-web`, `apps/companion` (a Tauri desktop app is planned) | browser |
+| Clients | `apps/device-web`, `apps/companion` (installable web apps; no separate desktop app) | browser |
+| Command line: deploy to Cloudflare, self-host setup, status, doctor | `apps/cli` (`npx openloungephone`) | Node |
 
 The backend is pluggable: only the entry point and the implementations of storage (`Sql`), the
 live coordinator (sockets and household hubs), the blob store, the transcriber, and the
@@ -269,8 +270,10 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.
 
-Planned software phases (see the status table in the [README](../README.md)): interop tests in
-CI and a versioned federation spec (P5). Call recording (opt-in per space, always announced) is
+All planned software phases are done (see the status table in the [README](../README.md)):
+interop tests run in CI and the federation protocol has a versioned spec
+([federation-spec.md](federation-spec.md), P5); the `openloungephone` CLI deploys and sets up
+servers (M5). Call recording (opt-in per space, always announced) is
 done; see [security-model.md](security-model.md). Rooms, 3-way calls, hold and
 transfer (P3.5) and the workplace phone system for team and org spaces (P6: directory,
 extensions, ring groups, business hours, shared voicemail, roles, call log and audit) are done. There is no text chat and no phone-network bridge.

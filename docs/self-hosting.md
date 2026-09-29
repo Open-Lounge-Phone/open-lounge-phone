@@ -33,7 +33,7 @@ Check the server from anywhere with `npx openloungephone status https://phone.ex
 
 ## Without Docker
 
-Requires Node 22+.
+Requires Node 22.18+.
 
 ```sh
 npm install

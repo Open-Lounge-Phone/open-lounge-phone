@@ -94,13 +94,13 @@ allowance unless you set one.
 Deploy (don't run this without the owner's go-ahead):
 
 ```sh
-cd apps/server-cloudflare
-npm run deploy:instance -- --instance hub --domain hub.openloungephone.app --open-signup \
-  --turn-key-id <id> --turn-key-token <token> \
-  --turnstile-site-key <key> --turnstile-secret <secret> \
-  --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>] \
-  [--sfu-app-id <id> --sfu-app-secret <secret>]
+npx openloungephone deploy cloudflare --instance hub --domain hub.openloungephone.app \
+  --open-signup --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>]
 ```
+
+It asks for the TURN key, the Turnstile keys and (optionally) the SFU app without echoing them,
+or takes them from `TURN_KEY_ID`/`TURN_KEY_API_TOKEN`, `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET`
+and `SFU_APP_ID`/`SFU_APP_SECRET` (see [cloudflare.md](cloudflare.md)).
 
 - **Rooms' relay** (optional): the Realtime SFU app's id and secret (dashboard → Realtime → SFU),
   stored as secrets; the script also reads them from `instances/sfu.env` when present. Without
