@@ -33,6 +33,15 @@ First message on every connection.
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
 | `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = the e-ink strip (standard on the board); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
 
+### `call.extension`
+
+Team/org spaces: dial an extension of your space (a member, a phone, a room or a ring group). Phones: MENU → Dial extension, the digits, then MENU. Refused (`denied`) in homes and for unknown numbers; a ring group that's closed follows its after-hours action.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `number` | string (`^[0-9]{2,6}$`) | yes |  |
+
 ### `pair.begin`
 
 Unpaired device asks for a pairing code to show on its display.
@@ -180,7 +189,7 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
-| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
+| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } \| { extension: string (`^[0-9]{2,6}$`) } \| { groupId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
 | `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
 
 ### `room.leave`
@@ -333,6 +342,7 @@ Sent after authentication and whenever guardians change settings.
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
+| `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |
 
 ### `lounge.idle`
 
@@ -549,6 +559,15 @@ First message from a companion app.
 | `token` | string (len ≥16, len ≤512) | yes |  |
 | `household` | string (len ≤64) |  |  |
 
+### `call.extension`
+
+Team/org spaces: dial an extension of your space (a member, a phone, a room or a ring group). Phones: MENU → Dial extension, the digits, then MENU. Refused (`denied`) in homes and for unknown numbers; a ring group that's closed follows its after-hours action.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `number` | string (`^[0-9]{2,6}$`) | yes |  |
+
 ### `call.dial`
 
 Companion app calls a device.
@@ -660,7 +679,7 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
-| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
+| `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } \| { extension: string (`^[0-9]{2,6}$`) } \| { groupId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
 | `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
 
 ### `room.join`
@@ -848,12 +867,13 @@ A voicemail was left for a phone in the guardian's household.
 
 ### `voicemail.inbox`
 
-A voicemail was left for you (your own inbox: `GET /api/voicemails`).
+A voicemail was left for you (your own inbox, or a shared box of a ring group you're in: `GET /api/voicemails`).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) | yes |  |
 | `from` | string (len ≤24) | yes |  |
+| `box` | string (len ≤40) |  | Left in a ring group's shared box you're in (its name). |
 
 ### `call.ringing`
 

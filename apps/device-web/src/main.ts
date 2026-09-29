@@ -14,14 +14,17 @@ import {
 } from "@openloungephone/client";
 import {
   CALL_PROMPT_TEXT,
+  CLOSED_NOTE,
   callActions,
   type DeviceInput,
   type DeviceState,
   deviceFingerprint,
   deviceStep,
   initialDeviceState,
+  NO_EXTENSION_NOTE,
   PROMPT_TEXT,
   soundFor,
+  WORKPLACE_PROMPT_TEXT,
 } from "@openloungephone/core";
 import {
   type DeviceToServer,
@@ -316,6 +319,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
         ...(msg.missed ? { missed: msg.missed } : {}),
         ...(msg.greeting ? { greeting: msg.greeting } : {}),
         ...(msg.owner ? { owner: msg.owner } : {}),
+        ...(msg.extensions ? { extensions: true } : {}),
       };
       // The mode is decided when the phone is claimed; it may differ from the first-run choice.
       if (msg.owner && msg.owner.mode !== variant) {
@@ -349,6 +353,12 @@ async function handle(msg: ServerToDevice): Promise<void> {
     }
     case "call.ringing":
     case "call.state":
+      if (msg.t === "call.state" && msg.state === "ended" && msg.note === NO_EXTENSION_NOTE) {
+        speak(WORKPLACE_PROMPT_TEXT["ext.unknown"]);
+      }
+      if (msg.t === "call.state" && msg.state === "ended" && msg.note === CLOSED_NOTE) {
+        speak(WORKPLACE_PROMPT_TEXT["ext.closed"]);
+      }
       if (msg.t === "call.state" && msg.state === "ended") {
         if (msg.merged) mergedCalls.add(msg.callId);
         if (msg.transfer?.offerer) offererFor.add(msg.transfer.callId);
@@ -818,6 +828,7 @@ function menuContext() {
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
     ...(config?.greeting && variant !== "lounge" ? { greeting: config.greeting } : {}),
     ...(callActions(deviceState).length ? { call: { actions: callActions(deviceState) } } : {}),
+    ...(config?.extensions ? { extensions: true } : {}),
   };
 }
 
@@ -843,6 +854,11 @@ function applyMenu(event: MenuEvent): void {
     voice.stop();
   }
   if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
+  if (r.action?.type === "extension") {
+    // Dialing needs the handset (or speaker) up.
+    if (!hookUp) toggleHook();
+    step({ type: "extension", number: r.action.number });
+  }
   if (r.action?.type === "call") {
     const action = r.action.action;
     if (action === "mute" || action === "unmute") roomAudio?.setMuted(action === "mute");

@@ -338,3 +338,20 @@ describe("rooms on a phone", () => {
     expect(sent.at(-1)).toEqual({ t: "room.leave", roomId: "r1" });
   });
 });
+
+describe("dialing an extension (team/org spaces)", () => {
+  it("from off-hook: dialing, with call.extension", () => {
+    const up = deviceStep(initialDeviceState, hook("up")).state;
+    const r = deviceStep(up, { type: "extension", number: "201" });
+    expect(r.state).toEqual({ kind: "dialing", button: -1 });
+    expect(r.send).toEqual([{ t: "call.extension", number: "201" }]);
+    // Not with the handset down, and not in a call.
+    expect(deviceStep(initialDeviceState, { type: "extension", number: "201" }).send).toEqual([]);
+    const held: DeviceState = { kind: "offhook", held: "c1" };
+    expect(deviceStep(held, { type: "extension", number: "300" }).state).toEqual({
+      kind: "dialing",
+      button: -1,
+      held: "c1",
+    });
+  });
+});

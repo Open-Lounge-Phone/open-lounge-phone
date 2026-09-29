@@ -8,3 +8,4 @@ export * from "./lounge.ts";
 export * from "./quietHours.ts";
 export * from "./rooms.ts";
 export * from "./voicemail.ts";
+export * from "./workplace.ts";

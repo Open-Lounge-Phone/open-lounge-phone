@@ -12,11 +12,14 @@ interface Props {
   people?: User[];
   /** For your connections (Add caller and Transfer across households and servers). */
   api?: Api;
+  /** A team/org space: people and ring groups can be reached by extension too. */
+  extensions?: boolean;
 }
 
 type Pick =
   | { kind: "user"; id: string; label: string }
-  | { kind: "connection"; id: string; label: string };
+  | { kind: "connection"; id: string; label: string }
+  | { kind: "extension"; id: string; label: string };
 
 /** Someone to add to the call or transfer it to: people here, then your connections. */
 function Picker({
@@ -25,9 +28,11 @@ function Picker({
   title,
   onPick,
   onCancel,
+  extensions,
 }: {
   people: User[];
   api?: Api | undefined;
+  extensions?: boolean | undefined;
   title: string;
   onPick(p: Pick): void;
   onCancel(): void;
@@ -39,9 +44,32 @@ function Picker({
       () => {},
     );
   }, [api]);
+  const [ext, setExt] = useState("");
   return (
     <div className="picker stack">
       <div className="what">{title}</div>
+      {extensions && (
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (/^[0-9]{2,6}$/.test(ext))
+              onPick({ kind: "extension", id: ext, label: `Ext. ${ext}` });
+          }}
+        >
+          <input
+            inputMode="numeric"
+            pattern="[0-9]{2,6}"
+            aria-label="Extension"
+            placeholder="Extension"
+            value={ext}
+            onChange={(e) => setExt(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+          <button type="submit" disabled={!/^[0-9]{2,6}$/.test(ext)}>
+            Go
+          </button>
+        </form>
+      )}
       <ul className="devices">
         {people.map((u) => (
           <li key={u.id}>
@@ -68,7 +96,7 @@ function Picker({
   );
 }
 
-export function CallOverlay({ snap, conn, people = [], api }: Props) {
+export function CallOverlay({ snap, conn, people = [], api, extensions }: Props) {
   const audio = useRef<HTMLAudioElement>(null);
   const call = snap.call;
   const held = snap.held;
@@ -94,9 +122,16 @@ export function CallOverlay({ snap, conn, people = [], api }: Props) {
   const pick = (p: Pick) => {
     if (picking === "add") {
       if (p.kind === "user") void conn.callUser(p.id, p.label);
+      else if (p.kind === "extension") void conn.callExtension(p.id, p.label);
       else void conn.callConnection(p.id, p.label);
     } else if (picking === "transfer") {
-      conn.transfer(p.kind === "user" ? { userId: p.id } : { connectionId: p.id });
+      conn.transfer(
+        p.kind === "user"
+          ? { userId: p.id }
+          : p.kind === "extension"
+            ? { extension: p.id }
+            : { connectionId: p.id },
+      );
     }
     setPicking(undefined);
   };
@@ -142,6 +177,7 @@ export function CallOverlay({ snap, conn, people = [], api }: Props) {
                 title="Add someone to the call"
                 onPick={pick}
                 onCancel={() => setPicking(undefined)}
+                extensions={extensions}
               />
             ) : (
               <button type="button" onClick={() => setPicking("add")}>
@@ -185,6 +221,7 @@ export function CallOverlay({ snap, conn, people = [], api }: Props) {
                 title={`Transfer ${call.label} to…`}
                 onPick={pick}
                 onCancel={() => setPicking(undefined)}
+                extensions={extensions}
               />
             )}
             <div className="overlay-actions">

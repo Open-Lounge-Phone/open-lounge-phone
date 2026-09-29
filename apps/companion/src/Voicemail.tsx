@@ -85,8 +85,13 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
                   {!v.heardAt && <span className="badge">New</span>} {v.fromLabel}
                 </div>
                 <div className="muted small">
-                  {v.deviceId ? `for ${deviceName(v.deviceId)}` : "for you"} ·{" "}
-                  {formatWhen(v.createdAt, now)} · {formatDuration(v.durationMs)}
+                  {v.box
+                    ? `in ${v.box}'s shared box`
+                    : v.deviceId
+                      ? `for ${deviceName(v.deviceId)}`
+                      : "for you"}{" "}
+                  · {formatWhen(v.createdAt, now)} · {formatDuration(v.durationMs)}
+                  {v.box && v.heardByName ? ` · heard by ${v.heardByName}` : ""}
                 </div>
               </div>
             </div>

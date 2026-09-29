@@ -50,7 +50,7 @@ export interface Recording {
 
 /** A voicemail to store: for a household phone, or for a person (their own inbox). */
 export interface Deposit extends Recording {
-  to: { deviceId: string } | { userId: string };
+  to: { deviceId: string } | { userId: string } | { groupId: string };
   fromUser: string | null;
   fromLabel: string;
   /** The caller as the callee's call log names them (`user:<id>`, `device:<id>`, `handle@host`). */
@@ -72,7 +72,8 @@ export async function depositVoicemail(
   const { store } = env;
   const device = "deviceId" in input.to ? await store.getDevice(input.to.deviceId) : undefined;
   const user = "userId" in input.to ? await store.getUser(input.to.userId) : undefined;
-  const householdId = device?.householdId ?? user?.householdId;
+  const group = "groupId" in input.to ? await store.workplace.group(input.to.groupId) : undefined;
+  const householdId = device?.householdId ?? user?.householdId ?? group?.householdId;
   if (!householdId) return undefined;
   const blobKey = `voicemail/${householdId}/${newId("vmb")}`;
   await env.blobs.put(blobKey, input.audio, input.mime);
@@ -83,6 +84,7 @@ export async function depositVoicemail(
     householdId,
     deviceId: device?.id ?? null,
     toUser: user?.id ?? null,
+    groupId: group?.id ?? null,
     fromUser: input.fromUser,
     fromLabel,
     fromAddress: input.fromAddress ?? null,
@@ -115,6 +117,18 @@ export async function depositVoicemail(
   } else if (user) {
     await refreshOwnPhones(env, live, user);
     await live.notifyAccount(user.accountId, { t: "voicemail.inbox", id: vm.id, from: fromLabel });
+  } else if (group) {
+    // A shared box: every member of the group hears about it.
+    for (const member of group.members) {
+      const m = await store.getUser(member);
+      if (!m) continue;
+      await live.notifyAccount(m.accountId, {
+        t: "voicemail.inbox",
+        id: vm.id,
+        from: fromLabel,
+        box: group.name.slice(0, 40),
+      });
+    }
   }
   return vm;
 }
@@ -296,14 +310,50 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
       user.role === "guardian"
         ? (await store.listVoicemails(user.householdId)).filter((v) => v.deviceId !== null)
         : [];
-    const all = [...personal, ...phones].sort((a, b) => b.createdAt - a.createdAt);
-    return c.json(all.map(publicView));
+    // Shared boxes of the ring groups you're in (admins: every group of the space).
+    const groups = await boxesFor(user);
+    const shared = await store.listGroupVoicemails([...groups.keys()]);
+    const heardBy = new Map<string, string>();
+    for (const v of shared) {
+      if (v.heardBy && !heardBy.has(v.heardBy)) {
+        heardBy.set(v.heardBy, (await store.getUser(v.heardBy))?.name ?? "");
+      }
+    }
+    const all = [...personal, ...phones, ...shared].sort((a, b) => b.createdAt - a.createdAt);
+    return c.json(
+      all.map((v) => ({
+        ...publicView(v),
+        ...(v.groupId ? { box: groups.get(v.groupId) ?? "" } : {}),
+        ...(v.heardBy ? { heardByName: heardBy.get(v.heardBy) ?? "" } : {}),
+      })),
+    );
   });
 
-  /** A voicemail the caller may open: their own, or (guardians) one for this space's phones. */
+  /**
+   * The shared boxes a member may open (group id → name): the groups they're in; an admin of a
+   * team/org space, all of the space's groups.
+   */
+  const boxesFor = async (user: User): Promise<Map<string, string>> => {
+    const groups = await store.workplace.groups(user.householdId);
+    return new Map(
+      groups
+        .filter((g) => user.role === "guardian" || g.members.includes(user.id))
+        .map((g) => [g.id, g.name]),
+    );
+  };
+
+  /**
+   * A voicemail the caller may open: their own, (guardians) one for this space's phones, or one
+   * in a shared box they may open.
+   */
   const reachable = async (user: User, account: Account, id: string) => {
     const vm = await store.getVoicemail(id);
     if (!vm) return undefined;
+    if (vm.groupId !== null) {
+      return vm.householdId === user.householdId && (await boxesFor(user)).has(vm.groupId)
+        ? vm
+        : undefined;
+    }
     if (vm.deviceId !== null) {
       return user.role === "guardian" && vm.householdId === user.householdId ? vm : undefined;
     }
@@ -330,7 +380,7 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
   api.post("/voicemails/:id/heard", async (c) => {
     const vm = await reachable(c.get("user"), c.get("account"), c.req.param("id"));
     if (!vm) return c.json({ error: "not found" }, 404);
-    await store.markVoicemailHeard(vm.id, env.now());
+    await store.markVoicemailHeard(vm.id, env.now(), c.get("user").id);
     await refreshFor(vm);
     return c.body(null, 204);
   });

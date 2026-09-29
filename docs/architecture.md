@@ -109,8 +109,10 @@ more — a *consult* call, never a third (`controlCheck` in `packages/core`). Th
   themselves*, with their own permissions (a kids' phone reaches only its allow-list); attended
   (`call.transfer {toCall}`): the held person and the consult person are connected directly and
   the transferring person leaves both calls. Clients follow with `call.state {transfer: {callId,
-  ringing, offerer}}`. Transferring someone in another household or on another server isn't
-  supported yet.
+  ringing, offerer}}`. Someone in another household or on another server can be transferred
+  only inside a team or org space, to its own members, phones, ring groups and extensions (their
+  server follows the `transfer` notice; a kids' phone's never does); see
+  [workplace.md](workplace.md).
 - A merge or an attended transfer never puts a **kids' phone** together with someone who isn't
   on its allow-list (`mayConnect`).
 - **On the phone:** MENU → 1 *Add caller* (holds the call) → a speed-dial key → MENU → 1 *Merge*
@@ -118,6 +120,13 @@ more — a *consult* call, never a third (`controlCheck` in `packages/core`). Th
   to add, then press menu to merge" and "You're all together now"; the strip shows `CALLER ON
   HOLD`, `ON HOLD`, `MENU: MERGE`. The companion has Hold, Add caller, Merge, Transfer and
   "Connect them & leave".
+
+**Team and org spaces (workplace phone system).** Owner/admin/member roles, a searchable
+directory, extensions for members, phones, rooms and ring groups (`call.extension`; phones:
+MENU → Dial ext), ring groups (simultaneous, sequential, round robin; a hub-side `hunt` state
+steps through members on the room's timer), business hours with an after-hours action, shared
+voicemail boxes (`voicemails.group_id`, "heard by"), the space's call log with CSV export and an
+audit trail (`audit_log`) — migration `0017_workplace.sql`; see [workplace.md](workplace.md).
 
 **Rooms.** Three kinds, all live in the owning space's hub (`LiveRooms`):
 - **Party lines**: a space's always-open rooms (guardians make them). Members drop in and out and
@@ -254,6 +263,6 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    board.
 
 Planned software phases (see the status table in the [README](../README.md)): recording (batch
-C), interop tests in CI and a versioned federation spec (P5), and professional features such as
-a directory, hunt groups and business hours (P6). Rooms, 3-way calls, hold and transfer (P3.5)
-are done. There is no text chat and no phone-network bridge.
+C2), interop tests in CI and a versioned federation spec (P5). Rooms, 3-way calls, hold and
+transfer (P3.5) and the workplace phone system for team and org spaces (P6: directory,
+extensions, ring groups, business hours, shared voicemail, roles, call log and audit) are done. There is no text chat and no phone-network bridge.

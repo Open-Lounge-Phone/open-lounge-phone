@@ -49,6 +49,8 @@ export type DeviceInput =
   | { type: "hook"; state: "up" | "down" }
   | { type: "button"; index: number }
   | { type: "action"; action: CallAction }
+  /** MENU → Dial extension (team/org spaces): the handset is up and the digits are in. */
+  | { type: "extension"; number: string }
   | {
       type: "server";
       msg: Extract<
@@ -142,6 +144,13 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
   }
 
   if (input.type === "action") return action(s, input.action);
+  if (input.type === "extension") {
+    if (s.kind !== "offhook") return stay(s);
+    return stay(
+      { kind: "dialing", button: -1, ...(s.held ? { held: s.held } : {}) },
+      { t: "call.extension", number: input.number },
+    );
+  }
 
   const msg = input.msg;
   if (msg.t === "room.state") {

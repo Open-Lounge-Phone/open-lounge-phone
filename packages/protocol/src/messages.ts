@@ -73,8 +73,14 @@ export const TransferTarget = z
     z.object({ userId: Id }),
     z.object({ deviceId: Id }),
     z.object({ connectionId: Id }),
+    z
+      .object({ extension: z.string().regex(/^[0-9]{2,6}$/) })
+      .describe("Team/org spaces: an extension of the space (a member, phone or ring group)."),
+    z.object({ groupId: Id }).describe("Team/org spaces: a ring group of the space."),
   ])
-  .describe("Who to transfer to.");
+  .describe(
+    "Who to transfer to. Someone in another household or on another server can be transferred only inside a team/org space, to its members, phones, ring groups and extensions.",
+  );
 export type TransferTarget = z.infer<typeof TransferTarget>;
 
 export const CallTransfer = z
@@ -93,6 +99,23 @@ export const CallTransfer = z
     message: "give exactly one of to, toCall",
   })
   .describe("Transfer a call: blind (`to`) or attended (`toCall`).");
+
+export const CallExtension = z
+  .object({
+    t: z.literal("call.extension"),
+    ...Ref,
+    number: z.string().regex(/^[0-9]{2,6}$/),
+  })
+  .describe(
+    "Team/org spaces: dial an extension of your space (a member, a phone, a room or a ring group). Phones: MENU → Dial extension, the digits, then MENU. Refused (`denied`) in homes and for unknown numbers; a ring group that's closed follows its after-hours action.",
+  );
+
+export const WorkplacePrompt = z
+  .enum(["ext.enter", "ext.unknown", "ext.closed"])
+  .describe(
+    'Audio prompt ids for team/org phones (pre-recorded on hardware; the browser phone speaks them). `ext.enter` "Enter the extension, then press MENU.", `ext.unknown` "There\'s no such extension.", `ext.closed` "We\'re closed right now. Please leave a message."',
+  );
+export type WorkplacePrompt = z.infer<typeof WorkplacePrompt>;
 
 export const RoomJoin = z
   .object({
@@ -466,6 +489,7 @@ export const GreetingReset = z
 
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
+  CallExtension,
   PairBegin,
   AuthProof,
   Hook,
@@ -575,6 +599,12 @@ export const Config = z
       .optional()
       .describe(
         'Lounge phone with nobody signed in, when the space turns on "who\'s here": people signed in at its other Lounge phones who are open to chat.',
+      ),
+    extensions: z
+      .boolean()
+      .optional()
+      .describe(
+        "The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`).",
       ),
   })
   .describe("Sent after authentication and whenever guardians change settings.");
@@ -812,6 +842,7 @@ export const LoungeAppLeave = z
 
 export const AppToServer = z.discriminatedUnion("t", [
   AppHello,
+  CallExtension,
   CallDial,
   CallUser,
   CallConnection,
@@ -875,8 +906,16 @@ export const VoicemailInbox = z
     ...Ref,
     id: Id,
     from: z.string().min(1).max(24),
+    box: z
+      .string()
+      .min(1)
+      .max(40)
+      .optional()
+      .describe("Left in a ring group's shared box you're in (its name)."),
   })
-  .describe("A voicemail was left for you (your own inbox: `GET /api/voicemails`).");
+  .describe(
+    "A voicemail was left for you (your own inbox, or a shared box of a ring group you're in: `GET /api/voicemails`).",
+  );
 
 export const MemberStatus = z
   .object({

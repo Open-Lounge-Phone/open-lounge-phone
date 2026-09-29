@@ -14,6 +14,7 @@ import type { Coordinator } from "./gateway.ts";
 import { body, clientIp, guardianOnly, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
 import { dropVoicemailBlobs } from "./voicemail.ts";
+import { auditFrom, roleOf, workplaceSpace } from "./workplace.ts";
 
 const Name = z.string().trim().min(1).max(24);
 
@@ -160,10 +161,23 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     } else {
       target = b;
     }
+    // Team/org spaces: only the owner makes admins (an admin invite or a sign-in link for one).
+    if (
+      target.role === "guardian" &&
+      (await workplaceSpace(env, me.householdId)) &&
+      (await roleOf(env, me)) !== "owner"
+    ) {
+      return c.json({ error: "only the owner invites admins" }, 403);
+    }
     const invite = await store.createInvite(
       { householdId: me.householdId, createdBy: me.id, ...target },
       env.now(),
     );
+    await auditFrom(env, c, "invite.create", {
+      name: target.name,
+      role: target.role,
+      ...(target.userId ? { userId: target.userId } : {}),
+    });
     return c.json(invite, 201);
   });
 
@@ -173,8 +187,15 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     if (!target || target.householdId !== me.householdId)
       return c.json({ error: "not found" }, 404);
     if (target.id === me.id) return c.json({ error: "you can't remove yourself" }, 400);
+    if ((await workplaceSpace(env, me.householdId)) && (await roleOf(env, target)) !== "member") {
+      // Admins are made and unmade by the owner; the owner can't be removed.
+      if ((await roleOf(env, me)) !== "owner" || (await roleOf(env, target)) === "owner") {
+        return c.json({ error: "only the owner removes admins" }, 403);
+      }
+    }
     await dropVoicemailBlobs(env, { userId: target.id });
     await store.deleteUser(target.id, env.now());
+    await auditFrom(env, c, "member.remove", { userId: target.id, name: target.name });
     // A Lounge phone they were using forgets them now.
     for (const d of await store.listDevices(me.householdId)) {
       if (d.kind === "lounge") await live.refreshDevice(me.householdId, d.id);

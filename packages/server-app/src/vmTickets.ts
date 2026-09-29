@@ -36,6 +36,8 @@ export type VmTarget =
   | { kind: "user"; userId: string; name: string }
   /** A household phone (its guardians' inbox, "missed" on the phone). */
   | { kind: "device"; deviceId: string; name: string }
+  /** A ring group's shared box (team/org spaces): its members hear it. */
+  | { kind: "group"; groupId: string; name: string }
   /**
    * Someone in another household or on another server, through a connection of the account in
    * `connectionId`: the person, or one of their phones (`deviceId`). `viaPhone`: a kids' phone
@@ -126,6 +128,8 @@ async function targetGreeting(env: ServerEnv, t: VmTarget): Promise<Response> {
     );
   }
   if (t.kind === "device") return greetingResponse(await greetingOf(env, { deviceId: t.deviceId }));
+  // A ring group has the spoken default greeting, with its name.
+  if (t.kind === "group") return greetingResponse({ kind: "default" });
   if (t.kind === "relay") {
     try {
       const res = await outbound(env)(
@@ -207,9 +211,14 @@ async function deliver(
       return 502;
     }
   }
-  if (target.kind === "user" || target.kind === "device") {
+  if (target.kind === "user" || target.kind === "device" || target.kind === "group") {
     const vm = await depositVoicemail(env, live, {
-      to: target.kind === "user" ? { userId: target.userId } : { deviceId: target.deviceId },
+      to:
+        target.kind === "user"
+          ? { userId: target.userId }
+          : target.kind === "group"
+            ? { groupId: target.groupId }
+            : { deviceId: target.deviceId },
       fromUser: from.userId ?? null,
       fromLabel: from.label,
       fromAddress: from.address,

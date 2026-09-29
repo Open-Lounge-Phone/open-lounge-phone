@@ -230,7 +230,18 @@ and the room's **media goes through the room owner's server** (its relay, or its
 with someone on another server that is **merged** into a 3-way call carries on under the call's
 id as their leg (`call.state {merged}` doesn't end the route). Room minutes are metered by each
 person's own server; the room's server also counts people from other servers against the room's
-owner. Transfers across servers aren't supported yet.
+owner.
+
+**Transfers across servers** (team and org spaces only; see [workplace.md](workplace.md)): the
+transferring server rings the target under a new call id and sends the other side
+`call.state {state: "ended", transfer: {callId, ringing, offerer}}` for the old call; `callId` is
+the new call's id on the sender's side, which the receiver uses as its leg. The receiving server
+checks its own side — a kids' phone never follows; it just ends the call — opens its own
+successor call for its person (or relays the notice on, e.g. from their home hub to the space
+they answered in) and tells its client the same way. `ringing: true` means the receiver's person
+places the new call (sends the offer); `ringing: false` connects at once (attended). The old route
+stays open until the other side answers or ends it (`transfer` doesn't end a route); if the other
+server ends the old call instead of following, the sender ends the new one.
 
 ## Lounge phones across servers (F2, implemented)
 

@@ -218,9 +218,17 @@ export class Connection {
     );
   }
 
+  /** Team/org spaces: dials an extension (a member, a phone or a ring group). */
+  async callExtension(number: string, label: string): Promise<void> {
+    await this.dialWith({ type: "dial", label, person: true }, { t: "call.extension", number });
+  }
+
   private async dialWith(
     event: Extract<CallEvent, { type: "dial" }>,
-    msg: Extract<AppToServer, { t: "call.dial" | "call.user" | "call.connection" | "call.phone" }>,
+    msg: Extract<
+      AppToServer,
+      { t: "call.dial" | "call.user" | "call.connection" | "call.phone" | "call.extension" }
+    >,
   ): Promise<void> {
     if (!this.canDial()) return;
     this.tones.unlock();

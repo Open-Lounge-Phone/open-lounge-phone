@@ -465,3 +465,93 @@ export async function mergeAcross(jesse: Person, bob: Person, carol: Person) {
   expect(await jApp.next("room.ended")).toMatchObject({ reason: "closed" });
   for (const app of [jApp, bApp, cApp]) app.ws.close();
 }
+
+/** Waits for a `call.state` with this state; returns it. */
+async function stateOf(app: Sock, state: string) {
+  for (;;) {
+    const m = await app.next("call.state");
+    if (m.state === state) return m;
+  }
+}
+
+/**
+ * A team space on server A (docs/workplace.md): Olga makes it, Ben joins by invite, Olga gives
+ * Ben an extension and a "Support" ring group. Bob (server B) calls Olga; she answers in the
+ * team and transfers him to extension 300 — a transfer across servers, which a team space
+ * allows — so Ben's app rings and Bob's server carries Bob's call over. The admin call log shows
+ * the calls.
+ */
+export async function workplaceAcross(server: ServerTarget, bob: Person) {
+  {
+    const olgaHome = await signUp(server, "olga", "Olga");
+    const made = await api(olgaHome, "/spaces", { body: { name: "Acme", type: "team" } });
+    expect(made.status, JSON.stringify(made.json)).toBe(201);
+    const olga: Person = { ...olgaHome, householdId: made.json.household.id };
+    const benHome = await signUp(server, "ben", "Ben");
+    const invite = await api(olga, "/invites", { body: { name: "Ben", role: "contact" } });
+    expect(invite.status).toBe(201);
+    const joined = await api(benHome, "/invites/accept", { body: { token: invite.json.token } });
+    expect(joined.status, JSON.stringify(joined.json)).toBe(201);
+    const ben: Person = { ...benHome, householdId: made.json.household.id };
+    const benUser = joined.json.user.id as string;
+    expect(
+      (
+        await api(olga, "/extensions/201", {
+          method: "PUT",
+          body: { kind: "user", targetId: benUser },
+        })
+      ).status,
+    ).toBe(204);
+    const group = await api(olga, "/groups", {
+      body: { name: "Support", extension: "300", members: [benUser] },
+    });
+    expect(group.status, JSON.stringify(group.json)).toBe(201);
+    const dir = await api(ben, "/directory?q=sup");
+    expect(dir.json.groups).toMatchObject([{ name: "Support", extension: "300" }]);
+
+    // Bob and Olga connect across servers.
+    expect((await api(bob, "/connections", { body: { to: olga.address } })).status).toBe(202);
+    const knock = (await connections(olga)).find((c) => c.address === bob.address);
+    expect((await api(olga, `/connections/${knock?.id}/accept`, { method: "POST" })).status).toBe(
+      200,
+    );
+    const toOlga = (await connections(bob)).find((c) => c.address === olga.address);
+
+    const bApp = await appSocket(bob);
+    const oApp = await appSocket(olga);
+    const benApp = await appSocket(ben);
+    bApp.send({ t: "call.connection", connectionId: toOlga?.id as string });
+    // Olga answers in the team: her call there has its own id (the team is one of her spaces).
+    const bCall = (await stateOf(bApp, "ringing")).callId as string;
+    const first = (await oApp.next("call.ringing")).callId as string;
+    oApp.send({ t: "call.answer", callId: first });
+    await stateOf(bApp, "connecting");
+    bApp.send({ t: "rtc.sdp", callId: bCall, type: "offer", sdp: "v=0 o" });
+    expect(await oApp.next("rtc.sdp")).toMatchObject({ callId: first, sdp: "v=0 o" });
+    oApp.send({ t: "rtc.sdp", callId: first, type: "answer", sdp: "v=0 a" });
+    await stateOf(oApp, "active");
+    await stateOf(bApp, "active");
+    oApp.send({ t: "call.transfer", callId: first, to: { extension: "300" } });
+    const moved = await stateOf(bApp, "ended");
+    expect(moved.transfer).toMatchObject({ ringing: true, offerer: true });
+    const next = (moved.transfer as { callId: string }).callId;
+    const ring = await benApp.next("call.ringing");
+    expect(ring.from).toMatchObject({ label: "Bob" });
+    benApp.send({ t: "call.answer", callId: ring.callId });
+    const connecting = await stateOf(bApp, "connecting");
+    expect(connecting.callId).toBe(next);
+    bApp.send({ t: "rtc.sdp", callId: next, type: "offer", sdp: "v=0 to-ben" });
+    expect(await benApp.next("rtc.sdp")).toMatchObject({ sdp: "v=0 to-ben" });
+    benApp.send({ t: "rtc.sdp", callId: ring.callId, type: "answer", sdp: "v=0 from-ben" });
+    expect(await bApp.next("rtc.sdp")).toMatchObject({ callId: next, sdp: "v=0 from-ben" });
+    await stateOf(bApp, "active");
+    bApp.send({ t: "call.hangup", callId: next });
+    await stateOf(benApp, "ended");
+    const log = await api(olga, "/space/calls");
+    expect(log.status).toBe(200);
+    expect((log.json as { who: string }[]).map((r) => r.who)).toEqual(
+      expect.arrayContaining(["Olga", "Ben"]),
+    );
+    for (const app of [bApp, oApp, benApp]) app.ws.close();
+  }
+}

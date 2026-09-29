@@ -2,7 +2,12 @@
  * The phone's on-device menu. MENU opens it; each digit picks the option shown for it on the
  * display (or spoken, on phones without one); BACK steps out. Pure, so firmware can mirror it.
  */
-import { CALL_PROMPT_TEXT, type CallAction, PROMPT_TEXT } from "@openloungephone/core";
+import {
+  CALL_PROMPT_TEXT,
+  type CallAction,
+  PROMPT_TEXT,
+  WORKPLACE_PROMPT_TEXT,
+} from "@openloungephone/core";
 import { STATUS_WIDTH } from "./strip.ts";
 
 export type MenuScreen =
@@ -15,12 +20,16 @@ export type MenuScreen =
   | "brightness"
   | "about"
   /** During a call or in a room: hold / add caller, merge, transfer, mute. */
-  | "call";
+  | "call"
+  /** Team/org spaces: the digits of an extension; MENU dials, BACK deletes one. */
+  | "extension";
 
 export interface MenuState {
   screen: MenuScreen;
   /** On the `greeting` screen: which greeting is being recorded. */
   recording?: "name" | "custom";
+  /** On the `extension` screen: the digits so far. */
+  digits?: string;
   /** Epoch ms of the last key press, for the inactivity timeout. */
   lastInput: number;
 }
@@ -58,6 +67,8 @@ export interface MenuContext {
   fingerprint?: readonly string[];
   /** In a call or a room: what MENU offers there (see `callActions`), digit 1 upward. */
   call?: { actions: readonly CallAction[] };
+  /** A team/org space with extensions: 6 → Dial extension. */
+  extensions?: boolean;
 }
 
 /** Something the phone must do or tell the server (greetings, Lounge phone items). */
@@ -72,7 +83,9 @@ export type MenuAction =
   | { type: "greeting-cancel" }
   | { type: "greeting-reset" }
   /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
-  | { type: "call"; action: CallAction };
+  | { type: "call"; action: CallAction }
+  /** Dial this extension (the phone lifts the handset if it's down). */
+  | { type: "extension"; number: string };
 
 export interface MenuResult {
   /** undefined = menu closed. */
@@ -112,6 +125,9 @@ const ROOT_OPTIONS: { digit: number; label: string; screen: MenuScreen; spoken: 
 /** Lounge-session items on the top menu: 5 toggles "open to chat", 9 logs out. */
 const CHAT_DIGIT = 5;
 const LOGOUT_DIGIT = 9;
+/** Team/org spaces: 6 dials an extension. */
+const EXTENSION_DIGIT = 6;
+const EXTENSION_MAX = 6;
 
 function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
   const labels: Partial<Record<number, string>> = Object.fromEntries(
@@ -121,6 +137,7 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
     labels[CHAT_DIGIT] = ctx.lounge.openToChat ? "Chat off" : "Chat on";
     labels[LOGOUT_DIGIT] = "Log out";
   }
+  if (ctx.extensions) labels[EXTENSION_DIGIT] = "Dial ext";
   return labels;
 }
 
@@ -212,6 +229,13 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         labels: Object.fromEntries((ctx.call?.actions ?? []).map((a, i) => [i + 1, CALL_LABEL[a]])),
         backLabel: "Close",
       };
+    case "extension":
+      return {
+        title: `EXT ${state.digits || "_"}`,
+        labels: {},
+        menuLabel: "Dial",
+        backLabel: state.digits ? "Delete" : "Back",
+      };
     case "about":
       return {
         ...base,
@@ -229,7 +253,8 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       const lounge = ctx.lounge
         ? ` Press ${CHAT_DIGIT} to ${ctx.lounge.openToChat ? "stop being" : "be"} open to chat. Press ${LOGOUT_DIGIT} to log out.`
         : "";
-      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")}${lounge} Press back to leave.`;
+      const ext = ctx.extensions ? ` Press ${EXTENSION_DIGIT} to dial an extension.` : "";
+      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")}${lounge}${ext} Press back to leave.`;
     }
     case "volume":
       return `Volume ${settings.volume}. Press 1 for quieter, 2 for louder.`;
@@ -258,6 +283,8 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       );
       return `${options.join(" ")} Press back to leave the menu.`;
     }
+    case "extension":
+      return WORKPLACE_PROMPT_TEXT["ext.enter"];
     case "about": {
       const words = ctx.fingerprint
         ? ` This phone's words are: ${ctx.fingerprint.join(", ")}. The app shows the same four words for this phone.`
@@ -314,6 +341,28 @@ export function menuStep(
     return { state: touched, settings, action: { type: "greeting-stop" } };
   }
 
+  // Dialing an extension: digits add up, BACK deletes one (or leaves), MENU dials.
+  if (state.screen === "extension") {
+    const digits = state.digits ?? "";
+    if (event.type === "digit") {
+      if (digits.length >= EXTENSION_MAX) return { state: touched, settings };
+      const next = `${digits}${event.digit}`;
+      return { state: { ...touched, digits: next }, settings, say: String(event.digit) };
+    }
+    if (event.type === "back") {
+      if (!digits) return enter("root");
+      return { state: { ...touched, digits: digits.slice(0, -1) }, settings };
+    }
+    if (digits.length < 2)
+      return { state: touched, settings, say: WORKPLACE_PROMPT_TEXT["ext.enter"] };
+    return {
+      state: undefined,
+      settings,
+      say: `Calling extension ${digits.split("").join(" ")}.`,
+      action: { type: "extension", number: digits },
+    };
+  }
+
   if (event.type === "menu") {
     // MENU at the top closes the menu; anywhere else it returns to the top.
     if (state.screen === "call") return { state: undefined, settings };
@@ -339,6 +388,10 @@ export function menuStep(
       }
       if (ctx.lounge && d === LOGOUT_DIGIT) {
         return { state: undefined, settings, say: "Logged out.", action: { type: "logout" } };
+      }
+      if (ctx.extensions && d === EXTENSION_DIGIT) {
+        const next: MenuState = { screen: "extension", digits: "", lastInput: event.now };
+        return { state: next, settings, say: menuPrompt(next, settings, ctx) };
       }
       const option = ROOT_OPTIONS.find((o) => o.digit === d);
       return option ? enter(option.screen) : { state: touched, settings };

@@ -10,3 +10,9 @@ export function spaceNoun(type: SpaceType | undefined): string {
 
 /** Kids' phones and quiet hours exist only in homes. */
 export const kidSafe = (type: SpaceType | undefined): boolean => (type ?? "home") === "home";
+
+/** A role's name: guardian/contact in a home, admin/member in a team or org. */
+export function roleNoun(role: "guardian" | "contact", type: SpaceType | undefined): string {
+  if (kidSafe(type)) return role === "guardian" ? "Guardian" : "Contact";
+  return role === "guardian" ? "Admin" : "Member";
+}

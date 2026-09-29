@@ -22,6 +22,8 @@ export interface DeviceConfig {
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
   /** Whose phone this is and how it's used (the strip's trust line). */
   owner?: { mode: "kids" | "personal" | "lounge"; space: string; person?: string };
+  /** A team/org space with extensions: MENU → 6 dials one. */
+  extensions?: boolean;
 }
 
 export interface LedInput {

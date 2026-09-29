@@ -288,3 +288,49 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
     expect(open.state?.screen).toBe("root");
   });
 });
+
+describe("MENU → Dial extension (team/org spaces)", () => {
+  const w = { ...ctx, extensions: true };
+  const step = (state: MenuState | undefined, e: MenuEvent, c: typeof ctx = w) =>
+    menuStep(state, DEFAULT_SETTINGS, e, c);
+
+  it("offers 6 only where the space has extensions", () => {
+    const root = step(undefined, menu()).state as MenuState;
+    expect(menuView(root, DEFAULT_SETTINGS, w).labels[6]).toBe("Dial ext");
+    expect(menuView(root, DEFAULT_SETTINGS, ctx).labels[6]).toBeUndefined();
+    expect(step(root, digit(6), ctx).state?.screen).toBe("root");
+  });
+
+  it("collects digits, BACK deletes one, MENU dials", () => {
+    let s = step(step(undefined, menu()).state, digit(6));
+    expect(s.state?.screen).toBe("extension");
+    expect(s.say).toMatch(/Enter the extension/);
+    for (const d of [2, 0, 9]) s = step(s.state, digit(d));
+    expect(s.state?.digits).toBe("209");
+    s = step(s.state, back());
+    expect(s.state?.digits).toBe("20");
+    expect(menuView(s.state as MenuState, DEFAULT_SETTINGS, w)).toMatchObject({
+      title: "EXT 20",
+      menuLabel: "Dial",
+      backLabel: "Delete",
+    });
+    s = step(s.state, digit(1));
+    const dialed = step(s.state, menu());
+    expect(dialed.state).toBeUndefined();
+    expect(dialed.action).toEqual({ type: "extension", number: "201" });
+  });
+
+  it("too short to dial: says so; BACK on nothing returns to the top", () => {
+    let s = step(step(undefined, menu()).state, digit(6));
+    s = step(s.state, digit(4));
+    const early = step(s.state, menu());
+    expect(early.action).toBeUndefined();
+    expect(early.state?.screen).toBe("extension");
+    s = step(step(early.state, back()).state, back());
+    expect(s.state?.screen).toBe("root");
+    // At most six digits.
+    let t = step(step(undefined, menu()).state, digit(6));
+    for (let i = 0; i < 8; i++) t = step(t.state, digit(1));
+    expect(t.state?.digits).toBe("111111");
+  });
+});

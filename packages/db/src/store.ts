@@ -9,6 +9,7 @@ import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
+import { WorkplaceStore } from "./workplace.ts";
 
 export type Role = "guardian" | "contact";
 
@@ -371,8 +372,10 @@ export interface Voicemail {
   householdId: string;
   /** For a household phone (its guardians' inbox)… */
   deviceId: string | null;
-  /** …or for a person (their own inbox). Exactly one of the two is set. */
+  /** …or for a person (their own inbox)… */
   toUser: string | null;
+  /** …or for a ring group's shared box (team/org spaces). Exactly one of the three is set. */
+  groupId: string | null;
   fromUser: string | null;
   fromLabel: string;
   /** Who left it, for the timeline: `handle@host`, `user:<id>` or `device:<id>`. */
@@ -384,6 +387,8 @@ export interface Voicemail {
   transcript: string | null;
   transcriptStatus: TranscriptStatus;
   heardAt: number | null;
+  /** Shared boxes: the member who marked it heard. */
+  heardBy: string | null;
 }
 
 type VoicemailRow = {
@@ -391,6 +396,7 @@ type VoicemailRow = {
   household_id: string;
   device_id: string | null;
   to_user: string | null;
+  group_id: string | null;
   from_user: string | null;
   from_label: string;
   from_address: string | null;
@@ -401,12 +407,14 @@ type VoicemailRow = {
   transcript: string | null;
   transcript_status: TranscriptStatus;
   heard_at: number | null;
+  heard_by: string | null;
 };
 const toVoicemail = (r: VoicemailRow): Voicemail => ({
   id: r.id,
   householdId: r.household_id,
   deviceId: r.device_id,
   toUser: r.to_user,
+  groupId: r.group_id ?? null,
   fromUser: r.from_user,
   fromLabel: r.from_label,
   fromAddress: r.from_address,
@@ -417,6 +425,7 @@ const toVoicemail = (r: VoicemailRow): Voicemail => ({
   transcript: r.transcript,
   transcriptStatus: r.transcript_status,
   heardAt: r.heard_at,
+  heardBy: r.heard_by ?? null,
 });
 
 type PasskeyRow = {
@@ -547,11 +556,14 @@ export class Store {
   readonly connections: ConnectionStore;
   /** Party lines, phone rooms, and rooms on phones' allow-lists. */
   readonly rooms: RoomStore;
+  /** Team and org spaces: extensions, ring groups, business hours, the audit trail. */
+  readonly workplace: WorkplaceStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
     this.connections = new ConnectionStore(sql);
     this.rooms = new RoomStore(sql);
+    this.workplace = new WorkplaceStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -832,6 +844,58 @@ export class Store {
       .slice(0, limit);
   }
 
+  /** A space's whole call log (admins of team/org spaces), newest first; `before` pages back. */
+  async spaceCallLog(householdId: string, limit = 200, before?: number): Promise<CallLogEntry[]> {
+    const rows = await this.sql.all<{ id: string; account_id: string | null }>(
+      `SELECT id, account_id FROM call_log WHERE household_id = ? AND started_at < ?
+       ORDER BY started_at DESC, id DESC LIMIT ?`,
+      householdId,
+      before ?? Number.MAX_SAFE_INTEGER,
+      limit,
+    );
+    const out: CallLogEntry[] = [];
+    for (const r of rows) {
+      const entry = await this.callLogEntry(r.id);
+      if (entry) out.push(entry);
+    }
+    return out;
+  }
+
+  async callLogEntry(id: string): Promise<CallLogEntry | undefined> {
+    const r = await this.sql.first<{
+      id: string;
+      household_id: string;
+      account_id: string | null;
+      device_id: string | null;
+      peer: string;
+      peer_label: string;
+      direction: "in" | "out";
+      started_at: number;
+      answered: number;
+      duration_ms: number;
+      end_reason: string | null;
+      voicemail_id: string | null;
+      expires_at: number | null;
+    }>("SELECT * FROM call_log WHERE id = ?", id);
+    return (
+      r && {
+        id: r.id,
+        householdId: r.household_id,
+        accountId: r.account_id,
+        deviceId: r.device_id,
+        peer: r.peer,
+        peerLabel: r.peer_label,
+        direction: r.direction,
+        startedAt: r.started_at,
+        answered: r.answered === 1,
+        durationMs: r.duration_ms,
+        endReason: r.end_reason,
+        voicemailId: r.voicemail_id,
+        expiresAt: r.expires_at,
+      }
+    );
+  }
+
   async setAccountRetention(accountId: string, days: number | null): Promise<void> {
     await this.sql.run("UPDATE accounts SET retention_days = ? WHERE id = ?", days, accountId);
   }
@@ -892,6 +956,16 @@ export class Store {
     const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
     await this.deleteIds("voicemails", ids(expiredVm));
     await this.deleteIds("call_log", ids(expiredCalls));
+    // The audit trail of a team/org space follows the space's history setting too.
+    await this.sql.run(
+      `DELETE FROM audit_log WHERE household_id = ?
+         AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
+         AND (SELECT history_days FROM households WHERE id = ?) > 0`,
+      householdId,
+      now,
+      householdId,
+      householdId,
+    );
     // The Lounge usage history (who used which phone, when) follows the space's history setting.
     await this.sql.run(
       `DELETE FROM lounge_sessions WHERE household_id = ? AND ended_at IS NOT NULL
@@ -933,6 +1007,11 @@ export class Store {
         query: `INSERT OR REPLACE INTO released_handles (handle, account_id, released_at)
           SELECT handle, id, ? FROM accounts WHERE id = ?`,
         params: [now, id],
+      },
+      {
+        query: `DELETE FROM extensions WHERE kind = 'user'
+          AND target_id IN (SELECT id FROM users WHERE account_id = ?)`,
+        params: [id],
       },
       { query: "DELETE FROM users WHERE account_id = ?", params: [id] },
       { query: "DELETE FROM accounts WHERE id = ?", params: [id] },
@@ -1124,6 +1203,11 @@ export class Store {
     return r && toUser(r);
   }
 
+  /** A member's role in their space (team/org: guardian = admin, contact = member). */
+  async setRole(userId: string, role: Role): Promise<void> {
+    await this.sql.run("UPDATE users SET role = ? WHERE id = ?", role, userId);
+  }
+
   async setAvailable(userId: string, available: boolean): Promise<void> {
     await this.sql.run("UPDATE users SET available = ? WHERE id = ?", available ? 1 : 0, userId);
   }
@@ -1145,6 +1229,7 @@ export class Store {
     const user = await this.getUser(id);
     if (!user) return;
     await this.sql.batch([
+      { query: "DELETE FROM extensions WHERE kind = 'user' AND target_id = ?", params: [id] },
       { query: "DELETE FROM users WHERE id = ?", params: [id] },
       // A deleted account's handle stays reserved for 90 days.
       {
@@ -1371,7 +1456,10 @@ export class Store {
 
   /** Removes a phone; its allow-list, keys and voicemail go with it. */
   async deleteDevice(id: string): Promise<void> {
-    await this.sql.run("DELETE FROM devices WHERE id = ?", id);
+    await this.sql.batch([
+      { query: "DELETE FROM extensions WHERE kind = 'device' AND target_id = ?", params: [id] },
+      { query: "DELETE FROM devices WHERE id = ?", params: [id] },
+    ]);
   }
 
   /**
@@ -2063,16 +2151,28 @@ export class Store {
 
   // --- voicemail ----------------------------------------------------------------
 
-  async createVoicemail(v: Omit<Voicemail, "id" | "transcript" | "heardAt">): Promise<Voicemail> {
-    const vm: Voicemail = { ...v, id: newId("vm"), transcript: null, heardAt: null };
+  async createVoicemail(
+    v: Omit<Voicemail, "id" | "transcript" | "heardAt" | "heardBy" | "groupId"> & {
+      groupId?: string | null;
+    },
+  ): Promise<Voicemail> {
+    const vm: Voicemail = {
+      ...v,
+      groupId: v.groupId ?? null,
+      id: newId("vm"),
+      transcript: null,
+      heardAt: null,
+      heardBy: null,
+    };
     await this.sql.run(
-      `INSERT INTO voicemails (id, household_id, device_id, to_user, from_user, from_label,
-         from_address, created_at, duration_ms, mime, blob_key, transcript_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO voicemails (id, household_id, device_id, to_user, group_id, from_user,
+         from_label, from_address, created_at, duration_ms, mime, blob_key, transcript_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       vm.id,
       vm.householdId,
       vm.deviceId,
       vm.toUser,
+      vm.groupId,
       vm.fromUser,
       vm.fromLabel,
       vm.fromAddress,
@@ -2170,10 +2270,16 @@ export class Store {
       | { userId: string }
       | { deviceId: string }
       | { householdId: string }
-      | { accountId: string },
+      | { accountId: string }
+      | { groupId: string },
   ): Promise<string[]> {
     let rows: { k: string | null }[];
-    if ("userId" in scope) {
+    if ("groupId" in scope) {
+      rows = await this.sql.all(
+        "SELECT blob_key AS k FROM voicemails WHERE group_id = ?",
+        scope.groupId,
+      );
+    } else if ("userId" in scope) {
       rows = await this.sql.all(
         "SELECT blob_key AS k FROM voicemails WHERE to_user = ?",
         scope.userId,
@@ -2337,12 +2443,27 @@ export class Store {
     );
   }
 
-  async markVoicemailHeard(id: string, now: number): Promise<void> {
+  /** Marks a message heard (the first time only); `by` = the member, for shared boxes. */
+  async markVoicemailHeard(id: string, now: number, by?: string): Promise<void> {
     await this.sql.run(
-      "UPDATE voicemails SET heard_at = COALESCE(heard_at, ?) WHERE id = ?",
+      `UPDATE voicemails SET heard_at = COALESCE(heard_at, ?),
+         heard_by = CASE WHEN heard_at IS NULL THEN ? ELSE heard_by END WHERE id = ?`,
       now,
+      by ?? null,
       id,
     );
+  }
+
+  /** The shared boxes' messages of these ring groups, newest first. */
+  async listGroupVoicemails(groupIds: string[], limit = 100): Promise<Voicemail[]> {
+    if (groupIds.length === 0) return [];
+    const rows = await this.sql.all<VoicemailRow>(
+      `SELECT * FROM voicemails WHERE group_id IN (${groupIds.map(() => "?").join(", ")})
+       ORDER BY created_at DESC LIMIT ?`,
+      ...groupIds,
+      limit,
+    );
+    return rows.map(toVoicemail);
   }
 
   async deleteVoicemail(id: string): Promise<void> {

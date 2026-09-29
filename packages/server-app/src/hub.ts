@@ -1,17 +1,24 @@
 import {
+  afterHoursAction,
   authorizeInbound,
   authorizeOutbound,
+  CLOSED_NOTE,
   type Contact,
   controlCheck,
+  effectiveHours,
   goesToVoicemail,
+  huntSteps,
+  isOpen,
   isQuietAt,
   localClock,
   loungeDayEnd,
   MAX_RING_SECONDS,
   type Meeting,
   mayConnect,
+  NO_EXTENSION_NOTE,
   newRoom,
   nextQuietChange,
+  nextRoundRobin,
   type PartyCall,
   type RoomEvent,
   type RoomState,
@@ -56,6 +63,7 @@ import {
   CONNECT_TIMEOUT_MS,
   type ConferenceSnapshot,
   type Conn,
+  type HuntState,
   LOUNGE_NONCE_TTL_MS,
   LOUNGE_PROOF_MS,
   LOUNGE_RECONNECT_GRACE_MS,
@@ -107,7 +115,8 @@ const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
  * (each side rings its own people and uses its own TURN).
  */
 class FedConn implements Conn {
-  private chain: Promise<void> = Promise.resolve();
+  /** Signals go out in order; a call's successor (after a transfer) shares the line. */
+  private line: { chain: Promise<void> } = { chain: Promise.resolve() };
   private readonly env: ServerEnv;
   readonly to: { host: string; householdId?: string };
   private leg: string | undefined;
@@ -125,6 +134,11 @@ class FedConn implements Conn {
     this.offers = offers;
   }
 
+  /** Keeps signals of a transferred call and its successor in one order. */
+  shareLine(other: FedConn): void {
+    this.line = other.line;
+  }
+
   /** A call that became a room goes on under the same id (see `merge`). */
   useLeg(leg: string): void {
     this.leg ??= leg;
@@ -135,7 +149,7 @@ class FedConn implements Conn {
     const calls = this.env.calls;
     const leg = this.leg;
     if (!calls || !leg) return;
-    this.chain = this.chain
+    this.line.chain = this.line.chain
       .then(() => calls.signal(this.to, { t: "room.signal", callId: leg, msg }))
       .catch((e) => this.env.log("warn", "room signal failed", { error: String(e) }));
   }
@@ -157,7 +171,7 @@ class FedConn implements Conn {
     if (!calls) return;
     // The far end knows this call by its own id (a leg of a relayed call).
     const signal = (this.leg ? { ...msg, callId: this.leg } : msg) as FedSignal;
-    this.chain = this.chain
+    this.line.chain = this.line.chain
       .then(() => calls.signal(this.to, signal))
       .catch((e) => this.env.log("warn", "federated signal failed", { error: String(e) }));
   }
@@ -238,6 +252,8 @@ interface Room {
   group?: string[];
   /** On hold: the party key of whoever put it on hold. */
   heldBy?: string;
+  /** A call to a ring group (callee key `hg:…`): its steps and where it is (see `huntNext`). */
+  hunt?: HuntState;
 }
 
 /** Someone signed in at another Lounge phone and open to chat ("who's here"). */
@@ -270,6 +286,11 @@ export class HouseholdHub {
   /** Our people in rooms held elsewhere, by leg id. */
   private readonly legs = new Map<string, RoomLeg>();
   private confDirty = false;
+  /**
+   * Calls handed over to a new id by a transfer (`<host>|<their old call id>` → the new call
+   * here): if their server ends the old call instead of following, the new one ends too.
+   */
+  private readonly handoffs = new Map<string, string>();
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -360,6 +381,7 @@ export class HouseholdHub {
         ...(r.vm ? { vm: r.vm } : {}),
         ...(r.group ? { group: r.group } : {}),
         ...(r.heldBy ? { heldBy: r.heldBy } : {}),
+        ...(r.hunt ? { hunt: r.hunt } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -414,6 +436,7 @@ export class HouseholdHub {
         ...(snap.vm ? { vm: snap.vm } : {}),
         ...(snap.group ? { group: snap.group } : {}),
         ...(snap.heldBy ? { heldBy: snap.heldBy } : {}),
+        ...(snap.hunt ? { hunt: snap.hunt } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -569,8 +592,10 @@ export class HouseholdHub {
       } else if (room.calleePeer === peer) {
         void this.apply(room, { type: "hangup", by: room.state.callee });
       } else if (!room.calleePeer && this.ringTargets(room).length === 0) {
-        // The last session or phone that was ringing for the callee went away.
-        void this.apply(room, { type: "timeout" });
+        // The last session or phone that was ringing for the callee went away (a ring group
+        // moves on to its next step).
+        if (room.hunt) void this.huntNext(room);
+        else void this.apply(room, { type: "timeout" });
       }
     }
   }
@@ -593,6 +618,8 @@ export class HouseholdHub {
           return;
         case "button":
           return this.deviceDial(device, msg.index);
+        case "call.extension":
+          return this.extensionDial(device, msg.number);
         case "lounge.press":
           return this.loungePress(device, msg.index);
         case "lounge.leave":
@@ -661,6 +688,8 @@ export class HouseholdHub {
       switch (msg.t) {
         case "call.dial":
           return this.appDial(peer, msg.deviceId);
+        case "call.extension":
+          return this.extensionDial(peer, msg.number);
         case "call.user":
           return this.userDial(peer, msg.userId);
         case "call.connection":
@@ -1326,6 +1355,10 @@ export class HouseholdHub {
       return;
     }
     if (msg.t === "call.hangup") {
+      // A ring-group member declining stops only their ringing.
+      if (party === "callee" && room.hunt && !room.calleePeer && room.state.phase === "ringing") {
+        return this.groupDecline(room, peer);
+      }
       const by = party === "caller" ? room.state.caller : room.state.callee;
       await this.apply(room, { type: "hangup", by });
       return;
@@ -1377,6 +1410,7 @@ export class HouseholdHub {
       case "ended": {
         room.cancelTimer?.();
         this.rooms.delete(room.id);
+        for (const [k, v] of this.handoffs) if (v === room.id) this.handoffs.delete(k);
         await this.logCall(room, r.state.reason ?? "hangup").catch((e) =>
           this.env.log("warn", "call log failed", { error: String(e) }),
         );
@@ -1477,20 +1511,23 @@ export class HouseholdHub {
         return;
       }
       const dir = await this.sessionDirectory(session);
+      const extensions = !session.guest && (await this.hasExtensions());
       peer.conn.send({
         t: "config",
         buttons: [...dir].map(([index, e]) => ({ index, label: e.label })),
         quiet: false,
         ...(owner ? { owner } : {}),
+        ...(extensions ? { extensions: true } : {}),
       });
       return;
     }
-    const [buttons, contacts, schedule, missed, greeting] = await Promise.all([
+    const [buttons, contacts, schedule, missed, greeting, extensions] = await Promise.all([
       store.listButtons(peer.id),
       store.listContacts(peer.id),
       this.scheduleFor(peer),
       store.unheardFrom(peer.id, 8, peer.owner),
       this.phoneGreeting(peer),
+      peer.owner ? this.hasExtensions() : false,
     ]);
     const now = new Date(this.env.now());
     const quiet = isQuietAt(schedule, now);
@@ -1526,7 +1563,14 @@ export class HouseholdHub {
             },
           }
         : {}),
+      ...(extensions ? { extensions: true } : {}),
     });
+  }
+
+  /** A team/org space with extensions: its phones' MENU offers "Dial extension". */
+  private async hasExtensions(): Promise<boolean> {
+    if (!(await this.isWorkplace())) return false;
+    return (await this.env.store.workplace.extensions(this.householdId)).length > 0;
   }
 
   /** Who a phone belongs to and how it's used, for the strip's trust line. */
@@ -2139,7 +2183,10 @@ export class HouseholdHub {
         accountId = (await store.getUser(userId))?.accountId ?? null;
         if (!accountId) continue;
       }
-      const other = await this.describe(side.other, side.otherKey);
+      const other =
+        !side.other && side.otherKey.startsWith("hg:")
+          ? { peer: `group:${idOf(side.otherKey)}`, label: room.hunt?.name ?? "Group" }
+          : await this.describe(side.other, side.otherKey);
       await store.logCall({
         householdId: this.householdId,
         accountId,
@@ -2465,7 +2512,16 @@ export class HouseholdHub {
           break;
         }
       }
-      if (!room || !remote) return;
+      if (!room || !remote) {
+        // Their server refused to follow a transfer (e.g. a kids' phone): end its successor.
+        const key = `${host}|${msg.callId}`;
+        const next = this.rooms.get(this.handoffs.get(key) ?? "");
+        this.handoffs.delete(key);
+        if (next && msg.t === "call.state" && msg.state === "ended") {
+          await this.apply(next, { type: "end", reason: msg.reason ?? "hangup" });
+        }
+        return;
+      }
       if (room.branches?.includes(remote)) {
         // One of the places ringing for the callee elsewhere.
         if (msg.t !== "call.state") return;
@@ -2486,6 +2542,7 @@ export class HouseholdHub {
         if (msg.state === "ended" && msg.merged) {
           return this.convertToLeg(room, remote, msg.merged.roomId);
         }
+        if (msg.state === "ended" && msg.transfer) return this.repoint(room, remote, msg.transfer);
         if (
           msg.state === "active" &&
           room.state.phase === "active" &&
@@ -2784,6 +2841,279 @@ export class HouseholdHub {
     });
   }
 
+  // --- team and org spaces: extensions and ring groups (docs/workplace.md) ------------------
+
+  /** Whether this space is a workplace (team or org) with extensions. */
+  private async isWorkplace(): Promise<boolean> {
+    const space = await this.env.store.getHousehold(this.householdId);
+    return !!space && space.type !== "home";
+  }
+
+  /**
+   * Who is calling: the person at an app, or the person a phone stands for (its owner, or a
+   * member signed in at a Lounge phone). Nobody for kids' phones, idle Lounge phones and guests.
+   */
+  private async callingAs(peer: Peer): Promise<{ id: string; label: string } | undefined> {
+    if (peer.kind === "user") return { id: peer.id, label: peer.label };
+    if (peer.kind !== "device") return undefined;
+    const d = peer as DevicePeer;
+    if (d.lounge) {
+      const s = d.lounge.session;
+      return s && !s.guest ? { id: s.userId, label: s.name } : undefined;
+    }
+    if (!d.owner) return undefined;
+    const user = await this.env.store.getUser(d.owner);
+    return user ? { id: user.id, label: user.name } : undefined;
+  }
+
+  /** Team/org spaces: an extension dialed from an app or a phone of this space. */
+  private async extensionDial(peer: Peer, number: string): Promise<void> {
+    const { store } = this.env;
+    const ext = (await this.isWorkplace())
+      ? await store.workplace.extension(this.householdId, number)
+      : undefined;
+    if (!ext) return this.refuse(peer, "denied", NO_EXTENSION);
+    const as = await this.callingAs(peer);
+    if (!as) return this.refuse(peer, "denied");
+    if (ext.kind === "user") return this.userDial(peer, ext.targetId, as);
+    if (ext.kind === "room") {
+      const stored = await store.rooms.get(ext.targetId);
+      if (!stored || stored.householdId !== this.householdId) {
+        return this.refuseRoom(peer, "denied", undefined, NO_EXTENSION);
+      }
+      return this.joinLocal(peer, stored);
+    }
+    return this.placeInSpace(
+      peer,
+      as,
+      ext.kind === "device" ? { deviceId: ext.targetId } : { groupId: ext.targetId },
+    );
+  }
+
+  /**
+   * A call from someone here (`as`) to a phone or a ring group of this space: the fair-use
+   * check, then ring it; refused calls get a voicemail offer where one applies.
+   */
+  private async placeInSpace(
+    caller: Peer,
+    as: { id: string; label: string },
+    target: { deviceId: string } | { groupId: string },
+  ): Promise<void> {
+    if (!this.canDial(caller)) return this.refuse(caller, "busy");
+    const allowance = await this.allowance(caller, as);
+    if (allowance.note) return this.refuse(caller, "denied", allowance.note);
+    const opened =
+      "deviceId" in target
+        ? await this.openToPhone(caller, target.deviceId, as.label)
+        : await this.openToGroup(caller, target.groupId, as.label, { except: as.id });
+    const from = await this.vmCaller(caller, as.label, as);
+    if (!("state" in opened)) {
+      const vm = from && opened.vm ? { target: opened.vm, from } : undefined;
+      return this.refuse(caller, opened.reason, opened.note, vm);
+    }
+    opened.payer = allowance.payer;
+    const vmTarget = await this.vmTargetOf(opened);
+    if (from && vmTarget) opened.vm = { target: vmTarget, from };
+    this.roomsDirty = true;
+    caller.conn.send({ t: "call.state", callId: opened.id, state: "ringing" });
+  }
+
+  /** Where an unanswered call in this space leaves its message: a group's box or a person. */
+  private async vmTargetOf(room: Room): Promise<VmTarget | undefined> {
+    if (room.hunt) return { kind: "group", groupId: room.hunt.groupId, name: room.hunt.name };
+    const key = room.state.callee;
+    if (key.startsWith("usr:")) {
+      const user = await this.env.store.getUser(idOf(key));
+      return user && { kind: "user", userId: user.id, name: user.name };
+    }
+    const owner = room.calleePeer?.kind === "device" ? room.calleePeer.owner : undefined;
+    const user = owner ? await this.env.store.getUser(owner) : undefined;
+    return user && { kind: "user", userId: user.id, name: room.calleePeer?.label ?? user.name };
+  }
+
+  /** Rings a member of this space for `caller` (someone here, or a transferred remote party). */
+  private async openToUser(
+    caller: Peer,
+    userId: string,
+    label: string,
+    id?: string,
+  ): Promise<Room | Refusal> {
+    const user = await this.env.store.getUser(userId);
+    if (!user || user.householdId !== this.householdId) return { reason: "denied" };
+    const vm: VmTarget = { kind: "user", userId, name: user.name };
+    const targets = this.reachable(userId, caller);
+    const plans = await this.branchesFor(userId);
+    if (!targets.length && !plans.length) return { reason: "unreachable", vm };
+    const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
+    if (!available) return { reason: "unavailable", vm };
+    if (this.busy(userKey(userId))) return { reason: "busy", vm };
+    const room = this.openRoom(caller, userKey(userId), id, await this.personRingMs(userId));
+    this.ringAll(room, targets, plans, label);
+    return room;
+  }
+
+  /** Rings a personal (desk) phone or a Lounge phone of this space. */
+  private async openToPhone(
+    caller: Peer,
+    deviceId: string,
+    label: string,
+    id?: string,
+  ): Promise<Room | Refusal> {
+    const { store } = this.env;
+    const target = await store.getDevice(deviceId);
+    if (!target || target.householdId !== this.householdId || deviceMode(target) === "kids") {
+      return { reason: "denied" };
+    }
+    const peer = this.devices.get(deviceId);
+    const owner = target.ownerUserId ? await store.getUser(target.ownerUserId) : undefined;
+    const vm: VmTarget | undefined = owner && {
+      kind: "user",
+      userId: owner.id,
+      name: target.name,
+    };
+    if (owner && !((await store.availability(this.householdId)).get(owner.id) ?? true)) {
+      return { reason: "unavailable", ...(vm ? { vm } : {}) };
+    }
+    const session = peer?.lounge?.session;
+    if (!peer || (peer.lounge && !session)) return { reason: "unreachable", ...(vm ? { vm } : {}) };
+    if (peer === caller || this.busy(peer.key) || peer.hook === "up") {
+      return { reason: "busy", ...(vm ? { vm } : {}) };
+    }
+    const room = this.openRoom(
+      caller,
+      peer.key,
+      id,
+      await this.ringMs(owner ? { accountId: owner.accountId } : undefined),
+    );
+    room.calleePeer = peer;
+    this.roomsDirty = true;
+    peer.conn.send({ t: "call.ringing", callId: room.id, from: { label } });
+    return room;
+  }
+
+  /**
+   * Rings a ring group: its business hours first (closed → its after-hours action: its shared
+   * voicemail box, or another group or a member, forwarding once at most), then its steps
+   * (all at once, one by one, or round robin). `except`: the caller, if a member.
+   */
+  private async openToGroup(
+    caller: Peer,
+    groupId: string,
+    label: string,
+    opts: { except?: string; forwarded?: boolean; id?: string },
+  ): Promise<Room | Refusal> {
+    const { store } = this.env;
+    const group = await store.workplace.group(groupId);
+    const space = await store.getHousehold(this.householdId);
+    if (!group || !space || group.householdId !== this.householdId) {
+      return { reason: "denied", note: NO_EXTENSION };
+    }
+    const box: VmTarget = { kind: "group", groupId: group.id, name: group.name };
+    const spaceHours = await store.workplace.spaceHours(this.householdId);
+    const hours = effectiveHours(space.timeZone, group.hours, spaceHours.hours);
+    if (!isOpen(hours, new Date(this.env.now()))) {
+      const action = afterHoursAction(
+        group.afterHours,
+        spaceHours.afterHours,
+        !!opts.forwarded,
+        group.id,
+      );
+      if (action.kind === "group") {
+        return this.openToGroup(caller, action.groupId, label, { ...opts, forwarded: true });
+      }
+      if (action.kind === "user" && action.userId !== opts.except) {
+        const r = await this.openToUser(caller, action.userId, label, opts.id);
+        return "state" in r ? r : { ...r, note: CLOSED_NOTE };
+      }
+      return { reason: "voicemail", note: CLOSED_NOTE, vm: box };
+    }
+    const availability = await store.availability(this.householdId);
+    const steps = huntSteps(
+      group.strategy,
+      group.members,
+      (u) =>
+        u !== opts.except &&
+        (availability.get(u) ?? true) &&
+        !this.busy(userKey(u)) &&
+        !this.ringingForGroup(u) &&
+        this.reachable(u, caller).length > 0,
+      group.nextIndex,
+    );
+    const first = steps[0];
+    if (!first) return { reason: "unavailable", vm: box };
+    if (group.strategy === "round_robin") {
+      await store.workplace.setNextIndex(group.id, nextRoundRobin(group.members, first[0] ?? ""));
+    }
+    const stepMs = group.ringSeconds * 1000;
+    const room = this.openRoom(caller, `hg:${group.id}`, opts.id, stepMs);
+    room.hunt = { groupId: group.id, name: group.name, steps, step: 0, stepMs, label };
+    room.group = first;
+    this.armHunt(room);
+    this.ringAll(
+      room,
+      first.flatMap((u) => this.reachable(u, caller)),
+      [],
+      label,
+    );
+    return room;
+  }
+
+  /** Someone already ringing for a ring-group call (a person takes one call at a time). */
+  private ringingForGroup(userId: string): boolean {
+    for (const r of this.rooms.values()) {
+      if (r.hunt && !r.calleePeer && r.group?.includes(userId)) return true;
+    }
+    return false;
+  }
+
+  private armHunt(room: Room): void {
+    const stepMs = room.hunt?.stepMs ?? RING_TIMEOUT_MS;
+    room.cancelTimer?.();
+    room.cancelTimer = this.env.setTimer(() => void this.run(() => this.huntNext(room)), stepMs);
+  }
+
+  /**
+   * The current step of a ring-group call wasn't answered (its time ran out, or everyone in it
+   * declined or went away): stop ringing them and ring the next step with someone to ring. After
+   * the last step the call times out, and the caller may leave a message in the group's box.
+   */
+  private async huntNext(room: Room): Promise<void> {
+    const hunt = room.hunt;
+    if (this.rooms.get(room.id) !== room || room.calleePeer || !hunt) return;
+    if (room.state.phase !== "ringing") return;
+    for (const t of this.ringTargets(room)) {
+      t.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+    }
+    for (let i = hunt.step + 1; i < hunt.steps.length; i++) {
+      const members = (hunt.steps[i] ?? []).filter(
+        (u) => !this.busy(userKey(u)) && !this.ringingForGroup(u),
+      );
+      const targets = members.flatMap((u) => this.reachable(u, room.caller));
+      if (!targets.length) continue;
+      hunt.step = i;
+      room.group = members;
+      this.roomsDirty = true;
+      this.ringAll(room, targets, [], hunt.label);
+      this.armHunt(room);
+      return;
+    }
+    room.group = [];
+    this.roomsDirty = true;
+    await this.apply(room, { type: "timeout" });
+  }
+
+  /** A ring-group member declined: only they stop ringing; the others (or the next step) go on. */
+  private async groupDecline(room: Room, peer: Peer): Promise<void> {
+    const person = peer.kind === "user" ? peer.id : personOf(peer);
+    if (!person) return;
+    for (const t of this.reachable(person, room.caller)) {
+      t.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+    }
+    room.group = (room.group ?? []).filter((u) => u !== person);
+    this.roomsDirty = true;
+    if (room.group.length === 0) await this.huntNext(room);
+  }
+
   // --- hold, 3-way and transfer ---------------------------------------------------------
 
   /** The other party of a call, from `peer`'s side. */
@@ -2946,12 +3276,8 @@ export class HouseholdHub {
     if (!room || !other || !check.ok || !msg.to) {
       return this.refuseControl(peer, check.ok ? "no such call" : check.error);
     }
-    if (other.kind === "remote") {
-      return this.refuseControl(
-        peer,
-        "transferring someone from another household or server isn't supported yet",
-      );
-    }
+    // Someone in another household or on another server: only inside a team/org space.
+    if (other.kind === "remote") return this.transferRemote(peer, room, other, msg.to);
     const target = await this.transferTarget(peer, msg.to);
     if (!target) return this.refuseControl(peer, "transfer refused: not allowed");
     // They call the target themselves, with their own permissions: step the call aside, dial
@@ -2991,10 +3317,7 @@ export class HouseholdHub {
   }
 
   /** What a transfer target means for the person being transferred. */
-  private async transferTarget(
-    by: Peer,
-    to: TransferTarget,
-  ): Promise<{ userId: string } | { deviceId: string } | { connectionId: string } | undefined> {
+  private async transferTarget(by: Peer, to: TransferTarget): Promise<DialTarget | undefined> {
     if (!("button" in to)) return to;
     // A key on the transferring phone: its allow-list entry for that key.
     if (by.kind !== "device") return undefined;
@@ -3008,10 +3331,13 @@ export class HouseholdHub {
   }
 
   /** Places a call as `who` (the person being transferred), under their own rules. */
-  private async dialAs(
-    who: Peer,
-    target: { userId: string } | { deviceId: string } | { connectionId: string },
-  ): Promise<void> {
+  private async dialAs(who: Peer, target: DialTarget): Promise<void> {
+    if ("extension" in target) return this.extensionDial(who, target.extension);
+    if ("groupId" in target) {
+      const as = await this.callingAs(who);
+      if (!as || !(await this.isWorkplace())) return this.refuse(who, "denied");
+      return this.placeInSpace(who, as, { groupId: target.groupId });
+    }
     if (who.kind === "device") {
       const device = who as DevicePeer;
       if (device.lounge) {
@@ -3040,6 +3366,157 @@ export class HouseholdHub {
     return this.connectionDial(who, target.connectionId);
   }
 
+  /**
+   * A transfer target inside this team/org space: a member, a phone (not a kids' phone), a ring
+   * group, or an extension naming one of those. Anything else (a connection, a room, someone in
+   * another space) is undefined.
+   */
+  private async spaceTarget(by: Peer, to: TransferTarget): Promise<SpaceTarget | undefined> {
+    const { store } = this.env;
+    let t: TransferTarget | DialTarget | undefined = to;
+    if ("button" in to) t = await this.transferTarget(by, to);
+    if (!t) return undefined;
+    if ("extension" in t) {
+      const ext = await store.workplace.extension(this.householdId, t.extension);
+      if (!ext || ext.kind === "room") return undefined;
+      t =
+        ext.kind === "user"
+          ? { userId: ext.targetId }
+          : ext.kind === "device"
+            ? { deviceId: ext.targetId }
+            : { groupId: ext.targetId };
+    }
+    if ("userId" in t) {
+      const user = await store.getUser(t.userId);
+      return user?.householdId === this.householdId ? { userId: user.id } : undefined;
+    }
+    if ("deviceId" in t) {
+      const d = await store.getDevice(t.deviceId);
+      return d?.householdId === this.householdId && deviceMode(d) !== "kids"
+        ? { deviceId: d.id }
+        : undefined;
+    }
+    if ("groupId" in t) {
+      const g = await store.workplace.group(t.groupId);
+      return g?.householdId === this.householdId ? { groupId: g.id } : undefined;
+    }
+    return undefined;
+  }
+
+  /** A fresh proxy for the same far end, for a call that goes on under a new id here. */
+  private successor(far: Peer, leg?: string): Peer {
+    const next = this.remotePeer({
+      host: far.host ?? LOCAL_HOST,
+      key: far.key,
+      label: far.label,
+      peerHousehold: far.peerHousehold,
+      ...(leg ? { leg } : {}),
+      ...(far.address ? { address: far.address } : {}),
+    });
+    (next.conn as FedConn).shareLine(far.conn as FedConn);
+    return next;
+  }
+
+  /**
+   * Blind transfer of someone in another household or on another server. Allowed only in a
+   * team/org space, to its own members, phones, ring groups and extensions: the space vouches
+   * for them there, and their own server re-checks its side (a kids' phone is never
+   * transferred). The call rings the target here under a new id; their server is told
+   * (`call.state` ended with `transfer`) and carries their person over to it.
+   */
+  private async transferRemote(
+    peer: Peer,
+    room: Room,
+    other: Peer,
+    to: TransferTarget,
+  ): Promise<void> {
+    const calls = this.env.calls;
+    if (!calls || !(await this.isWorkplace())) return this.refuseControl(peer, REMOTE_TRANSFER);
+    const target = await this.spaceTarget(peer, to);
+    const self = await this.callingAs(peer);
+    if (!target || ("userId" in target && target.userId === self?.id)) {
+      return this.refuseControl(peer, REMOTE_TARGET);
+    }
+    const id = newId("call");
+    const far = this.successor(other);
+    // Step the call aside while the target is tried (busy checks use the far end's key).
+    this.rooms.delete(room.id);
+    const opened =
+      "userId" in target
+        ? await this.openToUser(far, target.userId, other.label, id)
+        : "deviceId" in target
+          ? await this.openToPhone(far, target.deviceId, other.label, id)
+          : await this.openToGroup(far, target.groupId, other.label, {
+              id,
+              ...(self ? { except: self.id } : {}),
+            });
+    if (!("state" in opened)) {
+      this.rooms.set(room.id, room);
+      return this.refuseControl(peer, `transfer refused: ${opened.note ?? opened.reason}`);
+    }
+    opened.payer = room.payer;
+    await calls.register(far.host ?? LOCAL_HOST, id, this.householdId);
+    this.handoffs.set(`${other.host ?? LOCAL_HOST}|${other.leg ?? room.id}`, id);
+    room.cancelTimer?.();
+    await this.closeBooks(room, "hangup");
+    peer.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+    other.conn.send({
+      t: "call.state",
+      callId: room.id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId: id, ringing: true, offerer: true },
+    });
+  }
+
+  /**
+   * The far end of our call transferred it (a team/org space on their side, see
+   * `transferRemote`): the call goes on under a new id with the same server, `t.callId` there.
+   * Our person (or the server we relay for) follows; a kids' phone never does — its call just
+   * ends, so a transfer can't put it with someone who isn't on its list.
+   */
+  private async repoint(
+    room: Room,
+    remote: Peer,
+    t: { callId: string; ringing: boolean; offerer: boolean },
+  ): Promise<void> {
+    const near = remote === room.caller ? room.calleePeer : room.caller;
+    const calls = this.env.calls;
+    const answered = room.state.phase === "connecting" || room.state.phase === "active";
+    const device = near?.kind === "device" ? (near as DevicePeer) : undefined;
+    const kidsPhone = !!device && !device.owner && !device.lounge;
+    // A ringing successor is always one our side places (it can't ring our person).
+    const sound = t.offerer || !t.ringing;
+    if (!near || !calls || !answered || kidsPhone || !sound) {
+      return this.apply(room, { type: "end", reason: "hangup" });
+    }
+    room.cancelTimer?.();
+    this.rooms.delete(room.id);
+    this.roomsDirty = true;
+    await this.closeBooks(room, "hangup");
+    const id = newId("call");
+    const far = this.successor(remote, t.callId);
+    await calls.register(far.host ?? LOCAL_HOST, t.callId, this.householdId);
+    // Relaying for another household or server: its side follows under our new id.
+    const ours = near.kind === "remote" ? this.successor(near) : near;
+    if (ours !== near) await calls.register(ours.host ?? LOCAL_HOST, id, this.householdId);
+    const backstop = MAX_RING_SECONDS * 1000 + 5_000;
+    const next = t.offerer
+      ? this.openRoom(ours, far.key, id, backstop)
+      : this.openRoom(far, ours.key, id, backstop);
+    next.calleePeer = t.offerer ? far : ours;
+    if (room.payer) next.payer = room.payer;
+    this.roomsDirty = true;
+    near.conn.send({
+      t: "call.state",
+      callId: room.id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId: id, ringing: t.ringing, offerer: t.offerer },
+    });
+    if (!t.ringing) await this.apply(next, { type: "answer", by: next.state.callee });
+  }
+
   /** Attended transfer: your held party and your consult party are connected; you leave both. */
   private async transferAttended(peer: Peer, heldId: string, activeId: string): Promise<void> {
     const r1 = this.rooms.get(heldId);
@@ -3054,24 +3531,34 @@ export class HouseholdHub {
     const b = this.otherParty(r1, peer);
     const c = this.otherParty(r2, peer);
     if (!b || !c) return this.refuseControl(peer, "no such call");
-    if (b.kind === "remote" || c.kind === "remote") {
-      return this.refuseControl(
-        peer,
-        "transferring someone from another household or server isn't supported yet",
-      );
+    const remotes = [b, c].filter((p) => p.kind === "remote").length;
+    // Someone elsewhere may be connected only with someone of this team/org space.
+    if (remotes === 2 || (remotes === 1 && !(await this.isWorkplace()))) {
+      return this.refuseControl(peer, REMOTE_TRANSFER);
     }
     if (!(await this.kidsMayMeet([b, c]))) {
       return this.refuseControl(peer, "a kids' phone can only be with people on its list");
     }
+    const calls = this.env.calls;
+    if (remotes && !calls) return this.refuseControl(peer, REMOTE_TRANSFER);
     for (const r of [r1, r2]) {
       r.cancelTimer?.();
       this.rooms.delete(r.id);
       await this.closeBooks(r, "hangup");
       peer.conn.send({ t: "call.state", callId: r.id, state: "ended", reason: "hangup" });
     }
-    const room = this.openRoom(b, c.key);
+    const id = newId("call");
+    // A far end goes on under the new id (its server follows the `transfer` notice).
+    const b2 = b.kind === "remote" ? this.successor(b) : b;
+    const c2 = c.kind === "remote" ? this.successor(c) : c;
+    for (const p of [b2, c2]) {
+      if (p.kind === "remote") await calls?.register(p.host ?? LOCAL_HOST, id, this.householdId);
+    }
+    const room = this.openRoom(b2, c2.key, id);
+    if (b !== b2) this.handoffs.set(`${b.host ?? LOCAL_HOST}|${b.leg ?? r1.id}`, id);
+    if (c !== c2) this.handoffs.set(`${c.host ?? LOCAL_HOST}|${c.leg ?? r2.id}`, id);
     room.payer = r1.payer;
-    room.calleePeer = c;
+    room.calleePeer = c2;
     room.answered = true;
     this.roomsDirty = true;
     b.conn.send({
@@ -3406,6 +3893,25 @@ export class HouseholdHub {
 }
 
 const idOf = (key: string) => key.slice(4);
+
+/** Why a call in a space couldn't ring, and whose voicemail the caller may leave instead. */
+type Refusal = { reason: EndReason; note?: string; vm?: VmTarget };
+
+const NO_EXTENSION = NO_EXTENSION_NOTE;
+const REMOTE_TRANSFER =
+  "someone from another household or server can only be transferred inside a team or org space";
+const REMOTE_TARGET =
+  "transfer refused: only to people, phones, ring groups and extensions of this space";
+
+/** Whom a transfer (or a dial as someone) reaches. */
+type DialTarget =
+  | { userId: string }
+  | { deviceId: string }
+  | { connectionId: string }
+  | { extension: string }
+  | { groupId: string };
+/** A target inside this team/org space. */
+type SpaceTarget = { userId: string } | { deviceId: string } | { groupId: string };
 
 /** Room messages a participant may send (relayed from their server). */
 function isRoomInbound(msg: RoomSignalMsg): msg is RoomInbound {

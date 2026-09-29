@@ -34,6 +34,7 @@ import { kidSafe } from "./spaces.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
 import { Welcome } from "./Welcome.tsx";
 import { WhatsWhat } from "./WhatsWhat.tsx";
+import { Workplace } from "./Workplace.tsx";
 import { finishWelcome, markWelcomePending, welcomePending } from "./welcomeState.ts";
 
 export type Route =
@@ -48,6 +49,7 @@ export type Route =
   | { name: "connections" }
   | { name: "rooms" }
   | { name: "admin" }
+  | { name: "directory" }
   | { name: "voicemail" };
 
 function clearHash() {
@@ -429,6 +431,11 @@ function SignedIn({
               <span className="narrow-only">Quiet</span>
             </Tab>
           )}
+          {!home && me && (
+            <Tab route={route} name="directory" onGo={setRoute}>
+              Directory
+            </Tab>
+          )}
           <Tab route={route} name="rooms" onGo={setRoute}>
             Rooms
           </Tab>
@@ -597,6 +604,7 @@ function SignedIn({
             onCall={(u) => void conn?.callUser(u.id, u.name)}
             onBack={() => setRoute({ name: "home" })}
             householdName={me?.household.name ?? "your household"}
+            spaceType={spaceType}
           />
         )}
         {meInfo && route.name === "account" && (
@@ -634,6 +642,9 @@ function SignedIn({
             onBack={() => setRoute({ name: "home" })}
           />
         )}
+        {me && !home && route.name === "directory" && (
+          <Workplace api={api} conn={conn} onBack={() => setRoute({ name: "home" })} />
+        )}
         {meInfo?.operator && route.name === "admin" && (
           <Admin api={baseApi} onBack={() => setRoute({ name: "home" })} />
         )}
@@ -664,7 +675,9 @@ function SignedIn({
         </div>
       )}
 
-      {conn && <CallOverlay snap={snap} conn={conn} people={others} api={baseApi} />}
+      {conn && (
+        <CallOverlay snap={snap} conn={conn} people={others} api={baseApi} extensions={!home} />
+      )}
       {conn && <RoomPanel snap={snap} conn={conn} />}
     </div>
   );

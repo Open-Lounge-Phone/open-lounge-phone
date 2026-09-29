@@ -20,6 +20,7 @@ import {
   signUp,
   timelineAcross,
   voicemailAcross,
+  workplaceAcross,
 } from "./twoServers.ts";
 
 const MAIN = fileURLToPath(new URL("../../apps/server-selfhost/src/main.ts", import.meta.url));
@@ -83,7 +84,7 @@ afterAll(() => {
   }
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, rooms, 3-way, block", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, rooms, 3-way, block, workplace transfer", async () => {
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
@@ -98,4 +99,6 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe
   await connectLocally(jesse, carol);
   await mergeAcross(jesse, bob, carol);
   await block(jesse, bob);
+  // A team space on A takes Bob's call and transfers him to its ring group.
+  await workplaceAcross(a, bob);
 }, 90_000);

@@ -591,3 +591,81 @@ describe("accounts and handles", () => {
     expect(await store.getAccount(eve.accountId)).toBeDefined();
   });
 });
+
+describe("0017_workplace", () => {
+  it("keeps phones', people's voicemail and call-log links; adds shared boxes", async () => {
+    const old = openBefore("0017");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const device = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    old.db.exec(`
+      INSERT INTO voicemails (id, household_id, device_id, from_user, from_label, from_address,
+        created_at, duration_ms, mime, blob_key, transcript, transcript_status, heard_at)
+        VALUES ('vm_1', '${hh.id}', '${device?.id}', '${guardian.id}', 'Mom', 'user:x', 1, 1000,
+          'audio/webm', 'k1', 'hi', 'done', 5);
+      INSERT INTO voicemails (id, household_id, to_user, from_label, created_at, duration_ms, mime,
+        blob_key, transcript_status) VALUES ('vm_2', '${hh.id}', '${guardian.id}', 'Bob', 2, 2000,
+          'audio/ogg', 'k2', 'pending');
+      INSERT INTO call_log (id, household_id, device_id, peer, peer_label, direction, started_at,
+        voicemail_id) VALUES ('cl_1', '${hh.id}', '${device?.id}', 'user:x', 'Mom', 'in', 1, 'vm_1');
+    `);
+    expect(migrate(old.db)).toContain("0017_workplace.sql");
+    expect(await s.getVoicemail("vm_1")).toMatchObject({
+      deviceId: device?.id,
+      toUser: null,
+      groupId: null,
+      transcript: "hi",
+      heardAt: 5,
+      heardBy: null,
+    });
+    expect(await s.getVoicemail("vm_2")).toMatchObject({ toUser: guardian.id, fromLabel: "Bob" });
+    expect(old.db.prepare("SELECT voicemail_id FROM call_log WHERE id = 'cl_1'").get()).toEqual({
+      voicemail_id: "vm_1",
+    });
+    // Still exactly one owner per message, now also a ring group's box.
+    const group = await s.workplace.createGroup(
+      { householdId: hh.id, name: "Desk", strategy: "simultaneous", ringSeconds: 20, members: [] },
+      T0,
+    );
+    const shared = await s.createVoicemail({
+      householdId: hh.id,
+      deviceId: null,
+      toUser: null,
+      groupId: group.id,
+      fromUser: null,
+      fromLabel: "Caller",
+      fromAddress: null,
+      createdAt: T0,
+      durationMs: 1,
+      mime: "audio/webm",
+      blobKey: "k3",
+      transcriptStatus: "unavailable",
+    });
+    await s.markVoicemailHeard(shared.id, T0 + 1, guardian.id);
+    await s.markVoicemailHeard(shared.id, T0 + 2, "someone-else");
+    expect(await s.getVoicemail(shared.id)).toMatchObject({
+      heardAt: T0 + 1,
+      heardBy: guardian.id,
+    });
+    expect(() =>
+      old.db.exec(`INSERT INTO voicemails (id, household_id, device_id, group_id, from_label,
+        created_at, duration_ms, mime, blob_key) VALUES ('vm_x', '${hh.id}', '${device?.id}',
+        '${group.id}', 'x', 1, 1, 'audio/webm', 'k')`),
+    ).toThrow();
+    expect(await s.listGroupVoicemails([group.id])).toHaveLength(1);
+    expect(await s.voicemailBlobs({ groupId: group.id })).toEqual(["k3"]);
+    // Deleting the group takes its box (and its extension) with it.
+    await s.workplace.setExtension(
+      { householdId: hh.id, number: "100", kind: "group", targetId: group.id },
+      T0,
+    );
+    await s.workplace.deleteGroup(group.id);
+    expect(await s.getVoicemail(shared.id)).toBeUndefined();
+    expect(await s.workplace.extensions(hh.id)).toEqual([]);
+    old.db.close();
+  });
+});

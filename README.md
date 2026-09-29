@@ -42,7 +42,8 @@ The software works end to end today; the hardware is being designed in the open.
 | P2b | Buddy timeline: per-connection history of calls and voicemails (with transcripts), expiring per connection or by your default (30 days / 1 year / forever); no text chat | done (software) |
 | M5 | One-command deploy CLI and desktop app | deploy script done; the rest not started |
 | P3.5 | Rooms: party lines, phone rooms with addresses (`standup@host`, dialable from any phone's key), host mute/remove/lock, cross-server join; hold, instant 3-way (Add caller → Merge) and blind/attended transfer; a peer-to-peer mesh (≤ 4) or a relay (Cloudflare Realtime SFU, or LiveKit when self-hosting) with top-3 forwarding, idle drop and fair-use metering | done (software); relayed rooms are encrypted in transit, end-to-end (SFrame) planned |
-| P5, P6 | Interop tests in CI and a versioned federation spec; professional features (directory, hunt groups, business hours) | planned |
+| P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
+| P5 | Interop tests in CI and a versioned federation spec | planned |
 | Firmware | ESP32-S3 firmware, starting on dev boards | not started |
 | Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, USB-C handset port) in a 3D-printable base | schematic done; board placed, routing next; printable prototype box; product enclosure not designed yet |
 

@@ -3,6 +3,7 @@ import type { Api, Role, User } from "./api.ts";
 import type { MemberLive } from "./connection.ts";
 import { presenceOf } from "./presence.ts";
 import { inviteLink } from "./session.ts";
+import { kidSafe, roleNoun, type SpaceType } from "./spaces.ts";
 
 interface Props {
   api: Api;
@@ -13,6 +14,8 @@ interface Props {
   householdName: string;
   /** Pre-selects the role in the invite form ("Invite a co-guardian"). */
   initialRole?: Role;
+  /** Team/org spaces say admin/member. */
+  spaceType?: SpaceType | undefined;
 }
 
 interface Shared {
@@ -30,6 +33,7 @@ export function People({
   onBack,
   householdName,
   initialRole = "contact",
+  spaceType,
 }: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string>();
@@ -115,7 +119,7 @@ export function People({
                     {self && <span className="muted small"> (you)</span>}
                   </div>
                   <div className="muted small">
-                    {u.role === "guardian" ? "Guardian" : "Contact"}
+                    {roleNoun(u.role, spaceType)}
                     {!self && ` · ${p.label}`}
                   </div>
                 </div>
@@ -185,7 +189,9 @@ export function People({
               checked={role === "contact"}
               onChange={() => setRole("contact")}
             />
-            Contact — can call and be called by the phones they're allowed on
+            {kidSafe(spaceType)
+              ? "Contact — can call and be called by the phones they're allowed on"
+              : "Member — in the directory, can call and be called"}
           </label>
           <label className="check">
             <input
@@ -194,7 +200,9 @@ export function People({
               checked={role === "guardian"}
               onChange={() => setRole("guardian")}
             />
-            Guardian — can also manage phones, people and quiet hours
+            {kidSafe(spaceType)
+              ? "Guardian — can also manage phones, people and quiet hours"
+              : "Admin — can also manage people, extensions, ring groups and hours (only the owner makes admins)"}
           </label>
         </fieldset>
         <button type="submit" className="primary" disabled={busy || !name.trim()}>

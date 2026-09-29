@@ -42,6 +42,7 @@ import { roomRoutes } from "./roomsApi.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
+import { auditFrom, workplaceRoutes } from "./workplace.ts";
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
@@ -380,6 +381,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       await store.setButton(device.id, 0, user.id);
     }
     await live.notifyPaired(b.code, device);
+    await auditFrom(env, c, "phone.add", { deviceId: device.id, name: device.name, mode });
     return c.json(
       {
         id: device.id,
@@ -503,6 +505,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     await store.deleteDevice(device.id);
     await live.forgetDevice(user.householdId, device.id);
     for (const id of shared) await new Connections(env, live).sharePhones(id);
+    await auditFrom(env, c, "phone.remove", { deviceId: device.id, name: device.name });
     return c.body(null, 204);
   });
 
@@ -571,6 +574,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       ...(b.transcription !== undefined ? { transcribe: b.transcription } : {}),
     });
     await sweepSpace(env, hh);
+    await auditFrom(env, c, "privacy.update", b);
     return c.body(null, 204);
   });
 
@@ -746,6 +750,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.body(null, 204);
   });
 
+  workplaceRoutes(api, env, live);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
   roomRoutes(api, env, live);

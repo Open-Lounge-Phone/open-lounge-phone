@@ -122,7 +122,10 @@ export class RoomStore {
   }
 
   async delete(id: string): Promise<void> {
-    await this.sql.run("DELETE FROM rooms WHERE id = ?", id);
+    await this.sql.batch([
+      { query: "DELETE FROM extensions WHERE kind = 'room' AND target_id = ?", params: [id] },
+      { query: "DELETE FROM rooms WHERE id = ?", params: [id] },
+    ]);
   }
 
   // --- rooms on phones ---------------------------------------------------------

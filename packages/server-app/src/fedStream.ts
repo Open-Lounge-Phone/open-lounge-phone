@@ -316,10 +316,11 @@ export class ServerLink {
 
 /**
  * Whether a signal is the last on its route: a call that ended (not one merged into a room,
- * which goes on as a room leg under the same id), or a room leg that ended or was left.
+ * which goes on as a room leg under the same id, nor one handed over by a transfer, whose far
+ * side may still answer that it won't follow), or a room leg that ended or was left.
  */
 function endsRoute(msg: FedSignal): boolean {
-  if (msg.t === "call.state") return msg.state === "ended" && !msg.merged;
+  if (msg.t === "call.state") return msg.state === "ended" && !msg.merged && !msg.transfer;
   if (msg.t === "room.signal") return msg.msg.t === "room.ended" || msg.msg.t === "room.leave";
   return false;
 }

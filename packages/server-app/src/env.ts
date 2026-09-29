@@ -217,6 +217,20 @@ export interface RoomSnapshot {
   group?: string[];
   /** On hold: the party key of whoever put it on hold. */
   heldBy?: string;
+  /** A call to a ring group: its steps and where it is. */
+  hunt?: HuntState;
+}
+
+/** A call ringing a ring group, step by step (see `huntSteps` in `packages/core`). */
+export interface HuntState {
+  groupId: string;
+  name: string;
+  /** Members (user ids) rung together at each step. */
+  steps: string[][];
+  step: number;
+  stepMs: number;
+  /** What the members' phones and apps show while ringing. */
+  label: string;
 }
 
 /** One of our people in a room on another server or in another household (their "leg"). */

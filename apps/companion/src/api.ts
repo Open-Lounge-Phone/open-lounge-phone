@@ -282,6 +282,84 @@ export interface VoicemailSummary {
   transcript: string | null;
   transcriptStatus: TranscriptStatus;
   heardAt: number | null;
+  /** Left in a ring group's shared box (its name). */
+  box?: string;
+  /** Shared boxes: who marked it heard. */
+  heardByName?: string;
+}
+
+/** Team and org spaces (docs/workplace.md). */
+export type SpaceRole = "owner" | "admin" | "member";
+export type HuntStrategy = "simultaneous" | "sequential" | "round_robin";
+export interface HoursRule {
+  days: number[];
+  start: string;
+  end: string;
+}
+export type AfterHours =
+  | { kind: "voicemail" }
+  | { kind: "group"; groupId: string }
+  | { kind: "user"; userId: string };
+
+export interface Directory {
+  members: {
+    id: string;
+    name: string;
+    handle: string | null;
+    address: string | null;
+    role: SpaceRole;
+    extension: string | null;
+    available: boolean;
+  }[];
+  phones: {
+    id: string;
+    name: string;
+    mode: "personal" | "lounge" | "kids";
+    owner: string | null;
+    extension: string | null;
+  }[];
+  rooms: { id: string; name: string; kind: string; address?: string; extension: string | null }[];
+  groups: {
+    id: string;
+    name: string;
+    strategy: HuntStrategy;
+    extension: string | null;
+    members: string[];
+  }[];
+  you: { id: string; role: SpaceRole };
+}
+
+export interface RingGroupInfo {
+  id: string;
+  name: string;
+  strategy: HuntStrategy;
+  ringSeconds: number;
+  members: string[];
+  hours: HoursRule[] | null;
+  afterHours: AfterHours | null;
+  extension: string | null;
+}
+
+export interface SpaceCall {
+  id: string;
+  startedAt: number;
+  direction: "in" | "out";
+  who: string;
+  peer: string;
+  peerLabel: string;
+  answered: boolean;
+  durationMs: number;
+  endReason: string | null;
+  voicemailId: string | null;
+  recordingId?: string | null;
+}
+
+export interface AuditEntry {
+  id: string;
+  at: number;
+  actorName: string;
+  action: string;
+  detail: Record<string, unknown> | null;
 }
 
 /** How long history is kept; "default" = inherit (connection → account → server). */
@@ -600,6 +678,38 @@ export function createApi(opts: ApiOptions) {
     passkeyLoginOptions: () => request<CeremonyOptions>("POST", "/passkeys/login/options"),
     passkeyLoginVerify: (challengeId: string, response: unknown) =>
       request<SignedInResult>("POST", "/passkeys/login/verify", { challengeId, response }),
+
+    // Team and org spaces: directory, extensions, ring groups, hours, roles, logs
+    directory: (q = "") => request<Directory>("GET", `/directory?q=${enc(q)}`),
+    setExtension: (number: string, kind: "user" | "device" | "room" | "group", targetId: string) =>
+      request<void>("PUT", `/extensions/${enc(number)}`, { kind, targetId }),
+    deleteExtension: (number: string) => request<void>("DELETE", `/extensions/${enc(number)}`),
+    groups: () => request<RingGroupInfo[]>("GET", "/groups"),
+    createGroup: (g: {
+      name: string;
+      extension: string;
+      strategy: HuntStrategy;
+      ringSeconds: number;
+      members: string[];
+    }) => request<RingGroupInfo>("POST", "/groups", g),
+    updateGroup: (
+      id: string,
+      patch: Partial<Omit<RingGroupInfo, "id" | "extension">> & { extension?: string },
+    ) => request<RingGroupInfo>("PATCH", `/groups/${enc(id)}`, patch),
+    deleteGroup: (id: string) => request<void>("DELETE", `/groups/${enc(id)}`),
+    spaceHours: () =>
+      request<{ timeZone: string; hours: HoursRule[] | null; afterHours: AfterHours | null }>(
+        "GET",
+        "/space/hours",
+      ),
+    setSpaceHours: (v: { hours?: HoursRule[] | null; afterHours?: AfterHours | null }) =>
+      request<void>("PUT", "/space/hours", v),
+    setRole: (userId: string, role: "admin" | "member") =>
+      request<void>("PATCH", `/users/${enc(userId)}/role`, { role }),
+    spaceCalls: (before?: number) =>
+      request<SpaceCall[]>("GET", `/space/calls${before ? `?before=${before}` : ""}`),
+    spaceCallsCsv: async () => (await send("GET", "/space/calls.csv")).blob(),
+    audit: () => request<AuditEntry[]>("GET", "/space/audit"),
 
     // Voicemail
     voicemails: () => request<VoicemailSummary[]>("GET", "/voicemails"),
