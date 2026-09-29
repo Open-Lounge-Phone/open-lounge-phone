@@ -1,5 +1,7 @@
 # HRO TYPE-C-31-M-12 — USB-C 16-pin receptacle (J1 power, J7 handset)
 
+> **H5 (2026-09-30, owner D14):** only **J1** remains (power sink + ESP32 native USB for flashing and the USB-Serial-JTAG console). The handset USB-C J7 is gone: the handset is on a 3.5 mm jack ([pj-31060.md](pj-31060.md)). F-01 closed (flashing over J1 needs no switch), F-22 closed (PROTO_BOX.md follows proto_box.py).
+
 | | |
 |---|---|
 | MPN / maker | TYPE-C-31-M-12, Korean Hroparts (HRO) Electronics |

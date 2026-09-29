@@ -1,5 +1,7 @@
 # Capacitors — MLCC (all C)
 
+> **H5 (2026-09-30):** new values 12 pF C0G (C38523), 4.7 nF (C53987), 10 nF (C57112), all JLC basic; 100 µF/1206 and 470 nF gone; see `build/main/bom.csv` for the current list.
+
 | | |
 |---|---|
 | Makers / series | Samsung Electro-Mechanics CL series (most values); Yageo CC0603 X7R (100 nF) |

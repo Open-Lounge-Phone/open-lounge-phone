@@ -1,5 +1,7 @@
 # ST25DV04K-IER6S3 — dynamic NFC/RFID tag, I2C + RF (U19)
 
+> **H5 (2026-09-30):** the BOM carries **ST25DV04KC-IE6S3** (C3304276, SO8N; F-17): same pinout (DS13519 rev 4 p4 Fig. 2), same device select A6h/AEh = 0x53/0x57 (p165 Table B.1), CTUN 28.5 pF (p1). The 0x2D entry is gone from `pin_table.yaml` (F-27). The tuning cap C62 is fitted: 12 pF C0G for the 7-turn coil (`sim/` b08).
+
 | | |
 |---|---|
 | MPN / maker | ST25DV04K-IER6S3 (SO-8N), STMicroelectronics |

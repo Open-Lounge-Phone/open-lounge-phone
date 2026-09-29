@@ -12,11 +12,14 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 
 - **No main screen.** The only display is a **narrow e-ink status strip**. Primary feedback is
   **per-key RGB LEDs** plus **audio prompts/earcons** from flash.
-- **Passive handset.** Earpiece + mic + magnet only. All electronics live in the base.
+- **Passive handset.** An off-the-shelf analog handset (earpiece + mic on a 3.5 mm TRRS plug,
+  owner 2026-09-30); the hook magnet is in the base's plunger. All electronics live in the base.
 - **Keys are keyboard switches.** MX-compatible, hot-swap sockets, plate-mounted, standard keycaps.
 
-> **Current architecture — owner decisions of 2026-09-27 (supersede conflicting text below;
-> the older sections are kept for their reasoning and are being brought in line):**
+> **Current architecture — owner decisions of 2026-09-27, 2026-09-28 and 2026-09-30 (supersede
+> conflicting text below; the older sections are kept for their reasoning). The H5 schematic
+> (2026-09-30) is reviewed in [SCHEMATIC_REVIEW.md](SCHEMATIC_REVIEW.md); decisions D1–D21 are in
+> [REQUIREMENTS.md](REQUIREMENTS.md) §0.**
 >
 > - **Form factor:** compact base ≈ 186 × 94 × 33 mm with a G-style handset resting on a
 >   raised hook rest **above** the keypad (keys and e-ink stay visible). **Single board (owner,
@@ -26,26 +29,35 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 >   setup, no FFC/connectors/standoffs). Hook sensing: DRV5032 on the main board under one hook-rest post (plunger magnet,
 >   post at ≈ +80 mm from the base centre, a layout parameter until the enclosure confirms it).
 > - **Keys:** 12 MX keys, `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK` (§6.1); 13 SK6812MINI-E.
-> - **Handset:** **off-the-shelf USB-C (UAC 1.0) handset/headset** — e.g. a G-style retro USB-C
->   handset of the Native Union POP class, or any USB-C headset — plugged into a **USB-C
->   receptacle on the rear edge** (a short right-angle or coiled C-to-C extension also works).
->   The ESP32-S3 native USB OTG (GPIO19/20) is the **USB host** (ESP-IDF `usb_host_uac` class
->   driver, full-speed, isochronous; one device, no hub; firmware must accept the device's fixed
->   formats, typically 16/48 kHz mono/stereo). The port is a **source**: Rp 33 k to 3V3 on CC1/CC2
->   (Default USB), VBUS through a 0.45 A current-limited switch (SY6280) fed from VBUS or VSYS
->   (diode-OR, so it works on the battery option), enabled by GPIO3 (off at boot), sensed on GPIO10;
->   SRV05-4 at the connector. **Rejected:** USB-C analog audio-accessory mode (needs SBU wires most
->   C-to-C cables lack, and Ra on both CC), and the RJ9/4P4C cord (few new products, hard to
->   customise). A DIY handset (USB-C + CM108-class UAC codec) stays a possible future option.
->   The AEC reference for handset calls is the digital stream the firmware sends to the handset;
->   the ES8311→ES7210 CH3 loopback remains the reference for the base speaker.
-> - **Programming/console:** the power USB-C (sink) now has a **CH340C** USB-UART bridge to UART0
->   with DTR/RTS auto-reset (the native PHY belongs to the handset port).
+> - **Handset (owner 2026-09-30, supersedes the USB-C handset of 2026-09-27):** an **off-the-shelf
+>   analog handset on a 3.5 mm TRRS jack** (CTIA: tip/ring1 earpiece, ring2 GND, sleeve mic),
+>   e.g. the **Opis 60s Micro**, which plugs straight in with no dongle. Jack J7 (HOOYA PJ-31060,
+>   SMD) sits on the board's **bottom side at the rear edge**; its normally-closed tip contact
+>   gives insertion detect (GPIO12). The **ES8311** records the handset mic (MIC1, PGA ≈ 18 dB)
+>   and drives the earpiece from OUTP (its output drives 16/32 Ω headphone loads, User Guide rev
+>   1.11 p2 — no separate headphone driver) through a **TS5A3166 switch that is on only
+>   off-hook** (HOOK drives it), 2 × 22 µF and 22 Ω per contact. The inline button (sleeve to
+>   GND) and an OMTP plug are read on GPIO10 (ADC1) through a one-way diode. **Rejected:** the
+>   USB host / UAC handset (boost, VBUS switch, USB switch, CH340C all gone), USB-C analog
+>   audio-accessory mode, and RJ9.
+> - **No base mic, no speakerphone (2026-09-30):** the ES7210 and the base electret are gone,
+>   and with them the hardware AEC reference: echo exists only inside the handset (receiver →
+>   mic); if EVT measures too much, firmware AEC uses the playback stream as its reference (one
+>   codec, one I2S clock, sample-synchronous). The **speaker only rings and speaks prompts**.
+> - **Hardware privacy (2026-09-30):** the **MUTE switch AND the hook sensor** gate the handset
+>   mic's supply MIC_VCC (3V0 → 100 Ω/10 µF → MUTE pole A → P-FET switched by HOOK); **two mic
+>   lights** hang on MIC_VCC; a separate **red recording light** is on GPIO13. Firmware reads
+>   HOOK only through 47 kΩ and the mic line only through a diode, so it cannot power the mic;
+>   `schematic/checks.py` proves this on the netlist.
+> - **Programming/console:** the **power USB-C** carries the ESP32-S3 native USB (device mode:
+>   flashing and the USB-Serial-JTAG console, any C-to-C or A-to-C cable); UART0/EN/BOOT pads for
+>   recovery. (The CH340C and the USB switch of the USB-handset era are gone.)
 > - **Side controls:** VOL−/VOL+ (right-angle tacts) and MUTE (right-angle DPDT, lever outward)
->   on the board's right edge with ESD; MUTE breaks the mic bias locally; their states go to
+>   on the board's right edge with ESD; MUTE breaks the handset-mic supply; their states go to
 >   the AW9523B.
-> - **Speaker:** 20 × 40 mm rectangular top-firing speaker beside the deck (keep-out on the main
->   board's left zone).
+> - **Speaker (2026-09-30):** **Soberton SP-2040**, 20 × 40 × 8.4 mm, 8 Ω 1 W, 86 dB/1 W/0.5 m
+>   (spec rev B p1) under the board, firing down; NS4150B gain 3.5 (R_IN 68 kΩ) → ≥ 75 dBA at
+>   1 m (H4 b06: 77 dBA worst unit at the 1 W firmware cap). The prototype box grew to its depth.
 > - **One board, one BOM (owner decision 2026-09-28), no variants:** every core part plus the
 >   e-ink strip (ZIF + boost), NFC (ST25DV + coil) and the 1S battery charger with its fuel
 >   gauge, all fitted. **Removed:** the Lounge radar (LD2410C) and supercap hold-up (Lounge
@@ -53,12 +65,14 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 >   encryption + eFuse HMAC), the IR hook option (the magnet is in the plunger) and the Qwiic
 >   display port. Kids/Lounge text below describes software modes and the deferred Lounge
 >   board; the hardware sections follow SCHEMATIC.md / LAYOUT.md where they differ.
-> - **ESP32 module: WROOM-1U (U.FL + external FPC antenna on the shell wall)** instead of the
+> - **ESP32 module: WROOM-1U (U.FL + external antenna on the shell wall)** instead of the
 >   PCB-antenna WROOM-1 (layout, 2026-09-27): in base A no main-board edge is ≥ 15 mm from the
 >   hook tubes, standoffs and inserts. Same pinout and firmware; +≈$0.45 at scale for the antenna.
+>   **Antenna (owner 2026-09-30):** a general-purpose 2.4 GHz antenna with a U.FL/IPEX plug,
+>   user-upgradable — with the certification caveat in §4.
 > - Board geometry lives in `layout/boards.yaml` (180 × 88, R8.5, 9 M2.5 holes, hall U10 at
->   (171.0, 18.8), handset USB-C on the rear edge at x 153.8, power USB-C on the right edge at
->   y 40; LAYOUT.md §2).
+>   (171.0, 18.8), handset jack on the rear edge at x 153.8 (bottom side, H5; the H3 placement
+>   still shows a USB-C there until H6), power USB-C on the right edge at y 40; LAYOUT.md §2).
 > - **No FR4 key plate (2026-09-29):** the MX switch plate is the printed lid/top of the base
 >   (the prototype box's lid today, `enclosure/PROTO_BOX.md`); the separate FR4 plate in the
 >   older sections below is dropped. The product enclosure is not designed yet.
@@ -74,11 +88,11 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 | # | Decision | Why (one line) |
 |---|---|---|
 | 1 | **Envelope: compact base ≈186 L × 94 D × 33 H mm** (owner decision 2026-09-27, supersedes the ≈350 mm Trimline stretch). **One 180 × 88 mm board** with the keys on it (single board, owner 2026-09-27; the stacked deck + main pair is superseded), G-style USB-C handset on a raised hook rest above the keypad. | Smallest base that holds the board; keys and e-ink stay visible under the handset bridge. One board = one fab/assembly setup, no FFC/connectors/standoffs. |
-| 2 | **Handset: an off-the-shelf USB-C (UAC 1.0) handset** (G-style, Native Union POP class, or any USB-C headset) on a standard **USB-C to USB-C cable**; the ESP32-S3's native USB is the host (owner, 2026-09-27; *supersedes the passive 4P4C/RJ9 handset*). The hook magnet is in the base's plunger, not the handset. | No custom handset to build; any C-to-C cable (coiled or not) works; the digital link has no analog cord to pick up Wi-Fi buzz. |
+| 2 | **Handset: an off-the-shelf analog handset on a 3.5 mm TRRS jack** (CTIA; e.g. Opis 60s Micro), owner 2026-09-30 — *supersedes the USB-C (UAC) handset of 2026-09-27 and the RJ9 cord before it*. The hook magnet is in the base's plunger, not the handset. | No custom handset, no USB host stack, no boost; retro handsets for phones plug straight in. The cord's Wi-Fi-buzz risk is handled with a bead + RF caps at the jack (EVT to confirm). |
 | 3 | **MCU: ESP32-S3-WROOM-1-N16R8** (pre-certified module, 16 MB flash, 8 MB octal PSRAM). | Espressif's AFE/AEC (ESP-SR) and esp-webrtc both target the S3. The C5 lacks AFE support and the P4 costs too much. |
-| 4 | **Audio: ES8311 (DAC/earpiece driver) + ES7210 (4-ch ADC) + NS4150B (3 W class-D)**, the same chipset as ESP32-S3-Korvo-2 / S3-BOX-3. ES7210 ch3 records the **analog AEC reference**. | This is Espressif's known-good AEC topology, so the dev kit matches the product. INMP441/MAX98357A can't serve a passive handset and give no hardware reference. |
+| 4 | **Audio: ES8311 alone (handset mic ADC + earpiece driver) + NS4150B (class-D, ringer and prompts only)** — owner 2026-09-30: no base mic, no speakerphone, so the ES7210 and the analog AEC reference are gone. | The same codec as ESP32-S3-Korvo-2 / S3-BOX-3 (drivers carry over); a handset needs no hardware AEC reference. |
 | 5 | **Keys: 12 × MX-compatible switches** (owner decision 2026-09-27) in **Kailh CPG151101S11 hot-swap sockets**, on a **switch plate (the printed lid)**, DSA/relegendable 1u keycaps, two rows of six: `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`. No SPEAKER/END keys: hang up = handset on hook, speakerphone is a menu item. | This follows the owner's direction. Relegendable caps let kids' phones carry photos, and hot-swap means a parent can fix a key in 30 s. |
-| 6 | **Per-key LEDs: 13 × SK6812MINI-E** (12 keys + 1 status), reverse-mounted, on one RMT GPIO. A **hardwired red privacy LED** lights whenever mic bias is present. | With no screen, the keys are the status surface. The privacy LED can't be overridden by firmware. |
+| 6 | **Per-key LEDs: 13 × SK6812MINI-E** (12 keys + 1 status), reverse-mounted, on one RMT GPIO. **Two red mic lights** are powered by the handset mic's own supply (mute AND off-hook); a separate red **recording light** has its own GPIO. | With no screen, the keys are the status surface. The mic lights can't be overridden by firmware. |
 | 7 | **E-ink strip: Good Display GDEY029T94** (2.9", 296 × 128, SSD1680, active 66.9 × 29.1 mm), placed **between the two key rows** so every contact key has its label directly above or below it. I compared 7/14-segment LED arrays (HT16K33), dot-matrix, a single 0.91" SSD1306 OLED and per-key OLEDs (§7.2). | 4 key columns at 19.05 mm = 76.2 mm, which matches the 79 mm panel. It's the only option with per-key labels, zero light emission at night and no burn-in. It renders a QR at 22 mm, which is only enough at ~20–25 cm (§7.1). *The e-ink strip is now standard on the one board; the "Lite" and Qwiic-display options are superseded (2026-09-28).* |
 | 8 | **Lounge takeover = QR (strip, or printed) / NFC tap + press-the-flashing-key proof.** Implemented in software today (single-use QR nonce + key proof, also for guests from other servers). *mmWave presence is deferred with the radar (2026-09-28).* | A photographed code is useless without someone physically at the phone. |
 | 9 | **Hook: TI DRV5032 omnipolar Hall switch** (µA-class) under one hook-rest post; the **magnet rides in the hook plunger**, which the handset's weight pushes down (owner, 2026-09-27). *The IR-sensor option is removed.* | Works with any handset, uses almost no power, has no contacts to wear out. |
@@ -86,13 +100,13 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 | 11 | **NFC: ST25DV04K dynamic tag** with a PCB coil, on every board. *Radar (HLK-LD2410C) removed (2026-09-28): Lounge presence is deferred to a possible future board.* | NFC tap covers setup, pairing and lounge takeover. |
 | 12 | **Security:** Secure Boot v2 + flash encryption (release) + HMAC-protected NVS encryption. The **Ed25519 seed is derived at boot by the eFuse-keyed HMAC peripheral and never stored in flash.** Protocol should add **alg negotiation (ed25519 \| p256)** now. | The S3's DS peripheral is RSA-only and ATECC608B is P-256-only. P-256 opens the door to ESP32-C5/P4 on-chip ECDSA keys later. |
 | 13 | **PCBs: one board** (owner, 2026-09-27): 4-layer 180 × 88 mm with keys, LEDs, e-ink, NFC and all electronics; the switch plate is the printed lid. Supersedes the 3-board main + deck + plate set and its 24-pin FFC. | One fab/assembly setup, no FFC, connectors or standoffs; cheapest one-off. |
-| 14 | **Cost (current build roll-up, `build/main/cost.txt`):** board parts ≈ $16.5 at 1k; with PCB, assembly and off-board parts (switches, caps, speaker, e-ink panel, USB-C handset, antenna, battery) ≈ **$40 per phone at 1k, ≈ $38 at 10k**. A one-off build through JLCPCB is ≈ $204 per phone (setup and extended-part fees dominate). | Inside the owner's revised $28–40 goal at scale (§12). |
+| 14 | **Cost (H5 build roll-up, `build/main/cost.txt`):** board parts ≈ $14.0 at 1k; with PCB, assembly and off-board parts (switches, caps, SP-2040 speaker, e-ink panel, analog handset, antenna, battery) ≈ **$34.6 per phone at 1k, ≈ $32.8 at 10k**. A one-off build through JLCPCB is ≈ $198 per phone (setup and extended-part fees dominate). | Inside the owner's revised $28–40 goal at scale (§12). |
 
-**Top risks:** (1) speakerphone AEC and USB host audio (UAC) on the ESP32-S3 with arbitrary
-handsets; (2) the MX key stack height in a compact base; (3) **cost and compliance**: FCC 15B/CE
-RED incl. **EN 18031-2 (kids/toys cybersecurity)** and possible toy-safety scope. *(The earlier
-risks "RF buzz into the 2 m analog cord" and "the 330 mm envelope" are gone with the USB-C
-handset and the compact base.)*
+**Top risks:** (1) third-party analog handsets: unknown mic sensitivity/SNR and receiver level
+(the Opis 60s Micro publishes no data), Wi-Fi buzz on a 2 m analog cord, receiver-to-mic echo;
+(2) the MX key stack height in a compact base; (3) **cost and compliance**: FCC 15B/CE RED incl.
+**EN 18031-2 (kids/toys cybersecurity)** and possible toy-safety scope. *(USB host audio and
+speakerphone AEC are gone with the analog handset, 2026-09-30.)*
 
 ---
 
@@ -198,10 +212,13 @@ firing down through a bottom grille (4 mm feet) + left-end slots.
 
 ## 2. Partitioning: base vs handset
 
-> **Superseded (owner, 2026-09-27):** the handset is an off-the-shelf **USB-C (UAC) handset** on a
-> standard C-to-C cable, and the hook magnet sits in the base's plunger. §2.1–2.3 describe the
-> earlier passive handset on an analog 4P4C (RJ9) cord and are kept only for their reasoning; the
-> current handset interface is in the "Current architecture" box above and SCHEMATIC.md.
+> **Current (owner, 2026-09-30):** the handset is an off-the-shelf **analog handset on a 3.5 mm
+> TRRS plug** (CTIA), and the hook magnet sits in the base's plunger. The analog-cord reasoning
+> of §2.2 (RF buzz, ESD at the jack, balanced mic return) applies again, with a TRRS jack instead
+> of 4P4C: bead + RF caps on the mic line, bidirectional ESD on all four contacts, the mic return
+> taken at the jack. (The USB-C UAC handset of 2026-09-27 is superseded.) §2.1–2.3 describe the
+> earlier RJ9 cord and are kept for their reasoning; the current interface is in the "Current
+> architecture" box and [SCHEMATIC_REVIEW.md](SCHEMATIC_REVIEW.md).
 
 ### 2.1 Decision
 
@@ -260,24 +277,44 @@ carrier** (jack + 3 caps + pads). No active parts either way.
 
 ### 3.1 Block diagram
 
+Current (H5 schematic, owner decisions of 2026-09-30):
+
 ```
-                 ┌──────────────── BASE / MAIN BOARD ───────────────────────────────────────┐
- HANDSET         │                                                                          │
- electret ─MIC±──┼─RJ9─[FB+TVS+RF C]──┬──► ES7210 CH1 (handset mic)   ┐                     │
-                 │                    └ ─ ─► ES8311 MIC1 (0 Ω DNP, analog sidetone option)  │
- receiver ─EAR±──┼─RJ9─[FB+TVS]◄─[EAR_EN SPST]◄─ ES8311 OUTP/OUTN (HP driver 16/32 Ω)       │
-                 │                                    │     │                               │
- base electret ──┼──(rubber boot, front wall)──► ES7210 CH2 (speakerphone mic)             │
-                 │                                    │     └─[÷ attenuator]─► ES7210 CH3 (AEC REF)
- speaker 4Ω 3W ◄─┼──── NS4150B ◄─(CTRL=PA_EN)─────────┘                     ES7210 CH4 (spare)
-                 │                                                                          │
-                 │  ES8311 DSDIN ◄── I2S0 DOUT ─┐   MCLK/BCLK/WS shared                      │
-                 │  ES7210 SDOUT ──► I2S0 DIN ──┤── ESP32-S3 (TDM RX 4 slots @16 kHz)        │
-                 │  MICBIAS12/34 ─► [MUTE slide switch] ─► mics  ─► [bias-sense BJT]─► PRIV LED
-                 └──────────────────────────────────────────────────────────────────────────┘
+                 ┌──────────────── BASE / MAIN BOARD ──────────────────────────────────────────┐
+ HANDSET (TRRS)  │                                                                             │
+ electret ── S ──┼─ J7 ─[ESD]─[bead + 100 pF]─ HS_MIC_F ──1 µF──► ES8311 MIC1P  (ADC, PGA)       │
+                 │                               │  └─1N4148W─100k─► IO10 (button / OMTP / mic) │
+                 │                               └─ 2.2 k ─ MIC_VCC ◄─ Q5 ◄─ MUTE ◄─ 3V0 (RC)   │
+ GND ─────── R2 ─┼─ J7 ─ net tie ─ GND ─────────────1 µF──► ES8311 MIC1N        │             │
+                 │                                        Q5 on only when HOOK = off-hook      │
+                 │                                        MIC_VCC ─► 2 mic lights (parallel)  │
+ receiver ─ T,R1 ┼─ J7 ─[ESD]─ 22 Ω ─┬─ 2 × 22 µF ─ TS5A3166 (IN = HOOK) ─ ES8311 OUTP (DAC)   │
+                 │   TN (NC) ─► IO12 JACK_DET       └─ 22 k bypass (no pop)   OUTP/OUTN ─┐       │
+                 │                                                                        ▼       │
+ speaker 8 Ω 1 W ◄┼─ J4 ─ beads ◄─ NS4150B (CTRL = PA_EN, gain 3.5) ◄─ 100 nF + 68 k ◄──────┘       │
+                 │  ES8311 DSDIN ◄── I2S DOUT ; ES8311 ASDOUT ─47 Ω─► I2S DIN ; MCLK/BCLK/WS   │
+                 │  DRV5032AJ (hook) ─100 Ω─ HOOK ─ 100 k pull-up ; ─47 k─► IO17 (read only)   │
+                 │  IO13 ─ 680 Ω ─► red recording light                                         │
+                 └──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Earpiece and ringer: the ringer plays through the speaker (PA_EN) while on hook; the earpiece
+switch is open on hook (−52 dB, `sim/` b04), so nothing rings in the receiver. Off hook the amp
+stays off and the earpiece switch is closed by HOOK. Voice prompts go to whichever is live.
+
+The r0.1 diagram (RJ9 handset, base mic, ES7210 AEC reference) is superseded:
+
+```
+(superseded) HANDSET electret ─RJ9─► ES7210 CH1 ; receiver ◄─RJ9─ EAR_EN ◄─ ES8311 OUTP/OUTN ;
+             base electret ─► ES7210 CH2 ; ES8311 OUT ─[÷]─► ES7210 CH3 (AEC REF) ;
+             NS4150B ─► speaker 4 Ω 3 W ; MICBIAS ─► MUTE ─► mics ─► BJT ─► privacy LED
 ```
 
 ### 3.2 Codec choice
+
+> **2026-09-30:** with no base mic and no speakerphone the "ES8311 only" row below is what the
+> board uses: one mono codec, its ADC for the handset mic and its DAC for the earpiece and the
+> amp. The ES7210 and the analog AEC reference are gone (REQUIREMENTS D15).
 
 | Option | Mics | AEC reference | Earpiece drive | Cost | Verdict |
 |---|---|---|---|---|---|
@@ -295,6 +332,10 @@ carrier** (jack + 3 caps + pads). No active parts either way.
   ES7210 (Korvo-2 pattern **[UNVERIFIED: confirm against Korvo-2 V3.1 schematic]**).
 
 ### 3.3 Handset vs speakerphone routing
+
+> **2026-09-30: there is no speakerphone.** Routing is: on hook → speaker (ringer, prompts),
+> earpiece switch open in hardware; off hook → earpiece (switch closed by HOOK), amp off. The
+> text below is the r0.1 reasoning.
 
 - **Handset mode:** EAR_EN=1, PA_EN=0. AFE input = CH1 (handset) + CH3 (ref). AEC still runs
   because it removes receiver→capsule acoustic leak and linear cord crosstalk.
@@ -348,7 +389,15 @@ b/g/n 2.4 GHz + BLE 5; modular FCC/CE certification). 16 MB flash holds 2 × 4 M
 ESP unified provisioning) and, later, lounge proximity. **Caveat:** a PWA can't advertise BLE and
 iOS has no Web Bluetooth, so the BLE dead-man switch requires a future native app (§10.4).
 
-**Antenna placement:** module on the **rear edge** of the main board at x ≈ 150–168, antenna
+**Antenna (owner 2026-09-30):** the WROOM-1U's U.FL takes a **general-purpose 2.4 GHz antenna
+with a U.FL/IPEX plug**, mounted on the shell wall and **user-upgradable**. **Certification
+caveat:** the module's FCC/IC/CE grant was obtained with a monopole antenna (TFPD05H08750011,
+2.33 dBi peak, WROOM-1U datasheet v1.8 p44) and covers only antennas **of the same type with equal
+or lower gain** (47 CFR 15.204(c)(4)); the antenna we ship must meet that, and a user who fits a
+different type or a higher-gain antenna takes the phone outside the certification (radio
+re-testing would be needed). The docs and the user guide must say so.
+
+**Antenna placement (r0.1, PCB-antenna module):** module on the **rear edge** of the main board at x ≈ 150–168, antenna
 overhanging the edge toward the plastic rear wall (≥3 mm air), with **15 mm copper/component
 keep-out around the antenna on all layers** (Espressif PCB layout guideline). Distances:
 USB-C/cable ≈ 60 mm, speaker magnet ≈ 100 mm, B-option LiPo ≥ 80 mm, radar ≈ 80 mm (disable
@@ -521,7 +570,10 @@ Suggested LED language (firmware; configurable):
   **Third-party handsets have no magnet.** A DNP footprint for an IR reflective sensor (ITR8307
   class) under a trough window covers them.
 - **Side controls (right end face):** VOL−, VOL+ (right-angle SMD tact), **MUTE slide switch**
-  (DPDT: pole A physically breaks MICBIAS to both mics; pole B → MUTE_SENSE).
+  (DPDT: pole A physically breaks the handset-mic supply MIC_VCC, 2026-09-30; pole B → MUTE_SENSE).
+- **Hook (current, H5):** DRV5032**AJ** (open-drain, BOP ≤ 9.5 mT, BRP ≥ 3.0 mT) under the right
+  post, Ø3 × 1.5 N35 magnet in a **captive** plunger, 10 mm travel: 3.3× margin both ways
+  (`sim/` b11). The text above is r0.1.
 - **Rejected:** a dedicated "open to chat" toggle. Presence is set in the companion app, and
   long-press END is available if the owner wants a physical one.
 
@@ -632,7 +684,11 @@ states, and swap $4.98 of display parts for $2.32.
 
 ## 8. Sensors and extras
 
-> **Current board (2026-09-28):** the LD2410C radar and the ATECC608B footprint are **removed**
+> **Current board (2026-09-30, H5):** the LIS2DH12 accelerometer is **removed** (owner D10); the
+> privacy LED is now two mic lights on the handset mic's switched supply plus a recording light
+> on GPIO13, and MUTE breaks the handset mic (§6.4).
+>
+> **2026-09-28:** the LD2410C radar and the ATECC608B footprint are **removed**
 > (Lounge presence is deferred to a possible future board; the ESP32-S3 uses flash encryption +
 > eFuse HMAC). The MAX17048 fuel gauge is always fitted. NFC sits in a free end region of the one
 > board, not on a deck. The table keeps the original evaluation.
@@ -656,6 +712,11 @@ states, and swap $4.98 of display parts for $2.32.
 ## 9. Power
 
 ### 9.1 Architecture
+
+> **Current (H5):** as below minus the radar, the supercap and the diode-OR; the PTC is 2 A
+> (1812); VSYS carries 44.5 µF; 3V3 is 3.19 V (105 k / 24.3 k, 0.1 %); 3V0 feeds the ES8311 and the
+> handset-mic supply chain (MUTE, hook switch, mic lights). The power tree is drawn in
+> [BOARD_REQUIREMENTS.md](BOARD_REQUIREMENTS.md) §1.
 
 ```
 USB-C (sink, 2× 5.1 kΩ Rd on CC1/CC2, D+/D− to ESP32 USB)
@@ -688,6 +749,11 @@ USB-C (sink, 2× 5.1 kΩ Rd on CC1/CC2, D+/D− to ESP32 USB)
   load; wrong fit). BQ25895 (switching charger, more capable, overkill for 0.5 A charging).
 
 ### 9.2 Power budget (at the 5 V USB input)
+
+> **Current (H5, `schematic/power_budget.yaml`):** idle 79 mA, handset call 176 mA, ringing
+> 600 mA (1 W cap), worst firmware-capped 992 mA, uncapped 1323 mA (below the charger's
+> guaranteed 1350 mA); Default-USB reduced mode ≤ 491 mA. No VBUS-direct load remains. The r0.1
+> table below is kept for its derivation.
 
 Assumptions: 3V3 via buck η≈88% (I₅ ≈ 0.75·I₃.₃), VSYS loads pass linearly through BQ24074.
 ESP32-S3 Wi-Fi TX peak **355 mA** (802.11b 1 Mbps, 20.5 dBm, datasheet). LD2410C **79 mA avg @5 V**.
@@ -722,7 +788,7 @@ place: < 0.66 V = Default (500 mA; also what every USB-A→C cable reports), 0.6
 
 | Board (one design since 2026-09-28) | Default source | ≥1.5 A source |
 |---|---|---|
-| main | **reduced mode**: LEDs ≤10 %, ringer ≤0.5 W, charging off; strip "USE 1.5A CHARGER" (491 mA peak) | full features (1.11 A capped peak) |
+| main | **reduced mode**: LEDs ≤10 %, ringer ≤0.5 W, charging off; strip "USE 1.5A CHARGER" (491 mA peak) | full features (0.99 A capped peak, H5) |
 
 USB PD / higher voltages are deliberately not used: everything runs from 5 V, and a 5 V / 3 A
 Type-C advertisement already covers the worst case. Budget numbers and the per-SKU requirement
@@ -1225,6 +1291,15 @@ a prompt player.
 ---
 
 ## Revision notes
+
+- 2026-09-30 (H5 schematic, owner decisions D14–D21): analog 3.5 mm TRRS handset jack replaces
+  the USB-C UAC handset (no USB host, boost, VBUS switch, USB switch or CH340C; native USB on the
+  power USB-C for flashing/console); no base mic, no speakerphone, no ES7210; hardware privacy
+  re-based on the handset mic (MUTE AND hook → MIC_VCC → two mic lights; recording light on
+  GPIO13); 3V3 3.19 V; SP-2040 speaker with R_IN 68 kΩ; general-purpose IPEX antenna with the
+  certification caveat; DRV5032AJ + captive plunger; 2 A PTC, 44.5 µF VSYS, LED soft start,
+  12 pF NFC tuning (7-turn coil in H6), 3V0 caps, LIS2DH12 dropped, ST25DV04KC, socket
+  alternate. Review: [SCHEMATIC_REVIEW.md](SCHEMATIC_REVIEW.md).
 
 - 2026-09-27 (single board, owner): the deck board is merged into the main board: one
   180 × 88 mm 4-layer board, no FFC/connectors/standoffs, NFC coil in a free end region, e-ink

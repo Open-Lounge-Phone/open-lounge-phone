@@ -1,5 +1,7 @@
 # Inductors and ferrite beads (L1, L3, FB1, FB2)
 
+> **H5 (2026-09-30):** a third BLM18PG121SN1D (FB3) sits on the handset mic line.
+
 | | |
 |---|---|
 | Requirements | HW-ELEC-07 (buck), HW-FUNC-03 (e-ink boost), HW-FUNC-04 / HW-REG-01 (speaker EMI) |

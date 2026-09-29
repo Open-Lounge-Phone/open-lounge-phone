@@ -1,5 +1,7 @@
 # LIS2DH12TR — 3-axis accelerometer (U12)
 
+> **REMOVED in H5 (2026-09-30, owner D10):** no accelerometer (and its INT1 N-FET) on the board. Kept for the record.
+
 | | |
 |---|---|
 | MPN / maker | LIS2DH12TR (LGA-12 2 × 2 × 1), STMicroelectronics |

@@ -1,5 +1,7 @@
 # Resistors — 0603 thick film (all R)
 
+> **H5 (2026-09-30):** new values 105 kΩ and 24.3 kΩ 0.1 % thin film (extended), 68 kΩ and 680 Ω (basic); 150 kΩ, 20 kΩ, 4.3 kΩ, 33 kΩ, 15 kΩ gone; see `build/main/bom.csv`.
+
 | | |
 |---|---|
 | Maker / series | UNI-ROYAL (Uniroyal Electronics) 0603WAF…T5E thick-film chip resistors |

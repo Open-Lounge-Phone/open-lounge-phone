@@ -1,5 +1,7 @@
 # USBLC6-2SC6 — 2-line low-capacitance ESD protection (D1, D2)
 
+> **H5 (2026-09-30):** D1 now protects the D+/D− that go straight to the ESP32 native USB (no CH340C in between).
+
 | | |
 |---|---|
 | MPN / maker | USBLC6-2SC6 (SOT-23-6L), STMicroelectronics |

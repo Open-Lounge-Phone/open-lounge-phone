@@ -1,5 +1,7 @@
 # Kailh CPG151101S11-16 — MX hot-swap socket (SW6–SW17, 12 pcs)
 
+> **H5 (2026-09-30):** the BOM now carries the in-stock **HanElectricity CPG151101S11-2** (C49352235) on the same footprint (F-24).
+
 | | |
 |---|---|
 | MPN / maker | CPG151101S11-16, Kailh (Dongguan City Kaihua Electronics) |

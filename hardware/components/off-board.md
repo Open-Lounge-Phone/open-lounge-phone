@@ -1,5 +1,7 @@
 # Off-board parts (not on the PCB BOM)
 
+> **H5 (2026-09-30):** **handset** = an off-the-shelf analog G-style handset on a 3.5 mm CTIA plug (Opis 60s Micro, US $29.90 retail; generic OEM ≈ $4 at scale, UNVERIFIED) — the USB-C UAC handset is superseded (D14); **speaker** = Soberton SP-2040, 20 × 40 × 8.4 mm, 8 Ω, 1 W rated / 2 W max, 86 dB/1 W/0.5 m ± 3 dB, F0 650 Hz (spec rev B p1, https://www.soberton.com/wp-content/uploads/2020/03/SP-2040-June-2018.pdf); **antenna** = a general-purpose 2.4 GHz U.FL/IPEX antenna, user-upgradable, but only the same type with gain ≤ 2.33 dBi keeps the WROOM-1U modular grant (D19); **plunger + magnet** = captive (proto box: sleeve flange under the lid, lip, retainer cage; F-21 closed for the proto box).
+
 Parts the base needs that are not assembled on the board. None has an LCSC code in the
 schematic; prices are `schematic/cost_model.yaml` estimates (dated 2026-09-27, marked EST there).
 All are **UNVERIFIED** until a specific product is chosen — this file lists the requirements each

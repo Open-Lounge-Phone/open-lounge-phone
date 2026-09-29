@@ -1,5 +1,7 @@
 # INGHAi GMI6027-2C42DB — 6 mm electret microphone, base mic (MK1)
 
+> **REMOVED in H5 (2026-09-30, owner D15):** no base mic. Its specs remain the *assumed typical handset capsule* in `sim/` b04/b05/b07 (the Opis 60s Micro publishes no mic data). F-25 and F-29 are closed with it.
+
 | | |
 |---|---|
 | MPN / maker | GMI6027-2C42DB (Ø6.0 × 2.7 mm, solder pads "1033"), Dongguan INGHAI Electronics |

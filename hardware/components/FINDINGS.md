@@ -10,6 +10,46 @@ certification/safety as designed. **Medium** — out of a datasheet limit or lik
 fixable with a small change. **Low** — margin, documentation or verification gap. **Info** — no
 change needed, recorded for traceability.
 
+## H5 status (2026-09-30): what the schematic revision did with each finding
+
+H5 built the schematic to the H4 change list and to the owner's second batch of decisions
+(REQUIREMENTS.md §0 D14–D21: analog 3.5 mm handset jack, no base mic or speakerphone, privacy
+chain on the handset mic). Evidence per requirement: [../SCHEMATIC_REVIEW.md](../SCHEMATIC_REVIEW.md).
+
+| Finding | H5 status |
+|---|---|
+| F-01 flashing path | **closed** — native USB goes straight to the power USB-C (D14), no switch, no CH340C |
+| F-02 antenna type | **documented** — general-purpose U.FL/IPEX antenna, same type and ≤ 2.33 dBi to keep the grant (D19); the shipped part is still to pick (owner) |
+| F-03 3V3 vs eFuse limit | **closed** — 105 k / 24.3 k 0.1 % → 3.19 V (D17, b02) |
+| F-04 handset powered on hook | **closed differently** — no handset VBUS; the handset **mic** supply is MUTE AND hook in hardware (D16, b05, `check_privacy`) |
+| F-05 handset VBUS range | **N/A** — no USB handset (D14) |
+| F-06 speaker power | **closed** — R_IN 68 kΩ, SP-2040 (b06: 77 dBA) |
+| F-07 PTC | **closed** — SMD1812P200TF/16, 1.80 A hold at 40 °C (Ruilon p6) |
+| F-08 3V0 capacitance | **closed** — 2.1 µF |
+| F-09 mic light / recording light | **closed** — two lights on MIC_VCC, recording light on IO13 (b05 FMEA) |
+| F-10 battery connector / TS | open (pack spec, silkscreen: H6/BOM notes) |
+| F-11 VSYS capacitance | **closed** — 44.5 µF |
+| F-12 FPC land | open (sample) |
+| F-13 metal hook post ESD | **partly** — 100 Ω + 1 nF RC on HOOK; post grounding is layout/enclosure (H6) |
+| F-14 AEC divider | **N/A** — no AEC reference (D15) |
+| F-15 MUTE_SENSE polarity | open (sample) |
+| F-16 LIS2DH12 stock | **closed** — removed (D10) |
+| F-17 ST25DV NRND | **closed** — ST25DV04KC-IE6S3 |
+| F-18 NFC coil | **closed by analysis** — 7 turns + 12 pF (footprint in H6, VNA in EVT) |
+| F-19 3V3 capacitance | **closed** — 22 + 22 µF |
+| F-20 I2C rise time | **improved** — two fewer devices (ES7210, LIS2DH12); still measure or run 100 kHz |
+| F-21 removable plunger/magnet | **closed for the proto box** — captive sleeve/plunger/retainer (`make proto`); product enclosure open |
+| F-22 PROTO_BOX.md stale | **closed** |
+| F-23 extended lines | open — 34 (was 35) vs ≤ 25 (owner question) |
+| F-24 stock | **partly** — socket alternate in the BOM; BQ24074 / SWPA4020S470MT alternates listed |
+| F-25 assembly (electret iron-only, MSL) | **closed** for the electret (removed); MSL notes stay |
+| F-26 off-hook margin | **closed** — DRV5032AJ + 10 mm travel (b11) |
+| F-27 0x2D, stale comment | **closed** |
+| F-28 LED polarity | open (assembly check, now 3 LEDs) |
+| F-29 electret orientation | **N/A** — removed |
+| F-30 MUTE covers only the base mic | **closed** — MUTE now cuts the only mic (the handset's) |
+| F-31 module/LED temperature | info, unchanged |
+
 ## Owner decisions 2026-09-30 and H4 results (resolved)
 
 The owner answered the questions at the end of this file on 2026-09-30 (full wording:

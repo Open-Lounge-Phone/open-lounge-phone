@@ -1,5 +1,7 @@
 # ESP32-S3-WROOM-1U-N16R8 — MCU, Wi-Fi/BLE module (U1)
 
+> **H5 (2026-09-30):** native USB (IO19/20) is a **device** on the power USB-C J1 (flashing, USB-Serial-JTAG console; F-01 closed); 3V3 = 3.19 V (F-03 closed). Pins: IO10 MIC_SENSE (ADC1), IO12 JACK_DET, IO13 recording light, IO17 HOOK_IN (via 47 kΩ); IO3/IO9/IO46 free. Antenna: a general-purpose U.FL/IPEX 2.4 GHz antenna — same type and ≤ 2.33 dBi to stay inside the modular grant (owner D19, F-02: caveat documented, shipped antenna to choose).
+
 | | |
 |---|---|
 | MPN / maker | ESP32-S3-WROOM-1U-N16R8, Espressif Systems |
