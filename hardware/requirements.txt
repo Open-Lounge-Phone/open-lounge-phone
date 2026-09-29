@@ -1,2 +1,3 @@
 skidl==2.3.0
 pyyaml>=6
+numpy>=2   # sim/ (H4 testbenches)

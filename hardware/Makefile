@@ -1,7 +1,7 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build lcsc footprints clean layout tools freerouting proto review
+.PHONY: all venv build lcsc footprints clean layout tools freerouting proto review sim
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
@@ -62,3 +62,9 @@ proto:
 # Review pack (build/review/): schematic sheets, per-layer board PDF, 3D renders, DRC summary
 review: venv
 	layout/review_pack.sh
+
+# H4 simulation testbenches (sim/README.md): ngspice from PATH (brew install ngspice) or KiCad's
+# libngspice. Writes build/sim/report.md and refreshes the results table in sim/README.md.
+# VENDOR=1 also runs the (slow) TI switching-model smoke test.
+sim: venv
+	$(PY) sim/run.py $(if $(VENDOR),--vendor,)

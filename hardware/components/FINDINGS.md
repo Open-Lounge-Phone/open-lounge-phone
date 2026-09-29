@@ -10,6 +10,34 @@ certification/safety as designed. **Medium** — out of a datasheet limit or lik
 fixable with a small change. **Low** — margin, documentation or verification gap. **Info** — no
 change needed, recorded for traceability.
 
+## Owner decisions 2026-09-30 and H4 results (resolved)
+
+The owner answered the questions at the end of this file on 2026-09-30 (full wording:
+[../REQUIREMENTS.md](../REQUIREMENTS.md) §0). H4 ([../sim/](../sim/README.md)) simulated each
+one; the resulting schematic changes are P-01 … P-15 in [../sim/FINDINGS-H4.md](../sim/FINDINGS-H4.md).
+
+| Finding | Decision (2026-09-30) | H4 evidence | H5 change |
+|---|---|---|---|
+| F-09 | D1: mic light **in series** with the mic supply, **two parallel LEDs** as fallback; separate red recording LED on its own GPIO | b05: series leaves 0.89 V for the electret (< 1.5 V) → **parallel fallback taken**; one open LED leaves the other lit; MUTE darkens light and mic together | P-01, P-02 |
+| F-04 | D2: handset VBUS = hook sensor **AND** GPIO | b04: 0 V at boot, 34 mV 3 ms after hang-up | P-03 |
+| F-26 | D3: ≥ 2× magnetic margin both ways | b11: **DRV5032AJ** + 10 mm travel → 3.3× / 3.3× (FA: 0.3× off-hook) | P-06 |
+| F-01 | D4: USB 2.0 analog switch, power port by default and at boot | FSUSB42MUX, select = HS_MODE (also gates the handset VBUS) | P-04 |
+| F-05 | D5: 5 V boost (TPS61023-class) for the handset port | b04: 5.02 V at the port on USB and on a 3.3 V battery | P-03 |
+| F-03 | D6: 3V3 at 3.30 V nominal, ≤ 1 % resistors, worst case ≤ the eFuse limit | b02: **3.30 V nominal cannot meet ≤ 3.3 V** at the VFB-max corner (3.45 V); 3.19 V with 0.1 % resistors does (3.022–3.287 V) — **owner to confirm** | P-05 |
+| F-02 | D7: same antenna type as certified (monopole), ≤ 2.33 dBi, JLC/DigiKey part | candidate Molex 204281 (1.4–2.2 dBi); type + MHF I variant to confirm | enclosure / BOM |
+| F-21 | D8: captive plunger and magnet (HW-MECH-09); D11: toy standards as design intent, not certified | — | enclosure |
+| F-06 | D9: ringer ≥ 75 dBA at 1 m, speakerphone ≥ 70 dBA | b06: R_IN 68 kΩ → 77 dBA (150 kΩ: 71 dBA) | P-10 |
+| (HW-ELEC-06) | D9: battery ≥ 8 h idle + 1 h talk (700 mAh) | b10: needs ≤ 137 mW average idle (firmware power policy) | firmware |
+| F-16 | D10: drop the LIS2DH12 | — | P-13 |
+| (handsets) | D12: Native Union POP + one generic USB-C handset | — | EVT |
+| (tooling) | D13: ngspice | `make sim` (ngspice CLI or KiCad's libngspice) | — |
+
+H4 also closed or re-ranked: **F-07** (b01: charger ILIM max 1.56 A > PTC hold 1.34 A at 40 °C →
+SMD1812P200TF16, P-07), **F-08** (b03, P-12), **F-11** (b01: 44.5 µF VSYS, P-08), **F-18**
+(b08: the 9-turn coil resonates at 13.47 MHz and can reach 12.46 MHz — a cap only tunes down →
+7 turns + 12 pF, P-11), **F-19** (b02, P-05), and found one new problem: the LED power switch
+has a ≈ 26 A inrush and a 1.29 V VSYS dip (b09 → P-09).
+
 ## Ranked findings
 
 | # | Sev | Finding | Req. | Evidence | Proposed change (H5) |
@@ -83,7 +111,7 @@ and derated caps (HW-ELEC-07, F-19); (2) VSYS start-up and DPPM with ≈ 141 µF
 battery (F-05); (5) mic bias / mute / mic-light FMEA (F-09); (6) AEC reference divider with the
 6 kΩ ADC input (F-14); (7) NFC coil resonance (F-18).
 
-## What H3/H4 need from the owner
+## What H3/H4 needed from the owner (answered 2026-09-30, see the table at the top)
 
 1. **Battery-life and loudness targets** (HW-ELEC-06, -14 are marked "(owner)").
 2. **Antenna choice**: certified-type monopole vs FPC with extra tests (F-02).

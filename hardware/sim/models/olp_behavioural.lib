@@ -1,0 +1,117 @@
+* Open Lounge Phone H4 behavioural models (ngspice, psa mode). CERN-OHL-S-2.0.
+* Every model states the datasheet numbers it is built from; see hardware/sim/README.md for the
+* provenance table. They are deliberately simple (averaged / static) and are only claimed to be
+* good for the quantity each bench checks.
+
+* smooth step (0..1) of width w: keeps Newton happy where a model switches state
+.func stp(x,w) {0.5*(1+tanh(x/w))}
+
+* ------------------------------------------------------------------------------------------
+* BQ24074 power path (TI SLUS810N). No vendor model exists (TI product page, 2026-09-29).
+*  - Q1 IN->OUT: regulates OUT to VOREG (4.3/4.4/4.5 V, p12, 20 mohm load line), dropout 0.3 ohm typ / 0.475 max
+*    (VDO(IN-OUT) 300/475 mV at 1 A, p12), input current limit ILIM = K_ILIM/R_ILIM (p12).
+*  - Start-up: 100 mA limit until OUT > VO(SC1) 0.9 V, then ILIM (p19 section 9.3.2).
+*  - Input valid: VIN > UVLO 3.3 V and VIN > VBAT + 80 mV, VIN < OVP 10.5 V (p12).
+*  - Q2 BAT->OUT: ideal diode, 50 mohm (VDO(BAT-OUT) 50 mV at 1 A, p12); supplement mode when
+*    OUT < VBAT - 40 mV (VBSUP1, p12); fully on when no input.
+*  - Charger OUT->BAT: ICHG (K_ISET/R_ISET), reduced linearly as OUT falls from VOREG-50 mV to
+*    VDPPM = VOREG-100 mV (p12), off when CHG=0 or VBAT >= 4.2 V.
+.subckt BQ24074_BEH IN OUT BAT GND PARAMS: ILIM=1.46 VOREG=4.4 RDO=0.3 ICHG=0.494 CHG=1 RQ2=0.05
+* input-valid flag (0/1) and start-up latch (st: 0 = 100 mA phase, 1 = normal)
+Bval val GND V = stp(V(IN,GND)-3.3,0.02)*stp(V(IN,GND)-V(BAT,GND)-0.08,0.01)*stp(10.5-V(IN,GND),0.05)
+Rval val GND 1meg
+Bst GND st I = 1m*V(val)*stp(V(OUT,GND)-0.9,0.02) - 1m*(1-V(val))
+Cst st GND 1n
+Dsth st one DIDEAL
+Dstl GND st DIDEAL
+Vone one GND 1
+.model DIDEAL D(IS=1e-14 N=0.05)
+* Q1: current from IN to OUT, never reverse
+Bq1 IN OUT I = V(val)*max(0, min( min(({VOREG} - V(OUT,GND))/0.02, (V(IN,GND) - V(OUT,GND))/{RDO}), 0.1 + ({ILIM}-0.1)*stp(V(st,GND)-0.5,0.05) ))
+* Q2 BAT -> OUT (ideal diode / supplement)
+Bq2 BAT OUT I = max(0, (V(BAT,GND) - V(OUT,GND) - 0.04*V(val)) / {RQ2})
+* charger OUT -> BAT with DPPM foldback
+Bchg OUT BAT I = {CHG}*V(val)*stp(V(st,GND)-0.5,0.05)*stp(4.2-V(BAT,GND),0.01)*{ICHG}*min(1, max(0, (V(OUT,GND) - ({VOREG}-0.1))/0.05))
+Rleak OUT GND 1meg
+.ends BQ24074_BEH
+
+* ------------------------------------------------------------------------------------------
+* SY6280 current-limited load switch (Silergy AN_SY6280 rev 0.1). No vendor model.
+* RON 80 mohm (p3); I_LIM = 6800/RSET (p2) times K (corner: 0.75 / 1 / 1.25 for the +-25 %
+* spread, p3); limit folds back to 50 % when OUT < 1 V (short, p3/p5); EN rising 2.0 V /
+* falling 0.8 V (p3): threshold at 1.4 V here; no body diode, no reverse current (p1, p5);
+* 150 ohm output discharge when off (p3).
+.subckt SY6280_BEH IN OUT EN GND PARAMS: RSET=15k K=1
+Ben on GND V = stp(V(EN,GND)-1.4,0.05)
+Ron2 on GND 1meg
+Bsw IN OUT I = V(on)*max(0, min((V(IN,GND)-V(OUT,GND))/0.08, (0.5+0.5*stp(V(OUT,GND)-1,0.05))*{K}*6800/{RSET}))
+Bdis OUT GND I = (1-V(on))*V(OUT,GND)/150
+.ends SY6280_BEH
+
+* ------------------------------------------------------------------------------------------
+* Averaged current-mode converter (buck or boost), used where the TI switching models do not
+* run in ngspice (see the bench notes). The inductor current is the control variable:
+* Iout = limit(KP*err + integral, 0, IMAX); soft-start ramps the reference over TSS.
+* Buck: synchronous, can source and sink in PWM; output cannot exceed VIN - Iout*RDROP
+* (100 % duty, TLV62569 p6 section 7.3.2).
+* Boost: input current = VOUT*Iout/(EFF*VIN); pass-through when VIN > VOUT (TPS61023 p1).
+* The switching ripple is computed analytically by the bench (dI/(8 f C) + dI*ESR).
+.subckt CONV_AVG VIN VOUT FB EN GND PARAMS: VREF=0.6 KP=2 FZ=20k IMAX=2 EFF=0.9 TSS=0.8m BOOST=0 RDROP=0.14 L=2.2u
+Benf enf GND V = stp(V(EN,GND)-1.0,0.05)
+Renf enf GND 1meg
+* soft-start reference: ramps VREF over TSS after EN, resets when disabled
+Bss GND ss I = V(enf)*({VREF}/{TSS})*stp({VREF}-V(ss,GND),1e-4) - (1-V(enf))*V(ss,GND)*1e4
+Css ss GND 1
+* PI controller on the FB node (error in volts), integrator time constant 1/(2 pi FZ)
+Bint GND integ I = V(enf)*{KP}*2*3.14159*{FZ}*(V(ss,GND)-V(FB,GND)) - (1-V(enf))*1e3*V(integ,GND)
+Cint integ GND 1
+Rint integ GND 1e9
+Bicmd icmd GND V = V(enf)*max((1-{BOOST})*(-{IMAX}), min({IMAX}, {KP}*(V(ss,GND)-V(FB,GND)) + V(integ,GND)))
+Ricmd icmd GND 1meg
+* inductor current follows the command within the slew the inductor allows:
+* buck up (VIN-VOUT)/L, down VOUT/L; boost up VIN/L, down (VOUT-VIN)/L
+Bil GND il I = max(-max(0.05,({BOOST} > 0.5 ? V(VOUT,GND)-V(VIN,GND) : V(VOUT,GND)))/{L}, min(max(0.05,({BOOST} > 0.5 ? V(VIN,GND) : V(VIN,GND)-V(VOUT,GND)))/{L}, (V(icmd,GND)-V(il,GND))*1e8))
+Cil il GND 1
+Ril il GND 1e9
+* anti-windup: clamp the integrator to the current range
+Bclamp integ GND I = max(0, V(integ,GND)-{IMAX}) + min(0, V(integ,GND)+{IMAX})
+* output current (buck: limited by dropout; boost: pass-through diode below handles VIN > VOUT)
+Bout VIN VOUT I = (1-{BOOST})*min(V(il,GND), (V(VIN,GND)-V(VOUT,GND))/{RDROP})
+Bbo GND VOUT I = {BOOST}*max(0,V(il,GND))
+* boost: power drawn from VIN for the delivered current (averaged, efficiency EFF)
+Bbin VIN GND I = {BOOST}*V(VOUT,GND)*max(0,V(il,GND))/({EFF}*max(V(VIN,GND),0.5))
+* boost pass-through when enabled and VIN > VOUT (synchronous FET, ~0.1 ohm)
+Bpt VIN VOUT I = {BOOST}*V(enf)*max(0, (V(VIN,GND)-V(VOUT,GND))/0.1)
+* buck: efficiency loss drawn from VIN (EFF), on top of the delivered current
+Bbloss VIN GND I = (1-{BOOST})*max(0,V(il,GND))*V(VOUT,GND)*(1/{EFF}-1)/max(V(VIN,GND),0.5)
+.ends CONV_AVG
+
+* ------------------------------------------------------------------------------------------
+* NS4150B class-D amplifier (Nsiway datasheet V1.1). No vendor model.
+* Gain AV = 240k/RIN (p7 section 9.9; applied to the differential signal); output clips at
+* +-(VCC - 0.3 V) (BTL swing, estimate); supply current = Pout/EFF + IQ (EFF 0.88-0.90, p1/p3;
+* IQ 3 mA p3); CTRL high = on (p3). Inputs see RIN each (input resistor is the bench's part).
+.subckt NS4150B_BEH INP INN VOP VON VCC CTRL GND PARAMS: RIN=150k EFF=0.88
+Rip INP GND 1g
+Rin2 INN GND 1g
+Bdrv vd GND V = stp(V(CTRL,GND)-1.2,0.05)*max(-(V(VCC,GND)-0.3), min(V(VCC,GND)-0.3, (240k/{RIN})*V(INP,INN)))
+Rvd vd GND 1meg
+Eop vopi vmid vd GND 0.5
+Eon vmid VON vd GND 0.5
+Vmid vmid GND 2.2
+Vsense vopi VOP 0
+* supply current = delivered power / efficiency + quiescent (averaged over the PWM period)
+Bsup VCC GND I = stp(V(CTRL,GND)-1.2,0.05)*(3m + max(0, V(VOP,VON)*I(Vsense))/({EFF}*max(V(VCC,GND),1)))
+.ends NS4150B_BEH
+
+* ------------------------------------------------------------------------------------------
+* KT-0603R red LED (KENTO spec A.0 p3: VF 1.8-2.4 V at 20 mA). Diode fit: N = 2, RS = 10 ohm,
+* IS chosen per corner so VF(20 mA, 25 C) = 1.8 / 2.1 / 2.4 V; EG = 1.9 eV (AlGaInP) gives
+* about -1.8 mV/K at 0.5 mA (typical for red LEDs; the vendor gives no tempco: assumption).
+.model LED_RED_MIN D(IS=5.994e-16 N=2 RS=10 EG=1.9 XTI=3 TNOM=25)
+.model LED_RED_TYP D(IS=1.746e-18 N=2 RS=10 EG=1.9 XTI=3 TNOM=25)
+.model LED_RED_MAX D(IS=5.087e-21 N=2 RS=10 EG=1.9 XTI=3 TNOM=25)
+
+* ------------------------------------------------------------------------------------------
+* SMF5.0A TVS (Littelfuse SMF series p2): VBR 6.4-7.0 V at 10 mA, VC 9.2 V at 21.7 A.
+.model SMF5V0A D(IS=1e-12 N=1 BV=6.7 IBV=10m RS=0.115)
