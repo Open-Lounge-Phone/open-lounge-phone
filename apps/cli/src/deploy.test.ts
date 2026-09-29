@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import type { DeployOptions } from "./args.ts";
 import { deployCloudflare, parseWhoami, planDeploy, secretsFromEnv } from "./deploy.ts";
 import type { Run } from "./doctor.ts";
@@ -104,18 +107,25 @@ describe("secrets and accounts", () => {
 
 describe("deployCloudflare", () => {
   const id = "0123456789abcdef0123456789abcdef";
+  // A stand-in checkout: built web apps, no earlier instances (nothing from this machine).
+  const repoRoot = mkdtempSync(join(tmpdir(), "olp-cli-repo-"));
+  for (const d of ["apps/companion/dist", "apps/device-web/dist", "apps/server-cloudflare"]) {
+    mkdirSync(join(repoRoot, d), { recursive: true });
+  }
+  afterAll(() => rmSync(repoRoot, { recursive: true, force: true }));
   const whoami =
     (accounts: { id: string; name: string }[], loggedIn = true): Run =>
     () => ({ code: 0, out: `noise ${JSON.stringify({ loggedIn, accounts })}` });
 
   it("runs the preflight, shows a summary, and passes secrets only in the environment", async () => {
     const calls: { args: string[]; env: Record<string, string> }[] = [];
-    const { io, lines } = scriptedIo(["tid", "ttok", "", ""]);
+    // TURN id and token, no SFU app, then confirm with the default.
+    const { io, lines, remaining } = scriptedIo(["tid", "ttok", "", ""]);
     const code = await deployCloudflare(
       { ...opts, yes: false, instance: "home", domain: "phone.example.com", openSignup: false },
       io,
       {
-        repoRoot: process.cwd(),
+        repoRoot,
         run: whoami([{ id, name: "Me" }]),
         env: {},
         exec: async (args, env) => {
@@ -127,6 +137,7 @@ describe("deployCloudflare", () => {
     );
     const text = lines.join("\n");
     if (code !== 0) throw new Error(text);
+    expect(remaining).toEqual([]);
     expect(text).toContain("openloungephone-home-voicemail");
     expect(text).not.toContain("ttok");
     expect(calls).toEqual([
@@ -139,7 +150,7 @@ describe("deployCloudflare", () => {
 
   it("stops before deploying: not logged in, several accounts, or a dry run", async () => {
     const deps = (run: Run) => ({
-      repoRoot: process.cwd(),
+      repoRoot,
       run,
       env: {},
       exec: async () => {
@@ -162,5 +173,11 @@ describe("deployCloudflare", () => {
       await deployCloudflare({ ...o, dryRun: true }, dry.io, deps(whoami(accounts.slice(0, 1)))),
     ).toBe(0);
     expect(dry.lines.join("\n")).toMatch(/Dry run/);
+    // Without a build it stops at the first preflight step.
+    const bare = mkdtempSync(join(tmpdir(), "olp-cli-bare-"));
+    const nb = scriptedIo([], false);
+    expect(await deployCloudflare(o, nb.io, { ...deps(whoami(accounts)), repoRoot: bare })).toBe(1);
+    expect(nb.lines.join("\n")).toMatch(/npm run build/);
+    rmSync(bare, { recursive: true, force: true });
   });
 });
