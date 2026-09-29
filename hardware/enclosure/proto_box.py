@@ -2,7 +2,7 @@
 
     .venv/bin/python proto_box.py [--parts build/proto/board_parts.json] [--render]
 
-Standalone (does not use or change olp/, the product enclosure). Two printed parts, TRAY and
+Standalone. Two printed parts, TRAY and
 LID, where the lid IS the MX switch plate; plus a hook PLUNGER and its SLEEVE for a
 prototyping on/off-hook switch over the hall sensor. Outputs STL + STEP to build/proto/,
 numeric fit checks to build/proto/checks.txt (exit 1 on FAIL), optional render proto.png.
@@ -529,9 +529,59 @@ def main() -> int:
     return 1 if any(s == "FAIL" for s, _, _ in R) else 0
 
 
+def mesh_of(shape, tol=0.15, ang=0.4):
+    import numpy as np
+    v, t = shape.tessellate(tol, ang)
+    return np.array([[p.X, p.Y, p.Z] for p in v], dtype=float), np.array(t, dtype=int)
+
+
+def draw(items, path, elev=28, azim=-60, size=(12, 8), title=None, light=(0.35, -0.8, 0.9),
+         zoom=1.25, dpi=110) -> None:
+    """Headless PNG (matplotlib, Lambert shading). items: [(V, F, '#rrggbb')] in mm; one
+    collection for all faces so the per-polygon depth sort is global."""
+    import matplotlib
+    import numpy as np
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    fig = plt.figure(figsize=size, dpi=dpi)
+    ax = fig.add_subplot(111, projection="3d")
+    L = np.array(light, dtype=float)
+    L /= np.linalg.norm(L)
+    tris, cols, allv = [], [], []
+    for V, F, col in items:
+        if len(F) == 0:
+            continue
+        tri = V[F]
+        n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        nn = np.linalg.norm(n, axis=1, keepdims=True)
+        n = n / np.where(nn == 0, 1, nn)
+        shade = 0.25 + 0.75 * np.clip(np.abs(n @ L), 0, 1) ** 1.2
+        base = np.array([int(col.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)])
+        tris.append(tri)
+        cols.append(np.clip(base[None, :] * shade[:, None], 0, 1))
+        allv.append(V)
+    C = np.concatenate(cols)
+    ax.add_collection3d(Poly3DCollection(np.concatenate(tris), facecolors=np.c_[C, np.ones(len(C))],
+                                         edgecolors="none", linewidths=0))
+    A = np.vstack(allv)
+    mn, mx = A.min(0), A.max(0)
+    ax.set_xlim(mn[0], mx[0])
+    ax.set_ylim(mn[1], mx[1])
+    ax.set_zlim(mn[2], mx[2])
+    ax.set_box_aspect(tuple(np.maximum(mx - mn, 1e-3)), zoom=zoom)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_axis_off()
+    if title:
+        ax.set_title(title, fontsize=14)
+    fig.subplots_adjust(0, 0, 1, 1)
+    fig.savefig(path, facecolor="white")
+    plt.close(fig)
+
+
 def render(shapes) -> None:
-    sys.path.insert(0, str(HERE))
-    from olp.render import mesh_of, render as draw
     sx, sy = bx2x(SOCKETS[1][0]), by2y(SOCKETS[1][1])
     items = [
         (*mesh_of(shapes["tray"]), "#d8d2c4"),

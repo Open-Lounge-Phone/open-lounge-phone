@@ -1,18 +1,22 @@
-# Open Lounge Phone enclosure (code CAD, build123d). See ENCLOSURE.md.
-#   make            -> build/stl, build/step, build/renders, build/web, build/checks.txt (fails on FAIL)
-#   make sync       -> re-read board geometry from hardware/kicad/*/*.kicad_pcb into params.yaml
-#   make fast       -> exports + checks + web, no PNG renders
+# Open Lounge Phone prototype box (code CAD, build123d). See PROTO_BOX.md.
+#   make        -> build/proto/{tray,lid,plunger,sleeve}.{stl,step} + checks.txt (fails on FAIL)
+#   make render -> the same plus build/proto/proto.png
+#   make parts  -> build/proto/board_parts.json from the placed board (needs KiCad 10); without
+#                  it the part-fit checks against the board are skipped
 PY := .venv/bin/python
+KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
+KPY := $(KICAD_APP)/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3
 
-.PHONY: enclosure fast sync venv clean
-enclosure: venv
-	$(PY) build.py
+.PHONY: proto render parts venv clean
+proto: venv
+	$(PY) proto_box.py
 
-fast: venv
-	$(PY) build.py --no-render
+render: venv
+	$(PY) proto_box.py --render
 
-sync: venv
-	$(PY) sync_params.py
+parts:
+	mkdir -p build/proto
+	cd ../layout && $(KPY) dump_parts.py main ../enclosure/build/proto/board_parts.json
 
 venv: .venv/.ok
 .venv/.ok: requirements.txt
