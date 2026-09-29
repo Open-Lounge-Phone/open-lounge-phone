@@ -138,6 +138,11 @@ interface Room {
   /** For the call log. */
   startedAt?: number;
   answered?: boolean;
+  /**
+   * Also ringing for the callee elsewhere: their other spaces on this server and a Lounge phone
+   * they're a guest at on another server. The first to answer becomes `calleePeer`.
+   */
+  branches?: Peer[];
   caller: Peer;
   /** Known once the callee is a device (immediately) or a user answers from one session. */
   calleePeer?: Peer;
@@ -210,6 +215,7 @@ export class HouseholdHub {
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
+        ...(r.branches?.length ? { branches: r.branches.map(infoOf) } : {}),
       };
     });
   }
@@ -246,6 +252,9 @@ export class HouseholdHub {
       this.rooms.set(snap.id, {
         id: snap.id,
         state: snap.state,
+        ...(snap.branches?.length
+          ? { branches: snap.branches.map((b) => this.remoteFromInfo(b)) }
+          : {}),
         ...(snap.payer ? { payer: snap.payer } : {}),
         ...(snap.activeAt !== undefined ? { activeAt: snap.activeAt } : {}),
         ...(snap.startedAt !== undefined ? { startedAt: snap.startedAt } : {}),
@@ -618,15 +627,14 @@ export class HouseholdHub {
     if (decision.decision === "deny" || !contact) return this.refuse(device, "denied");
     if (isRemoteContactId(contact.id)) return this.remoteContactDial(device, contact.id);
     const targets = this.reachable(contact.id, device);
-    if (!targets.length) return this.refuse(device, "unreachable");
+    const plans = await this.branchesFor(contact.id);
+    if (!targets.length && !plans.length) return this.refuse(device, "unreachable");
     if (this.busy(userKey(contact.id))) return this.refuse(device, "busy");
 
     const room = this.openRoom(device, userKey(contact.id));
     room.payer = allowance.payer;
     device.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
-    for (const t of targets) {
-      t.conn.send({ t: "call.ringing", callId: room.id, from: { label: device.label } });
-    }
+    this.ringAll(room, targets, plans, device.label);
   }
 
   /**
@@ -691,7 +699,8 @@ export class HouseholdHub {
       return;
     }
     const targets = this.reachable(userId);
-    if (!targets.length) return this.refuse(caller, "unreachable");
+    const plans = await this.branchesFor(userId);
+    if (!targets.length && !plans.length) return this.refuse(caller, "unreachable");
     const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
     if (!available) return this.refuse(caller, "unavailable");
     if (this.busy(caller.key) || this.busy(userKey(userId))) return this.refuse(caller, "busy");
@@ -701,8 +710,94 @@ export class HouseholdHub {
     const room = this.openRoom(caller, userKey(userId));
     room.payer = allowance.payer;
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    this.ringAll(room, targets, plans, as.label);
+  }
+
+  /**
+   * Where else a person can be rung besides this household: their other spaces on this server
+   * (each rings that space's app sessions, own phones and Lounge phone) and any Lounge phone on
+   * another server where they're a guest right now.
+   */
+  private async branchesFor(userId: string): Promise<BranchPlan[]> {
+    const { store } = this.env;
+    const user = await store.getUser(userId);
+    if (!user || !this.env.calls) return [];
+    const plans: BranchPlan[] = [];
+    for (const m of await store.listMemberships(user.accountId)) {
+      if (m.household.id !== this.householdId) {
+        plans.push({ kind: "space", householdId: m.household.id, userId: m.user.id });
+      }
+    }
+    const away = await store.activeLoungeAway(user.accountId);
+    if (away.length) {
+      const account = (await store.getAccount(user.accountId)) as Account;
+      for (const a of away) {
+        plans.push({ kind: "away", host: a.host, deviceId: a.deviceId, guest: partyOf(account) });
+      }
+    }
+    return plans;
+  }
+
+  /** Rings a person's targets here, and starts their branches elsewhere. */
+  private ringAll(room: Room, targets: Peer[], plans: BranchPlan[], label: string): void {
     for (const t of targets) {
-      t.conn.send({ t: "call.ringing", callId: room.id, from: { label: as.label } });
+      t.conn.send({ t: "call.ringing", callId: room.id, from: { label } });
+    }
+    const calls = this.env.calls;
+    if (!calls) return;
+    for (const plan of plans) {
+      const leg = newId("call");
+      const branch = this.remotePeer({
+        host: plan.kind === "space" ? LOCAL_HOST : plan.host,
+        key: `branch:${leg}`,
+        label,
+        peerHousehold: plan.kind === "space" ? plan.householdId : undefined,
+        leg,
+      });
+      room.branches = [...(room.branches ?? []), branch];
+      this.roomsDirty = true;
+      // Over the network or another hub's queue: never awaited inside this hub's queue.
+      const ring: Promise<RingResult> =
+        plan.kind === "space"
+          ? calls.ringLocal(plan.householdId, {
+              callId: leg,
+              host: LOCAL_HOST,
+              key: room.state.caller,
+              label,
+              target: { kind: "person", userId: plan.userId },
+              peerHousehold: this.householdId,
+              noBranches: true,
+            })
+          : calls.register(plan.host, leg, this.householdId).then(() =>
+              calls.place(
+                plan.host,
+                {
+                  callId: leg,
+                  from: plan.guest,
+                  to: { kind: "guest", deviceId: plan.deviceId },
+                  ringLabel: label.slice(0, 24),
+                },
+                this.householdId,
+              ),
+            );
+      void ring.then(
+        (r) =>
+          r.state === "ended" ? this.run(() => this.dropBranch(room, branch, r.reason)) : undefined,
+        () => this.run(() => this.dropBranch(room, branch, "unreachable")),
+      );
+    }
+  }
+
+  /** A branch stopped ringing. A decline ends the call; otherwise it ends when nothing rings. */
+  private async dropBranch(room: Room, branch: Peer, reason: EndReason): Promise<void> {
+    if (this.rooms.get(room.id) !== room || room.calleePeer || !room.branches?.includes(branch)) {
+      return;
+    }
+    room.branches = room.branches.filter((b) => b !== branch);
+    this.roomsDirty = true;
+    if (reason === "declined") return this.apply(room, { type: "end", reason });
+    if (this.ringTargets(room).length === 0) {
+      await this.apply(room, { type: "end", reason: reason === "hangup" ? "unreachable" : reason });
     }
   }
 
@@ -789,11 +884,12 @@ export class HouseholdHub {
   /** Everything currently ringing for an unanswered call. */
   private ringTargets(room: Room): Peer[] {
     if (room.calleePeer) return [];
+    const branches = room.branches ?? [];
     const key = room.state.callee;
-    if (!key.startsWith("usr:")) return [];
+    if (!key.startsWith("usr:")) return branches;
     const userId = idOf(key);
     const phones = [...this.devices.values()].filter((d) => personOf(d) === userId);
-    return [...(this.apps.get(userId) ?? []), ...phones];
+    return [...(this.apps.get(userId) ?? []), ...phones, ...branches];
   }
 
   /** Online = an open companion session, a connected personal phone, or a Lounge phone. */
@@ -1636,14 +1732,27 @@ export class HouseholdHub {
       if (req.target.kind === "person") {
         const userId = req.target.userId;
         const targets = this.reachable(userId);
-        if (!targets.length) return end("unreachable");
+        const plans = req.noBranches ? [] : await this.branchesFor(userId);
+        if (!targets.length && !plans.length) return end("unreachable");
         const available = (await store.availability(this.householdId)).get(userId) ?? true;
         if (!available) return end("unavailable");
         if (this.busy(userKey(userId))) return end("busy");
         const room = this.openRoom(remote, userKey(userId), req.callId);
-        for (const t of targets) {
-          t.conn.send({ t: "call.ringing", callId: room.id, from: { label: req.label } });
+        this.ringAll(room, targets, plans, req.label);
+        return { state: "ringing" };
+      }
+      if (req.target.kind === "guest") {
+        // Ring our Lounge phone where the calling server's account is a guest right now.
+        const peer = this.devices.get(req.target.deviceId);
+        const guest = peer?.lounge?.session?.guest;
+        if (!peer || guest?.host !== req.host || guest.id !== req.target.guestId) {
+          return end("unreachable");
         }
+        if (this.busy(peer.key) || peer.hook === "up") return end("busy");
+        const room = this.openRoom(remote, peer.key, req.callId);
+        room.calleePeer = peer;
+        this.roomsDirty = true;
+        peer.conn.send({ t: "call.ringing", callId: room.id, from: { label: req.label } });
         return { state: "ringing" };
       }
       const device = await store.getDevice(req.target.deviceId);
@@ -1677,7 +1786,7 @@ export class HouseholdHub {
       let room: Room | undefined;
       let remote: Peer | undefined;
       for (const r of this.rooms.values()) {
-        remote = [r.caller, r.calleePeer].find(
+        remote = [r.caller, r.calleePeer, ...(r.branches ?? [])].find(
           (p) => p?.kind === "remote" && p.host === host && (p.leg ?? r.id) === msg.callId,
         );
         if (remote) {
@@ -1686,6 +1795,21 @@ export class HouseholdHub {
         }
       }
       if (!room || !remote) return;
+      if (room.branches?.includes(remote)) {
+        // One of the places ringing for the callee elsewhere.
+        if (msg.t !== "call.state") return;
+        if (msg.state === "ended") return this.dropBranch(room, remote, msg.reason ?? "hangup");
+        if (msg.state !== "connecting" || room.state.phase !== "ringing") return;
+        for (const other of this.ringTargets(room)) {
+          if (other !== remote) {
+            other.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
+          }
+        }
+        room.branches = [];
+        room.calleePeer = remote;
+        this.roomsDirty = true;
+        return this.apply(room, { type: "answer", by: room.state.callee });
+      }
       const party = remote === room.caller ? "caller" : "callee";
       if (msg.t === "call.state") {
         if (msg.state === "ended") {
@@ -1873,20 +1997,15 @@ export class HouseholdHub {
       if (conn.peerHost === LOCAL_HOST) {
         const here = await store.membership(conn.peerAccount, this.householdId);
         if (here) {
-          // Someone in this household: ring them here directly.
+          // Someone in this household: ring them here (and wherever else they are).
           const targets = this.reachable(here.id);
-          if (!targets.length) return { state: "ended", reason: "unreachable" };
+          const plans = await this.branchesFor(here.id);
+          if (!targets.length && !plans.length) return { state: "ended", reason: "unreachable" };
           if (this.busy(userKey(here.id))) return { state: "ended", reason: "busy" };
           const room = this.openRoom(caller, userKey(here.id));
           room.payer = account.id;
           await calls.register(req.host, req.callId, this.householdId);
-          for (const t of targets) {
-            t.conn.send({
-              t: "call.ringing",
-              callId: room.id,
-              from: { label: account.name.slice(0, 24) },
-            });
-          }
+          this.ringAll(room, targets, plans, account.name.slice(0, 24));
           return { state: "ringing" };
         }
         peerHousehold = (await primaryHousehold(this.env, conn.peerAccount))?.household.id;
@@ -1927,6 +2046,11 @@ export class HouseholdHub {
 }
 
 const idOf = (key: string) => key.slice(4);
+
+/** A place a person rings besides the household that owns the call. */
+type BranchPlan =
+  | { kind: "space"; householdId: string; userId: string }
+  | { kind: "away"; host: string; deviceId: string; guest: Party };
 
 /** How a guest from another server is known in a Lounge session here. */
 const guestKey = (g: LoungeGuest) => `guest:${g.host}:${g.id}`;

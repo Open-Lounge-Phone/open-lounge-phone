@@ -77,7 +77,8 @@ simply expires) or **Block**. Knocking back someone who knocked you connects you
   {status: "sent"}` from `/api/connections` — whether the handle exists, the sender is blocked,
   cooling down after a decline, or already pending. (The plan allowed a `404` for unknown
   handles; we chose the stricter uniform answer so an address book can't be probed at all. A
-  typo'd address therefore looks sent and quietly expires.)
+  typo'd address therefore looks sent and quietly expires; the app says "If <address> exists,
+  they'll get your request.")
 - **Only accounts are knockable.** Household phones (kids' phones) have no address. A guardian
   can put one of their own **active** connections on a phone's allow-list
   (`PUT /api/devices/:id/remote-contacts/:connectionId`, same flags as a local contact); the
@@ -167,8 +168,13 @@ dot; anything older than an hour shows as unknown. Turning it off sends "offline
   server; for a phone, an allow-list entry through an active connection with `canCallDevice`,
   then quiet hours (→ `voicemail`), online and hook state; for a person, reachability,
   availability and busy. It either rings or answers with a reason (`denied`, `unavailable`,
-  `busy`, `unreachable`, `voicemail`). Federated calls to a person ring their first (personal)
-  space.
+  `busy`, `unreachable`, `voicemail`). A call to a person rings **everywhere they are**: the
+  call is owned by their first (personal) space, which also rings their other spaces on that
+  server (each space's app sessions, own phones and the Lounge phone they're at) and any Lounge
+  phone on another server where they're a guest right now (a signed `/fed/v1/calls` with target
+  `{kind: "guest", deviceId}`, accepted only from the server that vouched for them). The first
+  place to answer wins; the others stop; a decline anywhere ends the call; availability still
+  applies. Each place is a leg with its own call id.
 - **Shared phones.** When a guardian puts a connection on a phone's allow-list with "can call",
   their server tells the other side with `POST /fed/v1/phones`; the person then sees that phone
   under the connection and can call it (and it disappears when the entry does).
@@ -208,7 +214,7 @@ the call as them** — its own rules and connections — relaying between the tw
 its own id on each). The guest's server refuses dial requests unless it has a live vouched session
 at that phone. Sessions end as usual (log out, leave from the guest's app, idle, a new takeover)
 and immediately if the phone disconnects; guardians see "who, where, when" with the guest's
-address. Calls *to* the guest don't ring the Lounge phone yet (they ring the guest's own apps).
+address. Calls *to* the guest ring the Lounge phone they're at as well as their own apps.
 
 ## Fairness and abuse controls
 
@@ -233,11 +239,6 @@ address. Calls *to* the guest don't ring the Lounge phone yet (they ring the gue
 | **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Planned (plan phase P5); the two-server test already runs in `npm test`. Needed before anyone else runs a server in production |
 
 ## Open questions
-
-- Incoming calls for a guest at a Lounge phone on another server (today they ring the guest's own
-  apps only).
-- Federated calls to a person ring their first (personal) space; whether to ring every space
-  they're in.
 
 - Whether a household can have its own shared address.
 - Whether to reuse an existing federation standard (ActivityPub, Matrix) for identity/transport.

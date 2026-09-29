@@ -37,9 +37,9 @@ A guardian can let people who have an account on **another** Open Lounge Phone s
 space's Lounge phones: **Lounge settings → Let people from other servers use these phones** (off
 by default). A guest scans the code, enters their own address on the page that opens, and
 continues on their own server, which vouches for them. They still press the flashing key. The
-phone greets them and its keys dial *their* connections, placed by their own server. Calls to
-them keep ringing their own app. The session ends the same ways (and at once if the phone goes
-offline), and guardians see the guest's address in the history.
+phone greets them and its keys dial *their* connections, placed by their own server. Calls to them ring the Lounge phone as
+well as their own app. The session ends the same ways (and at once if the phone goes offline),
+and guardians see the guest's address in the history.
 
 ## Open to chat
 

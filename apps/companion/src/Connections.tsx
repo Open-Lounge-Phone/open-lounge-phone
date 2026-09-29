@@ -132,7 +132,7 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
           run(async () => {
             const r = await api.knock(to, note);
             if (r.status === "connected") setNotice(`You're connected with ${to}.`);
-            else setNotice(`Knock sent to ${to}. You'll be connected when they accept.`);
+            else setNotice(`If ${to} exists, they'll get your request.`);
           })
         }
       />

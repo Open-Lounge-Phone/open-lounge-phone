@@ -539,3 +539,161 @@ describe("Lounge phones across servers", () => {
     });
   });
 });
+
+describe("ringing a person everywhere they are", () => {
+  it("rings the callee's other spaces: apps, own phone and the Lounge phone they're at", async () => {
+    const net = new Network();
+    const a = await net.server("a.test");
+    const b = await net.server("b.test");
+    const jesse = await a.person("jesse", "Jesse");
+    const bob = await b.person("bob", "Bob");
+    const ids = await connect(a, jesse, b, bob);
+    // Bob is also in Carol's studio (a team space) on b.test.
+    const carol = await b.person("carol", "Carol", "team");
+    const bobThere = await b.store.createUser(
+      { householdId: carol.household.id, name: "Bob", role: "contact", accountId: bob.account.id },
+      net.timers.now + 1,
+    );
+    const bobStudio = await b.store.createSession(bobThere.id, net.timers.now);
+    const jApp = await a.connectApp(jesse.token);
+
+    // Only his studio app is open: the call still reaches him there.
+    const studioApp = await b.connectApp(bobStudio);
+    jApp.write({ t: "call.connection", connectionId: ids.aSide });
+    const ring = await studioApp.next("call.ringing");
+    expect(ring.from.label).toBe("Jesse");
+    // Each leg has its own call id: Jesse's, and the one Bob's studio sees.
+    const mine = (await jApp.nextState("ringing")).callId;
+    studioApp.write({ t: "call.answer", callId: ring.callId });
+    await jApp.nextState("connecting");
+    jApp.write({ t: "rtc.sdp", callId: mine, type: "offer", sdp: "v=0 j" });
+    expect(await studioApp.next("rtc.sdp")).toMatchObject({ callId: ring.callId, sdp: "v=0 j" });
+    studioApp.write({ t: "rtc.sdp", callId: ring.callId, type: "answer", sdp: "v=0 b" });
+    expect(await jApp.next("rtc.sdp")).toMatchObject({ callId: mine, sdp: "v=0 b" });
+    await jApp.nextState("active");
+    jApp.write({ t: "call.hangup", callId: mine });
+    await studioApp.nextState("ended");
+
+    // His own phone in the studio and the studio's Lounge phone he's at ring too, alongside his
+    // home app; answering on one stops the others.
+    const own = await b.pairDevice(bobStudio, "Bob's desk", { forMe: true });
+    const desk = await b.connectDevice(own.deviceId as string, own.key?.pair as CryptoKeyPair);
+    const lobby = await b.pairDevice(carol.token, "Lobby", { kind: "lounge" });
+    const lounge = await b.connectDevice(
+      lobby.deviceId as string,
+      lobby.key?.pair as CryptoKeyPair,
+    );
+    const idle = await lounge.next("lounge.idle");
+    studioApp.write({ t: "lounge.claim", deviceId: lobby.deviceId as string, nonce: idle.nonce });
+    const challenge = await lounge.next("lounge.challenge");
+    lounge.write({ t: "lounge.press", index: challenge.index });
+    await lounge.next("lounge.session");
+    const homeApp = await b.connectApp(bob.token);
+
+    jApp.write({ t: "call.connection", connectionId: ids.aSide });
+    const second = (await jApp.nextState("ringing")).callId;
+    const atHome = await homeApp.next("call.ringing");
+    const atDesk = await desk.next("call.ringing");
+    const atLounge = await lounge.next("call.ringing");
+    expect([atDesk.from.label, atLounge.from.label]).toEqual(["Jesse", "Jesse"]);
+    lounge.write({ t: "hook", state: "up" });
+    lounge.write({ t: "call.answer", callId: atLounge.callId });
+    await jApp.nextState("connecting");
+    expect((await homeApp.nextState("ended")).callId).toBe(atHome.callId);
+    expect((await desk.nextState("ended")).callId).toBe(atDesk.callId);
+    jApp.write({ t: "rtc.sdp", callId: second, type: "offer", sdp: "v=0 x" });
+    expect(await lounge.next("rtc.sdp")).toMatchObject({ callId: atLounge.callId, sdp: "v=0 x" });
+    lounge.write({ t: "rtc.sdp", callId: atLounge.callId, type: "answer", sdp: "v=0 y" });
+    await jApp.nextState("active");
+    lounge.write({ t: "call.hangup", callId: atLounge.callId });
+    await jApp.nextState("ended");
+  });
+
+  it("a decline anywhere ends the call; nothing reachable anywhere is unreachable", async () => {
+    const net = new Network();
+    const a = await net.server("a.test");
+    const b = await net.server("b.test");
+    const jesse = await a.person("jesse", "Jesse");
+    const bob = await b.person("bob", "Bob");
+    const ids = await connect(a, jesse, b, bob);
+    const carol = await b.person("carol", "Carol", "team");
+    const bobThere = await b.store.createUser(
+      { householdId: carol.household.id, name: "Bob", role: "contact", accountId: bob.account.id },
+      net.timers.now + 1,
+    );
+    const jApp = await a.connectApp(jesse.token);
+    jApp.write({ t: "call.connection", connectionId: ids.aSide });
+    expect((await jApp.nextState("ended")).reason).toBe("unreachable");
+    const homeApp = await b.connectApp(bob.token);
+    const studioApp = await b.connectApp(await b.store.createSession(bobThere.id, net.timers.now));
+    jApp.write({ t: "call.connection", connectionId: ids.aSide });
+    const r = await studioApp.next("call.ringing");
+    const h = await homeApp.next("call.ringing");
+    studioApp.write({ t: "call.hangup", callId: r.callId });
+    expect((await jApp.nextState("ended")).reason).toBe("declined");
+    expect((await homeApp.nextState("ended")).callId).toBe(h.callId);
+  });
+
+  it("rings a Lounge guest at the phone they're on elsewhere, and at their own apps", async () => {
+    const net = new Network();
+    const a = await net.server("a.test");
+    const b = await net.server("b.test");
+    const jesse = await a.person("jesse", "Jesse");
+    const carol = await a.person("carol", "Carol");
+    const bob = await b.person("bob", "Bob");
+    const toJesse = await connect(a, carol, a, jesse);
+    const bobToJesse = await connect(b, bob, a, jesse);
+    const lobby = await b.pairDevice(bob.token, "Lobby", { kind: "lounge" });
+    const phone = await b.connectDevice(lobby.deviceId as string, lobby.key?.pair as CryptoKeyPair);
+    const deviceId = lobby.deviceId as string;
+    await b.http("/lounge/settings", { method: "PUT", token: bob.token, body: { guests: true } });
+    const idle = await phone.next("lounge.idle");
+    await a.http("/lounge/remote", {
+      token: jesse.token,
+      body: { host: "b.test", deviceId, nonce: idle.nonce },
+    });
+    const challenge = await phone.next("lounge.challenge");
+    phone.write({ t: "lounge.press", index: challenge.index });
+    await phone.next("lounge.session");
+    await vi.waitFor(async () =>
+      expect(await a.store.loungeAwayState(jesse.account.id, "b.test", deviceId)).toBe("active"),
+    );
+    const jApp = await a.connectApp(jesse.token);
+
+    // Carol, on Jesse's own server, calls her: her app and the Lounge phone at b.test both ring.
+    const cApp = await a.connectApp(carol.token);
+    cApp.write({ t: "call.connection", connectionId: toJesse.aSide });
+    const onApp = await jApp.next("call.ringing");
+    const onPhone = await phone.next("call.ringing");
+    expect([onApp.from.label, onPhone.from.label]).toEqual(["Carol", "Carol"]);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "call.answer", callId: onPhone.callId });
+    const connecting = await cApp.nextState("connecting");
+    expect((await jApp.nextState("ended")).callId).toBe(onApp.callId);
+    cApp.write({ t: "rtc.sdp", callId: connecting.callId, type: "offer", sdp: "v=0 c" });
+    expect(await phone.next("rtc.sdp")).toMatchObject({ callId: onPhone.callId, sdp: "v=0 c" });
+    phone.write({ t: "rtc.sdp", callId: onPhone.callId, type: "answer", sdp: "v=0 p" });
+    await cApp.nextState("active");
+    cApp.write({ t: "call.hangup", callId: connecting.callId });
+    await phone.nextState("ended");
+    phone.write({ t: "hook", state: "down" });
+
+    // Bob, on the Lounge phone's own server, calls her: it rings there too (through her server).
+    const bApp = await b.connectApp(bob.token);
+    bApp.write({ t: "call.connection", connectionId: bobToJesse.aSide });
+    await new Promise((r) => setTimeout(r, 100));
+    await jApp.next("call.ringing");
+    expect((await phone.next("call.ringing")).from.label).toBe("Bob");
+
+    // Only her own server can ring her there.
+    const c = await net.server("c.test");
+    expect(
+      await b.env.calls?.receive("c.test", {
+        callId: "call_forged_guest",
+        from: { handle: "jesse", id: jesse.account.id, name: "Jesse" },
+        to: { kind: "guest", deviceId },
+      }),
+    ).toEqual({ state: "ended", reason: "unreachable" });
+    void c;
+  });
+});

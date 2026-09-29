@@ -32,6 +32,8 @@ export interface CallLinks {
   place(host: string, body: CallBody, callerHousehold: string): Promise<RingResult>;
   register(host: string, callId: string, householdId: string): Promise<void>;
   signal(to: { host: string; householdId?: string }, msg: FedSignal): Promise<void>;
+  /** Rings a person in another household on this server, for a call owned here. */
+  ringLocal(householdId: string, req: import("./fedCalls.ts").RemoteRing): Promise<RingResult>;
 }
 
 /** Everything the server needs from its host platform. Node and Workers each provide one. */
@@ -163,6 +165,8 @@ export interface RoomSnapshot {
   callee?: string;
   /** Far ends in another household or on another server (they have no socket to restore). */
   remotes?: PeerInfo[];
+  /** Places still ringing for the callee elsewhere (their other spaces, a remote Lounge phone). */
+  branches?: PeerInfo[];
   /** Fair-use metering: who pays, and when media started. */
   payer?: string;
   activeAt?: number;

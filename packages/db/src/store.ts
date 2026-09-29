@@ -1403,6 +1403,15 @@ export class Store {
     );
   }
 
+  /** Other servers' Lounge phones where this account is a guest right now. */
+  async activeLoungeAway(accountId: string): Promise<{ host: string; deviceId: string }[]> {
+    const rows = await this.sql.all<{ host: string; device_id: string }>(
+      "SELECT host, device_id FROM lounge_away WHERE account_id = ? AND state = 'active'",
+      accountId,
+    );
+    return rows.map((r) => ({ host: r.host, deviceId: r.device_id }));
+  }
+
   async loungeAwayState(
     accountId: string,
     host: string,

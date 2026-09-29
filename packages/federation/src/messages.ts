@@ -42,6 +42,11 @@ export const CallTarget = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("person"), handle: Handle }),
   /** A household phone whose allow-list lists `from` (see `/fed/v1/phones`). */
   z.object({ kind: z.literal("phone"), deviceId: Id }),
+  /**
+   * The receiving server's Lounge phone where `from` (the sender's own account) is a guest right
+   * now: the guest's server rings them there too. Only for the server that vouched for them.
+   */
+  z.object({ kind: z.literal("guest"), deviceId: Id }),
 ]);
 export type CallTarget = z.infer<typeof CallTarget>;
 
@@ -57,6 +62,8 @@ export const CallBody = z.object({
   viaPhone: z.object({ label: z.string().trim().min(1).max(24) }).optional(),
   /** `from` is at one of the sending server's Lounge phones as a guest from `guestOf`. */
   guestOf: z.string().max(260).optional(),
+  /** What to show while ringing, when it isn't `from` (a guest's phone rung for their caller). */
+  ringLabel: z.string().trim().min(1).max(24).optional(),
 });
 export type CallBody = z.infer<typeof CallBody>;
 

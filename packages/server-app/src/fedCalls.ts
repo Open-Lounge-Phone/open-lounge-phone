@@ -26,7 +26,11 @@ export interface RemoteRing {
   label: string;
   target:
     | { kind: "person"; userId: string }
-    | { kind: "phone"; deviceId: string; contactId: string };
+    | { kind: "phone"; deviceId: string; contactId: string }
+    /** A Lounge phone here where the caller's server's account is a guest. */
+    | { kind: "guest"; deviceId: string; guestId: string };
+  /** Ring only here: a branch of a call another household here owns (no further fan-out). */
+  noBranches?: boolean;
   /** The caller, for the call log: `handle@host`. */
   address?: string;
   /** For calls between households here: the caller's household. */
@@ -98,6 +102,23 @@ export class FedCalls implements CallLinks {
         ...(peerHousehold ? { peerHousehold } : {}),
       });
     }
+    if (body.to.kind === "guest") {
+      // The guest's own server rings its account at our Lounge phone; the hub checks that this
+      // server is the one that vouched for the guest there.
+      const lounge = await store.getDevice(body.to.deviceId);
+      if (lounge?.kind !== "lounge" || host === LOCAL_HOST) return deny;
+      await this.register(host, body.callId, lounge.householdId);
+      return this.live.ringRemote(lounge.householdId, {
+        callId: body.callId,
+        host,
+        // Not the guest's own key: someone here may be calling the guest right now, and this
+        // ring is one leg of that very call.
+        key: `fed:${host}:guest-ring:${body.callId}`,
+        address: `${from.handle}@${host}`,
+        label: (body.ringLabel ?? from.name).slice(0, 24),
+        target: { kind: "guest", deviceId: lounge.id, guestId: from.id },
+      });
+    }
     const device = await store.getDevice(body.to.deviceId);
     if (!device) return deny;
     const entry = (await store.listRemoteContacts(device.id)).find(
@@ -127,6 +148,10 @@ export class FedCalls implements CallLinks {
       const reason = e instanceof FederationError && e.status === 429 ? "busy" : "unreachable";
       return { state: "ended", reason };
     }
+  }
+
+  ringLocal(householdId: string, req: RemoteRing): Promise<RingResult> {
+    return this.live.ringRemote(householdId, req);
   }
 
   async register(host: string, callId: string, householdId: string): Promise<void> {
