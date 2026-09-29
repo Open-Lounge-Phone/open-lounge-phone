@@ -41,7 +41,7 @@ Unpaired device asks for a pairing code to show on its display.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `alg` | `"ed25519"` \| `"p256"` |  | Defaults to `ed25519`. |
-| `kind` | `"kids"` \| `"lounge"` |  | What the phone was set up as (first-run choice); the guardian can override it when pairing. Defaults to `kids`. |
+| `kind` | `"kids"` \| `"personal"` \| `"lounge"` |  | What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`. |
 | `publicKey` | string | yes | Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes. |
 
 ### `auth.proof`
@@ -226,6 +226,9 @@ Sent after authentication and whenever guardians change settings.
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
+| `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
+| `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
+| `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 
 ### `lounge.idle`
 
@@ -264,7 +267,7 @@ Lounge phone: the session is over. Forget everything about the person (names, sp
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `reason` | `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` | yes | `logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = idle timeout; `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected. |
+| `reason` | `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` | yes | `logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = the space's session length ran out (idle minutes, or end of day); `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected. |
 
 ### `greeting.ticket`
 
@@ -286,6 +289,15 @@ The phone asked to record (`greeting.begin`) and may not, or its greeting was re
 | `id` | string (len ≤64) |  |  |
 | `result` | `"reset"` \| `"not_allowed"` | yes |  |
 | `kind` | `"default"` \| `"name"` \| `"custom"` | yes | The greeting callers hear now. |
+
+### `wipe`
+
+The phone must wipe itself: forget its device id, owner and settings, delete its device key and make a new one, then show "Set me up" again (Wi-Fi is kept so it can be claimed again; a factory reset clears that too). Sent to a removed phone that is connected, or when it next connects and proves it holds the removed key.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `reason` | `"removed"` | yes | `removed` = its owner removed it in the app (the server has forgotten its key). |
 
 ### `call.ringing`
 

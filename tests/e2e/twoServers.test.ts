@@ -12,6 +12,7 @@ import {
   callAcross,
   knockAndAccept,
   noAnswerAcross,
+  removeAndWipe,
   type ServerTarget,
   signUp,
   timelineAcross,
@@ -79,13 +80,14 @@ afterAll(() => {
   }
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, block", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, block", async () => {
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
   await callAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);
+  await removeAndWipe(bob);
   await voicemailAcross(jesse, bob);
   await block(jesse, bob);
 }, 90_000);

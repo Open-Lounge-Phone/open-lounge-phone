@@ -14,6 +14,18 @@ emulator (`apps/device-web`) as its reference implementation and test peer.
 - The handset is a USB-C UAC device on the ESP32-S3's native USB (host); the power USB-C port
   carries the CH340C console/flashing bridge.
 
+### Modes and remove = wipe (docs/device-lifecycle.md)
+
+- The first-run choice goes in `pair.begin.kind`: `kids`, `personal` or `lounge`; whoever claims
+  the phone may pick another mode, and `config.owner.mode` is the truth afterwards.
+- The strip's trust line comes from `config.owner` ("KIDS: SMITH HOME", "JESSE'S PHONE",
+  "LOUNGE: OFFICE"); see `ownerLine` in `apps/device-web/src/strip.ts`.
+- On `wipe`: forget the device id, owner and settings, erase the device key and generate a new
+  one, keep Wi-Fi, and go back to "Set me up". The server sends it to a connected phone when it's
+  removed, or after a removed phone reconnects and signs the challenge with its old key.
+- An idle Lounge phone may get `config.houseLine` (its keys call as the space) and
+  `config.here` ("who's here"); both are off unless the space turns them on.
+
 ### USB power source policy (hardware/DESIGN.md §9.2a)
 
 - Read the USB-C Rp advertisement on CC1/CC2 (GPIO8 / GPIO6, ADC1, per

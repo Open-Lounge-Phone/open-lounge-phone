@@ -99,7 +99,9 @@ calls stay inside one household until federated connections (see
 **Pairing.** An unpaired phone generates an Ed25519 keypair, sends `pair.begin`, shows the
 returned 6-digit code on its e-ink status strip, and reads it aloud when the handset is lifted. A guardian enters it in the companion app; the server binds the public key
 to the household and sends `pair.done`. Every later connection is a signed `auth.challenge`, so
-no shared secret is ever stored on the device.
+no shared secret is ever stored on the device. The claim picks the phone's **mode** — kids,
+personal (always its owner) or Lounge — and removing a phone makes it **wipe itself** (`wipe`,
+now or when it reconnects with the removed key); see [device-lifecycle.md](device-lifecycle.md).
 
 **Outbound call.** Handset up → button → server resolves the button to a contact and calls
 `authorizeOutbound` (default-deny, quiet hours) → a call room rings the contact's companion app →
@@ -161,11 +163,14 @@ person (`personOf` in `hub.ts`): calls to them ring it (`reachable`), and its ke
 speed-dial as if they called from their app (`appDial`/`userDial` with the person as the caller
 identity, so `authorizeInbound` and the availability rules decide — exactly their own
 permissions). The session is ephemeral: it ends on MENU → Log out (`lounge.leave`), Leave in the
-app, the household's idle timeout while hung up (`households.lounge_idle_minutes`, default 10),
+app, the space's session length (`households.lounge_session`: idle minutes while hung up,
+`lounge_idle_minutes` default 10; the end of the day, `lounge_day_end`; or only at logout),
 a new takeover, or a disconnect that lasts over 60 s (a reconnect within 60 s resumes the session;
-the deadline uses the hub's single `wakeAt` alarm, shared with quiet hours); the phone gets `lounge.ended` and forgets everything. The server
+the deadline and the end of day use the hub's single `wakeAt` alarm, shared with quiet hours); the phone gets `lounge.ended` and forgets everything. The server
 keeps only a `lounge_sessions` row (who, where, when) for guardians. "Open to chat"
-(`lounge.chat`, a MENU item) and the person's location travel in `member.status.lounge`.
+(`lounge.chat`, a MENU item) and the person's location travel in `member.status.lounge`. While
+nobody is signed in the phone is dead, unless its space turned on house-line keys or "who's
+here" (`config.houseLine`, `config.here`).
 
 ## Phases beyond software
 

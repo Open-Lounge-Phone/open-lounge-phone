@@ -51,3 +51,17 @@ describe("Lounge phone display", () => {
     );
   });
 });
+
+describe("idle Lounge phone options", () => {
+  const idle = { kind: "idle" as const };
+  it("shows house-line keys and who's here only when the space turned them on", () => {
+    expect(loungeLines({}, idle)).toEqual(["SCAN TO USE", "THIS PHONE"]);
+    expect(loungeLines({ houseLine: true }, idle)).toEqual(["SCAN TO USE", "OR PRESS A KEY"]);
+    expect(loungeKeysLive({ houseLine: true })).toBe(true);
+    expect(loungeKeysLive({})).toBe(false);
+    expect(loungeLines({ here: [{ name: "Dad", where: "Patio" }] }, idle)).toEqual([
+      "SCAN TO USE",
+      "HERE: DAD",
+    ]);
+  });
+});

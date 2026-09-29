@@ -67,6 +67,13 @@ type DevicePhase =
   | { kind: "hello" }
   | { kind: "unpaired"; code?: string }
   | { kind: "challenge"; device: Device; nonce: Uint8Array<ArrayBuffer> }
+  /** A removed phone came back: once it proves it holds the removed key, it's told to wipe. */
+  | {
+      kind: "removed";
+      id: string;
+      key: { publicKey: string; keyAlg: Device["keyAlg"] };
+      nonce: Uint8Array<ArrayBuffer>;
+    }
   | { kind: "ready"; hub: HouseholdHub; peer: Peer }
   | { kind: "closed" };
 
@@ -240,7 +247,7 @@ export class Gateway implements Coordinator {
     const cancelHello =
       initial.kind === "hello"
         ? this.env.setTimer(() => {
-            if (phase.kind === "hello" || phase.kind === "challenge") {
+            if (phase.kind === "hello" || phase.kind === "challenge" || phase.kind === "removed") {
               fail(CloseCode.timeout, "timeout");
             }
           }, HELLO_TIMEOUT_MS)
@@ -282,6 +289,13 @@ export class Gateway implements Coordinator {
             return;
           }
           const device = await this.env.store.getDevice(msg.deviceId);
+          const removed = device ? undefined : await this.env.store.removedDevice(msg.deviceId);
+          if (removed) {
+            const nonce = crypto.getRandomValues(new Uint8Array(32));
+            phase = { kind: "removed", id: msg.deviceId, key: removed, nonce };
+            conn.send({ t: "auth.challenge", nonce: toBase64Url(nonce) });
+            return;
+          }
           if (!device || !this.allowed(device.householdId)) {
             conn.send({ t: "error", code: "unauthorized", message: "unknown device; re-pair" });
             return fail(CloseCode.unauthorized, "unknown device");
@@ -308,6 +322,17 @@ export class Gateway implements Coordinator {
           conn.remember?.({ kind: "pairing", code });
           conn.send({ t: "pair.code", code, expiresAt });
           return;
+        }
+        case "removed": {
+          if (msg.t !== "auth.proof") return fail(CloseCode.badHandshake, "expected auth.proof");
+          const { id, key, nonce } = phase;
+          if (!(await verifyDeviceSignature(key.keyAlg, key.publicKey, msg.sig, nonce))) {
+            conn.send({ t: "error", code: "unauthorized", message: "bad signature" });
+            return fail(CloseCode.unauthorized, "bad signature");
+          }
+          conn.send({ t: "wipe", reason: "removed" });
+          await this.env.store.forgetRemovedDevice(id);
+          return fail(CloseCode.unauthorized, "removed");
         }
         case "challenge": {
           if (msg.t !== "auth.proof") return fail(CloseCode.badHandshake, "expected auth.proof");

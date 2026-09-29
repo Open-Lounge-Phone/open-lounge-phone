@@ -134,13 +134,20 @@ export const PhoneKind = z
   );
 export type PhoneKind = z.infer<typeof PhoneKind>;
 
+export const PhoneMode = z
+  .enum(["kids", "personal", "lounge"])
+  .describe(
+    "How a phone is used, chosen when it's claimed: `kids` = a home's phone for a child (its own allow-list, quiet hours); `personal` = one person's own desk or bedside phone, always signed in as them; `lounge` = a space's shared phone that people sign in to (idle until someone does).",
+  );
+export type PhoneMode = z.infer<typeof PhoneMode>;
+
 export const PairBegin = z
   .object({
     t: z.literal("pair.begin"),
     ...Ref,
     alg: KeyAlg.optional().describe("Defaults to `ed25519`."),
-    kind: PhoneKind.optional().describe(
-      "What the phone was set up as (first-run choice); the guardian can override it when pairing. Defaults to `kids`.",
+    kind: PhoneMode.optional().describe(
+      "What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`.",
     ),
     publicKey: Base64Url.describe(
       "Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes.",
@@ -298,6 +305,34 @@ export const Config = z
       })
       .optional()
       .describe("The phone's voicemail greeting (absent on Lounge phones)."),
+    owner: z
+      .object({
+        mode: PhoneMode,
+        space: z.string().min(1).max(64).describe("The space it belongs to."),
+        person: z.string().min(1).max(24).optional().describe("`personal`: whose phone it is."),
+      })
+      .optional()
+      .describe(
+        'Who the phone belongs to and how it is used, for the status strip\'s trust line ("Kids · Smith home", "Jesse\'s phone", "Lounge · Office").',
+      ),
+    houseLine: z
+      .boolean()
+      .optional()
+      .describe(
+        "Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on).",
+      ),
+    here: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(24),
+          where: z.string().min(1).max(24).describe("The Lounge phone they're at."),
+        }),
+      )
+      .max(8)
+      .optional()
+      .describe(
+        'Lounge phone with nobody signed in, when the space turns on "who\'s here": people signed in at its other Lounge phones who are open to chat.',
+      ),
   })
   .describe("Sent after authentication and whenever guardians change settings.");
 
@@ -382,7 +417,7 @@ export const LoungeSession = z
 export const LoungeReason = z
   .enum(["logout", "left", "idle", "replaced", "removed", "offline"])
   .describe(
-    "`logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = idle timeout; `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected.",
+    "`logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = the space's session length ran out (idle minutes, or end of day); `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected.",
   );
 
 export const LoungeEnded = z
@@ -414,6 +449,18 @@ export const GreetingDone = z
     "The phone asked to record (`greeting.begin`) and may not, or its greeting was reset (`greeting.reset`). A recorded greeting is confirmed by the upload's HTTP 201.",
   );
 
+export const Wipe = z
+  .object({
+    t: z.literal("wipe"),
+    ...Ref,
+    reason: z
+      .enum(["removed"])
+      .describe("`removed` = its owner removed it in the app (the server has forgotten its key)."),
+  })
+  .describe(
+    'The phone must wipe itself: forget its device id, owner and settings, delete its device key and make a new one, then show "Set me up" again (Wi-Fi is kept so it can be claimed again; a factory reset clears that too). Sent to a removed phone that is connected, or when it next connects and proves it holds the removed key.',
+  );
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -425,6 +472,7 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   LoungeEnded,
   GreetingTicket,
   GreetingDone,
+  Wipe,
   CallRinging,
   CallStateMsg,
   RtcConfig,

@@ -1,5 +1,8 @@
-/** Which phone model this emulator plays (`?variant=lounge`); they differ in power needs. */
-export type Variant = "kids" | "lounge";
+/**
+ * How this phone is used (first-run choice, or `?variant=`): a kids' phone, someone's own desk
+ * phone (`personal`), or a shared Lounge phone. Only the Lounge phone needs a stronger charger.
+ */
+export type Variant = "kids" | "personal" | "lounge";
 
 /** USB-C source advertisement as read from the CC pins (USB-A chargers always read "default"). */
 export type PowerSource = "default" | "1.5A" | "3A";
@@ -14,5 +17,5 @@ export function powerStatus(variant: Variant, source: PowerSource) {
 }
 
 export function parseVariant(v: string | null): Variant {
-  return v === "lounge" ? "lounge" : "kids";
+  return v === "lounge" || v === "personal" ? v : "kids";
 }

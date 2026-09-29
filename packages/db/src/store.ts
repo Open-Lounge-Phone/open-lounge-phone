@@ -179,6 +179,56 @@ export const HANDLE_RESERVE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type KeyAlg = "ed25519" | "p256";
 export type PhoneKind = "kids" | "lounge";
+/** How a phone is used (see docs/device-lifecycle.md): derived from `kind` and the owner. */
+export type PhoneMode = "kids" | "personal" | "lounge";
+export const PHONE_MODES: readonly PhoneMode[] = ["kids", "personal", "lounge"];
+
+export const deviceMode = (d: Pick<Device, "kind" | "ownerUserId">): PhoneMode =>
+  d.kind === "lounge" ? "lounge" : d.ownerUserId ? "personal" : "kids";
+
+/** How long a Lounge session lasts in a space. */
+export type LoungeSessionPolicy = "idle" | "end_of_day" | "until_logout";
+export const LOUNGE_SESSION_POLICIES: readonly LoungeSessionPolicy[] = [
+  "idle",
+  "end_of_day",
+  "until_logout",
+];
+
+/** Where an idle Lounge phone's house-line key rings, calling as the space. */
+export type HouseLineTarget =
+  /** A member of the space (wherever they can be rung, like any call to them). */
+  | { kind: "user"; userId: string }
+  /** A personal (desk) phone in the space. */
+  | { kind: "device"; deviceId: string }
+  /** Several members at once (a front desk, a staff group): the first to answer takes it. */
+  | { kind: "group"; userIds: string[] };
+
+export interface HouseLineKey {
+  /** Button index (0–9: digits 1–9, then 0). */
+  index: number;
+  label: string;
+  target: HouseLineTarget;
+}
+
+/** What a Lounge phone offers while nobody is signed in. Everything is off by default. */
+export interface LoungeIdleConfig {
+  houseLine: { enabled: boolean; keys: HouseLineKey[] };
+  /** Show people signed in at the space's other Lounge phones who are open to chat. */
+  whosHere: boolean;
+}
+export const LOUNGE_IDLE_OFF: LoungeIdleConfig = {
+  houseLine: { enabled: false, keys: [] },
+  whosHere: false,
+};
+
+export interface LoungeSettings {
+  idleMinutes: number;
+  guests: boolean;
+  session: LoungeSessionPolicy;
+  /** `end_of_day`: when sessions end, local "HH:MM". */
+  dayEnd: string;
+  idle: LoungeIdleConfig;
+}
 
 /** A takeover of a Lounge phone; `endedAt` is null while it lasts. */
 export interface LoungeSessionRecord {
@@ -1146,7 +1196,7 @@ export class Store {
     publicKey: string,
     now: number,
     keyAlg: KeyAlg = "ed25519",
-    kind?: PhoneKind,
+    kind?: PhoneMode,
   ): Promise<{ code: string; expiresAt: number }> {
     await this.sql.run(
       "DELETE FROM pairings WHERE expires_at <= ? OR public_key = ?",
@@ -1169,6 +1219,21 @@ export class Store {
     throw new Error("could not allocate a pairing code");
   }
 
+  /** A pending pairing, without claiming it: the key and what the phone was set up as. */
+  async peekPairing(
+    code: string,
+    now: number,
+  ): Promise<{ publicKey: string; keyAlg: KeyAlg; mode: PhoneMode | null } | undefined> {
+    const r = await this.sql.first<{ public_key: string; key_alg: KeyAlg; kind: string | null }>(
+      "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ?",
+      code,
+      now,
+    );
+    if (!r) return undefined;
+    const mode = PHONE_MODES.includes(r.kind as PhoneMode) ? (r.kind as PhoneMode) : null;
+    return { publicKey: r.public_key, keyAlg: r.key_alg, mode };
+  }
+
   /** Claims a pairing code for a household, creating the device. Single use. */
   async claimPairing(
     input: {
@@ -1184,7 +1249,7 @@ export class Store {
     const pending = await this.sql.first<{
       public_key: string;
       key_alg: KeyAlg;
-      kind: PhoneKind | null;
+      kind: string | null;
     }>(
       "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ?",
       input.code,
@@ -1200,7 +1265,8 @@ export class Store {
       publicKey: pending.public_key,
       keyAlg: pending.key_alg,
       ownerUserId: input.ownerUserId ?? null,
-      kind: input.kind ?? pending.kind ?? "kids",
+      // A phone set up as "personal" is a kids-kind phone with an owner.
+      kind: input.kind ?? (pending.kind === "lounge" ? "lounge" : "kids"),
       createdAt: now,
       lastSeen: null,
     };
@@ -1257,6 +1323,37 @@ export class Store {
   /** Removes a phone; its allow-list, keys and voicemail go with it. */
   async deleteDevice(id: string): Promise<void> {
     await this.sql.run("DELETE FROM devices WHERE id = ?", id);
+  }
+
+  /**
+   * Remembers removed phones (by id and key) so each is told to wipe itself when it next
+   * connects. Rows older than a year are forgotten.
+   */
+  async recordRemovedDevices(devices: Device[], now: number): Promise<void> {
+    await this.sql.batch([
+      {
+        query: "DELETE FROM removed_devices WHERE removed_at < ?",
+        params: [now - 365 * DAY_MS],
+      },
+      ...devices.map((d) => ({
+        query: `INSERT OR REPLACE INTO removed_devices (id, public_key, key_alg, removed_at)
+          VALUES (?, ?, ?, ?)`,
+        params: [d.id, d.publicKey, d.keyAlg, now],
+      })),
+    ]);
+  }
+
+  async removedDevice(id: string): Promise<{ publicKey: string; keyAlg: KeyAlg } | undefined> {
+    const r = await this.sql.first<{ public_key: string; key_alg: KeyAlg }>(
+      "SELECT public_key, key_alg FROM removed_devices WHERE id = ?",
+      id,
+    );
+    return r && { publicKey: r.public_key, keyAlg: r.key_alg };
+  }
+
+  /** The phone was told to wipe itself. */
+  async forgetRemovedDevice(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM removed_devices WHERE id = ?", id);
   }
 
   async touchDevice(id: string, now: number): Promise<void> {
@@ -1474,6 +1571,50 @@ export class Store {
       householdId,
     );
     return r?.m ?? DEFAULT_LOUNGE_IDLE_MINUTES;
+  }
+
+  /** A space's Lounge settings: session length, guests, and what an idle phone offers. */
+  async loungeSettings(householdId: string): Promise<LoungeSettings> {
+    const r = await this.sql.first<{
+      lounge_idle_minutes: number;
+      lounge_guests: number;
+      lounge_session: LoungeSessionPolicy | null;
+      lounge_day_end: string | null;
+      lounge_idle: string | null;
+    }>(
+      `SELECT lounge_idle_minutes, lounge_guests, lounge_session, lounge_day_end, lounge_idle
+       FROM households WHERE id = ?`,
+      householdId,
+    );
+    let idle = LOUNGE_IDLE_OFF;
+    try {
+      if (r?.lounge_idle) idle = { ...LOUNGE_IDLE_OFF, ...(JSON.parse(r.lounge_idle) as object) };
+    } catch {
+      // A damaged value means "off".
+    }
+    return {
+      idleMinutes: r?.lounge_idle_minutes ?? DEFAULT_LOUNGE_IDLE_MINUTES,
+      guests: r?.lounge_guests === 1,
+      session: r?.lounge_session ?? "idle",
+      dayEnd: r?.lounge_day_end ?? "00:00",
+      idle,
+    };
+  }
+
+  async setLoungeSession(
+    householdId: string,
+    patch: { session?: LoungeSessionPolicy; dayEnd?: string; idle?: LoungeIdleConfig },
+  ): Promise<void> {
+    await this.sql.run(
+      `UPDATE households SET lounge_session = COALESCE(?, lounge_session),
+         lounge_day_end = COALESCE(?, lounge_day_end),
+         lounge_idle = CASE WHEN ? THEN ? ELSE lounge_idle END WHERE id = ?`,
+      patch.session ?? null,
+      patch.dayEnd ?? null,
+      patch.idle ? 1 : 0,
+      patch.idle ? JSON.stringify(patch.idle) : null,
+      householdId,
+    );
   }
 
   async setLoungeIdleMinutes(householdId: string, minutes: number): Promise<void> {

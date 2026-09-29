@@ -16,14 +16,21 @@ export function loadKind(
   profile: string,
   param: string | null,
 ): Variant | undefined {
-  if (param === "lounge" || param === "kids") return param;
+  if (param === "lounge" || param === "kids" || param === "personal") return param;
   let stored: string | null = null;
   try {
     stored = storage?.getItem(kindKey(profile)) ?? null;
   } catch {
     // Storage can be blocked (private mode); the phone then asks again next launch.
   }
-  return stored === "lounge" || stored === "kids" ? stored : undefined;
+  return stored === "lounge" || stored === "kids" || stored === "personal" ? stored : undefined;
+}
+
+/** A wiped phone forgets how it was set up too: the first-run choice comes back. */
+export function forgetKind(storage: Pick<Storage, "removeItem"> | undefined, profile: string) {
+  try {
+    storage?.removeItem(kindKey(profile));
+  } catch {}
 }
 
 export function saveKind(storage: Set | undefined, profile: string, kind: Variant): void {
@@ -33,7 +40,7 @@ export function saveKind(storage: Set | undefined, profile: string, kind: Varian
 }
 
 export type StartScreen =
-  /** First run: pick "Kids phone" or "Lounge phone" (the tap also unlocks audio). */
+  /** First run: pick "Kids phone", "My own phone" or "Lounge phone" (the tap unlocks audio). */
   | "choose"
   /** Later launches: one tap to allow sound and the microphone. */
   | "tap"

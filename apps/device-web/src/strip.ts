@@ -134,7 +134,18 @@ export function statusLines(input: StatusInput): StatusLines {
 
   const first = quiet ?? (battery ? `READY ${battery.pct}%` : "READY");
   if (input.power?.reduced) return [first, WEAK_CHARGER];
-  return lowLine ? [first, lowLine] : [first];
+  if (lowLine) return [first, lowLine];
+  const owner = config?.owner ? ownerLine(config.owner) : undefined;
+  return owner ? [first, owner] : [first];
+}
+
+/**
+ * The trust line: whose phone this is and how it's used ("KIDS: SMITH HOME", "JESSE'S PHONE",
+ * "LOUNGE: OFFICE"), so anyone can see it at a glance.
+ */
+export function ownerLine(owner: NonNullable<DeviceConfig["owner"]>): string {
+  if (owner.mode === "personal" && owner.person) return clip(`${owner.person}'S PHONE`);
+  return clip(`${owner.mode === "lounge" ? "LOUNGE" : "KIDS"}: ${owner.space}`);
 }
 
 /** Shown on a Default (≤500 mA) USB source when the phone needs more (Lounge). */

@@ -12,7 +12,7 @@ describe("createApi", () => {
   it("sends the bearer token and JSON body", async () => {
     const fetch = fakeFetch(201, { id: "dev_1", name: "Kid" });
     const api = createApi({ token: "t".repeat(20), fetch });
-    expect(await api.pair("123456", "Kid")).toEqual({ id: "dev_1", name: "Kid" });
+    expect(await api.pair("123456", "Kid", "kids")).toEqual({ id: "dev_1", name: "Kid" });
     const [url, init] = fetch.mock.calls[0] ?? [];
     expect(url).toBe("/api/devices/pair");
     expect(init?.method).toBe("POST");
@@ -20,7 +20,7 @@ describe("createApi", () => {
       authorization: `Bearer ${"t".repeat(20)}`,
       "content-type": "application/json",
     });
-    expect(JSON.parse(String(init?.body))).toEqual({ code: "123456", name: "Kid" });
+    expect(JSON.parse(String(init?.body))).toEqual({ code: "123456", name: "Kid", mode: "kids" });
   });
 
   it("pins requests to a household when given one", async () => {
@@ -62,7 +62,7 @@ describe("createApi", () => {
       token: null,
       fetch: fakeFetch(404, { error: "unknown or expired code" }),
     });
-    const err = await api.pair("000000", "x").catch((e) => e);
+    const err = await api.pair("000000", "x", "personal").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 404, message: "unknown or expired code" });
   });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DeviceConfig } from "./leds.ts";
 import {
   MISSED_CYCLE_MS,
+  ownerLine,
   STATUS_WIDTH,
   type StatusInput,
   statusLines,
@@ -200,5 +201,31 @@ describe("weak charger", () => {
       config: { buttons: [], quiet: false, missed: [{ from: "Mom" }] },
     });
     expect(missed[0]).toBe("MISSED MOM");
+  });
+});
+
+describe("trust line", () => {
+  const base = { connection: "online" as const, deviceState: { kind: "idle" as const }, now: 0 };
+  it("says whose phone it is and how it's used", () => {
+    const config = (owner: NonNullable<Parameters<typeof ownerLine>[0]>) => ({
+      buttons: [],
+      quiet: false,
+      owner,
+    });
+    expect(statusLines({ ...base, config: config({ mode: "kids", space: "Smith home" }) })).toEqual(
+      ["READY", "KIDS: SMITH HOME"],
+    );
+    expect(ownerLine({ mode: "personal", space: "Home", person: "Jesse" })).toBe("JESSE'S PHONE");
+    expect(ownerLine({ mode: "lounge", space: "The Office Space" })).toBe("LOUNGE: THE OFFI");
+    expect(ownerLine({ mode: "lounge", space: "The Office Space" }).length).toBeLessThanOrEqual(
+      STATUS_WIDTH,
+    );
+    // Warnings win the second line.
+    const low = statusLines({
+      ...base,
+      battery: { pct: 10, charging: false },
+      config: config({ mode: "kids", space: "Home" }),
+    });
+    expect(low[1]).toBe("LOW BATTERY 10%");
   });
 });

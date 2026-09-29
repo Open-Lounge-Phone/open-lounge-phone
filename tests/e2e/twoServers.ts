@@ -285,3 +285,64 @@ export async function timelineAcross(jesse: Person, bob: Person) {
     from: "connection",
   });
 }
+
+/** A phone that pairs over a real socket on `owner`'s server as `mode`, then signs in. */
+async function pairPhone(owner: Person, mode: "kids" | "personal" | "lounge") {
+  const ws = owner.server.base.replace(/^http/, "ws");
+  const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicKey = toBase64Url(
+    new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey)),
+  );
+  const hello = {
+    t: "hello",
+    proto: 1,
+    model: "web-emulator",
+    fw: "e2e",
+    buttons: 4,
+    display: "eink",
+  };
+  const pairing = await socket(`${ws}/ws/device`);
+  pairing.send(hello);
+  pairing.send({ t: "pair.begin", publicKey, kind: mode });
+  const { code } = await pairing.next("pair.code");
+  const preview = await api(owner, "/devices/pair/preview", { body: { code } });
+  expect(preview.json.mode).toBe(mode);
+  const paired = await api(owner, "/devices/pair", { body: { code, name: "Desk" } });
+  expect(paired.status).toBe(201);
+  const { deviceId } = await pairing.next("pair.done");
+  pairing.ws.close();
+  const signIn = async () => {
+    const phone = await socket(`${ws}/ws/device?device=${deviceId}`);
+    phone.send({ ...hello, deviceId: deviceId as string });
+    const { nonce } = await phone.next("auth.challenge");
+    const sig = await crypto.subtle.sign(
+      "Ed25519",
+      keys.privateKey,
+      fromBase64Url(nonce as string),
+    );
+    phone.send({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+    return phone;
+  };
+  return { deviceId: deviceId as string, signIn };
+}
+
+/**
+ * Bob's own desk phone: claimed as "personal", its strip names him; removed in the app while
+ * connected it wipes itself, and a second phone removed while offline wipes when it comes back.
+ */
+export async function removeAndWipe(bob: Person) {
+  const desk = await pairPhone(bob, "personal");
+  const phone = await desk.signIn();
+  const config = await phone.next("config");
+  expect(config.owner).toMatchObject({ mode: "personal", person: "Bob" });
+  expect((await api(bob, `/devices/${desk.deviceId}`, { method: "DELETE" })).status).toBe(204);
+  expect(await phone.next("wipe")).toMatchObject({ reason: "removed" });
+
+  const spare = await pairPhone(bob, "personal");
+  expect((await api(bob, `/devices/${spare.deviceId}`, { method: "DELETE" })).status).toBe(204);
+  const back = await spare.signIn();
+  expect(await back.next("wipe")).toMatchObject({ reason: "removed" });
+}

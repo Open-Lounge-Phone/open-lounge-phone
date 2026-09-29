@@ -74,7 +74,7 @@ import {
 } from "./menu.ts";
 import { type PowerSource, powerStatus, type Variant } from "./power.ts";
 import { renderSegments } from "./segments.ts";
-import { loadKind, saveKind, startScreen } from "./setup.ts";
+import { forgetKind, loadKind, saveKind, startScreen } from "./setup.ts";
 import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
 import { ScreenAwake, type WakeLockLike } from "./wake.ts";
 
@@ -101,10 +101,16 @@ const storage = (() => {
     return undefined;
   }
 })();
-// Kids or Lounge: chosen on the first-run screen (or `?variant=`), remembered per profile.
+// Kids, personal or Lounge: chosen on the first-run screen (or `?variant=`), remembered per
+// profile; whoever claims the phone may pick another mode.
 let chosenKind: Variant | undefined = loadKind(storage, profile, params.get("variant"));
 let variant: Variant = chosenKind ?? "kids";
 const devMode = params.get("dev") === "1";
+const VARIANT_NAME: Record<Variant, string> = {
+  kids: "Kids",
+  personal: "Personal",
+  lounge: "Lounge",
+};
 let powerSource: PowerSource = "3A";
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
@@ -290,7 +296,21 @@ async function handle(msg: ServerToDevice): Promise<void> {
         ...(msg.quietUntil ? { quietUntil: msg.quietUntil } : {}),
         ...(msg.missed ? { missed: msg.missed } : {}),
         ...(msg.greeting ? { greeting: msg.greeting } : {}),
+        ...(msg.owner ? { owner: msg.owner } : {}),
       };
+      // The mode is decided when the phone is claimed; it may differ from the first-run choice.
+      if (msg.owner && msg.owner.mode !== variant) {
+        variant = msg.owner.mode;
+        chosenKind = variant;
+        saveKind(storage, profile, variant);
+        $<HTMLElement>('[data-power="variant"]').textContent = VARIANT_NAME[variant];
+      }
+      // An idle Lounge phone: the space's house-line keys and "who's here", if it has them.
+      lounge = { ...lounge };
+      if (msg.houseLine) lounge.houseLine = true;
+      else delete lounge.houseLine;
+      if (msg.here) lounge.here = msg.here;
+      else delete lounge.here;
       // Chime once for a newly missed caller, but never over a call or a lifted handset.
       if (authed && hasNewMissed(config, next) && !hookUp && deviceState.kind === "idle") {
         playChime();
@@ -361,10 +381,26 @@ async function handle(msg: ServerToDevice): Promise<void> {
     case "error":
       if (msg.code === "unauthorized" && getDeviceId(profile)) forgetDeviceId();
       break;
+    case "wipe":
+      await wipe();
+      return;
     default:
       break;
   }
   render();
+}
+
+/**
+ * Removed by its owner in the app: forget everything — the device key (IndexedDB), its id, how it
+ * was set up and the log — and start over at "Set me up". Wi-Fi would be kept on hardware.
+ */
+async function wipe(): Promise<void> {
+  log("•", "removed in the app: wiping this phone");
+  socket.close();
+  await forgetIdentity(profile);
+  forgetKind(storage, profile);
+  logEl.replaceChildren();
+  location.reload();
 }
 
 /** A Lounge session ended: nothing about the person may stay on the phone. */
@@ -708,7 +744,7 @@ sourceEl.addEventListener("change", () => {
   sendStatus();
   render();
 });
-$<HTMLElement>('[data-power="variant"]').textContent = variant === "lounge" ? "Lounge" : "Kids";
+$<HTMLElement>('[data-power="variant"]').textContent = VARIANT_NAME[variant];
 chargingEl.addEventListener("change", () => {
   battery.charging = chargingEl.checked;
   sendStatus();
@@ -740,7 +776,7 @@ function start(kind?: Variant): void {
     chosenKind = kind;
     variant = kind;
     saveKind(storage, profile, kind);
-    $<HTMLElement>('[data-power="variant"]').textContent = kind === "lounge" ? "Lounge" : "Kids";
+    $<HTMLElement>('[data-power="variant"]').textContent = VARIANT_NAME[kind];
     if (authed || getDeviceId(profile)) sendStatus();
     else beginPairing();
   }
@@ -927,7 +963,10 @@ function renderDisplay(): void {
         });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.
   const grid =
-    authed && !pairingCode && !lounge.challenge && !(loungeLive && !lounge.session && !view)
+    authed &&
+    !pairingCode &&
+    !lounge.challenge &&
+    !(loungeLive && !lounge.session && !lounge.houseLine && !view)
       ? keyGrid(config, view)
       : undefined;
   const text = JSON.stringify([lines, displayMode === "eink" ? grid : null, qr]);

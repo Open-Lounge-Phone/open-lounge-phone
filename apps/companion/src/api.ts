@@ -69,14 +69,49 @@ export interface DeviceSummary {
   ownerUserId?: string | null;
   /** `lounge` = a shared phone people take over by scanning its code. */
   kind?: "kids" | "lounge";
+  /** How it's used: a kids' phone, someone's own phone, or a shared Lounge phone. */
+  mode?: "kids" | "personal" | "lounge";
   /** How this device lists the signed-in user, if at all. */
   contact: ContactEntry | null;
+}
+
+export type LoungeSessionPolicy = "idle" | "end_of_day" | "until_logout";
+
+export type HouseLineTarget =
+  | { kind: "user"; userId: string }
+  | { kind: "device"; deviceId: string }
+  | { kind: "group"; userIds: string[] };
+
+export interface HouseLineKey {
+  index: number;
+  label: string;
+  target: HouseLineTarget;
+}
+
+export interface LoungeIdle {
+  houseLine: { enabled: boolean; keys: HouseLineKey[] };
+  whosHere: boolean;
+}
+
+export interface LoungeSettingsPatch {
+  idleMinutes?: number;
+  guests?: boolean;
+  session?: LoungeSessionPolicy;
+  dayEnd?: string;
+  houseLine?: LoungeIdle["houseLine"];
+  whosHere?: boolean;
 }
 
 export interface LoungeInfo {
   idleMinutes: number;
   /** People from other servers may use these Lounge phones (their server vouches). */
   guests?: boolean;
+  /** How long a session lasts in this space. */
+  session?: LoungeSessionPolicy;
+  /** `end_of_day`: local "HH:MM". */
+  dayEnd?: string;
+  /** Guardians: what idle phones offer (all off by default). */
+  idle?: LoungeIdle;
   phones: {
     id: string;
     name: string;
@@ -388,12 +423,16 @@ export function createApi(opts: ApiOptions) {
     deleteAccount: (confirm: string) => request<void>("DELETE", "/account", { confirm }),
     users: () => request<User[]>("GET", "/users"),
     devices: () => request<DeviceSummary[]>("GET", "/devices"),
-    pair: (code: string, name: string, forMe = false, kind?: "kids" | "lounge") =>
-      request<{ id: string; name: string }>("POST", "/devices/pair", {
+    pair: (code: string, name: string, mode: "kids" | "personal" | "lounge") =>
+      request<{ id: string; name: string; mode: string }>("POST", "/devices/pair", {
         code,
         name,
-        ...(forMe ? { forMe: true } : {}),
-        ...(kind ? { kind } : {}),
+        mode,
+      }),
+    /** Before pairing: what the phone was set up as. */
+    pairPreview: (code: string) =>
+      request<{ mode: "kids" | "personal" | "lounge" | null }>("POST", "/devices/pair/preview", {
+        code,
       }),
     lounge: () => request<LoungeInfo>("GET", "/lounge"),
     /** Use a Lounge phone on another server; this server vouches for you there. */
@@ -408,6 +447,8 @@ export function createApi(opts: ApiOptions) {
     setLoungeIdle: (idleMinutes: number) =>
       request<void>("PUT", "/lounge/settings", { idleMinutes }),
     setLoungeGuests: (guests: boolean) => request<void>("PUT", "/lounge/settings", { guests }),
+    setLoungeSettings: (patch: LoungeSettingsPatch) =>
+      request<void>("PUT", "/lounge/settings", patch),
     updateDevice: (deviceId: string, changes: { name?: string; owner?: "me" | "household" }) =>
       request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
     removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),

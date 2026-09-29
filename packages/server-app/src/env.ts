@@ -191,6 +191,8 @@ export interface RoomSnapshot {
   answered?: boolean;
   /** Voicemail if the call goes unanswered: for whom, and the caller as its sender. */
   vm?: { target: import("./vmTickets.ts").VmTarget; from: import("./vmTickets.ts").VmCaller };
+  /** A house-line key ringing several members at once (user ids). */
+  group?: string[];
 }
 
 /** One WebSocket, as seen by the server. */

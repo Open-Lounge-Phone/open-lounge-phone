@@ -1,5 +1,6 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { Api } from "./api.ts";
+import { allowedModes, initialMode, MODE_TEXT, type PhoneMode } from "./pairMode.ts";
 
 export function Pair({
   api,
@@ -14,25 +15,42 @@ export function Pair({
   api: Api;
   /** Non-guardians can only add their own phone. */
   guardian: boolean;
-  /** Start with "This is my own phone" ticked (e.g. from the welcome flow). */
+  /** Start with "My own phone" (e.g. from the welcome flow). */
   defaultMine?: boolean;
   onDone(): void;
   onCancel(): void;
 }) {
+  const modes = allowedModes(guardian, kidsAllowed);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [mine, setMine] = useState(!guardian || defaultMine);
-  /** Empty = keep what the phone was set up as on its first-run screen. */
-  const [kind, setKind] = useState<"" | "kids" | "lounge">(kidsAllowed ? "" : "lounge");
+  const [mode, setMode] = useState<PhoneMode>(initialMode(modes, null, defaultMine));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  // Once the code is complete: preselect what the phone was set up as.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the code changes
+  useEffect(() => {
+    if (code.length !== 6) return;
+    let live = true;
+    api.pairPreview(code).then(
+      (p) => {
+        if (!live) return;
+        setError(undefined);
+        setMode(initialMode(modes, p.mode, defaultMine));
+      },
+      (e) => live && setError((e as Error).message),
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, code]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(undefined);
     try {
-      await api.pair(code, name.trim(), mine || !guardian, mine || !kind ? undefined : kind);
+      await api.pair(code, name.trim(), mode);
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -75,48 +93,41 @@ export function Pair({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Maya's phone"
+            placeholder={
+              mode === "lounge" ? "Lobby" : mode === "personal" ? "My desk" : "Maya's phone"
+            }
             maxLength={24}
             required
           />
           <span className="hint">
-            {mine
+            {mode === "personal"
               ? "The other grown-ups go on its keys; calls to you ring it."
-              : "You'll be added to its first key automatically."}
+              : mode === "kids"
+                ? "You'll be added to its first key automatically."
+                : "Nothing on its keys until someone signs in."}
           </span>
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={mine || !guardian}
-            disabled={!guardian}
-            onChange={(e) => setMine(e.target.checked)}
-          />
-          <span>
-            This is my own phone
-            <span className="hint">
-              {guardian
-                ? kidsAllowed
-                  ? "Leave unticked for a household phone, e.g. a kid's."
-                  : "Leave unticked for a shared Lounge phone."
-                : "You can add your own phone; a guardian adds household phones."}
-            </span>
-          </span>
-        </label>
-        {guardian && !mine && (
-          <label>
-            Kind of phone
-            <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-              {kidsAllowed && <option value="">As chosen on the phone</option>}
-              {kidsAllowed && (
-                <option value="kids">Kids phone — its own allow-list and speed-dial</option>
-              )}
-              <option value="lounge">
-                Lounge phone — shared; people scan it to use it as themselves
-              </option>
-            </select>
-          </label>
-        )}
+        <fieldset className="choice">
+          <legend>How will it be used?</legend>
+          {modes.map((m) => (
+            <label key={m} className="check">
+              <input
+                type="radio"
+                name="mode"
+                value={m}
+                checked={mode === m}
+                onChange={() => setMode(m)}
+              />
+              <span>
+                {MODE_TEXT[m].title}
+                <span className="hint"> — {MODE_TEXT[m].hint}</span>
+              </span>
+            </label>
+          ))}
+          {!guardian && (
+            <span className="hint">You can add your own phone; a guardian adds the others.</span>
+          )}
+        </fieldset>
         {error && (
           <p className="error" role="alert">
             {error}

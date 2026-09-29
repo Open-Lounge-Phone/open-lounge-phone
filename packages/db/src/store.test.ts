@@ -483,6 +483,7 @@ describe("0013 and later (timeline, device modes, security)", () => {
       INSERT INTO call_log (id, household_id, account_id, peer, peer_label, direction, started_at,
         voicemail_id) VALUES ('cl_1', '${hh.id}', '${guardian.accountId}', 'bob@x', 'Bob', 'in', 1,
           'vm_1');
+      UPDATE households SET lounge_idle_minutes = 15, lounge_guests = 1;
     `);
     expect(migrate(old.db)).toContain("0013_buddy_timeline.sql");
     expect(await s.getVoicemail("vm_1")).toMatchObject({ toUser: guardian.id, fromLabel: "Bob" });
@@ -498,6 +499,15 @@ describe("0013 and later (timeline, device modes, security)", () => {
     expect(await s.getDevice(device?.id as string)).toMatchObject({ name: "Kid", kind: "kids" });
     const swept = await s.sweepExpired(hh.id, "x", T0 * 2);
     expect(swept).toEqual({ calls: 0, voicemails: 0, blobs: [] });
+    // Lounge settings keep their values; the new ones start as before (idle timeout, all off).
+    expect(await s.loungeSettings(hh.id)).toEqual({
+      idleMinutes: 15,
+      guests: true,
+      session: "idle",
+      dayEnd: "00:00",
+      idle: { houseLine: { enabled: false, keys: [] }, whosHere: false },
+    });
+    expect(await s.removedDevice("dev_x")).toBeUndefined();
     old.db.close();
   });
 });

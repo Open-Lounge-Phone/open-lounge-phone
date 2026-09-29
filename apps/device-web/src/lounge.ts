@@ -14,6 +14,10 @@ export interface LoungeView {
   challenge?: { index: number; expiresAt: number };
   /** Who is using the phone. Forgotten when the session ends. */
   session?: { name: string; openToChat: boolean };
+  /** Nobody signed in: the space gave idle phones house-line keys (they call as the space). */
+  houseLine?: boolean;
+  /** Nobody signed in: "who's here" (people open to chat at the space's other Lounge phones). */
+  here?: { name: string; where: string }[];
 }
 
 /** The link in the QR code; the companion's /lounge page reads the hash. */
@@ -34,7 +38,9 @@ export function loungeLines(view: LoungeView, state: DeviceState): StatusLines |
       view.session.openToChat ? "OPEN TO CHAT" : "MENU = OPTIONS",
     ];
   }
-  return ["SCAN TO USE", "THIS PHONE"];
+  const [someone] = view.here ?? [];
+  if (someone) return ["SCAN TO USE", clip(`HERE: ${someone.name}`)];
+  return ["SCAN TO USE", view.houseLine ? "OR PRESS A KEY" : "THIS PHONE"];
 }
 
 /** Ask for a new code this long before the current one expires. */
@@ -71,7 +77,10 @@ export function wantsFreshCode(
   return !view.nonce || view.nonce.expiresAt - now < QR_REFRESH_LEAD_MS;
 }
 
-/** Key digits a free Lounge phone can dial: none, until someone takes it over. */
+/**
+ * Key digits a free Lounge phone can dial: none until someone takes it over, unless the space
+ * gave it house-line keys.
+ */
 export function loungeKeysLive(view: LoungeView): boolean {
-  return !!view.session;
+  return !!view.session || !!view.houseLine;
 }

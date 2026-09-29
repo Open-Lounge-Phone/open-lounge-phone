@@ -117,6 +117,8 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
       }
       await dropVoicemailBlobs(env, { householdId: household.id });
       const devices = await store.listDevices(household.id);
+      // Its phones wipe themselves (now, or when they next connect).
+      await store.recordRemovedDevices(devices, now);
       await store.deleteHousehold(household.id);
       for (const d of devices) await live.forgetDevice(household.id, d.id);
     }

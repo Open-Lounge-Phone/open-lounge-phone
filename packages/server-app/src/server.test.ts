@@ -271,6 +271,8 @@ describe("pairing and device auth", () => {
       buttons: [{ index: 0, label: "Mom" }],
       quiet: false,
       greeting: { kind: "default", canRecord: true },
+      // The strip's trust line: whose phone, and how it's used.
+      owner: { mode: "kids", space: "Home" },
     });
   });
 

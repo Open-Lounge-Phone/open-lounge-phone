@@ -1,5 +1,15 @@
 import { type QuietHoursRule, validateSchedule, type Weekday } from "@openloungephone/core";
-import { isRemoteContactId, newToken, sha256, type User } from "@openloungephone/db";
+import {
+  deviceMode,
+  type HouseLineKey,
+  isRemoteContactId,
+  LOUNGE_SESSION_POLICIES,
+  type LoungeSessionPolicy,
+  newToken,
+  type PhoneMode,
+  sha256,
+  type User,
+} from "@openloungephone/db";
 import { Id } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -36,21 +46,49 @@ const SetupBody = z.object({
   guardianName: Name,
   timeZone: z.string().min(1),
 });
+const Code = z.string().regex(/^\d{6}$/);
+const Mode = z.enum(["kids", "personal", "lounge"]);
 const PairBody = z.object({
-  code: z.string().regex(/^\d{6}$/),
+  code: Code,
   name: Name,
-  /** Pair as the caller's own phone (any member) rather than a household phone (guardians). */
+  /**
+   * How the phone will be used: `kids` (a home's phone for a child; guardians), `personal` (the
+   * caller's own phone; any member) or `lounge` (the space's shared phone; guardians). Default:
+   * what the phone was set up as.
+   */
+  mode: Mode.optional(),
+  /** Older apps: pair as the caller's own phone (= `mode: "personal"`). */
   forMe: z.boolean().optional(),
-  /** Overrides what the phone was set up as. A Lounge phone is shared, never someone's own. */
+  /** Older apps: `kids` or `lounge` (= `mode`). */
   kind: z.enum(["kids", "lounge"]).optional(),
+});
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+const HouseLineKeyBody = z.object({
+  index: z.number().int().min(0).max(9),
+  label: Name,
+  target: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("user"), userId: Id }),
+    z.object({ kind: z.literal("device"), deviceId: Id }),
+    z.object({ kind: z.literal("group"), userIds: z.array(Id).min(1).max(10) }),
+  ]),
 });
 const LoungeSettingsBody = z
   .object({
     idleMinutes: z.number().int().min(1).max(240).optional(),
     /** Let people from other servers use this space's Lounge phones (their server vouches). */
     guests: z.boolean().optional(),
+    /** How long a session lasts: idle minutes, until the end of the day, or until logout. */
+    session: z.enum(LOUNGE_SESSION_POLICIES as [LoungeSessionPolicy]).optional(),
+    /** `end_of_day`: local time the day ends. */
+    dayEnd: HHMM.optional(),
+    /** Idle phones (nobody signed in): keys that call as the space. Off by default. */
+    houseLine: z
+      .object({ enabled: z.boolean(), keys: z.array(HouseLineKeyBody).max(10) })
+      .optional(),
+    /** Idle phones show who's signed in at the space's other Lounge phones, open to chat. */
+    whosHere: z.boolean().optional(),
   })
-  .refine((b) => b.idleMinutes !== undefined || b.guests !== undefined, {
+  .refine((b) => Object.values(b).some((v) => v !== undefined), {
     message: "nothing to change",
   });
 const RemoteLoungeBody = z.object({
@@ -235,23 +273,38 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           lastSeen: d.lastSeen,
           ownerUserId: d.ownerUserId,
           kind: d.kind,
+          mode: deviceMode(d),
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
       ),
     );
   });
 
+  /**
+   * Before claiming: what the phone was set up as. (The four-word fingerprint to compare with
+   * the phone's MENU → About comes with it; see security-model.md.)
+   */
+  api.post("/devices/pair/preview", async (c) => {
+    const b = await body(c.req.raw, z.object({ code: Code }));
+    if (b instanceof Response) return b;
+    const pending = await store.peekPairing(b.code, env.now());
+    if (!pending) return c.json({ error: "unknown or expired code" }, 404);
+    return c.json({ mode: pending.mode });
+  });
+
   api.post("/devices/pair", async (c) => {
     const user = c.get("user");
     const b = await body(c.req.raw, PairBody);
     if (b instanceof Response) return b;
-    if (!b.forMe && user.role !== "guardian") {
-      return c.json({ error: "only guardians can add household phones" }, 403);
-    }
     if (b.forMe && b.kind === "lounge") {
       return c.json({ error: "a Lounge phone is shared; pair it as a household phone" }, 400);
     }
-    if (!b.forMe && b.kind !== "lounge" && !(await isHome(user.householdId))) {
+    const chosen = b.mode ?? (b.forMe ? "personal" : b.kind);
+    const mode: PhoneMode = chosen ?? (await store.peekPairing(b.code, env.now()))?.mode ?? "kids";
+    if (mode !== "personal" && user.role !== "guardian") {
+      return c.json({ error: "only guardians can add household phones" }, 403);
+    }
+    if (mode === "kids" && !(await isHome(user.householdId))) {
       // A household phone without an owner is a kid's phone; those belong in a home.
       return c.json({ error: kidsOnlyAtHome }, 400);
     }
@@ -266,15 +319,15 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
         code: b.code,
         householdId: user.householdId,
         name: b.name,
-        ownerUserId: b.forMe ? user.id : null,
-        ...(b.forMe ? { kind: "kids" as const } : b.kind ? { kind: b.kind } : {}),
+        ownerUserId: mode === "personal" ? user.id : null,
+        kind: mode === "lounge" ? "lounge" : "kids",
       },
       env.now(),
     );
     if (!device) return c.json({ error: "unknown or expired code" }, 404);
     if (device.kind === "lounge") {
       // No allow-list of its own: whoever takes it over brings their own permissions.
-    } else if (b.forMe) {
+    } else if (mode === "personal") {
       // A grown-up's own phone: everyone else in the household on its speed-dial keys.
       const others = (await store.listUsers(user.householdId)).filter((u) => u.id !== user.id);
       for (const [i, other] of others.slice(0, 10).entries()) {
@@ -299,7 +352,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       await store.setButton(device.id, 0, user.id);
     }
     await live.notifyPaired(b.code, device);
-    return c.json({ id: device.id, name: device.name }, 201);
+    return c.json({ id: device.id, name: device.name, mode }, 201);
   });
 
   api.get("/devices/:id/contacts", async (c) => {
@@ -413,6 +466,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     // Voicemail and greeting rows cascade with the phone; their audio lives in the blob store.
     await dropVoicemailBlobs(env, { deviceId: device.id });
     const shared = (await store.listRemoteContacts(device.id)).map((r) => r.connectionId);
+    // Remove = wipe: the phone is told now (if connected) or when it next connects.
+    await store.recordRemovedDevices([device], env.now());
     await store.deleteDevice(device.id);
     await live.forgetDevice(user.householdId, device.id);
     for (const id of shared) await new Connections(env, live).sharePhones(id);
@@ -466,11 +521,11 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.get("/lounge", async (c) => {
     const user = c.get("user");
     const hh = user.householdId;
-    const [devices, sessions, users, idleMinutes] = await Promise.all([
+    const [devices, sessions, users, settings] = await Promise.all([
       store.listDevices(hh),
       store.listLoungeSessions(hh, 50),
       store.listUsers(hh),
-      store.loungeIdleMinutes(hh),
+      store.loungeSettings(hh),
     ]);
     const nameOf = new Map(users.map((u) => [u.id, u.name]));
     const phones = await Promise.all(
@@ -495,8 +550,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     );
     const guardian = user.role === "guardian";
     return c.json({
-      idleMinutes,
-      guests: await store.loungeGuests(hh),
+      idleMinutes: settings.idleMinutes,
+      guests: settings.guests,
+      session: settings.session,
+      dayEnd: settings.dayEnd,
+      // What idle phones offer (house-line keys, who's here); only guardians manage it.
+      ...(guardian ? { idle: settings.idle } : {}),
       phones,
       // Only that a session happened: who, where, when. Nothing about calls.
       ...(guardian
@@ -519,10 +578,57 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const b = await body(c.req.raw, LoungeSettingsBody);
     if (b instanceof Response) return b;
     const hh = c.get("user").householdId;
+    let idle: Parameters<typeof store.setLoungeSession>[1]["idle"];
+    if (b.houseLine !== undefined || b.whosHere !== undefined) {
+      const current = (await store.loungeSettings(hh)).idle;
+      if (b.houseLine) {
+        const problem = await houseLineProblem(hh, b.houseLine.keys);
+        if (problem) return c.json({ error: problem }, 400);
+      }
+      idle = {
+        houseLine: b.houseLine ?? current.houseLine,
+        whosHere: b.whosHere ?? current.whosHere,
+      };
+    }
     if (b.idleMinutes !== undefined) await store.setLoungeIdleMinutes(hh, b.idleMinutes);
     if (b.guests !== undefined) await store.setLoungeGuests(hh, b.guests);
+    await store.setLoungeSession(hh, {
+      ...(b.session ? { session: b.session } : {}),
+      ...(b.dayEnd ? { dayEnd: b.dayEnd } : {}),
+      ...(idle ? { idle } : {}),
+    });
+    // Lounge phones pick up the new session policy and idle keys right away.
+    for (const d of await store.listDevices(hh)) {
+      if (d.kind === "lounge") await live.refreshDevice(hh, d.id);
+    }
     return c.body(null, 204);
   });
+
+  /**
+   * House-line keys must point inside the space: its members, or a personal (desk) phone here.
+   * Kids' phones are never a target (they have their own allow-lists).
+   */
+  const houseLineProblem = async (
+    hh: string,
+    keys: HouseLineKey[],
+  ): Promise<string | undefined> => {
+    if (new Set(keys.map((k) => k.index)).size !== keys.length) return "one target per key";
+    const members = new Set((await store.listUsers(hh)).map((u) => u.id));
+    for (const k of keys) {
+      const t = k.target;
+      if (t.kind === "user" && !members.has(t.userId)) return `key ${k.index}: not a member here`;
+      if (t.kind === "group" && !t.userIds.every((u) => members.has(u))) {
+        return `key ${k.index}: not all members here`;
+      }
+      if (t.kind === "device") {
+        const d = await store.getDevice(t.deviceId);
+        if (!d || d.householdId !== hh || deviceMode(d) !== "personal") {
+          return `key ${k.index}: pick someone's own (desk) phone in this space`;
+        }
+      }
+    }
+    return undefined;
+  };
 
   /**
    * Use a Lounge phone on another server as yourself: this server vouches for you there (a

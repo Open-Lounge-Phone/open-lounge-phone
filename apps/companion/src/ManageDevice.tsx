@@ -11,6 +11,7 @@ import { hostBadge } from "./connectionGroups.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
+import { MODE_TEXT } from "./pairMode.ts";
 
 interface Props {
   api: Api;
@@ -103,7 +104,6 @@ export function ManageDevice({
           api={api}
           device={device}
           meId={meId}
-          guardian={guardian}
           onChanged={onChanged}
           onRemoved={onRemoved}
           onError={setError}
@@ -294,7 +294,6 @@ function PhoneSettings({
   api,
   device,
   meId,
-  guardian,
   onChanged,
   onRemoved,
   onError,
@@ -302,7 +301,6 @@ function PhoneSettings({
   api: Api;
   device: DeviceSummary;
   meId: string | undefined;
-  guardian: boolean;
   onChanged(): void;
   onRemoved(): void;
   onError(msg: string | undefined): void;
@@ -311,17 +309,9 @@ function PhoneSettings({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => setName(device.name), [device.name]);
-  const serverMine = !!meId && device.ownerUserId === meId;
-  const someoneElses = !!device.ownerUserId && !serverMine;
-  // Optimistic: reflect the choice immediately, fall back to the server's value on error.
-  const [mine, setMine] = useState(serverMine);
-  useEffect(() => setMine(serverMine), [serverMine]);
-  const setOwner = (me: boolean) => {
-    setMine(me);
-    void act(() => api.updateDevice(device.id, { owner: me ? "me" : "household" }), onChanged).then(
-      () => undefined,
-    );
-  };
+  const someoneElses = !!device.ownerUserId && device.ownerUserId !== meId;
+  const mode =
+    device.mode ?? (device.kind === "lounge" ? "lounge" : device.ownerUserId ? "personal" : "kids");
 
   const act = async (fn: () => Promise<unknown>, after: () => void) => {
     onError(undefined);
@@ -331,7 +321,6 @@ function PhoneSettings({
       after();
     } catch (e) {
       onError((e as Error).message);
-      setMine(serverMine);
     } finally {
       setBusy(false);
     }
@@ -357,33 +346,19 @@ function PhoneSettings({
           }}
         />
       </label>
-      {!someoneElses && (
-        <fieldset className="stack ownership" disabled={busy}>
-          <legend>Whose phone is this?</legend>
-          <label className="check">
-            <input type="radio" name="owner" checked={mine} onChange={() => setOwner(true)} />
-            <span>This is my phone</span>
-          </label>
-          <label className="check">
-            <input
-              type="radio"
-              name="owner"
-              checked={!mine}
-              disabled={!guardian && !mine}
-              onChange={() => setOwner(false)}
-            />
-            <span>Household phone (e.g. a kid's)</span>
-          </label>
-          <span className="hint">
-            Calls to you ring your own phone. Quiet hours only apply to household phones.
-          </span>
-        </fieldset>
-      )}
-      {someoneElses && <p className="muted small">This is another person's own phone.</p>}
+      <p className="small">
+        <strong>{MODE_TEXT[mode].title}</strong>
+        {someoneElses ? " — another person's own phone." : ` — ${MODE_TEXT[mode].hint}`}
+      </p>
+      <span className="hint">
+        To use it another way or give it to someone else, remove it (it wipes itself) and pair it
+        again.
+      </span>
       {confirming ? (
         <div className="confirm stack" role="alertdialog" aria-label="Remove this phone?">
           <p className="small">
-            Removes it from your household. A virtual phone will show a new pairing code.
+            The server forgets this phone, and the phone wipes itself — now if it's online, or the
+            next time it connects. Nothing stays on it; it can be set up again from scratch.
           </p>
           <div className="row">
             <button type="button" onClick={() => setConfirming(false)} disabled={busy}>
@@ -395,13 +370,13 @@ function PhoneSettings({
               disabled={busy}
               onClick={() => void act(() => api.removeDevice(device.id), onRemoved)}
             >
-              {busy ? "Removing…" : "Remove phone"}
+              {busy ? "Removing…" : "Remove and wipe"}
             </button>
           </div>
         </div>
       ) : (
         <button type="button" className="link danger" onClick={() => setConfirming(true)}>
-          Remove phone
+          Remove and wipe
         </button>
       )}
     </div>

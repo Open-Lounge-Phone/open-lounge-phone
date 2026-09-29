@@ -20,6 +20,8 @@ export interface DeviceConfig {
   missed?: { from: string }[];
   /** The phone's voicemail greeting, and whether MENU → Voicemail may change it. */
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
+  /** Whose phone this is and how it's used (the strip's trust line). */
+  owner?: { mode: "kids" | "personal" | "lounge"; space: string; person?: string };
 }
 
 export interface LedInput {

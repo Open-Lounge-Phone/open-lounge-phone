@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kindKey, loadKind, saveKind, startScreen } from "./setup.ts";
+import { forgetKind, kindKey, loadKind, saveKind, startScreen } from "./setup.ts";
 
 function memory() {
   const m = new Map<string, string>();
@@ -50,5 +50,22 @@ describe("start screen", () => {
     // Paired before this setting existed: don't ask, it's a kids' phone.
     expect(startScreen({ kind: undefined, paired: true, started: false })).toBe("tap");
     expect(startScreen({ kind: undefined, paired: false, started: true })).toBe("none");
+  });
+});
+
+describe("personal phones and wiping", () => {
+  it("remembers a personal phone, and forgets the choice when wiped", () => {
+    const data = new Map<string, string>();
+    const store = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+      removeItem: (k: string) => void data.delete(k),
+    };
+    expect(loadKind(store, "a", "personal")).toBe("personal");
+    saveKind(store, "a", "personal");
+    expect(loadKind(store, "a", null)).toBe("personal");
+    forgetKind(store, "a");
+    expect(loadKind(store, "a", null)).toBeUndefined();
+    expect(startScreen({ kind: undefined, paired: false, started: false })).toBe("choose");
   });
 });
