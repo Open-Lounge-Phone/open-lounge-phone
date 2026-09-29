@@ -227,6 +227,44 @@ export interface VoicemailSummary {
   heardAt: number | null;
 }
 
+/** How long history is kept; "default" = inherit (connection → account → server). */
+export type Retention = "default" | "30d" | "1y" | "forever";
+
+export interface TimelineVoicemail {
+  id: string;
+  at: number;
+  fromLabel: string;
+  durationMs: number;
+  transcript: string | null;
+  transcriptStatus: TranscriptStatus;
+  heardAt: number | null;
+}
+
+export type TimelineItem =
+  | {
+      kind: "call";
+      id: string;
+      at: number;
+      direction: "in" | "out";
+      answered: boolean;
+      durationMs: number;
+      endReason: string | null;
+      voicemail: TimelineVoicemail | null;
+    }
+  | { kind: "voicemail"; id: string; at: number; voicemail: TimelineVoicemail };
+
+/** One connection's history (GET /connections/:id/timeline). */
+export interface Timeline {
+  connection: ConnectionView;
+  retention: {
+    setting: Retention;
+    account: Retention;
+    effective: Exclude<Retention, "default">;
+    from: "connection" | "account" | "server";
+  };
+  items: TimelineItem[];
+}
+
 export type GreetingKind = "default" | "name" | "custom";
 
 /** Voicemail settings of a person (yours) or a kids' phone. */
@@ -429,6 +467,13 @@ export function createApi(opts: ApiOptions) {
     blockConnection: (id: string) => request<void>("POST", `/connections/${enc(id)}/block`),
     removeConnection: (id: string) => request<void>("DELETE", `/connections/${enc(id)}`),
     blockServer: (host: string) => request<void>("POST", "/connections/block-server", { host }),
+    /** A connection's history: calls and the voicemails they left you. */
+    timeline: (id: string) => request<Timeline>("GET", `/connections/${enc(id)}/timeline`),
+    setConnectionRetention: (id: string, retention: Retention) =>
+      request<void>("PUT", `/connections/${enc(id)}/retention`, { retention }),
+    accountRetention: () => request<{ retention: Retention }>("GET", "/account/retention"),
+    setAccountRetention: (retention: Retention) =>
+      request<void>("PUT", "/account/retention", { retention }),
     putContact: (deviceId: string, contact: ContactEntry) => {
       const { id, ...rest } = contact;
       return request<void>("PUT", `/devices/${enc(deviceId)}/contacts/${enc(id)}`, rest);

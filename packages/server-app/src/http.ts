@@ -21,6 +21,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
+import { timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
 
@@ -192,6 +193,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   hubRoutes(api, env);
   leavingRoutes(api, env, live);
   connectionRoutes(api, env, live);
+  timelineRoutes(api, env);
 
   // Everything below acts inside the active household.
   api.use("/*", async (c, next) => {

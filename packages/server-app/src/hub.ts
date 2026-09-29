@@ -55,6 +55,7 @@ import {
   sendGuestProgress,
 } from "./fedCalls.ts";
 import { ownHost } from "./federation.ts";
+import { SWEEP_EVERY_MS, sweepSpace } from "./timeline.ts";
 import {
   issueGreetingTicket,
   issueVoicemailOffer,
@@ -195,6 +196,8 @@ export class HouseholdHub {
   private roomsDirty = false;
   /** Lounge phones' key-proof and idle timers, by device id. */
   private readonly loungeTimers = new Map<string, { proof?: () => void; idle?: () => void }>();
+  /** When this hub last deleted expired history (see `maybeSweep`). */
+  private lastSweep = 0;
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -216,6 +219,21 @@ export class HouseholdHub {
     const next = this.queue.then(task, task);
     this.queue = next.catch((e) => this.env.log("error", "hub task failed", { error: String(e) }));
     return next;
+  }
+
+  /**
+   * Deletes the space's expired history now and then, piggybacking on activity (a phone or app
+   * connecting, a call ending) rather than a timer of its own, so an idle space can sleep.
+   */
+  private maybeSweep(): void {
+    const now = this.env.now();
+    if (now - this.lastSweep < SWEEP_EVERY_MS) return;
+    this.lastSweep = now;
+    this.env.defer(
+      sweepSpace(this.env, this.householdId).catch((e) =>
+        this.env.log("warn", "history sweep failed", { error: String(e) }),
+      ),
+    );
   }
 
   private remember(peer: Peer): void {
@@ -336,6 +354,7 @@ export class HouseholdHub {
         await this.touchIdle(peer);
       }
       await this.scheduleWake();
+      this.maybeSweep();
       return peer;
     });
   }
@@ -371,6 +390,7 @@ export class HouseholdHub {
         const live = this.devices.get(d.id);
         conn.send(this.statusMessage(d.id, live, d.lastSeen ?? 0));
       }
+      this.maybeSweep();
       return peer;
     });
   }
@@ -1138,6 +1158,7 @@ export class HouseholdHub {
         await this.logCall(room, r.state.reason ?? "hangup").catch((e) =>
           this.env.log("warn", "call log failed", { error: String(e) }),
         );
+        this.maybeSweep();
         if (room.payer && room.activeAt !== undefined) {
           // Metered at the end, rounded up to whole minutes; enforced only when calls start.
           const minutes = Math.ceil((this.env.now() - room.activeAt) / 60_000);

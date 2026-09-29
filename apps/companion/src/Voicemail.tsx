@@ -122,13 +122,13 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
 }
 
 /** Audio needs a bearer token, so it's fetched into an object URL on demand. */
-function Player({
+export function Player({
   api,
   voicemail,
   onFinished,
 }: {
   api: Api;
-  voicemail: VoicemailSummary;
+  voicemail: Pick<VoicemailSummary, "id">;
   onFinished(): void;
 }) {
   const [url, setUrl] = useState<string>();

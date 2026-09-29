@@ -449,6 +449,59 @@ describe("0012_voicemail_everywhere", () => {
   });
 });
 
+/** A database migrated up to (not including) migration `before`. */
+function openBefore(before: string) {
+  const dir = mkdtempSync(join(tmpdir(), "olp-mig-"));
+  for (const f of readdirSync(MIGRATIONS_DIR).filter((f) => f < before)) {
+    copyFileSync(join(MIGRATIONS_DIR, f), join(dir, f));
+  }
+  const old = openSqlite(":memory:");
+  migrate(old.db, dir);
+  rmSync(dir, { recursive: true, force: true });
+  return old;
+}
+
+describe("0013 and later (timeline, device modes, security)", () => {
+  it("keep existing spaces, phones, connections, calls and voicemail as they were", async () => {
+    const old = openBefore("0013");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const device = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    const other = await s.createAccount({ name: "Bob", handle: "bob" }, T0);
+    old.db.exec(`
+      INSERT INTO connections (id, account_id, peer_host, peer_handle, peer_account, peer_name,
+        state, direction, created_at, updated_at) VALUES ('con_1', '${guardian.accountId}', '',
+        'bob', '${other?.id}', 'Bob', 'active', 'none', 1, 1);
+      INSERT INTO voicemails (id, household_id, to_user, from_label, from_address, created_at,
+        duration_ms, mime, blob_key, transcript_status)
+        VALUES ('vm_1', '${hh.id}', '${guardian.id}', 'Bob', 'bob@x', 1, 1000, 'audio/webm', 'k',
+          'done');
+      INSERT INTO call_log (id, household_id, account_id, peer, peer_label, direction, started_at,
+        voicemail_id) VALUES ('cl_1', '${hh.id}', '${guardian.accountId}', 'bob@x', 'Bob', 'in', 1,
+          'vm_1');
+    `);
+    expect(migrate(old.db)).toContain("0013_buddy_timeline.sql");
+    expect(await s.getVoicemail("vm_1")).toMatchObject({ toUser: guardian.id, fromLabel: "Bob" });
+    expect(await s.callLog(guardian.accountId)).toMatchObject([
+      { id: "cl_1", peer: "bob@x", voicemailId: "vm_1" },
+    ]);
+    // New settings start unset: nothing expires until someone chooses to.
+    expect(await s.connections.get("con_1")).toMatchObject({
+      state: "active",
+      retentionDays: null,
+    });
+    expect((await s.getAccount(guardian.accountId))?.retentionDays).toBeNull();
+    expect(await s.getDevice(device?.id as string)).toMatchObject({ name: "Kid", kind: "kids" });
+    const swept = await s.sweepExpired(hh.id, "x", T0 * 2);
+    expect(swept).toEqual({ calls: 0, voicemails: 0, blobs: [] });
+    old.db.close();
+  });
+});
+
 describe("accounts and handles", () => {
   it("validates handles", () => {
     for (const ok of ["jo", "jesse", "jesse.garcia", "a_b-c", "x".repeat(30)]) {

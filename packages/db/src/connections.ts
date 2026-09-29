@@ -28,6 +28,11 @@ export interface Connection {
   expiresAt: number | null;
   /** Last presence they shared (only if they opted in); null = never. */
   presence: { online: boolean; available: boolean; at: number } | null;
+  /**
+   * How long this person's history with the peer is kept, in days (30, 365, 0 = forever);
+   * null = the account default.
+   */
+  retentionDays: number | null;
 }
 
 type Row = {
@@ -46,6 +51,7 @@ type Row = {
   presence_online?: number | null;
   presence_available?: number | null;
   presence_at?: number | null;
+  retention_days?: number | null;
 };
 const toConnection = (r: Row): Connection => ({
   id: r.id,
@@ -68,6 +74,7 @@ const toConnection = (r: Row): Connection => ({
           at: r.presence_at,
         }
       : null,
+  retentionDays: r.retention_days ?? null,
 });
 
 export const KNOCK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -135,7 +142,7 @@ export class ConnectionStore {
 
   /** Creates or replaces the account's row about `peerHost`/`peerHandle`. */
   async put(
-    c: Omit<Connection, "id" | "createdAt" | "updatedAt" | "presence">,
+    c: Omit<Connection, "id" | "createdAt" | "updatedAt" | "presence" | "retentionDays">,
     now: number,
   ): Promise<Connection> {
     const id = newId("con");
@@ -223,6 +230,11 @@ export class ConnectionStore {
 
   async delete(id: string): Promise<void> {
     await this.sql.run("DELETE FROM connections WHERE id = ?", id);
+  }
+
+  /** How long history with this peer is kept (days; 0 = forever; null = account default). */
+  async setRetention(id: string, days: number | null): Promise<void> {
+    await this.sql.run("UPDATE connections SET retention_days = ? WHERE id = ?", days, id);
   }
 
   /** Whether the account blocked this person or their whole server. */

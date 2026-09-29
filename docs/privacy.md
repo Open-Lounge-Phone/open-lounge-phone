@@ -13,13 +13,19 @@ own infrastructure.
 | Phones: name, public key, allow-lists and speed-dial keys; last time seen | pairing, calls, default-deny access | until the phone is removed |
 | Connections (buddies): their address, name, state (knocked, connected, declined, blocked), the note on a knock | knock-then-talk, blocking | until either side disconnects; declines are kept 30 days, blocks until you remove them |
 | Presence you chose to share | showing your connections if you're available | the latest value only |
-| Call log: who called whom, when, how long, how it ended — **never the audio** | your call history (and a per-buddy timeline later) | kept with your account; per-connection expiry is planned |
-| Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until a guardian (a phone's) or you (yours) delete it; per-connection expiry is planned |
+| Call log: who called whom, when, how long, how it ended — **never the audio** | your call history and each buddy's timeline | as long as you choose: per connection, or your account default (30 days, 1 year or forever; forever unless you change it) |
+| Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until a guardian (a phone's) or you (yours) delete it, or — for yours — until the retention you chose for that person runs out |
 | Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
 | Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | kept with the space |
 | Usage counters per month (call minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
 | Rate-limit counters (with IP addresses **hashed**) | stopping abuse | counted per minute, hour or day; stale counters are pruned after about a month |
 | Other servers' public keys and recent signature nonces | federation security | keys while the server is known; nonces ~11 minutes |
+
+**Expiry.** Expired call-log rows and voicemails are deleted with their audio by a sweep: once a
+day on a self-hosted server, and on a Cloudflare server whenever there is activity in the space
+(a phone or app connecting, a call ending) — no timer runs for an idle space. Your timeline and
+inbox run the sweep before they are shown, so you never see expired history. Your retention
+setting covers your side only: the other person keeps their own history by their settings.
 
 **Call audio never passes through the server.** It goes directly between the two people, or
 through a TURN relay that only forwards encrypted packets when a direct path is impossible.

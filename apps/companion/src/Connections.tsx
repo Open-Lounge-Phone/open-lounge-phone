@@ -1,7 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { renderSVG } from "uqr";
-import type { Api, ConnectionsInfo, ConnectionView } from "./api.ts";
+import type { Api, ConnectionsInfo, ConnectionView, Retention } from "./api.ts";
 import { daysLeft, groupConnections, hostBadge } from "./connectionGroups.ts";
+import { BuddyTimeline } from "./Timeline.tsx";
+import { retentionOptions } from "./timelineText.ts";
 
 interface Props {
   api: Api;
@@ -28,11 +30,14 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [showQr, setShowQr] = useState(false);
+  const [open, setOpen] = useState<string>();
+  const [retention, setRetention] = useState<Retention>();
 
   const load = useCallback(async () => {
     try {
       const next = await api.connections();
       setInfo(next);
+      setRetention((await api.accountRetention()).retention);
       onRequests(groupConnections(next.connections).requests.length);
     } catch (e) {
       setError((e as Error).message);
@@ -58,6 +63,19 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
 
   const groups = groupConnections(info?.connections ?? []);
   const now = Date.now();
+
+  const opened = info?.connections.find((c) => c.id === open);
+  if (open) {
+    return (
+      <BuddyTimeline
+        api={api}
+        connectionId={open}
+        refreshKey={refreshKey}
+        onBack={() => setOpen(undefined)}
+        onCall={opened && onCall ? () => onCall(opened) : undefined}
+      />
+    );
+  }
 
   return (
     <section className="stack connections">
@@ -114,6 +132,27 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
               <span className="hint"> — they see whether you're online and taking calls.</span>
             </span>
           </label>
+          {retention && (
+            <label>
+              Keep history with connections
+              <select
+                value={retention}
+                onChange={(e) =>
+                  void run(() => api.setAccountRetention(e.target.value as Retention))
+                }
+              >
+                {retentionOptions("forever", "Server default").map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <span className="hint">
+                Calls and voicemails older than this are deleted, audio included. Each connection
+                can have its own setting (open its history).
+              </span>
+            </label>
+          )}
         </div>
       )}
       {error && (
@@ -192,6 +231,9 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
                       Call
                     </button>
                   )}
+                  <button type="button" onClick={() => setOpen(c.id)}>
+                    History
+                  </button>
                   <details className="more">
                     <summary>More</summary>
                     <button

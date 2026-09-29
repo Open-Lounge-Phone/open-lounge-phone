@@ -350,6 +350,9 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
       if (!(await store.setHandle(account.id, b.handle, now))) {
         return c.json({ error: "that handle is taken" }, 409);
       }
+      // Timelines here keep following this person under the new address.
+      const host = serverHost(env, c.req.url);
+      await store.renamePeer(`${account.handle}@${host}`, `${b.handle}@${host}`);
     }
     if (b.name !== undefined) await store.setAccountName(account.id, b.name);
     if (b.sharePresence !== undefined && b.sharePresence !== account.sharePresence) {

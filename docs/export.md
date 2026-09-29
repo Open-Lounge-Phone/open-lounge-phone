@@ -51,6 +51,17 @@ and, later, for **moving an account** to another server while keeping its connec
       "answered": true,
       "durationMs": 420000,
       "endReason": "hangup"
+    },
+    {
+      "peer": "bob@l1.openloungephone.app",
+      "peerLabel": "Bob",
+      "direction": "in",
+      "startedAt": "2026-09-13T08:00:00.000Z",
+      "answered": false,
+      "durationMs": 0,
+      "endReason": "timeout",
+      "voicemailId": "vm_…",
+      "voicemail": "/api/voicemails/vm_…/audio"
     }
   ]
 }
@@ -64,7 +75,9 @@ and, later, for **moving an account** to another server while keeping its connec
   homes.
 - `calls` is the account's call log (newest first, up to 1,000). `peer` is `handle@host` for
   someone on another server or connected across households, `user:<id>` / `device:<id>` inside
-  a space.
+  a space. A missed call that ended in a voicemail for you carries `voicemailId` and
+  `voicemail`, the path of its audio on this server (signed-in `GET`, the same audio as the
+  Voicemail tab); the transcript is in the inbox.
 - Not included: passkeys (they're bound to the old server's name), sessions, voicemail audio
   (download it from the Voicemail tab), other people's data.
 

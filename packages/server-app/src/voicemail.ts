@@ -18,6 +18,7 @@ import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
+import { sweepAccount } from "./timeline.ts";
 
 /** Two minutes of Opus is ~500 KB; leave generous headroom for other codecs. */
 export const MAX_VOICEMAIL_BYTES = 2 * 1024 * 1024;
@@ -286,6 +287,8 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
    */
   api.get("/voicemails", async (c) => {
     const user = c.get("user");
+    // Expired voicemail is deleted before it could be shown.
+    await sweepAccount(env, c.get("account").id);
     const personal = await store.listPersonalVoicemails(c.get("account").id);
     const phones =
       user.role === "guardian"

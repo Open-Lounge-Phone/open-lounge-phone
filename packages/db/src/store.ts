@@ -67,7 +67,23 @@ export interface Account {
   suspendedAt: number | null;
   /** Not held to the fair-use allowance (set by an operator, e.g. for a venue). */
   fairUseExempt: boolean;
+  /**
+   * Default for how long history with connections is kept, in days (30, 365, 0 = forever);
+   * null = the server default (keep).
+   */
+  retentionDays: number | null;
 }
+
+/** The history retention choices (days; 0 = forever). */
+export const RETENTION_DAYS = { "30d": 30, "1y": 365, forever: 0 } as const;
+export type Retention = keyof typeof RETENTION_DAYS;
+/** A retention setting as the API names it; null (not set) is "default". */
+export function retentionName(days: number | null): Retention | "default" {
+  if (days === null) return "default";
+  if (days === 0) return "forever";
+  return days <= 30 ? "30d" : "1y";
+}
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** One account's metered use in one calendar month (UTC). */
 export interface Usage {
@@ -80,6 +96,8 @@ export interface Usage {
 
 /** One party's record of a finished call. */
 export interface CallLogEntry {
+  /** Set when read back. */
+  id?: string;
   householdId: string;
   accountId: string | null;
   deviceId: string | null;
@@ -383,6 +401,7 @@ type AccountRow = {
   share_presence?: number;
   suspended_at?: number | null;
   fair_use_exempt?: number;
+  retention_days?: number | null;
 };
 const toAccount = (r: AccountRow): Account => ({
   id: r.id,
@@ -393,6 +412,7 @@ const toAccount = (r: AccountRow): Account => ({
   sharePresence: r.share_presence === 1,
   suspendedAt: r.suspended_at ?? null,
   fairUseExempt: r.fair_use_exempt === 1,
+  retentionDays: r.retention_days ?? null,
 });
 type ContactRow = {
   user_id: string;
@@ -508,6 +528,7 @@ export class Store {
           sharePresence: false,
           suspendedAt: null,
           fairUseExempt: false,
+          retentionDays: null,
         };
       }
     }
@@ -675,6 +696,7 @@ export class Store {
   /** An account's calls with one peer (newest first), or all of its calls. */
   async callLog(accountId: string, peer?: string, limit = 100): Promise<CallLogEntry[]> {
     const rows = await this.sql.all<{
+      id: string;
       household_id: string;
       account_id: string | null;
       device_id: string | null;
@@ -693,6 +715,7 @@ export class Store {
       ...(peer ? [accountId, peer, limit] : [accountId, limit]),
     );
     return rows.map((r) => ({
+      id: r.id,
       householdId: r.household_id,
       accountId: r.account_id,
       deviceId: r.device_id,
@@ -706,6 +729,91 @@ export class Store {
       voicemailId: r.voicemail_id,
       expiresAt: r.expires_at,
     }));
+  }
+
+  /** An account's calls with any of `peers` (one person under several names), newest first. */
+  async callLogWith(accountId: string, peers: string[], limit = 200): Promise<CallLogEntry[]> {
+    if (peers.length === 0) return [];
+    const all = await Promise.all(peers.map((p) => this.callLog(accountId, p, limit)));
+    return all
+      .flat()
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, limit);
+  }
+
+  async setAccountRetention(accountId: string, days: number | null): Promise<void> {
+    await this.sql.run("UPDATE accounts SET retention_days = ? WHERE id = ?", days, accountId);
+  }
+
+  /** A local person's new address in everyone's history (after a handle change). */
+  async renamePeer(from: string, to: string): Promise<void> {
+    await this.sql.batch([
+      { query: "UPDATE call_log SET peer = ? WHERE peer = ?", params: [to, from] },
+      {
+        query: "UPDATE voicemails SET from_address = ? WHERE from_address = ?",
+        params: [to, from],
+      },
+    ]);
+  }
+
+  /**
+   * Deletes a space's expired history: call-log rows and voicemails older than their retention.
+   * A person's rows follow their connection's setting for that peer, then their account default;
+   * then (the server default) they're kept. `host` names this server in local addresses. Returns
+   * the blob keys of the deleted voicemails, for the caller to delete.
+   */
+  async sweepExpired(
+    householdId: string,
+    host: string,
+    now: number,
+  ): Promise<{ calls: number; voicemails: number; blobs: string[] }> {
+    // The shortest retention is 30 days: nothing younger can have expired.
+    const floor = now - RETENTION_DAYS["30d"] * DAY_MS;
+    // A connection's setting for a peer address (`handle@host`, or a local person's `user:<id>`).
+    const connectionDays = (account: string, peer: string) =>
+      `(SELECT c.retention_days FROM connections c
+         WHERE c.account_id = ${account} AND c.retention_days IS NOT NULL AND c.peer_handle != '*'
+           AND (${peer} = c.peer_handle || '@' || CASE WHEN c.peer_host = '' THEN ? ELSE c.peer_host END
+             OR (c.peer_host = '' AND c.peer_account IS NOT NULL AND ${peer} IN
+               (SELECT 'user:' || u.id FROM users u WHERE u.account_id = c.peer_account)))
+         LIMIT 1)`;
+    const calls = `SELECT id FROM (
+        SELECT r.id, r.started_at AS t, COALESCE(
+          ${connectionDays("r.account_id", "r.peer")},
+          (SELECT a.retention_days FROM accounts a WHERE a.id = r.account_id),
+          0) AS days
+        FROM call_log r WHERE r.household_id = ? AND r.started_at < ? AND r.account_id IS NOT NULL
+      ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
+    const voicemails = `SELECT id, k FROM (
+        SELECT v.id, v.blob_key AS k, v.created_at AS t, COALESCE(
+          ${connectionDays("u.account_id", "v.from_address")},
+          (SELECT a.retention_days FROM accounts a WHERE a.id = u.account_id),
+          0) AS days
+        FROM voicemails v JOIN users u ON u.id = v.to_user
+        WHERE v.household_id = ? AND v.created_at < ?
+      ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
+    const params = [host, householdId, floor, now];
+    const expiredVm = await this.sql.all<{ id: string; k: string }>(voicemails, ...params);
+    const expiredCalls = await this.sql.all<{ id: string }>(calls, ...params);
+    const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+    await this.deleteIds("voicemails", ids(expiredVm));
+    await this.deleteIds("call_log", ids(expiredCalls));
+    return {
+      calls: expiredCalls.length,
+      voicemails: expiredVm.length,
+      blobs: expiredVm.map((r) => r.k),
+    };
+  }
+
+  /** Deletes rows by id, in chunks (D1 binds at most 100 parameters). */
+  private async deleteIds(table: "voicemails" | "call_log", ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      await this.sql.run(
+        `DELETE FROM ${table} WHERE id IN (${chunk.map(() => "?").join(", ")})`,
+        ...chunk,
+      );
+    }
   }
 
   /** Deletes a space and everything in it (members, phones, voicemail rows, logs). */
@@ -814,6 +922,12 @@ export class Store {
   }
 
   // --- households & users -------------------------------------------------
+
+  /** Every space's id (the self-hosted server's daily history sweep). */
+  async householdIds(): Promise<string[]> {
+    const rows = await this.sql.all<{ id: string }>("SELECT id FROM households ORDER BY id");
+    return rows.map((r) => r.id);
+  }
 
   async countHouseholds(): Promise<number> {
     const row = await this.sql.first<{ n: number }>("SELECT COUNT(*) AS n FROM households");
@@ -1752,6 +1866,20 @@ export class Store {
       `SELECT v.* FROM voicemails v JOIN users u ON u.id = v.to_user
        WHERE u.account_id = ? ORDER BY v.created_at DESC LIMIT ?`,
       accountId,
+      limit,
+    );
+    return rows.map(toVoicemail);
+  }
+
+  /** A person's own voicemail from someone (under any of their addresses), newest first. */
+  async personalVoicemailsFrom(accountId: string, peers: string[], limit = 200) {
+    if (peers.length === 0) return [];
+    const rows = await this.sql.all<VoicemailRow>(
+      `SELECT v.* FROM voicemails v JOIN users u ON u.id = v.to_user
+       WHERE u.account_id = ? AND v.from_address IN (${peers.map(() => "?").join(", ")})
+       ORDER BY v.created_at DESC LIMIT ?`,
+      accountId,
+      ...peers,
       limit,
     );
     return rows.map(toVoicemail);

@@ -14,5 +14,6 @@ export * from "./hubAdmin.ts";
 export * from "./ice.ts";
 export * from "./limits.ts";
 export * from "./people.ts";
+export * from "./timeline.ts";
 export * from "./vmTickets.ts";
 export * from "./voicemail.ts";

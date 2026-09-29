@@ -78,6 +78,10 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
         answered: l.answered,
         durationMs: l.durationMs,
         endReason: l.endReason,
+        // The voicemail they left after this call, if any: its audio is in your inbox.
+        ...(l.voicemailId
+          ? { voicemailId: l.voicemailId, voicemail: `/api/voicemails/${l.voicemailId}/audio` }
+          : {}),
       })),
     };
     return c.json(document, 200, {

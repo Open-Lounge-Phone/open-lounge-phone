@@ -81,6 +81,16 @@ timeline. Operators (`OPERATORS`) get an admin view to suspend or exempt account
 servers. People can download their data (`GET /api/account/export`, [export.md](export.md)) and
 delete their account. See [hub.md](hub.md) and [privacy.md](privacy.md).
 
+**Buddy timeline.** A connection's page in the companion shows your history with that person
+(`GET /api/connections/:id/timeline`): calls both ways from `call_log` (when, how long,
+answered or missed) and the voicemails they left you, attached to the missed call they followed,
+with transcripts and playback. There is no text chat. Each person's side is their own: retention
+is per connection (`PUT /api/connections/:id/retention`), else the account default
+(`PUT /api/account/retention`), else forever — 30 days, 1 year or forever. `Store.sweepExpired`
+deletes a space's expired rows and the audio blobs; the hub runs it on activity at most every six
+hours (never on a timer of its own, so a quiet Durable Object stays asleep), the self-hosted
+server once a day, and the timeline and inbox before they're read.
+
 Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decide every call, and
 calls stay inside one household until federated connections (see
 [federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted
@@ -174,7 +184,7 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.
 
-Planned software phases (see the status table in the [README](../README.md)): a per-buddy call timeline (P2b), rooms —
+Planned software phases (see the status table in the [README](../README.md)): rooms —
 party lines, 3-way calls, dialable room addresses — on an SFU (P3.5), interop tests in CI and a
 versioned federation spec (P5), and professional features such as a directory, hunt groups and
 business hours (P6). There is no text chat and no phone-network bridge.

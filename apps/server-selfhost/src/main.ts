@@ -22,6 +22,7 @@ import {
   type ServerEnv,
   type ServerLink,
   STREAM_PATH,
+  sweepSpace,
 } from "@openloungephone/server-app";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
@@ -35,6 +36,8 @@ import {
 import { type Config, loadConfig } from "./config.ts";
 
 const KEEPALIVE_MS = 30_000;
+/** Expired history is deleted once a day here (a Durable Object host sweeps on activity). */
+const SWEEP_MS = 24 * 60 * 60 * 1000;
 
 /** Installs from before the rename to Open Lounge Phone kept their data in opentincan.sqlite. */
 function adoptLegacyDatabase(dataDir: string, dbPath: string): void {
@@ -167,6 +170,17 @@ export async function start(config: Config) {
     }
   }, KEEPALIVE_MS);
 
+  const sweepAll = async () => {
+    try {
+      for (const id of await env.store.householdIds()) await sweepSpace(env, id);
+    } catch (e) {
+      env.log("warn", "history sweep failed", { error: String(e) });
+    }
+  };
+  const sweeper = setInterval(() => void sweepAll(), SWEEP_MS);
+  sweeper.unref();
+  void sweepAll();
+
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host });
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const path = new URL(req.url ?? "/", "http://x").pathname;
@@ -211,6 +225,7 @@ export async function start(config: Config) {
     setupToken,
     close: async () => {
       clearInterval(keepalive);
+      clearInterval(sweeper);
       links.close();
       for (const ws of wss.clients) ws.terminate();
       for (const ws of streamServer.clients) ws.terminate();
