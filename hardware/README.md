@@ -13,6 +13,9 @@ Nothing to buy yet.
 - [LAYOUT.md](LAYOUT.md): the board layout as code (`layout/`), placement status and routing plan.
 - [ASSEMBLY.md](ASSEMBLY.md): building the board (PCBA, hybrid, by hand).
 - [GUIDELINES.md](GUIDELINES.md): the design rules (child-safe, rugged, simple).
+- [REQUIREMENTS.md](REQUIREMENTS.md): numbered, traceable hardware requirements (H1).
+- [components/](components/README.md): one file per part, checked against its datasheet and
+  footprint (H2); [components/FINDINGS.md](components/FINDINGS.md) ranks the problems found.
 - [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): a functional, printable prototype box for
   the board (`make proto`).
 

@@ -58,6 +58,6 @@ could not be checked.
 environment (UNVERIFIED). "likely" = the vendor is known to publish SPICE models for this family,
 not confirmed for this part.
 
-**Counts:** 38 part files (32 individual distinct parts incl. the custom NFC coil and the e-ink panel,
-3 grouped passive files covering 21 resistor values, 12 capacitor values and 3 inductor/bead
-parts, 1 off-board file), plus this index and FINDINGS.md.
+**Counts:** 42 part files — 38 for individual parts (the JST file covers both header sizes; the
+custom NFC coil and the e-ink panel included), 3 grouped passive files (21 resistor values, 12
+capacitor values, 3 inductor/bead parts) and 1 off-board file — plus this index and FINDINGS.md.
