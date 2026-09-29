@@ -190,6 +190,24 @@ export const RoomMediaMsg = z
     "Rooms with a relay (`media: sfu`): the one peer connection to the relay. The client offers its microphone once and the server answers. Then the server adds the other participants' audio (it offers, the client answers) and, when the active speakers change, asks the client to `close` a slot (the client stops it and offers; the server answers). The server decides whose audio you get.",
   );
 
+export const RecordingNotice = z
+  .object({
+    by: z.string().min(1).max(64).describe("The space that records (its name)."),
+    ticket: z
+      .string()
+      .min(16)
+      .max(128)
+      .optional()
+      .describe(
+        "Only to the one client that makes the recording (the recording side's own app or phone): record what you send and what you hear until the call ends (or you leave the room), at most `maxMs`, then `POST /api/rec/upload?ticket=&durationMs=` with a raw `audio/*` body. Single use.",
+      ),
+    maxMs: z.number().int().positive().optional().describe("With `ticket`: the longest recording."),
+  })
+  .describe(
+    'This call or room is recorded. Every party gets it — on other servers too, from their own server — before the recorder gets its ticket. Play prompt `call.recorded` ("This call is recorded."), show a mark in the app, and on a phone light the recording light, until the call ends. Absent = not recorded.',
+  );
+export type RecordingNotice = z.infer<typeof RecordingNotice>;
+
 export const RoomRole = z.enum(["host", "member"]);
 
 export const RoomParticipant = z.object({
@@ -253,6 +271,9 @@ export const RoomState = z
       .optional()
       .describe("`media: livekit`: where to connect and your join token (for you only)."),
     note: z.string().max(200).optional(),
+    recording: RecordingNotice.optional().describe(
+      "The room is recorded by its space (see `RecordingNotice`); `ticket` only to the participant who records.",
+    ),
   })
   .describe("You're in a room: who's there and how its audio travels. Sent on every change.");
 
@@ -290,9 +311,10 @@ export const CallPrompt = z
     "room.full",
     "room.muted",
     "room.unmuted",
+    "call.recorded",
   ])
   .describe(
-    `Audio prompt ids for hold, 3-way calls, transfer and rooms (pre-recorded on hardware; the browser phone speaks them). \`hold.tone\` = the soft on-hold tone (played locally, repeating), \`call.on_hold\` "You're on hold.", \`call.add\` "Choose who to add, then press MENU to merge.", \`call.merged\` "You're all together now.", \`call.transfer\` "Choose who to transfer to.", \`call.transferred\` "Call transferred.", \`room.joined\` "You're in the room.", \`room.left\` "You left the room.", \`room.idle\` "Still there? Press any key to stay.", \`room.removed\` "The host removed you from the room.", \`room.locked\` "That room is locked.", \`room.full\` "That room is full.", \`room.muted\` "Muted.", \`room.unmuted\` "Unmuted."`,
+    `Audio prompt ids for hold, 3-way calls, transfer and rooms (pre-recorded on hardware; the browser phone speaks them). \`hold.tone\` = the soft on-hold tone (played locally, repeating), \`call.on_hold\` "You're on hold.", \`call.add\` "Choose who to add, then press MENU to merge.", \`call.merged\` "You're all together now.", \`call.transfer\` "Choose who to transfer to.", \`call.transferred\` "Call transferred.", \`room.joined\` "You're in the room.", \`room.left\` "You left the room.", \`room.idle\` "Still there? Press any key to stay.", \`room.removed\` "The host removed you from the room.", \`room.locked\` "That room is locked.", \`room.full\` "That room is full.", \`room.muted\` "Muted.", \`room.unmuted\` "Unmuted.", \`call.recorded\` "This call is recorded." (when \`recording\` first appears on a call or room).`,
   );
 export type CallPrompt = z.infer<typeof CallPrompt>;
 
@@ -659,6 +681,9 @@ export const CallStateMsg = z
       .describe(
         "With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`).",
       ),
+    recording: RecordingNotice.optional().describe(
+      "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it.",
+    ),
   })
   .describe("Call progress update.");
 

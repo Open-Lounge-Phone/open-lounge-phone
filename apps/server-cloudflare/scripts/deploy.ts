@@ -51,6 +51,7 @@ const { values: args } = parseArgs({
     "turn-key-token": { type: "string" },
     "new-setup-token": { type: "boolean", default: false },
     "open-signup": { type: "boolean", default: false },
+    "refuse-recorded-calls": { type: "boolean", default: false },
     "fair-use": { type: "string" },
     "turnstile-site-key": { type: "string" },
     "turnstile-secret": { type: "string" },
@@ -205,6 +206,7 @@ const config = {
   vars: {
     ...(base.vars as object | undefined),
     OPEN_SIGNUP: openSignup ? "1" : "0",
+    REFUSE_RECORDED_CALLS: args["refuse-recorded-calls"] === true ? "1" : "0",
     PUBLIC_URL: `https://${domain}`,
     // Public instances get the hub's fair-use allowance unless told otherwise.
     ...(openSignup && args["fair-use"] !== "none" ? { FAIR_USE: "hub" } : {}),

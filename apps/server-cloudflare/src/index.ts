@@ -50,6 +50,8 @@ export interface Env {
   SETUP_TOKEN?: string;
   /** "1" = open sign-up (wrangler var; `scripts/deploy.ts --open-signup`). Off by default. */
   OPEN_SIGNUP?: string;
+  /** "1" = other servers' recorded calls don't reach this server's people. */
+  REFUSE_RECORDED_CALLS?: string;
   TURN_KEY_ID?: string;
   TURN_KEY_API_TOKEN?: string;
   /** Comma-separated; used when no TURN key is configured. */
@@ -220,6 +222,7 @@ function baseEnv(
     ...(env.AI ? { transcriber: workersAiTranscriber(env.AI) } : {}),
     defer: waitUntil,
     openSignup: env.OPEN_SIGNUP === "1",
+    refuseRecordedCalls: env.REFUSE_RECORDED_CALLS === "1",
     ...(env.DEV_LOOPBACK === "1"
       ? { fetch: (req: Request) => fetch(new Request(loopback(env, req.url), req)) }
       : {}),

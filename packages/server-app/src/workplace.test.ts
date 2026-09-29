@@ -398,9 +398,9 @@ describe("team and org spaces: dialing extensions and ring groups", () => {
     expect(csv.headers.get("content-type")).toMatch(/text\/csv/);
     const text = await csv.text();
     expect(text.split("\r\n")[0]).toBe(
-      "started,direction,who,peer,peer_label,answered,duration_s,end_reason,voicemail",
+      "started,direction,who,peer,peer_label,answered,duration_s,end_reason,voicemail,recording",
     );
-    expect(text).toMatch(/,Cy,user:[^,]+,Ben,yes,65,hangup,no/);
+    expect(text).toMatch(/,Cy,user:[^,]+,Ben,yes,65,hangup,no,no/);
     // Exporting is itself in the audit trail.
     const audit = (await s.http("/space/audit", { token: t.olga.token })).json;
     expect(audit[0]).toMatchObject({ action: "calls.export", actorName: "Olga" });

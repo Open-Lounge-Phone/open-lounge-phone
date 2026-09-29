@@ -258,3 +258,20 @@ describe("hold, merge and transfer", () => {
     });
   });
 });
+
+describe("recording notices", () => {
+  it("marks the call recorded (sticky across hold changes)", () => {
+    const active: CallView = { phase: "active", callId: "c", label: "Ben", offerer: true };
+    const msg = (extra: object) => ({
+      type: "server" as const,
+      now: 1,
+      msg: { t: "call.state" as const, callId: "c", state: "active" as const, ...extra },
+    });
+    const rec = callStep(active, msg({ recording: { by: "Acme" } })).view;
+    expect(rec).toMatchObject({ phase: "active", recording: "Acme" });
+    const held = callStep(rec, msg({ hold: "them" })).view;
+    expect(held).toMatchObject({ hold: "them", recording: "Acme" });
+    // A second notice changes nothing.
+    expect(callStep(rec, msg({ recording: { by: "Acme" } })).view).toBe(rec);
+  });
+});

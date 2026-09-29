@@ -8,6 +8,7 @@ import {
   type Connection,
   LOCAL_HOST,
   RETENTION_DAYS,
+  type Recording,
   type Retention,
   retentionName,
   type Voicemail,
@@ -73,6 +74,13 @@ const voicemailView = (v: Voicemail) => ({
   heardAt: v.heardAt,
 });
 
+const recordingView = (r: Recording) => ({
+  id: r.id,
+  durationMs: r.durationMs,
+  transcript: r.transcript,
+  transcriptStatus: r.transcriptStatus,
+});
+
 export type TimelineItem =
   | {
       kind: "call";
@@ -83,12 +91,19 @@ export type TimelineItem =
       durationMs: number;
       endReason: string | null;
       voicemail: ReturnType<typeof voicemailView> | null;
+      /** The call was recorded (announced to both): play it with `/api/recordings/:id/audio`. */
+      recording?: ReturnType<typeof recordingView> | null;
     }
   | { kind: "voicemail"; id: string; at: number; voicemail: ReturnType<typeof voicemailView> };
 
 /** Calls and voicemails, newest first; a voicemail left after a missed call sits on that call. */
-export function buildTimeline(calls: CallLogEntry[], voicemails: Voicemail[]): TimelineItem[] {
+export function buildTimeline(
+  calls: CallLogEntry[],
+  voicemails: Voicemail[],
+  recordings: Recording[] = [],
+): TimelineItem[] {
   const byId = new Map(voicemails.map((v) => [v.id, v]));
+  const recs = new Map(recordings.map((r) => [r.id, r]));
   const used = new Set<string>();
   const items: TimelineItem[] = calls.map((c) => {
     const vm = c.voicemailId ? byId.get(c.voicemailId) : undefined;
@@ -102,6 +117,9 @@ export function buildTimeline(calls: CallLogEntry[], voicemails: Voicemail[]): T
       durationMs: c.durationMs,
       endReason: c.endReason,
       voicemail: vm ? voicemailView(vm) : null,
+      ...(c.recordingId && recs.has(c.recordingId)
+        ? { recording: recordingView(recs.get(c.recordingId) as Recording) }
+        : {}),
     };
   });
   for (const v of voicemails) {
@@ -145,9 +163,10 @@ export function timelineRoutes(api: Hono<Vars>, env: ServerEnv): void {
     await sweepAccount(env, account.id);
     const host = ownHost(env, c.req.url);
     const peers = await peerAddresses(env, connection, host);
-    const [calls, voicemails] = await Promise.all([
+    const [calls, voicemails, recordings] = await Promise.all([
       store.callLogWith(account.id, peers),
       store.personalVoicemailsFrom(account.id, peers),
+      store.recordings.forAccount(account.id),
     ]);
     // The active space's default applies when neither you nor the connection set one.
     const member = c.get("member");
@@ -159,7 +178,7 @@ export function timelineRoutes(api: Hono<Vars>, env: ServerEnv): void {
         account: retentionName(account.retentionDays),
         ...effectiveRetention(connection, account, space),
       },
-      items: buildTimeline(calls, voicemails),
+      items: buildTimeline(calls, voicemails, recordings),
     });
   });
 

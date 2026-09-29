@@ -735,3 +735,15 @@ body {
 .display--qr .eink-grid {
   grid-column: 1 / -1;
 }
+
+/* The separate recording light: on only while a call or room is recorded (announced). */
+.rec-light {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #cfc7b8;
+}
+.rec-light.is-on {
+  background: #d93025;
+  box-shadow: 0 0 8px #d93025;
+}

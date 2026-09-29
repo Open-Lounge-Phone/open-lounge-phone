@@ -16,6 +16,8 @@ own infrastructure.
 | Call log: who called whom, when, how long, how it ended — **never the audio** | your call history and each buddy's timeline | as long as you choose: per connection, or your account default; else the space's default (30 days, 1 year or forever; forever unless someone changes it) |
 | Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until deleted, or until the retention runs out: yours by your setting for that person (else the space's voicemail default), a phone's by the space's |
 | Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
+| Call recordings (only where a space turned recording on, always announced; never in a home with kids' phones or with a kids' phone on the call) and their transcripts where the space transcribes | the space's record of its calls | by the history retention of whoever recorded it (per connection, account, then the space's history setting) |
+| Team and org spaces: extensions, ring groups and their hours, the shared voicemail boxes, and an audit trail of admin changes | the workplace phone system | extensions and groups until removed; the audit trail by the space's history setting |
 | Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | by the space's history setting (forever by default) |
 | Phones' software version and model, as they report it | the phone's page in the app | until the phone is removed |
 | Usage counters per month (call minutes, room minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
@@ -36,7 +38,9 @@ setting covers your side only: the other person keeps their own history by their
 through a TURN relay that only forwards encrypted packets when a direct path is impossible.
 Rooms of up to 4 people without a relay work the same way. A room through the server's relay
 (the Cloudflare Realtime SFU or LiveKit) is encrypted in transit, but the relay could hear it;
-nothing is recorded, and end-to-end room encryption (SFrame) is planned.
+end-to-end room encryption (SFrame) is planned. The server records nothing itself: where a space
+turned recording on, the recording is made by that side's own app or phone (for a room, a
+participant's), announced to everyone first, and uploaded like a voicemail.
 There are no ads, no trackers, no text chat, and no connection to the phone network — ever.
 
 ## Who can see what

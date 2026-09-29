@@ -82,6 +82,20 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
         ...(l.voicemailId
           ? { voicemailId: l.voicemailId, voicemail: `/api/voicemails/${l.voicemailId}/audio` }
           : {}),
+        // A recording of this call (it was announced to everyone), if its space made one.
+        ...(l.recordingId
+          ? { recordingId: l.recordingId, recording: `/api/recordings/${l.recordingId}/audio` }
+          : {}),
+      })),
+      // Recordings of calls and rooms you were in or recorded (their audio: the paths above).
+      recordings: (await store.recordings.forAccount(account.id, 1000)).map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        peerLabel: r.peerLabel,
+        startedAt: new Date(r.startedAt).toISOString(),
+        durationMs: r.durationMs,
+        transcript: r.transcript,
+        audio: `/api/recordings/${r.id}/audio`,
       })),
     };
     return c.json(document, 200, {

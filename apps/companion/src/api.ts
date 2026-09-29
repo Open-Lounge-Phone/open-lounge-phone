@@ -385,6 +385,13 @@ export type TimelineItem =
       durationMs: number;
       endReason: string | null;
       voicemail: TimelineVoicemail | null;
+      /** The call was recorded by its space (announced to both). */
+      recording?: {
+        id: string;
+        durationMs: number;
+        transcript: string | null;
+        transcriptStatus: TranscriptStatus;
+      } | null;
     }
   | { kind: "voicemail"; id: string; at: number; voicemail: TimelineVoicemail };
 
@@ -395,6 +402,25 @@ export interface SpacePrivacyInfo {
   transcription: boolean;
   /** Whether this server can transcribe at all. */
   transcriber: boolean;
+}
+
+/** Call recording in this space (GET /space/recording). */
+export interface RecordingInfo {
+  enabled: boolean;
+  /** False in a home with kids' phones (`reason` says why). */
+  allowed: boolean;
+  reason?: string;
+}
+
+export interface RecordingSummary {
+  id: string;
+  kind: "call" | "room";
+  callId: string;
+  peerLabel: string;
+  startedAt: number;
+  durationMs: number;
+  transcript: string | null;
+  transcriptStatus: TranscriptStatus;
 }
 
 /** One connection's history (GET /connections/:id/timeline). */
@@ -710,6 +736,14 @@ export function createApi(opts: ApiOptions) {
       request<SpaceCall[]>("GET", `/space/calls${before ? `?before=${before}` : ""}`),
     spaceCallsCsv: async () => (await send("GET", "/space/calls.csv")).blob(),
     audit: () => request<AuditEntry[]>("GET", "/space/audit"),
+
+    // Call recording (off unless the space turns it on; always announced)
+    recordingSetting: () => request<RecordingInfo>("GET", "/space/recording"),
+    setRecording: (enabled: boolean) => request<void>("PUT", "/space/recording", { enabled }),
+    recordings: () => request<RecordingSummary[]>("GET", "/recordings"),
+    recordingAudio: async (id: string) =>
+      (await send("GET", `/recordings/${enc(id)}/audio`)).blob(),
+    deleteRecording: (id: string) => request<void>("DELETE", `/recordings/${enc(id)}`),
 
     // Voicemail
     voicemails: () => request<VoicemailSummary[]>("GET", "/voicemails"),

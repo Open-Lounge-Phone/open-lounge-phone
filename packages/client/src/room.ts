@@ -41,6 +41,8 @@ export interface RoomAudioOptions {
   onAudible?(count: number): void;
   /** Output volume 0–1. */
   volume?: number;
+  /** Every remote audio stream as it starts playing (e.g. for recording the room). */
+  onStream?(stream: MediaStream): void;
 }
 
 /** Voice activity from the microphone's level, with hysteresis. */
@@ -180,6 +182,12 @@ export class RoomAudio {
     );
   }
 
+  /** Plays someone's audio (and hands it to `onStream`). */
+  private hear(key: string, stream: MediaStream): void {
+    this.speakers.play(key, stream);
+    this.opts.onStream?.(stream);
+  }
+
   /** Our own microphone on or off (the server is told by the app with `room.mute`). */
   setMuted(muted: boolean): void {
     this.muted = muted;
@@ -273,7 +281,7 @@ export class RoomAudio {
         peer,
       });
     pc.ontrack = (e) => {
-      this.speakers.play(peer, e.streams[0] ?? new MediaStream([e.track]));
+      this.hear(peer, e.streams[0] ?? new MediaStream([e.track]));
       this.opts.onAudible?.(this.speakers.count);
     };
     pc.onconnectionstatechange = () => {
@@ -326,7 +334,7 @@ export class RoomAudio {
     if (track) pc.addTransceiver(track, { direction: "sendonly" });
     pc.ontrack = (e) => {
       const key = e.transceiver.mid ?? String(this.speakers.count);
-      this.speakers.play(key, new MediaStream([e.track]));
+      this.hear(key, new MediaStream([e.track]));
       this.opts.onAudible?.(this.speakers.count);
     };
     pc.onconnectionstatechange = () => {
@@ -382,7 +390,7 @@ export class RoomAudio {
       this.lk = { room, forward };
       room.on(lk.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind !== "audio") return;
-        this.speakers.play(participant.identity, new MediaStream([track.mediaStreamTrack]));
+        this.hear(participant.identity, new MediaStream([track.mediaStreamTrack]));
         this.opts.onAudible?.(this.speakers.count);
       });
       room.on(lk.RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {

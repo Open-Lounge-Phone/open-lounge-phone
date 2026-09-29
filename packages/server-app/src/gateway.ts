@@ -372,7 +372,8 @@ export class Gateway implements Coordinator {
           cancelHello();
           await this.env.store.touchDevice(device.id, this.env.now(), phase.runs);
           const hub = this.hub(device.householdId);
-          const peer = await hub.connectDevice(device, conn);
+          // What it runs now (whether its client can record, for instance).
+          const peer = await hub.connectDevice({ ...device, ...phase.runs }, conn);
           if (closed()) {
             await hub.disconnect(peer);
             return;

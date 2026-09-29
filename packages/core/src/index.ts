@@ -6,6 +6,7 @@ export * from "./fingerprint.ts";
 export * from "./funding.ts";
 export * from "./lounge.ts";
 export * from "./quietHours.ts";
+export * from "./recording.ts";
 export * from "./rooms.ts";
 export * from "./voicemail.ts";
 export * from "./workplace.ts";

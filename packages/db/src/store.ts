@@ -7,6 +7,7 @@ import type {
 } from "@openloungephone/core";
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
+import { RecordingStore } from "./recordings.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
 import { WorkplaceStore } from "./workplace.ts";
@@ -115,6 +116,9 @@ export interface CallLogEntry {
   endReason: string | null;
   voicemailId?: string | null;
   expiresAt?: number | null;
+  /** The call's id in its hub (links a recording made of it). */
+  callId?: string | null;
+  recordingId?: string | null;
 }
 
 /** 'YYYY-MM' (UTC) for a time. */
@@ -558,12 +562,15 @@ export class Store {
   readonly rooms: RoomStore;
   /** Team and org spaces: extensions, ring groups, business hours, the audit trail. */
   readonly workplace: WorkplaceStore;
+  /** Call recording: the per-space switch, upload tickets, recordings. */
+  readonly recordings: RecordingStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
     this.connections = new ConnectionStore(sql);
     this.rooms = new RoomStore(sql);
     this.workplace = new WorkplaceStore(sql);
+    this.recordings = new RecordingStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -777,8 +784,8 @@ export class Store {
     const id = newId("cl");
     await this.sql.run(
       `INSERT INTO call_log (id, household_id, account_id, device_id, peer, peer_label, direction,
-         started_at, answered, duration_ms, end_reason, voicemail_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         started_at, answered, duration_ms, end_reason, voicemail_id, expires_at, call_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       entry.householdId,
       entry.accountId,
@@ -792,6 +799,7 @@ export class Store {
       entry.endReason,
       entry.voicemailId ?? null,
       entry.expiresAt ?? null,
+      entry.callId ?? null,
     );
     return id;
   }
@@ -812,6 +820,7 @@ export class Store {
       end_reason: string | null;
       voicemail_id: string | null;
       expires_at: number | null;
+      recording_id: string | null;
     }>(
       `SELECT * FROM call_log WHERE account_id = ? ${peer ? "AND peer = ?" : ""}
        ORDER BY started_at DESC LIMIT ?`,
@@ -831,6 +840,7 @@ export class Store {
       endReason: r.end_reason,
       voicemailId: r.voicemail_id,
       expiresAt: r.expires_at,
+      recordingId: r.recording_id ?? null,
     }));
   }
 
@@ -876,6 +886,8 @@ export class Store {
       end_reason: string | null;
       voicemail_id: string | null;
       expires_at: number | null;
+      call_id: string | null;
+      recording_id: string | null;
     }>("SELECT * FROM call_log WHERE id = ?", id);
     return (
       r && {
@@ -892,6 +904,8 @@ export class Store {
         endReason: r.end_reason,
         voicemailId: r.voicemail_id,
         expiresAt: r.expires_at,
+        callId: r.call_id ?? null,
+        recordingId: r.recording_id ?? null,
       }
     );
   }
@@ -922,7 +936,7 @@ export class Store {
     householdId: string,
     host: string,
     now: number,
-  ): Promise<{ calls: number; voicemails: number; blobs: string[] }> {
+  ): Promise<{ calls: number; voicemails: number; recordings: number; blobs: string[] }> {
     // The shortest retention is 30 days: nothing younger can have expired.
     const floor = now - RETENTION_DAYS["30d"] * DAY_MS;
     // A connection's setting for a peer address (`handle@host`, or a local person's `user:<id>`).
@@ -950,12 +964,24 @@ export class Store {
         FROM voicemails v LEFT JOIN users u ON u.id = v.to_user
         WHERE v.household_id = ? AND v.created_at < ?
       ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
+    // Recordings follow the history retention of whoever made them (per connection, account,
+    // then the space's history setting), like the call-log rows they belong to.
+    const recordings = `SELECT id, k FROM (
+        SELECT r.id, r.blob_key AS k, r.started_at AS t, COALESCE(
+          ${connectionDays("r.account_id", "r.peer")},
+          (SELECT a.retention_days FROM accounts a WHERE a.id = r.account_id),
+          (SELECT h.history_days FROM households h WHERE h.id = r.household_id),
+          0) AS days
+        FROM recordings r WHERE r.household_id = ? AND r.started_at < ?
+      ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
     const params = [host, householdId, floor, now];
     const expiredVm = await this.sql.all<{ id: string; k: string }>(voicemails, ...params);
     const expiredCalls = await this.sql.all<{ id: string }>(calls, ...params);
+    const expiredRec = await this.sql.all<{ id: string; k: string }>(recordings, ...params);
     const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
     await this.deleteIds("voicemails", ids(expiredVm));
     await this.deleteIds("call_log", ids(expiredCalls));
+    await this.deleteIds("recordings", ids(expiredRec));
     // The audit trail of a team/org space follows the space's history setting too.
     await this.sql.run(
       `DELETE FROM audit_log WHERE household_id = ?
@@ -980,12 +1006,16 @@ export class Store {
     return {
       calls: expiredCalls.length,
       voicemails: expiredVm.length,
-      blobs: expiredVm.map((r) => r.k),
+      recordings: expiredRec.length,
+      blobs: [...expiredVm.map((r) => r.k), ...expiredRec.map((r) => r.k)],
     };
   }
 
   /** Deletes rows by id, in chunks (D1 binds at most 100 parameters). */
-  private async deleteIds(table: "voicemails" | "call_log", ids: string[]): Promise<void> {
+  private async deleteIds(
+    table: "voicemails" | "call_log" | "recordings",
+    ids: string[],
+  ): Promise<void> {
     for (let i = 0; i < ids.length; i += 50) {
       const chunk = ids.slice(i, i + 50);
       await this.sql.run(
@@ -2295,7 +2325,9 @@ export class Store {
       rows = await this.sql.all(
         `SELECT blob_key AS k FROM voicemails WHERE household_id = ?
          UNION ALL SELECT p.greeting_blob AS k FROM voicemail_prefs p
-           JOIN devices d ON d.id = p.device_id WHERE d.household_id = ?`,
+           JOIN devices d ON d.id = p.device_id WHERE d.household_id = ?
+         UNION ALL SELECT blob_key AS k FROM recordings WHERE household_id = ?`,
+        scope.householdId,
         scope.householdId,
         scope.householdId,
       );

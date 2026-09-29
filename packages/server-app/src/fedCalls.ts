@@ -37,6 +37,8 @@ export interface RemoteRing {
   address?: string;
   /** For calls between households here: the caller's household. */
   peerHousehold?: string;
+  /** A kids' phone is calling (through its guardian's connection): never recorded. */
+  fromKidsPhone?: boolean;
 }
 
 /** Someone elsewhere joins one of this household's phone rooms (see `remoteRoomJoin`). */
@@ -70,6 +72,9 @@ export interface StreamPort {
 
 const deny: RingResult = { state: "ended", reason: "denied" };
 
+/** Why a server that refuses recorded calls said no. */
+export const REFUSES_RECORDING = "This server doesn't take recorded calls";
+
 /** The household where federated calls for an account ring: its first (personal) space. */
 export async function primaryHousehold(env: ServerEnv, accountId: string) {
   return (await env.store.listMemberships(accountId))[0];
@@ -94,6 +99,11 @@ export class FedCalls implements CallLinks {
     const { store } = this.env;
     const from: Party = body.from;
     const key = `fed:${host}:${from.id}`;
+    // A server may refuse recorded calls for its people (another household here is the same
+    // server, and its own spaces' rules already apply).
+    if (body.recording && host !== LOCAL_HOST && this.env.refuseRecordedCalls) {
+      return { state: "ended", reason: "denied", note: REFUSES_RECORDING };
+    }
     if (body.to.kind === "person") {
       const account = await store.accountByHandle(body.to.handle);
       if (!account || account.suspendedAt !== null) return deny;
@@ -114,6 +124,7 @@ export class FedCalls implements CallLinks {
         label: label.slice(0, 24),
         target: { kind: "person", userId: home.user.id },
         ...(peerHousehold ? { peerHousehold } : {}),
+        ...(body.viaPhone ? { fromKidsPhone: true } : {}),
       });
     }
     if (body.to.kind === "guest") {

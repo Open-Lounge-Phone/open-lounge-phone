@@ -52,6 +52,8 @@ Options:
   unlimited).
 - `--turnstile-site-key <key> --turnstile-secret <secret>`: Cloudflare Turnstile on sign-up
   (dashboard → Turnstile → add a widget for the domain). Without keys there's no check.
+- `--refuse-recorded-calls`: other servers' recorded calls don't reach your people (sets the
+  `REFUSE_RECORDED_CALLS` var on every deploy; see [security-model.md](security-model.md)).
 - `--operator <handle[,handle]>`: who sees the Operator view (suspend or exempt accounts, block
   servers).
 - `--funding-balance <usd>`: show the funding card (see [hub.md](hub.md));

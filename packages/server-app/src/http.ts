@@ -38,6 +38,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
+import { publicRecordingRoutes, recordingRoutes } from "./recordings.ts";
 import { roomRoutes } from "./roomsApi.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
@@ -221,6 +222,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   publicPeopleRoutes(api, env);
   publicHubRoutes(api, env);
   publicVoicemailRoutes(api, env, live);
+  publicRecordingRoutes(api, env);
 
   // --- authenticated --------------------------------------------------------
 
@@ -336,6 +338,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (mode === "kids" && !(await isHome(user.householdId))) {
       // A household phone without an owner is a kid's phone; those belong in a home.
       return c.json({ error: kidsOnlyAtHome }, 400);
+    }
+    if (mode === "kids" && (await store.recordings.enabled(user.householdId))) {
+      // A home with kids' phones never records calls.
+      return c.json({ error: "turn off call recording before adding a kids' phone" }, 409);
     }
     const phones = (await store.listDevices(user.householdId)).length;
     const owner = await store.spaceOwner(user.householdId);
@@ -751,6 +757,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   workplaceRoutes(api, env, live);
+  recordingRoutes(api, env);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
   roomRoutes(api, env, live);

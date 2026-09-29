@@ -20,8 +20,12 @@ import {
   nextQuietChange,
   nextRoundRobin,
   type PartyCall,
+  pickRecorder,
+  RECORDING_MAX_MS,
+  RECORDING_MODELS,
   type RoomEvent,
   type RoomState,
+  recordingDecision,
   resolveButton,
   roomAccess,
   roomStep,
@@ -79,6 +83,7 @@ import { fairUseProblem } from "./fairUse.ts";
 import {
   placeGuestDial,
   primaryHousehold,
+  REFUSES_RECORDING,
   type RelayDial,
   type RemoteRing,
   type RemoteRoomJoin,
@@ -254,6 +259,12 @@ interface Room {
   heldBy?: string;
   /** A call to a ring group (callee key `hg:…`): its steps and where it is (see `huntNext`). */
   hunt?: HuntState;
+  /** Recording announced: by this space (`ours`), or by the far side's. */
+  recording?: { by: string; ours: boolean };
+  /** Never recorded here (we called a kids' phone elsewhere). */
+  noRecording?: boolean;
+  /** The far server's explanation for ending it (e.g. it doesn't take recorded calls). */
+  endNote?: string;
 }
 
 /** Someone signed in at another Lounge phone and open to chat ("who's here"). */
@@ -308,6 +319,20 @@ export class HouseholdHub {
       reschedule: () => void this.scheduleWake(),
       announce: (room) => this.announceRoom(room),
       remote: (info) => this.remoteFromInfo(info),
+      recordingBy: (room) => this.recordingBy([...room.participants.values()].map((p) => p.peer)),
+      recordingTicket: async (room, p) =>
+        this.env.store.recordings.createTicket(
+          {
+            householdId: this.householdId,
+            kind: "room",
+            callId: room.id,
+            accountId: await this.recorderAccount(p.peer),
+            peer: `room:${room.id}`,
+            peerLabel: room.name,
+            startedAt: this.env.now(),
+          },
+          this.env.now(),
+        ),
     });
   }
 
@@ -382,6 +407,8 @@ export class HouseholdHub {
         ...(r.group ? { group: r.group } : {}),
         ...(r.heldBy ? { heldBy: r.heldBy } : {}),
         ...(r.hunt ? { hunt: r.hunt } : {}),
+        ...(r.recording ? { recording: r.recording } : {}),
+        ...(r.noRecording ? { noRecording: true } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -437,6 +464,8 @@ export class HouseholdHub {
         ...(snap.group ? { group: snap.group } : {}),
         ...(snap.heldBy ? { heldBy: snap.heldBy } : {}),
         ...(snap.hunt ? { hunt: snap.hunt } : {}),
+        ...(snap.recording ? { recording: snap.recording } : {}),
+        ...(snap.noRecording ? { noRecording: true } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -485,6 +514,7 @@ export class HouseholdHub {
         hook: "down",
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
         ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
+        ...(device.model && RECORDING_MODELS.has(device.model) ? { canRecord: true } : {}),
       };
       // Back within the grace period: the session carries on (a replaced socket hands it over).
       const resumed = peer.lounge ? await this.resumeLounge(peer, old) : undefined;
@@ -1406,6 +1436,7 @@ export class HouseholdHub {
         room.cancelTimer = undefined;
         room.activeAt = this.env.now();
         for (const p of both) p.conn.send({ t: "call.state", callId: room.id, state: "active" });
+        await this.announceRecording(room);
         return;
       case "ended": {
         room.cancelTimer?.();
@@ -1433,6 +1464,7 @@ export class HouseholdHub {
             callId: room.id,
             state: "ended",
             reason,
+            ...(room.endNote ? { note: room.endNote } : {}),
             ...(voicemail && p === room.caller ? { voicemail } : {}),
           });
         }
@@ -2198,6 +2230,7 @@ export class HouseholdHub {
         answered: room.answered === true,
         durationMs,
         endReason: reason,
+        callId: room.id,
       });
     }
   }
@@ -2212,6 +2245,7 @@ export class HouseholdHub {
     leg?: string;
     address?: string;
     loungeRelay?: boolean;
+    kidsPhone?: boolean;
   }): Peer {
     return this.remoteFromInfo({
       session: newId("s"),
@@ -2225,6 +2259,7 @@ export class HouseholdHub {
       ...(info.leg ? { leg: info.leg } : {}),
       ...(info.address ? { address: info.address } : {}),
       ...(info.loungeRelay ? { loungeRelay: true } : {}),
+      ...(info.kidsPhone ? { kidsPhone: true } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
     } as PeerInfo);
@@ -2311,6 +2346,7 @@ export class HouseholdHub {
       key: `fed:${conn.peerHost}:phone:${deviceId}`,
       label: phone.label,
       peerHousehold,
+      kidsPhone: true,
       body: { from: partyOf(account), to: { kind: "phone", deviceId } },
       vmTarget: { kind: "connection", connectionId: conn.id, deviceId, name: phone.label },
     });
@@ -2363,6 +2399,8 @@ export class HouseholdHub {
       /** Voicemail if it goes unanswered, through the same connection. */
       vmTarget?: VmTarget;
       vmCheck?: VmCaller["check"];
+      /** Calling a kids' phone elsewhere: never recorded. */
+      kidsPhone?: boolean;
     },
   ): Promise<void> {
     const calls = this.env.calls;
@@ -2392,15 +2430,25 @@ export class HouseholdHub {
     room.payer = allowance.payer;
     room.calleePeer = remote;
     if (vm) room.vm = vm;
+    if (target.kidsPhone) room.noRecording = true;
     this.roomsDirty = true;
     await calls.register(target.host, room.id, this.householdId);
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    // The far server is told up front if this space will record (it may refuse such calls).
+    const recording = !target.kidsPhone && (await this.recordingBy([caller, remote])) !== undefined;
     // Placement goes over the network: not inside the hub's queue.
-    const body: CallBody = { ...target.body, callId: room.id };
+    const body: CallBody = {
+      ...target.body,
+      callId: room.id,
+      ...(recording ? { recording: true } : {}),
+    };
     void calls.place(target.host, body, this.householdId).then(
       (r) =>
         r.state === "ended"
-          ? this.run(() => this.apply(room, { type: "end", reason: r.reason }))
+          ? this.run(() => {
+              if (r.note) room.endNote = r.note;
+              return this.apply(room, { type: "end", reason: r.reason });
+            })
           : undefined,
       (e) => {
         this.env.log("warn", "federated call placement failed", { error: String(e) });
@@ -2428,6 +2476,7 @@ export class HouseholdHub {
         label: req.label,
         peerHousehold: req.peerHousehold,
         ...(req.address ? { address: req.address } : {}),
+        ...(req.fromKidsPhone ? { kidsPhone: true } : {}),
       });
       if (req.target.kind === "person") {
         const userId = req.target.userId;
@@ -2543,6 +2592,9 @@ export class HouseholdHub {
           return this.convertToLeg(room, remote, msg.merged.roomId);
         }
         if (msg.state === "ended" && msg.transfer) return this.repoint(room, remote, msg.transfer);
+        if (msg.state === "active" && msg.recording) {
+          return this.farRecording(room, remote, party, msg.recording.by);
+        }
         if (
           msg.state === "active" &&
           room.state.phase === "active" &&
@@ -2556,6 +2608,7 @@ export class HouseholdHub {
           return;
         }
         if (msg.state === "ended") {
+          if (msg.note) room.endNote = msg.note;
           if (msg.voicemail && party === "callee") this.relayOffer(room, host, msg.voicemail);
           return this.apply(room, { type: "end", reason: msg.reason ?? "hangup" });
         }
@@ -3112,6 +3165,120 @@ export class HouseholdHub {
     room.group = (room.group ?? []).filter((u) => u !== person);
     this.roomsDirty = true;
     if (room.group.length === 0) await this.huntNext(room);
+  }
+
+  // --- recording (docs/security-model.md) ------------------------------------------------
+
+  /** A kids' phone: a household phone of ours without an owner, or one elsewhere we know of. */
+  private isKidsPhone(p: Peer): boolean {
+    if (p.kind === "remote") return p.kidsPhone === true;
+    if (p.kind !== "device") return false;
+    const d = p as DevicePeer;
+    return !d.owner && !d.lounge;
+  }
+
+  /**
+   * Whether this space records a call or room with these parties: its name if so. Off unless the
+   * space turned it on; never in a home with kids' phones, never with a kids' phone taking part.
+   */
+  private async recordingBy(parties: Peer[]): Promise<string | undefined> {
+    const { store } = this.env;
+    const enabled = await store.recordings.enabled(this.householdId);
+    if (!enabled) return undefined;
+    const kidsPhones = (await store.listDevices(this.householdId)).filter(
+      (d) => deviceMode(d) === "kids",
+    ).length;
+    const decision = recordingDecision({
+      enabled,
+      spaceKidsPhones: kidsPhones,
+      kidsPhoneOnCall: parties.some((p) => this.isKidsPhone(p)),
+    });
+    if (!decision.record) return undefined;
+    return (await store.getHousehold(this.householdId))?.name.slice(0, 64);
+  }
+
+  /** Who a recording made by `p` belongs to: the person at that app or phone. */
+  private async recorderAccount(p: Peer): Promise<string | null> {
+    const person = p.kind === "user" ? p.id : p.kind === "device" ? personOf(p) : undefined;
+    if (!person || person.startsWith("guest:")) return null;
+    return (await this.env.store.getUser(person))?.accountId ?? null;
+  }
+
+  /**
+   * The call is live: if this space records it, every party is told — our people directly, the
+   * far side through its server — and only then does the recording side's own client get its
+   * upload ticket. There is no way to get a ticket without that announcement going out first.
+   */
+  private async announceRecording(room: Room): Promise<void> {
+    if (room.noRecording || room.recording?.ours) return;
+    const parties = [room.caller, room.calleePeer].filter((p): p is Peer => !!p);
+    // A hub that only relays between two other places records nothing: their spaces decide.
+    if (!parties.some((p) => p.kind !== "remote")) return;
+    const by = await this.recordingBy(parties);
+    if (!by || this.rooms.get(room.id) !== room) return;
+    room.recording = { by, ours: true };
+    this.roomsDirty = true;
+    const recorderId = pickRecorder(
+      parties.map((p) => ({
+        id: p.session,
+        local: p.kind !== "remote",
+        canRecord: p.kind === "user" || p.canRecord === true,
+      })),
+    );
+    const notice = {
+      t: "call.state",
+      callId: room.id,
+      state: "active",
+      recording: { by },
+    } as const;
+    for (const p of parties) if (p.session !== recorderId) p.conn.send(notice);
+    const recorder = parties.find((p) => p.session === recorderId);
+    if (!recorder) return;
+    const other = parties.find((p) => p !== recorder);
+    const who = await this.describe(other, other?.key ?? "");
+    const ticket = await this.env.store.recordings.createTicket(
+      {
+        householdId: this.householdId,
+        kind: "call",
+        callId: room.id,
+        accountId: await this.recorderAccount(recorder),
+        peer: who.peer,
+        peerLabel: who.label.slice(0, 64),
+        startedAt: room.activeAt ?? this.env.now(),
+      },
+      this.env.now(),
+    );
+    recorder.conn.send({
+      ...notice,
+      recording: { by, ticket, maxMs: RECORDING_MAX_MS },
+    });
+  }
+
+  /**
+   * The far side's space records the call: tell our person (never with a ticket — the recording
+   * is theirs), or end the call if this server doesn't take recorded calls from other servers.
+   */
+  private async farRecording(
+    room: Room,
+    remote: Peer,
+    party: "caller" | "callee",
+    by: string,
+  ): Promise<void> {
+    if (room.state.phase !== "active" && room.state.phase !== "connecting") return;
+    if (this.env.refuseRecordedCalls && (remote.host ?? LOCAL_HOST) !== LOCAL_HOST) {
+      room.endNote = REFUSES_RECORDING;
+      return this.apply(room, { type: "end", reason: "denied" });
+    }
+    if (room.recording) return;
+    room.recording = { by: by.slice(0, 64), ours: false };
+    this.roomsDirty = true;
+    const other = party === "caller" ? room.calleePeer : room.caller;
+    other?.conn.send({
+      t: "call.state",
+      callId: room.id,
+      state: "active",
+      recording: { by: by.slice(0, 64) },
+    });
   }
 
   // --- hold, 3-way and transfer ---------------------------------------------------------
@@ -3750,6 +3917,22 @@ export class HouseholdHub {
 
   /** A message from the room's server for one of our people in it. */
   private async legSignal(leg: RoomLeg, msg: RoomSignalMsg): Promise<void> {
+    if (msg.t === "room.state" && msg.recording) {
+      // A room recorded on another server: this server may not take that for its people.
+      if (this.env.refuseRecordedCalls && leg.conn.to.host !== LOCAL_HOST) {
+        leg.roomId ??= msg.roomId;
+        await this.endLeg(leg, "denied", { tellRoom: true, tellPeer: false });
+        leg.peer.conn.send({
+          t: "room.ended",
+          roomId: msg.roomId,
+          reason: "denied",
+          note: REFUSES_RECORDING,
+        });
+        return;
+      }
+      // The recording is theirs: never pass a ticket on.
+      msg = { ...msg, recording: { by: msg.recording.by } };
+    }
     if (msg.t === "room.state") {
       if (!leg.roomId) {
         leg.roomId = msg.roomId;

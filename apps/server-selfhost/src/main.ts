@@ -102,6 +102,7 @@ export async function start(config: Config) {
     ...(config.operators.length ? { operators: config.operators } : {}),
     ...(config.hub ? { hub: config.hub } : {}),
     trustProxy: config.trustProxy,
+    refuseRecordedCalls: config.refuseRecordedCalls,
     ...(config.federation ? { federationKey: await federationKeyFile(config.dataDir) } : {}),
     fetch: loopbackFetch,
     now: () => Date.now(),

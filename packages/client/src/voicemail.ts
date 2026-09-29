@@ -80,6 +80,16 @@ export function uploadGreeting(
   return upload(`/api/vm/greeting?ticket=${encodeURIComponent(ticket)}`, rec, base, doFetch);
 }
 
+/** Uploads a call or room recording with the ticket that came with its announcement. */
+export function uploadRecording(
+  ticket: string,
+  rec: Recording,
+  base = "",
+  doFetch: Fetch = defaultFetch,
+): Promise<UploadResult> {
+  return upload(`/api/rec/upload?ticket=${encodeURIComponent(ticket)}`, rec, base, doFetch);
+}
+
 /** How greetings are voiced: speech, recordings and the tone. */
 export interface GreetingVoice {
   say(text: string): Promise<void>;

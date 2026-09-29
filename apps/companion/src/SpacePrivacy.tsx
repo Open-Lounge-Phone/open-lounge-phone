@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Api, SpacePrivacyInfo } from "./api.ts";
+import type { Api, RecordingInfo, SpacePrivacyInfo } from "./api.ts";
 import { RETENTION_LABEL } from "./timelineText.ts";
 
 type Choice = SpacePrivacyInfo["history"];
@@ -11,9 +11,11 @@ const CHOICES: Choice[] = ["30d", "1y", "forever"];
  */
 export function SpacePrivacy({ api, guardian }: { api: Api; guardian: boolean }) {
   const [info, setInfo] = useState<SpacePrivacyInfo>();
+  const [rec, setRec] = useState<RecordingInfo>();
   const [error, setError] = useState<string>();
   const load = useCallback(() => {
     api.spacePrivacy().then(setInfo, (e: Error) => setError(e.message));
+    api.recordingSetting().then(setRec, () => {});
   }, [api]);
   useEffect(load, [load]);
   const save = (patch: Parameters<Api["setSpacePrivacy"]>[0]) =>
@@ -60,6 +62,28 @@ export function SpacePrivacy({ api, guardian }: { api: Api; guardian: boolean })
           </span>
         </span>
       </label>
+      {rec && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={rec.enabled}
+            disabled={!guardian || (!rec.allowed && !rec.enabled)}
+            onChange={(e) =>
+              void api
+                .setRecording(e.target.checked)
+                .then(load, (err: Error) => setError(err.message))
+            }
+          />
+          <span>
+            Record calls
+            <span className="hint">
+              {rec.allowed
+                ? ' — off by default. Every call and room is announced ("This call is recorded"), with a mark in the apps and the recording light on phones; recordings follow the history setting above. Never with a kids\' phone.'
+                : ` — ${rec.reason ?? "not allowed here"}.`}
+            </span>
+          </span>
+        </label>
+      )}
       {!guardian && <span className="hint">Guardians can change these.</span>}
       {error && (
         <p className="error" role="alert">

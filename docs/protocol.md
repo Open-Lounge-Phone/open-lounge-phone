@@ -438,6 +438,7 @@ Call progress update.
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it. |
 
 ### `rtc.config`
 
@@ -493,6 +494,7 @@ You're in a room: who's there and how its audio travels. Sent on every change.
 | `forward` | string (len ≤64)[] |  | Relayed rooms: whose audio the relay sends you now (top 3 speakers in rooms of more than 4). |
 | `livekit` | { url: string (len ≤300), token: string (len ≤2048) } |  | `media: livekit`: where to connect and your join token (for you only). |
 | `note` | string (len ≤200) |  |  |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | The room is recorded by its space (see `RecordingNotice`); `ticket` only to the participant who records. |
 
 ### `room.media`
 
@@ -900,6 +902,7 @@ Call progress update.
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it. |
 
 ### `rtc.config`
 
@@ -955,6 +958,7 @@ You're in a room: who's there and how its audio travels. Sent on every change.
 | `forward` | string (len ≤64)[] |  | Relayed rooms: whose audio the relay sends you now (top 3 speakers in rooms of more than 4). |
 | `livekit` | { url: string (len ≤300), token: string (len ≤2048) } |  | `media: livekit`: where to connect and your join token (for you only). |
 | `note` | string (len ≤200) |  |  |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | The room is recorded by its space (see `RecordingNotice`); `ticket` only to the participant who records. |
 
 ### `room.media`
 

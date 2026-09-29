@@ -1,3 +1,4 @@
+export * from "./callRecorder.ts";
 export * from "./media.ts";
 export * from "./recorder.ts";
 export * from "./room.ts";

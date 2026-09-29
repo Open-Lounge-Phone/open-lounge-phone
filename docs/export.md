@@ -62,6 +62,28 @@ and, later, for **moving an account** to another server while keeping its connec
       "endReason": "timeout",
       "voicemailId": "vm_…",
       "voicemail": "/api/voicemails/vm_…/audio"
+    },
+    {
+      "peer": "user:usr_…",
+      "peerLabel": "Ben",
+      "direction": "out",
+      "startedAt": "2026-09-14T09:00:00.000Z",
+      "answered": true,
+      "durationMs": 180000,
+      "endReason": "hangup",
+      "recordingId": "rec_…",
+      "recording": "/api/recordings/rec_…/audio"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "rec_…",
+      "kind": "call",
+      "peerLabel": "Ben",
+      "startedAt": "2026-09-14T09:00:00.000Z",
+      "durationMs": 180000,
+      "transcript": "…",
+      "audio": "/api/recordings/rec_…/audio"
     }
   ]
 }
@@ -77,7 +99,10 @@ and, later, for **moving an account** to another server while keeping its connec
   someone on another server or connected across households, `user:<id>` / `device:<id>` inside
   a space. A missed call that ended in a voicemail for you carries `voicemailId` and
   `voicemail`, the path of its audio on this server (signed-in `GET`, the same audio as the
-  Voicemail tab); the transcript is in the inbox.
+  Voicemail tab); the transcript is in the inbox. A call its space recorded (always announced to
+  everyone on it) carries `recordingId` and `recording`, the path of its audio.
+- `recordings` lists the recordings of calls and rooms you were in or recorded (up to 1,000),
+  with their transcripts where the space transcribes; the audio is at `audio` (signed-in `GET`).
 - Not included: passkeys (they're bound to the old server's name), sessions, voicemail audio
   (download it from the Voicemail tab), other people's data.
 

@@ -508,6 +508,10 @@ export async function workplaceAcross(server: ServerTarget, bob: Person) {
     expect(group.status, JSON.stringify(group.json)).toBe(201);
     const dir = await api(ben, "/directory?q=sup");
     expect(dir.json.groups).toMatchObject([{ name: "Support", extension: "300" }]);
+    // The team records its calls (off by default; announced to everyone, other servers too).
+    expect(
+      (await api(olga, "/space/recording", { method: "PUT", body: { enabled: true } })).status,
+    ).toBe(204);
 
     // Bob and Olga connect across servers.
     expect((await api(bob, "/connections", { body: { to: olga.address } })).status).toBe(202);
@@ -531,7 +535,24 @@ export async function workplaceAcross(server: ServerTarget, bob: Person) {
     oApp.send({ t: "rtc.sdp", callId: first, type: "answer", sdp: "v=0 a" });
     await stateOf(oApp, "active");
     await stateOf(bApp, "active");
+    // Bob hears from his own server that the call is recorded (no ticket: it's not his to make);
+    // Olga's app is the one that records.
+    const bobNotice = (await stateOf(bApp, "active")).recording as { by: string; ticket?: string };
+    expect(bobNotice).toEqual({ by: "Acme" });
+    const olgaNotice = (await stateOf(oApp, "active")).recording as { ticket: string };
+    expect(olgaNotice.ticket).toBeTruthy();
     oApp.send({ t: "call.transfer", callId: first, to: { extension: "300" } });
+    // Olga's call is over for her: her app uploads what it recorded.
+    await stateOf(oApp, "ended");
+    const up = await fetch(
+      `${server.base}/api/rec/upload?ticket=${olgaNotice.ticket}&durationMs=3000`,
+      {
+        method: "POST",
+        headers: { "content-type": "audio/webm" },
+        body: new Uint8Array([1, 2, 3]),
+      },
+    );
+    expect(up.status).toBe(201);
     const moved = await stateOf(bApp, "ended");
     expect(moved.transfer).toMatchObject({ ringing: true, offerer: true });
     const next = (moved.transfer as { callId: string }).callId;
@@ -549,6 +570,8 @@ export async function workplaceAcross(server: ServerTarget, bob: Person) {
     await stateOf(benApp, "ended");
     const log = await api(olga, "/space/calls");
     expect(log.status).toBe(200);
+    expect((log.json as { recordingId: string | null }[]).some((r) => r.recordingId)).toBe(true);
+    expect((await api(olga, "/recordings")).json.length).toBeGreaterThanOrEqual(1);
     expect((log.json as { who: string }[]).map((r) => r.who)).toEqual(
       expect.arrayContaining(["Olga", "Ben"]),
     );

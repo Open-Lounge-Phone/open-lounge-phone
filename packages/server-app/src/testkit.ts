@@ -26,6 +26,8 @@ export type Msg = ServerToDevice | ServerToApp;
 export const NOON_MONDAY = Date.UTC(2026, 2, 2, 12);
 
 export class FakeConn implements Conn {
+  /** Every message any FakeConn was sent, in order (for "who heard it first" checks). */
+  static journal: { conn: FakeConn; msg: Msg }[] = [];
   sent: Msg[] = [];
   closed?: { code: number; reason: string };
   memo?: ConnMemo;
@@ -36,7 +38,9 @@ export class FakeConn implements Conn {
     this.memo = structuredClone(memo);
   }
   send(msg: Msg) {
-    this.sent.push(structuredClone(msg));
+    const copy = structuredClone(msg);
+    this.sent.push(copy);
+    FakeConn.journal.push({ conn: this, msg: copy });
   }
   close(code: number, reason: string) {
     this.closed = { code, reason };

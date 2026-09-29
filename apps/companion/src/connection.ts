@@ -1,5 +1,6 @@
 import {
   CallMedia,
+  CallRecorder,
   getMicrophone,
   ProtocolSocket,
   RoomAudio,
@@ -7,6 +8,7 @@ import {
   socketUrl,
   TonePlayer,
 } from "@openloungephone/client";
+import { RECORDING_MAX_MS, RECORDING_PROMPT } from "@openloungephone/core";
 import {
   type AppToServer,
   decodeServerToApp,
@@ -71,6 +73,8 @@ export interface RoomView {
   idleDropAt?: number;
   /** Its audio is up. */
   connected: boolean;
+  /** Recorded by its space (announced to everyone): the space's name. */
+  recording?: string;
 }
 
 export interface Snapshot {
@@ -147,7 +151,12 @@ export class Connection {
   private lingering: { audio: CallAudio; el?: HTMLAudioElement }[] = [];
   private lingerTimer?: ReturnType<typeof setTimeout>;
   private roomAudio?: RoomAudio;
+  /** Recordings this app makes for its space (call id or room id → recorder). */
+  private readonly recorders = new Map<string, { recorder: CallRecorder; ticket: string }>();
+  /** Calls and rooms whose recording was announced (the prompt plays once). */
+  private readonly announced = new Set<string>();
   private roomPending: RoomMsg[] = [];
+  private roomMic?: MediaStream;
   private idleTimer?: ReturnType<typeof setTimeout>;
   /** Signed in on the current socket (`app.ready` seen since it opened). */
   private ready = false;
@@ -466,6 +475,7 @@ export class Connection {
   }
 
   private closeCall(callId: string): void {
+    this.stopRecording(callId);
     const audio = this.calls.get(callId);
     if (!audio) return;
     this.calls.delete(callId);
@@ -536,6 +546,8 @@ export class Connection {
 
   /** A call merged into a room: its audio keeps playing until the room's is connected. */
   private linger(callId: string, roomId: string): void {
+    // The call's recording ends with the call (a recorded room makes its own).
+    this.stopRecording(callId);
     const audio = this.calls.get(callId);
     if (!audio) return;
     this.calls.delete(callId);
@@ -571,6 +583,7 @@ export class Connection {
 
   private endRoom(): void {
     const room = this.snap.room;
+    if (room) this.stopRecording(room.roomId);
     this.closeRoomAudio();
     this.endLinger();
     if (room) this.ice.delete(room.roomId);
@@ -596,6 +609,7 @@ export class Connection {
       muted: me?.muted ?? false,
       ...(prev?.idleDropAt ? { idleDropAt: prev.idleDropAt } : {}),
       connected: prev?.connected ?? false,
+      ...(msg.recording ? { recording: msg.recording.by } : {}),
     };
     if (!this.roomAudio || this.roomAudio.roomId !== msg.roomId) {
       this.closeRoomAudio();
@@ -604,11 +618,13 @@ export class Connection {
         void this.acquireMic().then((ok) => (ok ? this.roomState(msg) : this.leaveRoom()));
         return;
       }
+      const microphone = this.micCopy();
       this.roomAudio = new RoomAudio({
         roomId: msg.roomId,
         iceServers: this.ice.get(msg.roomId) ?? [],
-        microphone: this.micCopy(),
+        microphone,
         send: (m) => this.socket.send(m),
+        onStream: (stream) => this.recorders.get(msg.roomId)?.recorder.add(stream),
         onConnected: () => {
           this.endLinger();
           const r = this.snap.room;
@@ -616,8 +632,10 @@ export class Connection {
         },
       });
       for (const m of this.roomPending.splice(0)) this.roomAudio.handle(m);
+      this.roomMic = microphone;
     }
     this.roomAudio.update(msg);
+    this.onRecording(msg.roomId, msg.recording, [this.roomMic]);
     this.tones.play("none");
     this.set({
       room,
@@ -739,8 +757,51 @@ export class Connection {
         }
         this.apply({ type: "server", msg, now: Date.now() });
         if (msg.t === "call.state" && msg.state === "connecting") this.startMedia(msg.callId);
+        if (msg.t === "call.state" && msg.state === "active" && msg.recording) {
+          const audio = this.calls.get(msg.callId);
+          this.onRecording(msg.callId, msg.recording, [audio?.mic, audio?.remote]);
+        }
         return;
     }
+  }
+
+  /**
+   * A call or room is recorded: say so once ("This call is recorded."), and if the server picked
+   * this app to make the recording (a ticket), record what we send and hear, and upload it when
+   * the call ends. A notice without `recording` (a room that stopped recording) stops ours.
+   */
+  private onRecording(
+    id: string,
+    notice: { by: string; ticket?: string; maxMs?: number } | undefined,
+    streams: (MediaStream | undefined)[],
+  ): void {
+    const mine = this.recorders.get(id);
+    if (!notice) {
+      if (mine) this.stopRecording(id);
+      return;
+    }
+    if (!this.announced.has(id)) {
+      this.announced.add(id);
+      speak(RECORDING_PROMPT);
+    }
+    if (!notice.ticket || mine?.ticket === notice.ticket) return;
+    if (mine) this.stopRecording(id);
+    const recorder = new CallRecorder({
+      ticket: notice.ticket,
+      maxMs: notice.maxMs ?? RECORDING_MAX_MS,
+      onDone: (r) => {
+        if (!r.ok) this.set({ error: `The recording wasn't saved: ${r.message}` });
+      },
+    });
+    for (const s of streams) recorder.add(s);
+    if (recorder.start()) this.recorders.set(id, { recorder, ticket: notice.ticket });
+  }
+
+  private stopRecording(id: string): void {
+    const mine = this.recorders.get(id);
+    if (!mine) return;
+    this.recorders.delete(id);
+    mine.recorder.stop();
   }
 
   private currentCallId(): string | undefined {
@@ -763,6 +824,7 @@ export class Connection {
       send: (m) => this.socket.send(m),
       onRemoteStream: (remote) => {
         audio.remote = remote;
+        this.recorders.get(callId)?.recorder.add(remote);
         if (this.currentCallId() === callId) this.set({ remote });
       },
       onState: (state) => {
@@ -803,5 +865,16 @@ export function roomEndText(reason: RoomEndReason): string {
       return "Something went wrong with the room's audio.";
     default:
       return "You left the room.";
+  }
+}
+
+/** Says something through the speaker (the recording announcement). */
+function speak(text: string): void {
+  const synth = globalThis.speechSynthesis;
+  if (!synth || typeof SpeechSynthesisUtterance === "undefined") return;
+  try {
+    synth.speak(new SpeechSynthesisUtterance(text));
+  } catch {
+    // No voice: the mark in the app still shows it.
   }
 }

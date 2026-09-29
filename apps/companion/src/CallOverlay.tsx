@@ -195,6 +195,12 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
               {call.label.slice(0, 1).toUpperCase()}
             </div>
             <div className="who">{call.label}</div>
+            {(call.phase === "active" || call.phase === "connecting") && call.recording && (
+              <div className="recording-mark" role="status">
+                <span className="rec-dot" aria-hidden /> Recording · this call is recorded by{" "}
+                {call.recording}
+              </div>
+            )}
             <div className="what">
               {call.phase === "incoming" && "is calling…"}
               {call.phase === "outgoing" && (call.ringing ? "Ringing…" : "Calling…")}

@@ -320,6 +320,27 @@ describe("voicemail", () => {
     expect(await store.takeVoicemailTicket(late, "voicemail", T0 + 1000)).toBeUndefined();
   });
 
+  it("uses a recording ticket once, even under a race, and not after it expires", async () => {
+    const data = {
+      householdId: "hh",
+      kind: "call" as const,
+      callId: "c1",
+      accountId: null,
+      peer: "user:x",
+      peerLabel: "X",
+      startedAt: T0,
+    };
+    const token = await store.recordings.createTicket(data, T0);
+    expect(await store.recordings.peekTicket(token, T0)).toEqual(data);
+    const takes = await Promise.all([
+      store.recordings.takeTicket(token, T0),
+      store.recordings.takeTicket(token, T0),
+    ]);
+    expect(takes.filter((t) => t !== undefined)).toHaveLength(1);
+    const late = await store.recordings.createTicket(data, T0);
+    expect(await store.recordings.takeTicket(late, T0 + 6 * 60 * 60 * 1000)).toBeUndefined();
+  });
+
   it("remembers each device's key algorithm", async () => {
     const { household: hh } = await household();
     const { code } = await store.createPairing("P".repeat(87), T0, "p256");
@@ -498,7 +519,7 @@ describe("0013 and later (timeline, device modes, security)", () => {
     expect((await s.getAccount(guardian.accountId))?.retentionDays).toBeNull();
     expect(await s.getDevice(device?.id as string)).toMatchObject({ name: "Kid", kind: "kids" });
     const swept = await s.sweepExpired(hh.id, "x", T0 * 2);
-    expect(swept).toEqual({ calls: 0, voicemails: 0, blobs: [] });
+    expect(swept).toEqual({ calls: 0, voicemails: 0, recordings: 0, blobs: [] });
     // Lounge settings keep their values; the new ones start as before (idle timeout, all off).
     expect(await s.loungeSettings(hh.id)).toEqual({
       idleMinutes: 15,
@@ -666,6 +687,62 @@ describe("0017_workplace", () => {
     await s.workplace.deleteGroup(group.id);
     expect(await s.getVoicemail(shared.id)).toBeUndefined();
     expect(await s.workplace.extensions(hh.id)).toEqual([]);
+    old.db.close();
+  });
+});
+
+describe("0018_recording", () => {
+  it("keeps call logs and spaces; recording starts off; recordings link to their call", async () => {
+    const old = openBefore("0018");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Office", timeZone: "UTC", guardianName: "Olga", type: "team" },
+      T0,
+    );
+    old.db.exec(`
+      INSERT INTO call_log (id, household_id, account_id, peer, peer_label, direction, started_at,
+        answered, duration_ms) VALUES ('cl_1', '${hh.id}', '${guardian.accountId}', 'user:x', 'X',
+        'out', 1, 1, 60000);
+    `);
+    expect(migrate(old.db)).toContain("0018_recording.sql");
+    expect(await s.recordings.enabled(hh.id)).toBe(false);
+    expect(await s.callLogEntry("cl_1")).toMatchObject({
+      durationMs: 60000,
+      callId: null,
+      recordingId: null,
+    });
+    await s.logCall({
+      householdId: hh.id,
+      accountId: guardian.accountId,
+      deviceId: null,
+      peer: "user:y",
+      peerLabel: "Y",
+      direction: "in",
+      startedAt: T0,
+      answered: true,
+      durationMs: 1000,
+      endReason: "hangup",
+      callId: "call_1",
+    });
+    const rec = await s.recordings.create({
+      householdId: hh.id,
+      kind: "call",
+      callId: "call_1",
+      accountId: guardian.accountId,
+      peer: "user:y",
+      peerLabel: "Y",
+      startedAt: T0,
+      createdAt: T0,
+      durationMs: 1000,
+      mime: "audio/webm",
+      blobKey: "k",
+      bytes: 1,
+      transcriptStatus: "unavailable",
+    });
+    const [row] = await s.callLog(guardian.accountId, "user:y");
+    expect(row?.recordingId).toBe(rec.id);
+    expect(await s.recordings.wasParty(rec.id, guardian.accountId)).toBe(true);
+    expect(await s.voicemailBlobs({ householdId: hh.id })).toContain("k");
     old.db.close();
   });
 });

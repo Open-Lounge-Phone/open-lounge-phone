@@ -131,10 +131,13 @@ export function Player({
   api,
   voicemail,
   onFinished,
+  fetchAudio,
 }: {
   api: Api;
   voicemail: Pick<VoicemailSummary, "id">;
   onFinished(): void;
+  /** Where the audio comes from (default: the voicemail's; e.g. a call recording's). */
+  fetchAudio?: (id: string) => Promise<Blob>;
 }) {
   const [url, setUrl] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -152,7 +155,7 @@ export function Player({
     setLoading(true);
     setError(undefined);
     try {
-      const blob = await api.voicemailAudio(voicemail.id);
+      const blob = await (fetchAudio ?? api.voicemailAudio)(voicemail.id);
       const u = URL.createObjectURL(blob);
       urlRef.current = u;
       setUrl(u);

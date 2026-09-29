@@ -244,6 +244,12 @@ export function RoomPanel({ snap, conn }: { snap: Snapshot; conn: Connection }) 
           {room.connected ? "" : " · connecting…"}
         </div>
         <p className="hint small">{roomPrivacyText(room.media)}</p>
+        {room.recording && (
+          <div className="recording-mark" role="status">
+            <span className="rec-dot" aria-hidden /> Recording · this room is recorded by{" "}
+            {room.recording}
+          </div>
+        )}
         {room.idleDropAt && (
           <div className="warning" role="alert">
             Still there? You'll leave in {idleSecondsLeft(room.idleDropAt, now)} s.{" "}

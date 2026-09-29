@@ -1260,3 +1260,34 @@ dl.phone-facts {
 .overlay-room .overlay-actions {
   flex-wrap: wrap;
 }
+
+/* Call recording: always visible while a call or room is recorded. */
+.recording-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0.25rem auto;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: #b3261e;
+}
+.rec-dot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: #fff;
+  animation: rec-blink 1.2s steps(2, start) infinite;
+}
+@keyframes rec-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot {
+    animation: none;
+  }
+}

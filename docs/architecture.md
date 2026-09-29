@@ -128,6 +128,13 @@ steps through members on the room's timer), business hours with an after-hours a
 voicemail boxes (`voicemails.group_id`, "heard by"), the space's call log with CSV export and an
 audit trail (`audit_log`) — migration `0017_workplace.sql`; see [workplace.md](workplace.md).
 
+**Recording.** Off unless a space turns it on; never with kids' phones. When a call goes live the
+space's hub announces `call.state.recording` to every party (other servers' people through their
+server) and only then hands the recording side's own client an upload ticket; rooms carry
+`room.state.recording`, the host's client recording. Recordings are uploaded like voicemail
+(`/api/rec/upload`), linked to the call log, and expire with history. See
+[security-model.md](security-model.md).
+
 **Rooms.** Three kinds, all live in the owning space's hub (`LiveRooms`):
 - **Party lines**: a space's always-open rooms (guardians make them). Members drop in and out and
   see who's in (`rooms.changed`, `GET /api/rooms`).
@@ -262,7 +269,8 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.
 
-Planned software phases (see the status table in the [README](../README.md)): recording (batch
-C2), interop tests in CI and a versioned federation spec (P5). Rooms, 3-way calls, hold and
+Planned software phases (see the status table in the [README](../README.md)): interop tests in
+CI and a versioned federation spec (P5). Call recording (opt-in per space, always announced) is
+done; see [security-model.md](security-model.md). Rooms, 3-way calls, hold and
 transfer (P3.5) and the workplace phone system for team and org spaces (P6: directory,
 extensions, ring groups, business hours, shared voicemail, roles, call log and audit) are done. There is no text chat and no phone-network bridge.

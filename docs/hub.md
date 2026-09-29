@@ -17,7 +17,7 @@ metered when it ends.
 |---|---|---|
 | Call minutes | 1,000 | `FAIR_USE_CALL_MINUTES` |
 | Voicemails | 100 | `FAIR_USE_VOICEMAILS` |
-| Voicemail storage | 100 MB | `FAIR_USE_VOICEMAIL_MB` |
+| Voicemail and call-recording storage (uploaded this month) | 100 MB | `FAIR_USE_VOICEMAIL_MB` |
 | Knocks | 100 (and 10 a day, everywhere) | `FAIR_USE_KNOCKS` |
 | Phones per space | 5 | `FAIR_USE_PHONES_PER_SPACE` |
 | Spaces per account | 5 | `FAIR_USE_SPACES_PER_ACCOUNT` |

@@ -1,6 +1,7 @@
 import {
   browserVoice,
   CallMedia,
+  CallRecorder,
   getMicrophone,
   LeaveMessage,
   type LeaveState,
@@ -23,6 +24,7 @@ import {
   initialDeviceState,
   NO_EXTENSION_NOTE,
   PROMPT_TEXT,
+  RECORDING_MAX_MS,
   soundFor,
   WORKPLACE_PROMPT_TEXT,
 } from "@openloungephone/core";
@@ -125,6 +127,7 @@ const handsetEl = $<HTMLButtonElement>(".handset");
 const keyRowEls = [$<HTMLDivElement>(".keys--top"), $<HTMLDivElement>(".keys--bottom")];
 const displayEl = $<HTMLDivElement>(".display");
 const statusLedEl = $<HTMLSpanElement>(".status-led");
+const recLightEl = $<HTMLSpanElement>(".rec-light");
 const handsetLabelEl = $<HTMLSpanElement>(".handset__label");
 const startEl = $<HTMLDivElement>(".start");
 // Live call audio (no captions possible), so it is created here rather than in the markup.
@@ -164,6 +167,9 @@ let lingerTimer: ReturnType<typeof setTimeout> | undefined;
 let roomAudio: RoomAudio | undefined;
 let roomPending: Extract<ServerToDevice, { t: "room.media" | "rtc.sdp" | "rtc.ice" }>[] = [];
 let room: { name: string; people: number; muted: boolean; idleWarning?: boolean } | undefined;
+/** The room's microphone copy and the others' audio (for a recording this phone makes). */
+let roomMic: MediaStream | undefined;
+let roomStreams: MediaStream[] = [];
 let micPromise: Promise<MediaStream> | undefined;
 let unauthorizedStreak = 0;
 let announceTimer: ReturnType<typeof setInterval> | undefined;
@@ -185,6 +191,11 @@ let leaveFlow: LeaveMessage | undefined;
 let leave: LeaveState | undefined;
 let leaveTicker: ReturnType<typeof setInterval> | undefined;
 let leaveClear: ReturnType<typeof setTimeout> | undefined;
+/** Calls and rooms announced as recorded (the light and REC stay on while they last). */
+const recorded = new Set<string>();
+/** The recording this phone makes for its space, if the server picked it (call or room id). */
+let recorder: { id: string; ticket: string; rec: CallRecorder } | undefined;
+
 /** Recording the phone's greeting from MENU → Voicemail. */
 let greetingRec:
   | { kind: "name" | "custom"; stage: "asking" | "recording"; recorder?: VoicemailRecorder }
@@ -359,7 +370,12 @@ async function handle(msg: ServerToDevice): Promise<void> {
       if (msg.t === "call.state" && msg.state === "ended" && msg.note === CLOSED_NOTE) {
         speak(WORKPLACE_PROMPT_TEXT["ext.closed"]);
       }
+      if (msg.t === "call.state" && msg.state === "active" && msg.recording) {
+        onRecording(msg.callId, msg.recording);
+      }
       if (msg.t === "call.state" && msg.state === "ended") {
+        recorded.delete(msg.callId);
+        if (recorder?.id === msg.callId) stopRecorder();
         if (msg.merged) mergedCalls.add(msg.callId);
         if (msg.transfer?.offerer) offererFor.add(msg.transfer.callId);
       }
@@ -367,9 +383,14 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
     case "room.state":
       step({ type: "server", msg });
-      if (deviceState.kind === "inroom" && deviceState.roomId === msg.roomId) enterRoom(msg);
+      if (deviceState.kind === "inroom" && deviceState.roomId === msg.roomId) {
+        enterRoom(msg);
+        onRecording(msg.roomId, msg.recording);
+      }
       break;
     case "room.ended": {
+      if (msg.roomId) recorded.delete(msg.roomId);
+      if (recorder && recorder.id === msg.roomId) stopRecorder();
       const was = deviceState.kind === "inroom";
       step({ type: "server", msg });
       leaveRoomAudio();
@@ -609,6 +630,7 @@ async function startMedia(callId: string, offerer: boolean): Promise<void> {
     microphone: mic,
     send: (m) => send(m),
     onRemoteStream: (stream) => {
+      if (recorder?.id === callId) recorder.rec.add(stream);
       audioEl.srcObject = stream;
       void audioEl.play().catch(() => {});
     },
@@ -623,6 +645,57 @@ async function startMedia(callId: string, offerer: boolean): Promise<void> {
   }
 }
 
+/** Whether the call or room this phone is in right now is recorded. */
+function recordedNow(): boolean {
+  const s = deviceState;
+  if (s.kind === "incall") return recorded.has(s.callId);
+  if (s.kind === "inroom") return !!s.roomId && recorded.has(s.roomId);
+  return false;
+}
+
+/**
+ * A call or room is recorded: the phone says so ("This call is recorded."), lights its
+ * recording light, and — if the server picked this phone to make the recording (a ticket) —
+ * records what it sends and hears, and uploads it when the call ends.
+ */
+function onRecording(
+  id: string,
+  notice: { by: string; ticket?: string; maxMs?: number } | undefined,
+): void {
+  if (!notice) {
+    recorded.delete(id);
+    if (recorder?.id === id) stopRecorder();
+    return;
+  }
+  if (!recorded.has(id)) {
+    recorded.add(id);
+    speak(CALL_PROMPT_TEXT["call.recorded"]);
+    log("•", `recorded by ${notice.by}`);
+  }
+  if (!notice.ticket || recorder?.ticket === notice.ticket) return;
+  if (recorder) stopRecorder();
+  const rec = new CallRecorder({
+    ticket: notice.ticket,
+    maxMs: notice.maxMs ?? RECORDING_MAX_MS,
+    onDone: (r) => log("•", r.ok ? "recording uploaded" : `recording not saved: ${r.message}`),
+  });
+  const mine = call?.callId === id ? call : undefined;
+  rec.add(mine?.mic);
+  const remote = mine?.media?.pc.getReceivers()[0]?.track;
+  if (remote) rec.add(new MediaStream([remote]));
+  if (roomAudio?.roomId === id) {
+    rec.add(roomMic);
+    for (const s of roomStreams) rec.add(s);
+  }
+  if (rec.start()) recorder = { id, ticket: notice.ticket, rec };
+}
+
+function stopRecorder(): void {
+  const r = recorder;
+  recorder = undefined;
+  r?.rec.stop();
+}
+
 function closeCallAudio(c: CallAudio): void {
   c.media?.close();
   for (const t of c.mic?.getTracks() ?? []) t.stop();
@@ -630,6 +703,7 @@ function closeCallAudio(c: CallAudio): void {
 }
 
 function endCall(): void {
+  if (recorder && recorder.id === call?.callId) stopRecorder();
   if (call && mergedCalls.has(call.callId)) lingerCall(call);
   else if (call) closeCallAudio(call);
   call = undefined;
@@ -677,11 +751,18 @@ function enterRoom(msg: Extract<ServerToDevice, { t: "room.state" }>): void {
     const base = await micPromise.catch(() => undefined);
     if (!base || deviceState.kind !== "inroom" || deviceState.roomId !== msg.roomId) return;
     roomAudio?.close();
+    roomMic = new MediaStream(base.getAudioTracks().map((t) => t.clone()));
+    roomStreams = [];
+    recorder?.rec.add(roomMic);
     roomAudio = new RoomAudio({
       roomId: msg.roomId,
       iceServers: iceByCall.get(msg.roomId) ?? [],
-      microphone: new MediaStream(base.getAudioTracks().map((t) => t.clone())),
+      microphone: roomMic,
       send: (m) => send(m),
+      onStream: (stream) => {
+        roomStreams.push(stream);
+        if (recorder?.id === msg.roomId) recorder.rec.add(stream);
+      },
       volume: settings.volume / 10,
       onConnected: () => {
         log("•", "room audio connected");
@@ -694,6 +775,7 @@ function enterRoom(msg: Extract<ServerToDevice, { t: "room.state" }>): void {
 }
 
 function leaveRoomAudio(): void {
+  if (recorder && recorder.id === roomAudio?.roomId) stopRecorder();
   roomAudio?.close();
   roomAudio = undefined;
   roomPending = [];
@@ -1099,6 +1181,10 @@ function render(): void {
   }
   statusLedEl.dataset.color = leds.status.color;
   statusLedEl.dataset.mode = leds.status.mode;
+  // The recording light (firmware drives it from `call.state.recording` / `room.state.recording`).
+  const recOn = recordedNow();
+  recLightEl.classList.toggle("is-on", recOn);
+  recLightEl.setAttribute("aria-label", recOn ? "Recording" : "Not recording");
 
   renderDisplay();
   maybeRefreshQr();
@@ -1160,6 +1246,7 @@ function renderDisplay(): void {
           ...(callStartedAt !== undefined ? { callStartedAt } : {}),
           ...(leaveView() ? { leave: leaveView() } : {}),
           ...(room ? { room } : {}),
+          ...(recordedNow() ? { recording: true } : {}),
           battery,
           power: powerStatus(variant, powerSource),
           now: Date.now(),

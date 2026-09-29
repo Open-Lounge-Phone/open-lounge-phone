@@ -492,6 +492,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
         durationMs: e.durationMs,
         endReason: e.endReason,
         voicemailId: e.voicemailId ?? null,
+        recordingId: e.recordingId ?? null,
       })),
     );
   };
@@ -520,6 +521,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
       "duration_s",
       "end_reason",
       "voicemail",
+      "recording",
     ];
     const lines = [header.join(",")];
     for (const r of rows) {
@@ -534,6 +536,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
           Math.round(r.durationMs / 1000),
           r.endReason,
           r.voicemailId ? "yes" : "no",
+          r.recordingId ? "yes" : "no",
         ]
           .map(csvCell)
           .join(","),

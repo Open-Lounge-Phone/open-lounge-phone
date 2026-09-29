@@ -282,3 +282,33 @@ describe("hold, 3-way calls and rooms on the strip", () => {
     ).toEqual(["STILL THERE?", "PRESS ANY KEY"]);
   });
 });
+
+describe("recording", () => {
+  it("says REC during a recorded call and in a recorded room", async () => {
+    const { statusLines } = await import("./strip.ts");
+    const base = { connection: "online" as const, now: 65_000, callStartedAt: 0 };
+    expect(
+      statusLines({
+        ...base,
+        deviceState: { kind: "incall", callId: "c", connected: true },
+        activeLabel: "Ben",
+        recording: true,
+      }),
+    ).toEqual(["REC 01:05", "BEN"]);
+    expect(
+      statusLines({
+        ...base,
+        deviceState: { kind: "incall", callId: "c", connected: true },
+        activeLabel: "Ben",
+      }),
+    ).toEqual(["IN CALL 01:05", "BEN"]);
+    expect(
+      statusLines({
+        ...base,
+        deviceState: { kind: "inroom", roomId: "r", muted: false },
+        room: { name: "Desk", people: 3, muted: false },
+        recording: true,
+      }),
+    ).toEqual(["DESK", "REC 3 IN ROOM"]);
+  });
+});

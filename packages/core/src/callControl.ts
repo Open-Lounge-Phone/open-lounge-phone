@@ -91,4 +91,5 @@ export const CALL_PROMPT_TEXT: Record<CallPrompt, string> = {
   "room.full": "That room is full.",
   "room.muted": "Muted.",
   "room.unmuted": "Unmuted.",
+  "call.recorded": "This call is recorded.",
 };

@@ -111,6 +111,25 @@ export function BuddyTimeline({ api, connectionId, refreshKey, onBack, onCall }:
                   <div className="muted small">{formatWhen(item.at, now)}</div>
                 </div>
               </div>
+              {item.kind === "call" && item.recording && (
+                <div className="stack">
+                  <div className="small">
+                    <span className="badge">Recorded</span>{" "}
+                    {formatDuration(item.recording.durationMs)}
+                  </div>
+                  {item.recording.transcriptStatus !== "unavailable" && (
+                    <p className={`transcript ${item.recording.transcriptStatus}`}>
+                      {transcriptText(item.recording.transcriptStatus, item.recording.transcript)}
+                    </p>
+                  )}
+                  <Player
+                    api={api}
+                    voicemail={item.recording}
+                    fetchAudio={api.recordingAudio}
+                    onFinished={() => {}}
+                  />
+                </div>
+              )}
               {vm && (
                 <div className={`stack voicemail ${vm.heardAt ? "" : "unheard"}`}>
                   <div className="small">

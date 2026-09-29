@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchGreeting, playGreeting, uploadVoicemail } from "./voicemail.ts";
+import { fetchGreeting, playGreeting, uploadRecording, uploadVoicemail } from "./voicemail.ts";
 
 describe("voicemail helpers", () => {
   it("fetches a recorded greeting, and falls back to the spoken default", async () => {
@@ -63,5 +63,22 @@ describe("voicemail helpers", () => {
     log.length = 0;
     await playGreeting([{ kind: "tone" }], { kind: "default" }, voice, () => true);
     expect(log).toEqual([]);
+  });
+});
+
+describe("uploading a call recording", () => {
+  it("posts the audio with its ticket and duration", async () => {
+    let got: string | undefined;
+    const r = await uploadRecording(
+      "t k",
+      { blob: new Blob([new Uint8Array(2)], { type: "audio/webm" }), durationMs: 65_000 },
+      "https://x.test",
+      async (url) => {
+        got = url;
+        return Response.json({ id: "rec_1" }, { status: 201 });
+      },
+    );
+    expect(r.ok).toBe(true);
+    expect(got).toBe("https://x.test/api/rec/upload?ticket=t%20k&durationMs=65000");
   });
 });

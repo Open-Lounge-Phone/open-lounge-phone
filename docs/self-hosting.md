@@ -45,6 +45,7 @@ Configuration is by environment variable:
 | `OPERATORS` | unset | Comma-separated handles who see the Operator view |
 | `FUNDING_BALANCE_USD`, `SPONSOR_URL` | unset | Funding card and Sponsor button (public hubs; see [hub.md](hub.md)) |
 | `TRUST_PROXY` | unset | `1` behind your own reverse proxy: take the client address from `X-Forwarded-For` for per-IP limits |
+| `REFUSE_RECORDED_CALLS` | unset | `1`: calls from other servers that are recorded (their space turned recording on) don't reach your people — refused when placed, or ended when the recording is announced (see [security-model.md](security-model.md)) |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_API_URL` | unset | A LiveKit server as the rooms' media relay (see below); without one, rooms are peer to peer and hold 4 people |
 | `SFU_APP_ID`, `SFU_APP_SECRET` | unset | Or a Cloudflare Realtime SFU app as the relay |
 

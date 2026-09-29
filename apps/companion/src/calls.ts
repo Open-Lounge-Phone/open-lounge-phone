@@ -24,6 +24,8 @@ export type CallView =
       startedAt?: number;
       /** `you` put it on hold; `them` = the other side is holding you (soft tone). */
       hold?: "you" | "them";
+      /** The call is recorded (announced to everyone): by this space. Stays until it ends. */
+      recording?: string;
     }
   | {
       phase: "ended";
@@ -162,10 +164,11 @@ function stateFor(
       return { view: { phase: "connecting", callId, label, offerer } };
     case "active": {
       const hold = msg.hold ? { hold: msg.hold } : {};
+      const recording = msg.recording ? { recording: msg.recording.by } : {};
       if (view.phase === "active") {
-        if (view.hold === msg.hold) return { view };
+        if (view.hold === msg.hold && (!msg.recording || view.recording)) return { view };
         const { hold: _h, ...rest } = view;
-        return { view: { ...rest, ...hold } };
+        return { view: { ...rest, ...hold, ...recording } };
       }
       return {
         view: {
@@ -175,6 +178,7 @@ function stateFor(
           offerer: view.phase === "connecting" ? view.offerer : offerer,
           startedAt: now,
           ...hold,
+          ...recording,
         },
       };
     }

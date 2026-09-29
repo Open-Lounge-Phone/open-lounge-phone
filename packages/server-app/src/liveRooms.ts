@@ -10,6 +10,8 @@ import {
   forwardFor,
   idleCheck,
   MESH_MAX,
+  pickRecorder,
+  RECORDING_MAX_MS,
   ROOM_MAX,
   type RoomKind,
   type Speaker,
@@ -80,6 +82,11 @@ export interface LiveRoom {
   locked: boolean;
   media: RoomMediaKind;
   participants: Map<string, Participant>;
+  /**
+   * Recorded by its space: announced to everyone; `recorder` (a participant here) records it
+   * with `ticket`. Recomputed whenever someone comes or goes.
+   */
+  recording?: { by: string; recorder?: string; ticket?: string };
 }
 
 /** A participant as stored with the hub's rooms (Durable Objects sleep; see `restore`). */
@@ -107,6 +114,10 @@ export interface RoomPort {
   announce(room: LiveRoom): void;
   /** Rebuilds a remote peer from its info (after a restart). */
   remote(info: PeerInfo): Peer;
+  /** Whether the space records this room now (its name), or undefined. */
+  recordingBy?(room: LiveRoom): Promise<string | undefined>;
+  /** The upload ticket for the participant who records it. */
+  recordingTicket?(room: LiveRoom, p: Participant): Promise<string>;
 }
 
 const CLIENT_WAIT_MS = 15_000;
@@ -265,11 +276,44 @@ export class LiveRooms {
       peer.conn.send({ t: "rtc.config", callId: room.id, iceServers: await this.iceFor(room) });
     }
     this.recompute(room);
+    await this.updateRecording(room);
     this.broadcast(room);
     this.port.changed();
     this.port.reschedule();
     if (room.stored) this.port.announce(room);
     return p;
+  }
+
+  /**
+   * Who records the room, if its space records it: the recorder stays while they're in; when
+   * they leave, the next local participant who can record gets a new ticket (a new part).
+   * Nobody records while a kids' phone is in (the port decides).
+   */
+  private async updateRecording(room: LiveRoom): Promise<void> {
+    const by = await this.port.recordingBy?.(room);
+    if (!by) {
+      delete room.recording;
+      return;
+    }
+    const current = room.recording?.recorder;
+    if (current && room.participants.has(current)) {
+      room.recording = { ...room.recording, by };
+      return;
+    }
+    const pick = pickRecorder(
+      [...room.participants.values()].map((x) => ({
+        id: x.id,
+        local: x.peer.kind !== "remote",
+        canRecord: x.peer.kind === "user" || x.peer.canRecord === true,
+        host: x.host,
+      })),
+    );
+    const p = pick ? room.participants.get(pick) : undefined;
+    if (!p || !this.port.recordingTicket) {
+      room.recording = { by };
+      return;
+    }
+    room.recording = { by, recorder: p.id, ticket: await this.port.recordingTicket(room, p) };
   }
 
   private async iceFor(room: LiveRoom) {
@@ -300,6 +344,7 @@ export class LiveRooms {
     if (room.participants.size === 0) this.rooms.delete(room.id);
     else {
       this.recompute(room);
+      await this.updateRecording(room);
       this.broadcast(room);
     }
     this.port.changed();
@@ -479,11 +524,25 @@ export class LiveRooms {
       ...(room.media === "livekit" && relay?.kind === "livekit" && p.livekitToken
         ? { livekit: { url: relay.url, token: p.livekitToken } }
         : {}),
+      ...(room.recording
+        ? {
+            recording: {
+              by: room.recording.by,
+              ...(room.recording.ticket && room.recording.recorder === p.id
+                ? { ticket: room.recording.ticket, maxMs: RECORDING_MAX_MS }
+                : {}),
+            },
+          }
+        : {}),
     };
   }
 
+  /** Everyone's `room.state`; the recorder's (with its ticket) goes last, after everyone's. */
   broadcast(room: LiveRoom): void {
-    for (const p of room.participants.values()) p.peer.conn.send(this.stateFor(room, p));
+    const recorder = room.recording?.recorder;
+    const all = [...room.participants.values()];
+    for (const p of all) if (p.id !== recorder) p.peer.conn.send(this.stateFor(room, p));
+    for (const p of all) if (p.id === recorder) p.peer.conn.send(this.stateFor(room, p));
   }
 
   /**

@@ -13,6 +13,7 @@ import type {
 } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { formatDuration } from "./text.ts";
+import { Player } from "./Voicemail.tsx";
 import { afterHoursText, auditText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -451,6 +452,14 @@ function Admin({
                   {c.voicemailId ? " · voicemail" : ""}
                   {c.recordingId ? " · recorded" : ""}
                 </span>
+                {c.recordingId && (
+                  <Player
+                    api={api}
+                    voicemail={{ id: c.recordingId }}
+                    fetchAudio={api.recordingAudio}
+                    onFinished={() => {}}
+                  />
+                )}
               </li>
             ))}
             {calls.length === 0 && <li className="muted">No calls yet.</li>}

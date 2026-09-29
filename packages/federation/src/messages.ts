@@ -79,6 +79,11 @@ export const CallBody = z.object({
   guestOf: z.string().max(260).optional(),
   /** What to show while ringing, when it isn't `from` (a guest's phone rung for their caller). */
   ringLabel: z.string().trim().min(1).max(24).optional(),
+  /**
+   * The caller's space records this call (announced to everyone once it's answered). A server
+   * may refuse recorded calls for its people: it answers `ended` `denied` with a `note`.
+   */
+  recording: z.boolean().optional(),
 });
 export type CallBody = z.infer<typeof CallBody>;
 
@@ -100,6 +105,8 @@ export const CallResult = z.union([
   z.object({
     state: z.literal("ended"),
     reason: CallEndReason,
+    /** The refusing server's explanation, e.g. that it doesn't take recorded calls. */
+    note: z.string().max(200).optional(),
     /**
      * `/fed/v1/lounge/dial` only: the guest's call can't ring through; their server's voicemail
      * offer, for the Lounge phone to play and record (see `/api/vm/*` on the guest's server).

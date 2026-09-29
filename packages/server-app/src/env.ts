@@ -85,6 +85,12 @@ export interface ServerEnv {
   hub?: import("./limits.ts").HubInfo;
   /** Trust X-Forwarded-For for the client's IP (behind your own reverse proxy). */
   trustProxy?: boolean;
+  /**
+   * Refuse calls another server records (`REFUSE_RECORDED_CALLS=1`): its calls to our people
+   * that say `recording` are denied, and a call that turns out to be recorded is ended for our
+   * people (they're told why). Our own spaces' recording is unaffected.
+   */
+  refuseRecordedCalls?: boolean;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;
@@ -190,6 +196,13 @@ export interface PeerInfo {
    * through us (`relayDial`). The only remote party a voicemail offer is sent to.
    */
   loungeRelay?: boolean;
+  /**
+   * The far end is a kids' phone (it called through a guardian's connection, or we called one):
+   * a call with it is never recorded.
+   */
+  kidsPhone?: boolean;
+  /** A phone whose client can record calls (the browser phone; not yet firmware). */
+  canRecord?: boolean;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */
@@ -219,6 +232,10 @@ export interface RoomSnapshot {
   heldBy?: string;
   /** A call to a ring group: its steps and where it is. */
   hunt?: HuntState;
+  /** Recording announced for this call (by this space, or by the far side's). */
+  recording?: { by: string; ours: boolean };
+  /** Never recorded (e.g. we called a kids' phone elsewhere). */
+  noRecording?: boolean;
 }
 
 /** A call ringing a ring group, step by step (see `huntSteps` in `packages/core`). */

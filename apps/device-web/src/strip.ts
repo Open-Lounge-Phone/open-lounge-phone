@@ -22,6 +22,8 @@ export interface StatusInput {
   room?: { name: string; people: number; muted: boolean; idleWarning?: boolean };
   /** Leaving a voicemail after an unanswered call (and its outcome, shortly after hang-up). */
   leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
+  /** The call or room is recorded (announced): the strip says REC, next to the recording light. */
+  recording?: boolean;
   now: number;
 }
 
@@ -83,14 +85,17 @@ export function statusLines(input: StatusInput): StatusLines {
       if (!s.connected || input.callStartedAt === undefined) {
         return name ? ["CONNECTING", clip(name)] : ["CONNECTING"];
       }
-      return name
-        ? [`IN CALL ${clock(input.now - input.callStartedAt)}`, clip(name)]
-        : [`IN CALL ${clock(input.now - input.callStartedAt)}`];
+      {
+        const what = input.recording ? "REC" : "IN CALL";
+        return name
+          ? [`${what} ${clock(input.now - input.callStartedAt)}`, clip(name)]
+          : [`${what} ${clock(input.now - input.callStartedAt)}`];
+      }
     case "inroom": {
       const room = input.room;
       if (!s.roomId || !room) return ["JOINING ROOM"];
       if (room.idleWarning) return ["STILL THERE?", "PRESS ANY KEY"];
-      const count = `${room.people} IN ROOM${s.muted ? " MUTED" : ""}`;
+      const count = `${input.recording ? "REC " : ""}${room.people} IN ROOM${s.muted ? " MUTED" : ""}`;
       return [clip(room.name), clip(count)];
     }
     case "offhook": {

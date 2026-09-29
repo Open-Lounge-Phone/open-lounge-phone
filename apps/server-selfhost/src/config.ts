@@ -36,6 +36,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     hub: hubInfoFromVars(env),
     /** Trust X-Forwarded-For for client IPs (only behind your own reverse proxy). */
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
+    /** REFUSE_RECORDED_CALLS=1: other servers' recorded calls don't reach this server's people. */
+    refuseRecordedCalls: env.REFUSE_RECORDED_CALLS === "1" || env.REFUSE_RECORDED_CALLS === "true",
     /** Federation (connections with other servers) is on unless FEDERATION=0. */
     federation: env.FEDERATION !== "0" && env.FEDERATION !== "false",
     transcribe: env.TRANSCRIBE_URL
