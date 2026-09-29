@@ -21,7 +21,7 @@ import {
   verifyBytes,
 } from "@openloungephone/federation";
 import type { ServerEnv } from "./env.ts";
-import { ownHost, resolveServerKey, serverKey } from "./federation.ts";
+import { federatable, ownHost, resolveServerKey, serverKey } from "./federation.ts";
 
 /** Close an idle dialed stream this long after the last call or signal. */
 export const STREAM_IDLE_MS = 60_000;
@@ -136,6 +136,7 @@ export class ServerLink {
     this.opening = (async () => {
       const key = await serverKey(this.env);
       if (!key) throw new Error("federation is not configured");
+      if (!federatable(this.env, this.host)) throw new Error(`refused: ${this.host}`);
       const me = ownHost(this.env);
       const url = `${baseUrlFor(this.host).replace(/^http/, "ws")}${STREAM_PATH}?from=${encodeURIComponent(me)}`;
       let socket: LinkSocket;

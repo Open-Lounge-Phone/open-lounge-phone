@@ -418,6 +418,22 @@ describe("knocks across servers", () => {
     expectStatus(await knock(a, jesse, "c4@b.test"), 202);
   });
 
+  it("never contacts its own network: loopback names, IP literals, local names", async () => {
+    // Servers that exist on the test network under such names, to prove nothing is sent there.
+    const inside = await net.server("127.0.0.1");
+    await inside.person("admin", "Admin");
+    for (const to of ["admin@127.0.0.1", "admin@localhost:6379", "x@printer.local"]) {
+      expectStatus(await knock(a, jesse, to), 400);
+    }
+    expect(net.requests.filter((r) => !r.url.includes("b.test"))).toEqual([]);
+    // A request whose keyid names a loopback host: its key is never fetched.
+    const dev = await net.server("localhost:9");
+    const mallory = await dev.person("mallory", "Mallory");
+    expectStatus(await knock(dev, mallory, "bob@b.test"), 502);
+    expect(net.requests.some((r) => r.url.startsWith("http://localhost:9/"))).toBe(false);
+    expect(net.requests.find((r) => r.url.endsWith("/fed/v1/knock"))?.status).toBe(401);
+  });
+
   it("surfaces an unreachable server and keeps nothing half-done", async () => {
     net.down.add("b.test");
     expectStatus(await knock(a, jesse, "bob@b.test"), 502);

@@ -5,6 +5,7 @@ import {
   FEDERATION_PATH,
   FEDERATION_VERSION,
   HOST_RE,
+  isFederatableHost,
   loadServerKey,
   MAX_FED_BODY_BYTES,
   rotationTrusted,
@@ -44,7 +45,22 @@ export function ownOrigin(env: ServerEnv, requestUrl: string): string {
   return new URL(env.publicUrl ?? requestUrl).origin;
 }
 
-export const outbound = (env: ServerEnv) => env.fetch ?? ((r: Request) => fetch(r));
+/** Whether this server may contact `host` as another server (see `isFederatableHost`). */
+export const federatable = (env: ServerEnv, host: string) => isFederatableHost(host, ownHost(env));
+
+/**
+ * Fetch for requests to other servers. Refuses hosts this server must not contact (its own
+ * network: loopback, IP literals, local names) before anything is sent.
+ */
+export const outbound =
+  (env: ServerEnv) =>
+  (req: Request): Promise<Response> => {
+    const host = new URL(req.url).host;
+    if (!federatable(env, host)) {
+      return Promise.reject(new TypeError(`refused: ${host} is not a public server address`));
+    }
+    return env.fetch ? env.fetch(req) : fetch(req);
+  };
 
 export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefined> {
   const key = await serverKey(env);
@@ -119,7 +135,9 @@ export async function fedFetch(
   if (!key || !env.publicUrl) {
     throw new FederationError(400, "this server isn't set up to talk to other servers");
   }
-  if (!HOST_RE.test(host)) throw new FederationError(400, "not a server address");
+  if (!HOST_RE.test(host) || !federatable(env, host)) {
+    throw new FederationError(400, "not a server address");
+  }
   if (await env.store.connections.serverBlocked(host)) {
     throw new FederationError(403, "this server doesn't talk to that server");
   }
@@ -191,7 +209,7 @@ export async function verifyFedRequest(
     body,
     now,
     resolveKey: (host, retry) =>
-      HOST_RE.test(host) ? resolveServerKey(env, host, retry) : Promise.resolve(undefined),
+      federatable(env, host) ? resolveServerKey(env, host, retry) : Promise.resolve(undefined),
     useNonce: (host, nonce, expiresAt) => store.useNonce(`${host} ${nonce}`, expiresAt, now),
   });
   if (!result.ok) {

@@ -20,3 +20,5 @@ jobs:
       - run: npm test
       - name: Protocol docs are up to date
         run: npm run docs:protocol && git diff --exit-code docs/protocol.md
+      - name: Federation spec is up to date
+        run: npm run docs:federation && git diff --exit-code docs/federation-spec.md

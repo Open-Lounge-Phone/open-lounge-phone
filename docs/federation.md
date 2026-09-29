@@ -1,9 +1,12 @@
 # Federation: connecting across Open Lounge Phone servers
 
 Status: **F0 (accounts, spaces), F1 (knocks, connections, signed server-to-server requests),
-F2 (federated calls, voicemail, opt-in presence, Lounge guests) and rooms across servers (P3.5:
-join by address, 3-way calls spanning servers) are implemented; F3 (phone ↔ phone) and F4 (CI
-interop, spec versioning) are planned.**
+F2 (federated calls, voicemail, opt-in presence, Lounge guests), rooms across servers (P3.5:
+join by address, 3-way calls spanning servers) and F4 (interop tests in CI, a versioned
+protocol spec) are implemented; F3 (phone ↔ phone) is planned.** This page is the readable
+overview; the normative protocol an independent server can implement is
+**[federation-spec.md](federation-spec.md)** (`/fed/v1`: discovery, keys, the signature
+profile, every endpoint's schema, the stream, errors, versioning and security).
 Owner direction (2026-09-27): people should be able to send and accept connection invites
 regardless of which server they're on, and call each other through a fair, seamless
 server-to-server protocol. No central server, and the owner's public-good hub is just one more
@@ -107,11 +110,16 @@ simply expires) or **Block**. Knocking back someone who knocked you connects you
   (TLS plus trust-on-first-use, the same way SSH treats hosts). Key rotation is announced by
   signing the new key with the old one: `.well-known` then also carries `previous_key` and
   `rotation_sig` = the old key's signature over `openloungephone-key-rotation:<new key>`.
+- **Only public servers:** a server with a public name never contacts loopback names, IP
+  literals or local-network names (`x@127.0.0.1` can't point it into its own network); servers
+  on `*.localhost` (development, interop tests) talk only to each other.
 - **Keys:** Cloudflare keeps the private key in the `FED_PRIVATE_KEY` secret (generated once by
   `scripts/deploy.ts`, never regenerated); self-host keeps it in `DATA_DIR/federation-key.jwk`
   (mode 600; back it up). `FEDERATION=0` turns federation off on a self-hosted server.
 
 ### `/fed/v1` wire format (version 1)
+
+A summary; the exact rules, schemas and error codes are in [federation-spec.md](federation-spec.md).
 
 Every request carries:
 
@@ -283,7 +291,7 @@ address. Calls *to* the guest ring the Lounge phone they're at as well as their 
 | **F1** ✔ | Knocks and connections (locally, then across servers), server keys, `.well-known`, signed requests, disconnect, block | Done (plan phase P2); two-server e2e in `tests/e2e/twoServers.test.ts` |
 | **F2** ✔ | Federated **calls** (person ↔ person, person ↔ allowed phone, phone → connection), signaling over the on-demand server-pair stream, cross-server voicemail, opt-in presence, Lounge guests | Done (plan phase P3). Cloudflare: `FederationObject` per remote host |
 | **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians | Planned; needs phone-to-phone calling locally first |
-| **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Planned (plan phase P5); the two-server test already runs in `npm test`. Needed before anyone else runs a server in production |
+| **F4** ✔ | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Done (plan phase P5): the `Interop` workflow runs two self-hosted servers and two Workers (`wrangler dev`) against each other on every push; [federation-spec.md](federation-spec.md) is the versioned spec |
 
 ## Open questions
 

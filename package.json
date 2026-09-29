@@ -19,6 +19,7 @@
     "format": "biome format --write .",
     "check": "npm run lint && npm run typecheck && npm test",
     "docs:protocol": "node packages/protocol/scripts/gen-docs.ts",
+    "docs:federation": "node packages/federation/scripts/gen-spec.ts",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run build && npm start -w @openloungephone/server-selfhost"
   },

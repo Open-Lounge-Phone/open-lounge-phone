@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress, parseAddress } from "./address.ts";
+import { formatAddress, isFederatableHost, parseAddress } from "./address.ts";
 import { generateServerKey, loadServerKey, rotationStatement, signBytes } from "./keys.ts";
 import { NONCE_TTL_MS, signRequest, type VerifyInput, verifyRequest } from "./signature.ts";
 import { baseUrlFor, rotationTrusted, WellKnown } from "./wellKnown.ts";
@@ -161,5 +161,34 @@ describe("server keys and discovery", () => {
       expect(parseAddress(bad), bad).toBeUndefined();
     }
     expect(formatAddress({ handle: "a.b", host: "h" })).toBe("a.b@h");
+  });
+});
+
+describe("isFederatableHost", () => {
+  it("a public server talks only to public names", () => {
+    const me = "hub.example.org";
+    expect(isFederatableHost("l1.openloungephone.app", me)).toBe(true);
+    expect(isFederatableHost("phone.example.com:8443", me)).toBe(true);
+    for (const bad of [
+      "localhost",
+      "localhost:6379",
+      "a.localhost:8787",
+      "127.0.0.1",
+      "10.0.0.5:80",
+      "169.254.169.254",
+      "intranet",
+      "printer.local",
+      "db.internal",
+      "nas.home.arpa",
+      "[::1]",
+    ]) {
+      expect(isFederatableHost(bad, me), bad).toBe(false);
+    }
+  });
+
+  it("a development server on a loopback name may talk to other loopback servers", () => {
+    expect(isFederatableHost("b.localhost:8788", "a.localhost:8787")).toBe(true);
+    expect(isFederatableHost("hub.example.org", "localhost:8787")).toBe(true);
+    expect(isFederatableHost("127.0.0.1", "a.localhost:8787")).toBe(false);
   });
 });
