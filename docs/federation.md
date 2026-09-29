@@ -1,8 +1,9 @@
 # Federation: connecting across Open Lounge Phone servers
 
-Status: **F0 (accounts, spaces), F1 (knocks, connections, signed server-to-server requests) and
-F2 (federated calls, voicemail, opt-in presence, Lounge guests) are implemented; F3 (phone ↔
-phone) and F4 (CI interop, spec versioning) are planned.**
+Status: **F0 (accounts, spaces), F1 (knocks, connections, signed server-to-server requests),
+F2 (federated calls, voicemail, opt-in presence, Lounge guests) and rooms across servers (P3.5:
+join by address, 3-way calls spanning servers) are implemented; F3 (phone ↔ phone) and F4 (CI
+interop, spec versioning) are planned.**
 Owner direction (2026-09-27): people should be able to send and accept connection invites
 regardless of which server they're on, and call each other through a fair, seamless
 server-to-server protocol. No central server, and the owner's public-good hub is just one more
@@ -145,6 +146,7 @@ change). The endpoints:
 | `POST /fed/v1/lounge/progress` | `{to: handle, deviceId, step, reason?, expiresAt?}` | `202` |
 | `POST /fed/v1/lounge/dial` | `{callId, for: handle, deviceId, deviceLabel, to: address}` | like `/calls`; an `ended` answer may carry the guest's server's `voicemail` offer |
 | `POST /fed/v1/lounge/leave` | `{from, deviceId}` | `202` |
+| `POST /fed/v1/rooms/join` | `{leg, from, room: handle}` — `from` wants into the phone room `handle@<receiver>` | `{ok: true, roomId, name}` or `{ok: false, reason}` (`denied`, `locked`, `full`, …) |
 
 Budgets per sending server (defaults): 300 requests a minute, 500 knocks a day.
 
@@ -211,6 +213,24 @@ dot; anything older than an hour shows as unknown. Turning it off sends "offline
   `/api/vm/*` on the guest's server, which delivers it as them.
 - **Between households on one server** the same code runs with host `''`: the two hubs relay to
   each other directly (on Cloudflare, household Durable Object to household Durable Object).
+
+## Rooms across servers (P3.5, implemented)
+
+A phone room has an address like a person, `standup@host`. Someone on another server joins it
+from their app by address: their server checks its own rules (fair use), registers a *leg* id
+on the server-pair stream and sends a signed `POST /fed/v1/rooms/join`. The room's server
+decides alone — the room must be open to connections and `from` must have an active connection
+with the room's owner (a member of the space in another household on the same server gets in
+anyway), then the lock and the size. After that every room message travels as
+`{t: "room.signal", callId: <leg>, msg}` on the stream, both ways (`room.state`, `room.media`,
+`room.idle`, `room.ended` to the participant; `room.leave`, `room.mute`, `room.talk`,
+`room.here`, `room.media` and mesh `rtc.*` from them); the stream forgets a leg's route on
+`room.ended` or `room.leave`. Each person's own server hands them its own ICE servers (TURN),
+and the room's **media goes through the room owner's server** (its relay, or its mesh). A call
+with someone on another server that is **merged** into a 3-way call carries on under the call's
+id as their leg (`call.state {merged}` doesn't end the route). Room minutes are metered by each
+person's own server; the room's server also counts people from other servers against the room's
+owner. Transfers across servers aren't supported yet.
 
 ## Lounge phones across servers (F2, implemented)
 

@@ -18,7 +18,8 @@ own infrastructure.
 | Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
 | Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | by the space's history setting (forever by default) |
 | Phones' software version and model, as they report it | the phone's page in the app | until the phone is removed |
-| Usage counters per month (call minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
+| Usage counters per month (call minutes, room minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
+| Rooms: a party line's or phone room's name, address, who made it, whether it's locked or open to connections; which phones may join it. Who's in a room right now is kept only while they're in it | rooms | until the room is deleted |
 | Rate-limit counters (with IP addresses **hashed**) | stopping abuse | counted per minute, hour or day; stale counters are pruned after about a month |
 | Other servers' public keys and recent signature nonces | federation security | keys while the server is known; nonces ~11 minutes |
 
@@ -33,6 +34,9 @@ setting covers your side only: the other person keeps their own history by their
 
 **Call audio never passes through the server.** It goes directly between the two people, or
 through a TURN relay that only forwards encrypted packets when a direct path is impossible.
+Rooms of up to 4 people without a relay work the same way. A room through the server's relay
+(the Cloudflare Realtime SFU or LiveKit) is encrypted in transit, but the relay could hear it;
+nothing is recorded, and end-to-end room encryption (SFrame) is planned.
 There are no ads, no trackers, no text chat, and no connection to the phone network — ever.
 
 ## Who can see what

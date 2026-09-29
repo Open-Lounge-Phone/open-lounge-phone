@@ -26,7 +26,7 @@
 | Storage: plain SQL migrations shared by D1 and SQLite, typed store | `packages/db` | servers |
 | HTTP/WS app written against backend interfaces | `packages/server-app` | servers |
 | Server-to-server federation (signatures, keys, `/fed/v1` schemas) | `packages/federation` | servers |
-| Call media: WebRTC peer-to-peer with STUN/TURN (an SFU provider is planned for rooms) | `packages/client` | clients |
+| Call and room media: 1:1 calls peer to peer (STUN/TURN); rooms as a peer-to-peer mesh (≤ 4) or through a relay (Cloudflare Realtime SFU, or a self-hosted LiveKit) | `packages/client` (`CallMedia`, `RoomAudio`), `packages/server-app` (`liveRooms.ts`, `sfu.ts`) | clients, servers |
 | Entry points | `apps/server-selfhost`, `apps/server-cloudflare` | Node / Workers |
 | Clients | `apps/device-web`, `apps/companion` (a Tauri desktop app is planned) | browser |
 
@@ -95,6 +95,70 @@ Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decid
 calls stay inside one household until federated connections (see
 [federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted
 "knock". There is no bridge to the phone network (PSTN), ever.
+
+**Hold, 3-way calls and transfer.** Either party can put an answered call on hold
+(`call.hold`): the holder's audio stops and the other side hears a soft tone that its own phone
+or app plays (prompt `hold.tone`; nothing is sent). While holding one call a person may place one
+more — a *consult* call, never a third (`controlCheck` in `packages/core`). Then:
+- **Merge** (`call.merge`): both calls become a room of kind `call`, hosted by the person who
+  merged. The calls end with `call.state {merged: {roomId}}` and every client keeps the old
+  call's audio playing until the room's audio is connected (make before break), so nobody hears
+  a gap. Someone in another household or on another server stays reached through their own
+  server: the call's id carries on as their *room leg*.
+- **Transfer**, blind (`call.transfer {to}`): the person being transferred rings the target *as
+  themselves*, with their own permissions (a kids' phone reaches only its allow-list); attended
+  (`call.transfer {toCall}`): the held person and the consult person are connected directly and
+  the transferring person leaves both calls. Clients follow with `call.state {transfer: {callId,
+  ringing, offerer}}`. Transferring someone in another household or on another server isn't
+  supported yet.
+- A merge or an attended transfer never puts a **kids' phone** together with someone who isn't
+  on its allow-list (`mayConnect`).
+- **On the phone:** MENU → 1 *Add caller* (holds the call) → a speed-dial key → MENU → 1 *Merge*
+  (or 2 *Transfer*). The phone plays prompt ids (`CallPrompt` in the protocol), e.g. "Choose who
+  to add, then press menu to merge" and "You're all together now"; the strip shows `CALLER ON
+  HOLD`, `ON HOLD`, `MENU: MERGE`. The companion has Hold, Add caller, Merge, Transfer and
+  "Connect them & leave".
+
+**Rooms.** Three kinds, all live in the owning space's hub (`LiveRooms`):
+- **Party lines**: a space's always-open rooms (guardians make them). Members drop in and out and
+  see who's in (`rooms.changed`, `GET /api/rooms`).
+- **Phone rooms**: a name with an address, e.g. `standup@host` (room handles share the namespace
+  of people's handles), made by any member, who hosts it. Open to the space, or also to its
+  owner's connections. Dialable from the companion (by id, or by address on any server) and from
+  a phone's speed-dial key once a guardian puts the room on the phone's allow-list
+  (`PUT /api/devices/:id/rooms/:roomId`; migration `0016_rooms.sql`).
+- **3-way calls**: made by merging; nobody dials in.
+
+Access is default deny (`roomAccess`): the space's members; for a phone room open to
+connections, anyone with an active connection to its owner (checked by the room's own server);
+kids' phones only rooms of their own space that are on their allow-list. Then the lock and the
+size. Hosts (the owner, a home's guardians, whoever merged a 3-way call) can mute people (they
+may unmute themselves), remove them and lock the room. Someone on another server joins by
+address: their server sends a signed `POST /fed/v1/rooms/join`, the room's server decides, and
+everything after that travels as `room.signal` on the server-pair stream (between households
+here: hub to hub). A room's audio always goes through its owner's server.
+
+**Room media.** 1:1 calls stay peer to peer. Rooms use the server's relay when it has one
+(`room.state.media`):
+- **no relay** (the default): a peer-to-peer mesh of at most 4 people, end-to-end encrypted
+  (`rtc.*` with `peer`, relayed by the room's hub);
+- **Cloudflare Realtime SFU** (`SFU_APP_ID`/`SFU_APP_SECRET`): the server holds the app secret
+  and drives each participant's single peer connection over `room.media`. It pushes their
+  microphone, pulls the others into slots, and when the speakers change asks the client to stop
+  a slot and offer again (a negotiated close, so the SFU reuses the m-line and the SDP stays
+  small — `tracks/update` only re-targets simulcast tracks); pulls retry until the publisher is
+  sending;
+- **LiveKit** (self-host, `LIVEKIT_*`): clients connect to it with a join token the server signs,
+  and listen to whom `room.state.forward` lists.
+
+Relayed rooms are **encrypted in transit but not end to end**: the relay could hear them.
+End-to-end room encryption (SFrame) is planned; the apps say so. Cost controls: Opus DTX
+everywhere; in rooms of more than 4 each person gets only the 3 most active speakers
+(`forwardFor`, from clients' own voice activity, `room.talk`), and muted people aren't forwarded
+at all; someone silent and idle for 10 minutes is warned (`room.idle`) and dropped a minute
+later unless they speak or answer (`room.here`; on the hub's one alarm, no timers); room minutes
+are metered for fair use when someone leaves — each person by their own server, people from
+other servers against the room's owner.
 
 **Pairing.** An unpaired phone generates an Ed25519 keypair, sends `pair.begin`, shows the
 returned 6-digit code on its e-ink status strip, and reads it aloud when the handset is lifted. A guardian enters it in the companion app; the server binds the public key
@@ -189,7 +253,7 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.
 
-Planned software phases (see the status table in the [README](../README.md)): rooms —
-party lines, 3-way calls, dialable room addresses — on an SFU (P3.5), interop tests in CI and a
-versioned federation spec (P5), and professional features such as a directory, hunt groups and
-business hours (P6). There is no text chat and no phone-network bridge.
+Planned software phases (see the status table in the [README](../README.md)): recording (batch
+C), interop tests in CI and a versioned federation spec (P5), and professional features such as
+a directory, hunt groups and business hours (P6). Rooms, 3-way calls, hold and transfer (P3.5)
+are done. There is no text chat and no phone-network bridge.

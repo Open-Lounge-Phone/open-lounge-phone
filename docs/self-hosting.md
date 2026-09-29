@@ -45,9 +45,29 @@ Configuration is by environment variable:
 | `OPERATORS` | unset | Comma-separated handles who see the Operator view |
 | `FUNDING_BALANCE_USD`, `SPONSOR_URL` | unset | Funding card and Sponsor button (public hubs; see [hub.md](hub.md)) |
 | `TRUST_PROXY` | unset | `1` behind your own reverse proxy: take the client address from `X-Forwarded-For` for per-IP limits |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_API_URL` | unset | A LiveKit server as the rooms' media relay (see below); without one, rooms are peer to peer and hold 4 people |
+| `SFU_APP_ID`, `SFU_APP_SECRET` | unset | Or a Cloudflare Realtime SFU app as the relay |
 
 Passkeys are tied to the site's host name. If you reach the server through a reverse proxy or
 several names, set `PUBLIC_URL` to the one address people use.
+
+## Rooms
+
+Party lines, phone rooms (`standup@your.host`) and 3-way calls work out of the box as a
+**peer-to-peer mesh** of up to 4 people, end-to-end encrypted like calls. For bigger rooms, run
+the bundled [LiveKit](https://livekit.io) server and point Open Lounge Phone at it:
+
+```sh
+# in .env: LIVEKIT_URL=wss://livekit.your.host  LIVEKIT_API_URL=http://host.docker.internal:7880
+#          LIVEKIT_API_KEY=openloungephone       LIVEKIT_API_SECRET=<32+ random characters>
+docker compose --profile livekit up -d
+```
+
+`LIVEKIT_URL` is what browsers connect to (put it behind your HTTPS proxy, WebSockets
+included); `LIVEKIT_API_URL` is how the server reaches LiveKit. LiveKit uses host networking for
+its UDP media ports. Relayed rooms are encrypted in transit but not end to end (the relay could
+hear them); end-to-end room encryption (SFrame) is planned. The LiveKit setup has been built
+against its token and room APIs but not yet run end to end here; please report issues.
 
 ## HTTPS
 

@@ -29,8 +29,15 @@ are not built yet; recording is designed below and built later.
 
 - **Encrypted calls:** 1:1 calls use WebRTC (DTLS-SRTP), peer to peer. The TURN relay only forwards
   encrypted packets. The server and relay never hear 1:1 audio.
-- **Group rooms (planned SFU):** encrypted in transit, but the relay could access the audio until
-  end-to-end room encryption (SFrame) is added.
+- **Rooms** (built): without a relay a room is a peer-to-peer mesh of up to 4 people, end-to-end
+  encrypted like a 1:1 call. Through a relay (the Cloudflare Realtime SFU, or LiveKit when
+  self-hosting) a room is **encrypted in transit but not end to end**: the relay could access the
+  audio until end-to-end room encryption (SFrame) is added (planned). The apps say which one a
+  room is. A 3-way call made by merging follows the same rule.
+- **Rooms are default deny** like calls: a space's members, a phone room's owner's connections if
+  it's open to them, and kids' phones only rooms of their own space on their allow-list; merging
+  or transferring never puts a kids' phone with someone off its list. Hosts can remove people and
+  lock a room.
 - **Default-deny calling**, enforced on the server. Kids' phones have no address and can't be
   knocked.
 - **Federation:** signed server-to-server requests (RFC 9421), server-key pinning, blocklists and

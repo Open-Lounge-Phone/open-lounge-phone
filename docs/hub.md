@@ -21,6 +21,7 @@ metered when it ends.
 | Knocks | 100 (and 10 a day, everywhere) | `FAIR_USE_KNOCKS` |
 | Phones per space | 5 | `FAIR_USE_PHONES_PER_SPACE` |
 | Spaces per account | 5 | `FAIR_USE_SPACES_PER_ACCOUNT` |
+| Room minutes (time in rooms: 3 people for 10 minutes = 10 each) | 1,000 | `FAIR_USE_ROOM_MINUTES` |
 
 `FAIR_USE=hub` turns these defaults on; each variable overrides one (a number, or `unlimited`).
 **A self-hosted server has no allowance unless you set one.** An operator can exempt an account
@@ -46,6 +47,22 @@ Workers Paid plan.
 | An average call minute (≈ 80 % direct, 20 % relayed) | | ≈ $0.000008 |
 | A voicemail | R2 storage, a Workers AI transcript | a small fraction of a cent |
 | A typical active person per month (300 min, 30 voicemails) | all of the above | ≈ $0.02 |
+
+**Rooms** (party lines, phone rooms, 3-way calls) are the one thing that goes through the hub's
+media relay, the Cloudflare Realtime SFU: it bills **$0.05 per GB of egress** (what it sends to
+listeners) after the first 1,000 GB a month, shared with TURN; what people send into it is free.
+A listener receiving one speaker at a time with Opus (≈ 32 kbit/s) costs about 0.25 MB a minute,
+so a room minute costs roughly **$0.0000125–0.000025** ($0.013–0.025 per 1,000). The controls
+that keep it there:
+- **Small rooms need no relay.** Without one, a room is a peer-to-peer mesh of up to 4 people
+  (like calls, ≈ $0); 1:1 calls never use the relay, and a 3-way call made by merging uses the
+  relay only on servers that have one.
+- **Opus DTX** on every connection: silence sends (almost) nothing.
+- **Top 3 speakers** in rooms of more than 4: each person gets only the three most active
+  speakers, and muted people aren't forwarded at all.
+- **Idle drop**: someone silent with no interaction for 10 minutes is warned, and dropped a minute
+  later unless they speak or tap "I'm here".
+- **Room minutes** count toward the fair-use allowance above (metered when someone leaves).
 
 These are the estimates the funding numbers below are computed from
 (`COST_PER_ACTIVE_USER_USD_PER_MONTH`, `BASE_COST_USD_PER_MONTH`), not measurements; they'll be
@@ -81,8 +98,13 @@ cd apps/server-cloudflare
 npm run deploy:instance -- --instance hub --domain hub.openloungephone.app --open-signup \
   --turn-key-id <id> --turn-key-token <token> \
   --turnstile-site-key <key> --turnstile-secret <secret> \
-  --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>]
+  --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>] \
+  [--sfu-app-id <id> --sfu-app-secret <secret>]
 ```
+
+- **Rooms' relay** (optional): the Realtime SFU app's id and secret (dashboard → Realtime → SFU),
+  stored as secrets; the script also reads them from `instances/sfu.env` when present. Without
+  them rooms are peer to peer and hold 4 people.
 
 - **TURN is required** for a public instance; the script refuses `--open-signup` without a key
   (Cloudflare dashboard → Realtime → TURN).

@@ -41,7 +41,8 @@ The software works end to end today; the hardware is being designed in the open.
 | Voicemail everywhere | Unanswered calls go to voicemail for every caller and callee (people, kids' phones, Lounge guests, other servers); greetings (standard, recorded name, custom); ring time; recording the greeting on the phone | done (software) |
 | P2b | Buddy timeline: per-connection history of calls and voicemails (with transcripts), expiring per connection or by your default (30 days / 1 year / forever); no text chat | done (software) |
 | M5 | One-command deploy CLI and desktop app | deploy script done; the rest not started |
-| P3.5, P5, P6 | Rooms (party lines, 3-way calls); interop tests in CI and a versioned federation spec; professional features (directory, hunt groups, business hours) | planned |
+| P3.5 | Rooms: party lines, phone rooms with addresses (`standup@host`, dialable from any phone's key), host mute/remove/lock, cross-server join; hold, instant 3-way (Add caller → Merge) and blind/attended transfer; a peer-to-peer mesh (≤ 4) or a relay (Cloudflare Realtime SFU, or LiveKit when self-hosting) with top-3 forwarding, idle drop and fair-use metering | done (software); relayed rooms are encrypted in transit, end-to-end (SFrame) planned |
+| P5, P6 | Interop tests in CI and a versioned federation spec; professional features (directory, hunt groups, business hours) | planned |
 | Firmware | ESP32-S3 firmware, starting on dev boards | not started |
 | Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, USB-C handset port) in a 3D-printable base | schematic done; board placed, routing next; printable prototype box; product enclosure not designed yet |
 

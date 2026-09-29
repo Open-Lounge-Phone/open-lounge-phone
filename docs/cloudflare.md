@@ -15,6 +15,7 @@ What gets created:
 | R2 bucket `openloungephone-<instance>-voicemail` | voicemail audio |
 | Workers AI (optional) | voicemail transcripts (Whisper, billed per audio minute) |
 | Realtime TURN key (optional) | relays audio when phones can't connect directly |
+| Realtime SFU app (optional) | rooms of more than 4 people (party lines, phone rooms, 3-way calls); without it rooms are peer to peer |
 
 ## Deploy (one command)
 
@@ -37,6 +38,11 @@ go to `apps/server-cloudflare/instances/` (gitignored).
 Options:
 - `--turn-key-id <id> --turn-key-token <token>`: TURN relay for calls across networks. Create
   a key in the dashboard under Realtime → TURN.
+- `--sfu-app-id <id> --sfu-app-secret <secret>`: the rooms' media relay (dashboard → Realtime →
+  SFU → create an app), stored as the `SFU_APP_ID` / `SFU_APP_SECRET` secrets. When the flags are
+  left out the script reads them from `instances/sfu.env` (`SFU_APP_ID=…`, `SFU_APP_SECRET=…`;
+  gitignored) if it exists. Relayed rooms are encrypted in transit, not end to end (see
+  [security-model.md](security-model.md)).
 - `--no-ai`: skip Workers AI voicemail transcripts.
 - `--new-setup-token`: issue a fresh setup link (only useful before the first household exists).
 - `--open-signup`: let anyone create an account on the instance (sets the `OPEN_SIGNUP` var; a
@@ -82,6 +88,15 @@ cross-server call, voicemail, block, and the server-pair stream closing after a 
 ```sh
 npm run build
 OLP_E2E_CLOUDFLARE=1 npx vitest run tests/e2e/cloudflare.test.ts   # about 90 s
+```
+
+Rooms through the real SFU (three headless Chromium companions in one room with audio both
+ways, one leaving and rejoining, then a 1:1 call merged into a 3-way call) — put the SFU app's
+`SFU_APP_ID` and `SFU_APP_SECRET` in `apps/server-cloudflare/.dev.vars` (gitignored) first:
+
+```sh
+npm run build && npm run assets -w apps/server-cloudflare
+OLP_SFU_CHECK=1 PLAYWRIGHT_CORE=/path/to/playwright-core npx vitest run tests/e2e/live/rooms.test.ts
 ```
 
 It starts two `wrangler dev` instances (local D1, R2 and Durable Objects, no AI) as
