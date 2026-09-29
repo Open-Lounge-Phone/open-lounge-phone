@@ -20,6 +20,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     publicUrlExplicit: env.PUBLIC_URL !== undefined,
     /** OPEN_SIGNUP=1: anyone can create an account (and their own household). Off by default. */
     openSignup: env.OPEN_SIGNUP === "1" || env.OPEN_SIGNUP === "true",
+    /** Federation (connections with other servers) is on unless FEDERATION=0. */
+    federation: env.FEDERATION !== "0" && env.FEDERATION !== "false",
     transcribe: env.TRANSCRIBE_URL
       ? {
           url: env.TRANSCRIBE_URL,

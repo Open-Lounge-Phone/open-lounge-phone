@@ -9,13 +9,16 @@
 //
 // Idempotent: creates the D1 database and R2 bucket only if missing, applies pending
 // migrations, deploys the Worker on the custom domain, and on first run sets a one-time
-// SETUP_TOKEN secret and prints the setup link. Account-specific IDs are written to
+// SETUP_TOKEN secret and prints the setup link. It also generates the instance's federation key
+// (FED_PRIVATE_KEY secret) once — other servers pin it, so it is never regenerated — and sets
+// PUBLIC_URL to https://<domain>. Account-specific IDs are written to
 // instances/<instance>.json and instances/<instance>.wrangler.jsonc, which are gitignored.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { generateServerKey } from "@openloungephone/federation";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const INSTANCES = `${APP}instances`;
@@ -48,6 +51,8 @@ interface InstanceState {
   ai: boolean;
   openSignup: boolean;
   setupTokenSet: boolean;
+  /** FED_PRIVATE_KEY was set (never regenerated: other servers have the public key pinned). */
+  fedKeySet?: boolean;
 }
 
 const statePath = `${INSTANCES}/${instance}.json`;
@@ -124,7 +129,11 @@ const config = {
   ],
   r2_buckets: [{ binding: "BLOBS", bucket_name: bucket }],
   ...(ai ? { ai: { binding: "AI" } } : {}),
-  vars: { ...(base.vars as object | undefined), OPEN_SIGNUP: args["open-signup"] ? "1" : "0" },
+  vars: {
+    ...(base.vars as object | undefined),
+    OPEN_SIGNUP: args["open-signup"] ? "1" : "0",
+    PUBLIC_URL: `https://${domain}`,
+  },
   routes: [{ pattern: domain, custom_domain: true }],
   workers_dev: false,
 };
@@ -151,6 +160,12 @@ if (!previous.setupTokenSet || args["new-setup-token"]) {
   setupToken = randomBytes(24).toString("base64url");
   wrangler(["secret", "put", "SETUP_TOKEN", "-c", configPath], setupToken);
 }
+let fedKeySet = previous.fedKeySet === true;
+if (!fedKeySet) {
+  step("setting the federation key (FED_PRIVATE_KEY secret, generated once)");
+  wrangler(["secret", "put", "FED_PRIVATE_KEY", "-c", configPath], await generateServerKey());
+  fedKeySet = true;
+}
 if (args["turn-key-id"] && args["turn-key-token"]) {
   step("setting TURN secrets");
   wrangler(["secret", "put", "TURN_KEY_ID", "-c", configPath], args["turn-key-id"]);
@@ -166,6 +181,7 @@ const state: InstanceState = {
   ai,
   openSignup: args["open-signup"] === true,
   setupTokenSet: previous.setupTokenSet || setupToken !== undefined,
+  fedKeySet,
 };
 writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 

@@ -11,7 +11,9 @@ import {
   serverHost,
   signupRoutes,
 } from "./accounts.ts";
+import { connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
+import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
@@ -149,6 +151,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   accountRoutes(api, env);
+  connectionRoutes(api, env, live);
 
   // Everything below acts inside the active household.
   api.use("/*", async (c, next) => {
@@ -254,11 +257,46 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.get("/devices/:id/contacts", async (c) => {
     const device = await manageable(c.get("user"), c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    const [contacts, buttons] = await Promise.all([
+    const [contacts, buttons, remote] = await Promise.all([
       store.listContacts(device.id),
       store.listButtons(device.id),
+      store.listRemoteContacts(device.id),
     ]);
-    return c.json({ contacts, buttons: Object.fromEntries(buttons) });
+    const host = ownHost(env, c.req.url);
+    return c.json({
+      contacts,
+      buttons: Object.fromEntries(buttons),
+      // Entries from connections (other households or servers): `rc_…` ids in `contacts`.
+      remote: remote.map((r) => ({
+        id: r.id,
+        connectionId: r.connectionId,
+        address: `${r.connection.peerHandle}@${r.connection.peerHost || host}`,
+        name: r.connection.peerName,
+      })),
+    });
+  });
+
+  /**
+   * Puts one of your own active connections on a phone's allow-list (a person from another
+   * household or server). Default-deny still holds: they can call only with `canCallDevice`, and
+   * the entry goes away when the connection does.
+   */
+  api.put("/devices/:id/remote-contacts/:connectionId", async (c) => {
+    const user = c.get("user");
+    const device = await manageable(user, c.req.param("id"));
+    if (!device || device.kind === "lounge") return c.json({ error: "not found" }, 404);
+    const connection = await store.connections.get(c.req.param("connectionId"));
+    if (!connection || connection.accountId !== c.get("account").id) {
+      return c.json({ error: "not found" }, 404);
+    }
+    if (connection.state !== "active") {
+      return c.json({ error: "only people you're connected with can be added" }, 409);
+    }
+    const b = await body(c.req.raw, ContactBody);
+    if (b instanceof Response) return b;
+    const id = await store.upsertRemoteContact(device.id, connection.id, b);
+    await live.refreshDevice(user.householdId, device.id);
+    return c.json({ id });
   });
 
   api.put("/devices/:id/contacts/:userId", async (c) => {

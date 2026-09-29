@@ -34,6 +34,16 @@ export interface ServerEnv {
    * creates their own household. Off by default; then people join only through invites.
    */
   openSignup?: boolean;
+  /**
+   * This server's federation identity: an Ed25519 private key as JWK JSON (Cloudflare secret
+   * `FED_PRIVATE_KEY`, or the self-host key file). Without it the server doesn't federate;
+   * connections between its own accounts still work.
+   */
+  federationKey?: string;
+  /** Outbound HTTP for federation (tests route between in-memory servers). Default: `fetch`. */
+  fetch?: (request: Request) => Promise<Response>;
+  /** Overrides for rate limits (see `DEFAULT_LIMITS`). */
+  limits?: Partial<import("./limits.ts").Limits>;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;

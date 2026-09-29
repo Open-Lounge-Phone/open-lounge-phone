@@ -12,6 +12,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@openloungephone/db": "0.0.0",
+    "@openloungephone/federation": "0.0.0",
     "@openloungephone/protocol": "0.0.0",
     "@openloungephone/server-app": "0.0.0",
     "hono": "^4.13.9",

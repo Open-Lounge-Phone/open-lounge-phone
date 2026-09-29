@@ -52,6 +52,8 @@ export interface Snapshot {
   error?: string;
   /** Your latest Lounge takeover / session event. */
   lounge?: LoungeClaim;
+  /** Bumped on every `connections.changed` (a knock arrived, someone accepted…). */
+  connectionsSeq?: number;
   /** Latest `voicemail.new`; `seq` changes on every announcement. */
   voicemail?: { seq: number; id: string; deviceId: string; from: string };
 }
@@ -228,6 +230,9 @@ export class Connection {
     switch (msg.t) {
       case "app.ready":
       case "pong":
+        return;
+      case "connections.changed":
+        this.set({ connectionsSeq: (this.snap.connectionsSeq ?? 0) + 1 });
         return;
       case "error":
         this.set({ error: msg.message });

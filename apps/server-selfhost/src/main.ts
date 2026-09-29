@@ -12,12 +12,19 @@ import {
   type ConnectionHandler,
   createApi,
   ensureSetupToken,
+  federationApp,
   Gateway,
   type ServerEnv,
 } from "@openloungephone/server-app";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
-import { blobDir, fileBlobStore, openAiTranscriber } from "./adapters.ts";
+import {
+  blobDir,
+  federationKeyFile,
+  fileBlobStore,
+  loopbackFetch,
+  openAiTranscriber,
+} from "./adapters.ts";
 import { type Config, loadConfig } from "./config.ts";
 
 const KEEPALIVE_MS = 30_000;
@@ -47,6 +54,8 @@ export async function start(config: Config) {
     },
     ...(config.publicUrlExplicit ? { publicUrl: config.publicUrl } : {}),
     openSignup: config.openSignup,
+    ...(config.federation ? { federationKey: await federationKeyFile(config.dataDir) } : {}),
+    fetch: loopbackFetch,
     now: () => Date.now(),
     iceServers: () => buildIceServers(config.ice, Date.now()),
     setTimer: (fn, ms) => {
@@ -60,6 +69,8 @@ export async function start(config: Config) {
   const gateway = new Gateway(env);
   const app = new Hono();
   app.route("/api", createApi(env, gateway));
+  // Server-to-server: /.well-known/openloungephone and the signed /fed/v1 endpoints.
+  app.route("/", federationApp(env, gateway));
   const staticSite = (prefix: string, root: string) => {
     if (!existsSync(root)) {
       env.log("warn", `${root} not built; run \`npm run build\` to serve ${prefix}`);

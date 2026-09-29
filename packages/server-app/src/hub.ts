@@ -456,6 +456,13 @@ export class HouseholdHub {
     });
   }
 
+  /** Sends a message to every open companion session of one member. */
+  sendToUser(userId: string, msg: ServerToApp): Promise<void> {
+    return this.run(() => {
+      for (const app of this.apps.get(userId) ?? []) app.conn.send(msg);
+    });
+  }
+
   /** Called by hosts that implement `wakeAt`, at the requested time. */
   wake(): Promise<void> {
     return this.run(async () => {

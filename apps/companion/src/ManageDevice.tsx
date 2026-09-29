@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Api, ContactEntry, DeviceSummary, User } from "./api.ts";
+import type {
+  Api,
+  ConnectionView,
+  ContactEntry,
+  DeviceSummary,
+  RemoteContactInfo,
+  User,
+} from "./api.ts";
+import { hostBadge } from "./connectionGroups.ts";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
 
@@ -29,14 +37,23 @@ export function ManageDevice({
   const [users, setUsers] = useState<User[]>([]);
   const [contacts, setContacts] = useState<ContactEntry[]>([]);
   const [buttons, setButtons] = useState<Record<string, string>>({});
+  /** Allow-list entries that come from connections, by their `rc_…` id. */
+  const [remote, setRemote] = useState<Map<string, RemoteContactInfo>>(new Map());
+  const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
     try {
-      const [u, c] = await Promise.all([api.users(), api.contacts(deviceId)]);
+      const [u, c, conns] = await Promise.all([
+        api.users(),
+        api.contacts(deviceId),
+        api.connections().catch(() => undefined),
+      ]);
       setUsers(u);
       setContacts(c.contacts);
       setButtons(c.buttons);
+      setRemote(new Map((c.remote ?? []).map((r) => [r.id, r])));
+      setConnections((conns?.connections ?? []).filter((x) => x.state === "active"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -56,9 +73,18 @@ export function ManageDevice({
     await load();
   };
 
-  const save = (c: ContactEntry) => run(() => api.putContact(deviceId, c));
+  const save = (c: ContactEntry) => {
+    const via = remote.get(c.id);
+    if (via) {
+      const { id: _id, ...flags } = c;
+      return run(() => api.putRemoteContact(deviceId, via.connectionId, flags));
+    }
+    return run(() => api.putContact(deviceId, c));
+  };
   const byId = new Map(contacts.map((c) => [c.id, c]));
   const others = users.filter((u) => !byId.has(u.id));
+  const listed = new Set([...remote.values()].map((r) => r.connectionId));
+  const addable = connections.filter((c) => !listed.has(c.id));
 
   return (
     <section className="stack">
@@ -92,6 +118,7 @@ export function ManageDevice({
           <ContactEditor
             key={c.id}
             contact={c}
+            via={remote.get(c.id)?.address}
             onSave={save}
             onRemove={() => run(() => api.deleteContact(deviceId, c.id))}
           />
@@ -116,6 +143,36 @@ export function ManageDevice({
                 }
               >
                 + {u.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {addable.length > 0 && device?.kind !== "lounge" && (
+        <div className="card stack">
+          <span className="small muted">
+            Add someone you're connected with (another household or server)
+          </span>
+          <div className="chips">
+            {addable.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                title={c.address}
+                onClick={() =>
+                  void run(() =>
+                    api.putRemoteContact(deviceId, c.id, {
+                      label: c.name.slice(0, 24),
+                      canCallDevice: true,
+                      deviceCanCall: true,
+                      bypassQuietHours: false,
+                    }),
+                  )
+                }
+              >
+                + {c.name}
+                {hostBadge(c) && <span className="badge">{hostBadge(c)}</span>}
               </button>
             ))}
           </div>
@@ -162,10 +219,13 @@ export function ManageDevice({
 
 function ContactEditor({
   contact,
+  via,
   onSave,
   onRemove,
 }: {
   contact: ContactEntry;
+  /** Their address, for someone from another household or server. */
+  via?: string | undefined;
   onSave(c: ContactEntry): void;
   onRemove(): void;
 }) {
@@ -192,6 +252,7 @@ function ContactEditor({
           Remove
         </button>
       </div>
+      {via && <span className="muted small">Connection: {via}</span>}
       <label className="check">
         <input
           type="checkbox"

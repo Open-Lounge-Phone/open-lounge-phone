@@ -439,8 +439,15 @@ export const LoungeProgress = z
   })
   .describe("Progress of your takeover of a Lounge phone, and the end of your session there.");
 
+export const ConnectionsChanged = z
+  .object({ t: z.literal("connections.changed"), ...Ref })
+  .describe(
+    "Your connections changed (a knock arrived, someone accepted or disconnected); reload them with `GET /api/connections`.",
+  );
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
+  ConnectionsChanged,
   LoungeProgress,
   MemberStatus,
   DeviceStatus,

@@ -1083,3 +1083,50 @@ fieldset.ownership legend {
   overflow-wrap: anywhere;
   font-variant-ligatures: none;
 }
+
+/* --- connections ------------------------------------------------------------ */
+
+.chips .badge {
+  margin-left: 0.4em;
+}
+
+.connections .device-name .badge {
+  margin: 0 0 0 0.4em;
+  font-weight: 600;
+}
+.connections .address {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+.connections .qr {
+  width: min(220px, 70vw);
+  align-self: center;
+  background: #fff;
+  padding: 6px;
+  border-radius: 8px;
+}
+.connections .qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.connections .note {
+  margin: 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.connections details.more {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.connections details.more summary {
+  cursor: pointer;
+}
+.connections details.blocked summary {
+  cursor: pointer;
+  font-weight: 600;
+}

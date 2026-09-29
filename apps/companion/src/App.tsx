@@ -10,7 +10,9 @@ import {
   type User,
 } from "./api.ts";
 import { CallOverlay } from "./CallOverlay.tsx";
+import { Connections } from "./Connections.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
+import { groupConnections } from "./connectionGroups.ts";
 import { Home } from "./Home.tsx";
 import { AddHousehold, GetStarted, HouseholdSwitcher } from "./Households.tsx";
 import { Invite } from "./Invite.tsx";
@@ -41,6 +43,7 @@ export type Route =
   | { name: "people"; role?: Role }
   | { name: "add-household" }
   | { name: "account" }
+  | { name: "connections" }
   | { name: "voicemail" };
 
 function clearHash() {
@@ -209,6 +212,8 @@ function SignedIn({
   const [route, setRoute] = useState<Route>({ name: "home" });
   const [loadError, setLoadError] = useState<string>();
   const [unheard, setUnheard] = useState(0);
+  /** Knocks waiting for this person's answer (Connections tab badge). */
+  const [knocks, setKnocks] = useState(0);
   const [toast, setToast] = useState<string>();
 
   const switchTo = useCallback(
@@ -336,6 +341,15 @@ function SignedIn({
     void countUnheard();
   }, [countUnheard]);
 
+  const connSeq = snap.connectionsSeq ?? 0;
+  useEffect(() => {
+    void connSeq;
+    baseApi.connections().then(
+      (c) => setKnocks(groupConnections(c.connections).requests.length),
+      () => {},
+    );
+  }, [baseApi, connSeq]);
+
   // Live voicemail announcements.
   const vmSeq = snap.voicemail?.seq ?? 0;
   const vmFrom = snap.voicemail?.from;
@@ -398,6 +412,11 @@ function SignedIn({
               <span className="narrow-only">Quiet</span>
             </Tab>
           )}
+          <Tab route={route} name="connections" onGo={setRoute}>
+            <span className="wide-only">Connections</span>
+            <span className="narrow-only">Connect</span>
+            {knocks > 0 && <span className="count">{knocks}</span>}
+          </Tab>
           <Tab route={route} name="account" onGo={setRoute}>
             Account
           </Tab>
@@ -568,6 +587,14 @@ function SignedIn({
             onBack={() => setRoute({ name: "home" })}
             onSignOut={() => void signOut()}
             onHelp={() => setRoute({ name: "help" })}
+          />
+        )}
+        {meInfo && route.name === "connections" && (
+          <Connections
+            api={baseApi}
+            refreshKey={connSeq}
+            onRequests={setKnocks}
+            onBack={() => setRoute({ name: "home" })}
           />
         )}
         {me && route.name === "voicemail" && (

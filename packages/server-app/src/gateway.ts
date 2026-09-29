@@ -37,6 +37,8 @@ export interface Coordinator {
   announce(householdId: string, msg: ServerToApp): Promise<void>;
   /** Disconnects a removed phone so it goes back to pairing. */
   forgetDevice(householdId: string, deviceId: string): Promise<void>;
+  /** Sends a message to every open companion session of an account, in all its households. */
+  notifyAccount(accountId: string, msg: ServerToApp): Promise<void>;
 }
 
 type DevicePhase =
@@ -110,6 +112,12 @@ export class Gateway implements Coordinator {
 
   async forgetDevice(householdId: string, deviceId: string): Promise<void> {
     await this.hubs.get(householdId)?.forgetDevice(deviceId);
+  }
+
+  async notifyAccount(accountId: string, msg: ServerToApp): Promise<void> {
+    for (const m of await this.env.store.listMemberships(accountId)) {
+      await this.hubs.get(m.household.id)?.sendToUser(m.user.id, msg);
+    }
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */

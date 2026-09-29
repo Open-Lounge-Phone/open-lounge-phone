@@ -5,6 +5,7 @@ import type {
   QuietHoursSchedule,
   Weekday,
 } from "@openloungephone/core";
+import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import type { Sql } from "./sql.ts";
 
@@ -328,12 +329,28 @@ const toContact = (r: ContactRow): Contact => ({
   bypassQuietHours: r.bypass_quiet_hours === 1,
 });
 
+/** A person from another household or server on a phone's allow-list (via a connection). */
+export interface RemoteContact extends Contact {
+  /** `rc_…` */
+  id: string;
+  connectionId: string;
+  connection: Connection;
+}
+
+/** Remote allow-list entries have ids with this prefix; local ones are user ids. */
+export const isRemoteContactId = (id: string) => id.startsWith("rc_");
+
+type RemoteContactRow = ContactRow & { id: string; connection_id: string };
+
 /** Typed data access shared by every backend. All times are epoch ms supplied by the caller. */
 export class Store {
   private readonly sql: Sql;
+  /** Connections, knocks, server keys and rate limits. */
+  readonly connections: ConnectionStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
+    this.connections = new ConnectionStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -459,6 +476,11 @@ export class Store {
         query:
           "INSERT OR REPLACE INTO released_handles (handle, account_id, released_at) VALUES (?, ?, ?)",
         params: [before.handle, accountId, now],
+      },
+      // Other people on this server see the new address in their connections.
+      {
+        query: "UPDATE connections SET peer_handle = ? WHERE peer_host = '' AND peer_account = ?",
+        params: [handle, accountId],
       },
     ]);
     return true;
@@ -866,6 +888,14 @@ export class Store {
   }
 
   async removeContact(deviceId: string, userId: string): Promise<void> {
+    if (isRemoteContactId(userId)) {
+      await this.sql.run(
+        "DELETE FROM remote_contacts WHERE device_id = ? AND id = ?",
+        deviceId,
+        userId,
+      );
+      return;
+    }
     await this.sql.batch([
       {
         query: "DELETE FROM contacts WHERE device_id = ? AND user_id = ?",
@@ -879,6 +909,9 @@ export class Store {
   }
 
   async getContact(deviceId: string, userId: string): Promise<Contact | undefined> {
+    if (isRemoteContactId(userId)) {
+      return (await this.listRemoteContacts(deviceId)).find((c) => c.id === userId);
+    }
     const r = await this.sql.first<ContactRow>(
       "SELECT * FROM contacts WHERE device_id = ? AND user_id = ?",
       deviceId,
@@ -887,17 +920,90 @@ export class Store {
     return r && toContact(r);
   }
 
+  /** The whole allow-list: household members, then people via connections (`rc_…` ids). */
   async listContacts(deviceId: string): Promise<Contact[]> {
     const rows = await this.sql.all<ContactRow>(
       "SELECT * FROM contacts WHERE device_id = ? ORDER BY label",
       deviceId,
     );
-    return rows.map(toContact);
+    const remote = (await this.listRemoteContacts(deviceId)).map(
+      ({ connection: _c, connectionId: _i, ...c }) => c,
+    );
+    return [...rows.map(toContact), ...remote];
   }
 
+  /** People from other households or servers on a phone's allow-list (active connections only). */
+  async listRemoteContacts(deviceId: string): Promise<RemoteContact[]> {
+    const rows = await this.sql.all<RemoteContactRow & { c_id: string }>(
+      `SELECT r.id, r.connection_id, r.label, r.can_call_device, r.device_can_call,
+         r.bypass_quiet_hours, r.id AS user_id, c.id AS c_id
+       FROM remote_contacts r JOIN connections c ON c.id = r.connection_id
+       WHERE r.device_id = ? AND c.state = 'active' ORDER BY r.label`,
+      deviceId,
+    );
+    const out: RemoteContact[] = [];
+    for (const r of rows) {
+      const connection = await this.connections.get(r.connection_id);
+      if (!connection) continue;
+      out.push({ ...toContact(r), id: r.id, connectionId: r.connection_id, connection });
+    }
+    return out;
+  }
+
+  /** Adds (or updates) a connection on a phone's allow-list; returns its `rc_…` id. */
+  async upsertRemoteContact(
+    deviceId: string,
+    connectionId: string,
+    c: Omit<Contact, "id">,
+  ): Promise<string> {
+    await this.sql.run(
+      `INSERT INTO remote_contacts (id, device_id, connection_id, label, can_call_device,
+         device_can_call, bypass_quiet_hours) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(device_id, connection_id) DO UPDATE SET label = excluded.label,
+         can_call_device = excluded.can_call_device, device_can_call = excluded.device_can_call,
+         bypass_quiet_hours = excluded.bypass_quiet_hours`,
+      newId("rc"),
+      deviceId,
+      connectionId,
+      c.label,
+      c.canCallDevice ? 1 : 0,
+      c.deviceCanCall ? 1 : 0,
+      c.bypassQuietHours ? 1 : 0,
+    );
+    const r = await this.sql.first<{ id: string }>(
+      "SELECT id FROM remote_contacts WHERE device_id = ? AND connection_id = ?",
+      deviceId,
+      connectionId,
+    );
+    return (r as { id: string }).id;
+  }
+
+  /** Phones (with their allow-list entry) that list this connection. */
+  async phonesForConnection(connectionId: string): Promise<{ deviceId: string; id: string }[]> {
+    const rows = await this.sql.all<{ device_id: string; id: string }>(
+      "SELECT device_id, id FROM remote_contacts WHERE connection_id = ?",
+      connectionId,
+    );
+    return rows.map((r) => ({ deviceId: r.device_id, id: r.id }));
+  }
+
+  /** Maps a key to a person on the allow-list (a user id or an `rc_…` id), or clears it. */
   async setButton(deviceId: string, index: number, userId: string | null): Promise<void> {
+    await this.sql.run(
+      "DELETE FROM remote_buttons WHERE device_id = ? AND idx = ?",
+      deviceId,
+      index,
+    );
     if (userId === null) {
       await this.sql.run("DELETE FROM buttons WHERE device_id = ? AND idx = ?", deviceId, index);
+    } else if (isRemoteContactId(userId)) {
+      await this.sql.batch([
+        { query: "DELETE FROM buttons WHERE device_id = ? AND idx = ?", params: [deviceId, index] },
+        {
+          query: "INSERT INTO remote_buttons (device_id, idx, remote_id) VALUES (?, ?, ?)",
+          params: [deviceId, index, userId],
+        },
+      ]);
     } else {
       await this.sql.run(
         `INSERT INTO buttons (device_id, idx, user_id) VALUES (?, ?, ?)
@@ -911,7 +1017,10 @@ export class Store {
 
   async listButtons(deviceId: string): Promise<ButtonMap> {
     const rows = await this.sql.all<{ idx: number; user_id: string }>(
-      "SELECT idx, user_id FROM buttons WHERE device_id = ? ORDER BY idx",
+      `SELECT idx, user_id FROM buttons WHERE device_id = ?
+       UNION ALL SELECT idx, remote_id AS user_id FROM remote_buttons WHERE device_id = ?
+       ORDER BY idx`,
+      deviceId,
       deviceId,
     );
     return new Map(rows.map((r) => [r.idx, r.user_id]));

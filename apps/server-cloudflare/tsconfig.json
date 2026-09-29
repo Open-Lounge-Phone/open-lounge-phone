@@ -9,6 +9,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/db" },
+    { "path": "../../packages/federation" },
     { "path": "../../packages/protocol" },
     { "path": "../../packages/server-app" }
   ]

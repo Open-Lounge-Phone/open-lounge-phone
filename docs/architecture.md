@@ -55,6 +55,15 @@ A household is one kind of **space** (`type`: `home`, `team` or `org`; `POST /ap
 Kids' phones and quiet hours exist only in homes; team and org spaces hold grown-ups' own phones
 and Lounge phones. A released handle stays reserved for its last owner for 90 days.
 
+**Connections.** Grown-ups reach people outside their spaces through **connections**: knock on
+`handle@host` (`POST /api/connections`), and once the other person accepts, both have an
+`active` connection. The same code handles a person on this server or on another one; another
+server is reached with signed `/fed/v1` requests (RFC 9421, Ed25519 server keys published at
+`/.well-known/openloungephone`, pinned on first use, see [federation.md](federation.md)). A
+guardian may put an active connection on a kid's phone's allow-list. `packages/federation` holds
+the web-standard crypto and message schemas; `packages/server-app/src/connections.ts` and
+`federation.ts` the server side.
+
 Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decide every call, and
 calls stay inside one household until federated connections (see
 [federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted

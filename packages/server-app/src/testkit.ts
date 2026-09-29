@@ -2,6 +2,7 @@
 // `TestServer` is one in-memory server; several can be wired together for federation tests.
 import { Store, type User } from "@openloungephone/db";
 import { migrate, openSqlite } from "@openloungephone/db/node";
+import { generateServerKey } from "@openloungephone/federation";
 import {
   encode,
   fromBase64Url,
@@ -9,7 +10,9 @@ import {
   type ServerToDevice,
   toBase64Url,
 } from "@openloungephone/protocol";
+import { Hono } from "hono";
 import { expect, vi } from "vitest";
+import { federationApp } from "./connections.ts";
 import type { Conn, ConnMemo, RoomSnapshot, ServerEnv } from "./env.ts";
 import { type ConnectionHandler, Gateway } from "./gateway.ts";
 import { createApi } from "./http.ts";
@@ -100,6 +103,8 @@ export class TestServer {
   readonly env: ServerEnv;
   readonly gateway: Gateway;
   readonly api: ReturnType<typeof createApi>;
+  /** Everything a real host serves: `/api`, `/.well-known`, `/fed/v1`. */
+  readonly root: Hono;
   readonly blobs = new Map<string, { data: ArrayBuffer; contentType: string }>();
   readonly background: Promise<unknown>[] = [];
   readonly savedRooms = new Map<string, RoomSnapshot[]>();
@@ -130,6 +135,9 @@ export class TestServer {
     };
     this.gateway = new Gateway(this.env);
     this.api = createApi(this.env, this.gateway);
+    this.root = new Hono();
+    this.root.route("/api", this.api);
+    this.root.route("/", federationApp(this.env, this.gateway));
   }
 
   /** The host part of addresses on this server. */
@@ -217,6 +225,41 @@ export class TestServer {
     conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
     await conn.next("config");
     return conn;
+  }
+}
+
+/**
+ * Servers that reach each other by host name through an in-memory "internet". `down` hosts
+ * fail like an unreachable server; `requests` records every server-to-server request.
+ */
+export class Network {
+  readonly timers = new ManualTimers();
+  readonly servers = new Map<string, TestServer>();
+  readonly down = new Set<string>();
+  readonly requests: { from: string | undefined; url: string; status: number }[] = [];
+  /** Lets a test rewrite a request in flight (e.g. to replay or tamper with it). */
+  tap?: (req: Request) => Request | Promise<Request>;
+
+  async server(host: string, opts: { env?: Partial<ServerEnv> } = {}): Promise<TestServer> {
+    const key = await generateServerKey();
+    const server = new TestServer({
+      timers: this.timers,
+      publicUrl: `https://${host}`,
+      env: { federationKey: key, fetch: (req) => this.fetch(req), ...opts.env },
+    });
+    this.servers.set(host, server);
+    return server;
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const target = this.servers.get(url.host);
+    if (!target || this.down.has(url.host)) throw new TypeError(`fetch failed: ${url.host}`);
+    const sent = this.tap ? await this.tap(req.clone()) : req;
+    const res = await target.root.fetch(sent);
+    const keyid = /keyid="([^"]+)"/.exec(req.headers.get("signature-input") ?? "")?.[1];
+    this.requests.push({ from: keyid, url: req.url, status: res.status });
+    return res;
   }
 }
 

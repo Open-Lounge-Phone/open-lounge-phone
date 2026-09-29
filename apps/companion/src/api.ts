@@ -122,6 +122,40 @@ export interface SignedInResult {
   account?: AccountInfo;
 }
 
+/** Someone you're connected with, knocked on, or blocked. */
+export interface ConnectionView {
+  id: string;
+  /** `handle@host` */
+  address: string;
+  host: string;
+  /** On another server. */
+  remote: boolean;
+  name: string;
+  state: "requested" | "active" | "declined" | "blocked";
+  /** `in` = they knocked on you; `out` = you knocked on them. */
+  direction: "in" | "out" | "none";
+  note: string | null;
+  createdAt: number;
+  expiresAt: number | null;
+}
+
+export interface ConnectionsInfo {
+  /** Your own address, to share. */
+  address: string;
+  /** Whether this server can connect to other servers. */
+  federates: boolean;
+  connections: ConnectionView[];
+  blockedServers: { id: string; host: string }[];
+}
+
+/** A connection on a phone's allow-list (its `rc_…` id is also in `contacts`). */
+export interface RemoteContactInfo {
+  id: string;
+  connectionId: string;
+  address: string;
+  name: string;
+}
+
 export interface PasskeySummary {
   id: string;
   name: string;
@@ -261,10 +295,35 @@ export function createApi(opts: ApiOptions) {
       request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
     removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),
     contacts: (deviceId: string) =>
-      request<{ contacts: ContactEntry[]; buttons: Record<string, string> }>(
-        "GET",
-        `/devices/${enc(deviceId)}/contacts`,
+      request<{
+        contacts: ContactEntry[];
+        buttons: Record<string, string>;
+        remote?: RemoteContactInfo[];
+      }>("GET", `/devices/${enc(deviceId)}/contacts`),
+    putRemoteContact: (deviceId: string, connectionId: string, contact: Omit<ContactEntry, "id">) =>
+      request<{ id: string }>(
+        "PUT",
+        `/devices/${enc(deviceId)}/remote-contacts/${enc(connectionId)}`,
+        contact,
       ),
+
+    // Connections (knock, then talk)
+    connections: () => request<ConnectionsInfo>("GET", "/connections"),
+    knock: (to: string, note?: string) =>
+      request<{ status: "sent" | "connected"; connection: ConnectionView }>(
+        "POST",
+        "/connections",
+        {
+          to,
+          ...(note ? { note } : {}),
+        },
+      ),
+    acceptConnection: (id: string) =>
+      request<ConnectionView>("POST", `/connections/${enc(id)}/accept`),
+    declineConnection: (id: string) => request<void>("POST", `/connections/${enc(id)}/decline`),
+    blockConnection: (id: string) => request<void>("POST", `/connections/${enc(id)}/block`),
+    removeConnection: (id: string) => request<void>("DELETE", `/connections/${enc(id)}`),
+    blockServer: (host: string) => request<void>("POST", "/connections/block-server", { host }),
     putContact: (deviceId: string, contact: ContactEntry) => {
       const { id, ...rest } = contact;
       return request<void>("PUT", `/devices/${enc(deviceId)}/contacts/${enc(id)}`, rest);

@@ -1,5 +1,7 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { generateServerKey } from "@openloungephone/federation";
 import type { BlobStore, Transcriber } from "@openloungephone/server-app";
 
 /** Blobs as files under `root`, with the content type in a sidecar file. */
@@ -70,3 +72,25 @@ export function openAiTranscriber(opts: {
 }
 
 export const blobDir = (dataDir: string) => join(dataDir, "blobs");
+
+/** This server's federation key: created once in DATA_DIR, readable only by its owner. */
+export async function federationKeyFile(dataDir: string): Promise<string> {
+  const path = join(dataDir, "federation-key.jwk");
+  if (existsSync(path)) return readFileSync(path, "utf8").trim();
+  const key = await generateServerKey();
+  writeFileSync(path, `${key}\n`, { mode: 0o600, flag: "wx" });
+  return key;
+}
+
+/**
+ * Outbound fetch for federation. `*.localhost` names are loopback by definition (RFC 6761), but
+ * not every resolver knows that, so they're sent to 127.0.0.1 directly (dev and interop tests).
+ */
+export function loopbackFetch(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.hostname.endsWith(".localhost")) {
+    url.hostname = "127.0.0.1";
+    return fetch(new Request(url, request));
+  }
+  return fetch(request);
+}

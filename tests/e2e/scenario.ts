@@ -11,7 +11,7 @@ export interface Target {
   setupToken: string;
 }
 
-async function socket(url: string) {
+export async function socket(url: string) {
   const ws = new WebSocket(url);
   const inbox: Msg[] = [];
   ws.addEventListener("message", (e) => inbox.push(JSON.parse(String(e.data))));

@@ -232,8 +232,24 @@ Keep this section current when finishing a milestone.
   rules outside homes. Released handles (rename or leaving the last space) stay reserved 90 days
   for their last owner (`handleAvailable`, conditional inserts). UI says "household" for homes,
   "team"/"organization" otherwise. Tests: `spaces.test.ts`; shared harness `testkit.ts`.
+- **P2 connections + knocks, local and federated (2026-09-28, F1):** migration
+  `0008_connections.sql` (additive: `connections`, `remote_contacts`, `remote_buttons`,
+  `rate_limits`, `server_keys`, `fed_nonces`, `blocked_servers`). New `packages/federation`
+  (RFC 9421 Ed25519 sign/verify via WebCrypto, key gen/load as JWK, `.well-known` schema with
+  signed rotation, `handle@host` parsing, `/fed/v1` bodies). Server: `connections.ts` (knock /
+  accept / decline / block / disconnect / block-server; same code for local and remote;
+  `federationApp` = `/.well-known/openloungephone` + `/fed/v1/{knock,connections/accept,
+  connections/remove}`), `federation.ts` (TOFU key pinning, `fedFetch`, `verifyFedRequest`:
+  ±5 min, nonce cache, operator blocklist, per-server budget), `limits.ts` (one config object).
+  Every knock answers the same (no enumeration). Kid phones have no address; guardians add active
+  connections to allow-lists (`rc_…` entries, also on speed-dial keys). Keys: CF secret
+  `FED_PRIVATE_KEY` + var `PUBLIC_URL` (deploy.ts), self-host `DATA_DIR/federation-key.jwk`,
+  `.localhost` hosts go to loopback. Protocol: `connections.changed` (additive). Companion:
+  Connections tab (address + copy + QR, Add by address, knocks inbox, waiting, blocked), allow-list
+  picker with `@host` badges. Tests: `connections.test.ts` (mutation-checked),
+  `federation/signature.test.ts`, `tests/e2e/twoServers.test.ts` (two real self-host processes).
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
-  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections → P3 federated calls → P4 public hub → P5 interop).
+  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls → P4 public hub → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
   The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across

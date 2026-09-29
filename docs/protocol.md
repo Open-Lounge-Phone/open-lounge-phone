@@ -440,6 +440,14 @@ Companion app authenticated.
 | `id` | string (len ≤64) |  |  |
 | `userId` | string (len ≤64) | yes |  |
 
+### `connections.changed`
+
+Your connections changed (a knock arrived, someone accepted or disconnected); reload them with `GET /api/connections`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
 ### `lounge.progress`
 
 Progress of your takeover of a Lounge phone, and the end of your session there.
