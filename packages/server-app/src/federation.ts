@@ -44,7 +44,7 @@ export function ownOrigin(env: ServerEnv, requestUrl: string): string {
   return new URL(env.publicUrl ?? requestUrl).origin;
 }
 
-const outbound = (env: ServerEnv) => env.fetch ?? ((r: Request) => fetch(r));
+export const outbound = (env: ServerEnv) => env.fetch ?? ((r: Request) => fetch(r));
 
 export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefined> {
   const key = await serverKey(env);

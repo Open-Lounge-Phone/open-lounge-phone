@@ -163,6 +163,11 @@ export interface PeerInfo {
   leg?: string;
   /** Remote peers: who they are, for the call log (`handle@host` or `device:<id>@host`). */
   address?: string;
+  /**
+   * Remote peers: another server's Lounge phone where one of our accounts is a guest, calling
+   * through us (`relayDial`). The only remote party a voicemail offer is sent to.
+   */
+  loungeRelay?: boolean;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */

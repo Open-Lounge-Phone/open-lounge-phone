@@ -1,6 +1,6 @@
 // Bodies of the signed `/fed/v1` requests. The sending server is the signature's key id; every
 // `from` is one of that server's accounts, so a server can only speak for its own people.
-import { CallStateMsg, RtcIce, RtcSdp } from "@openloungephone/protocol";
+import { CallStateMsg, RtcIce, RtcSdp, VoicemailOffer } from "@openloungephone/protocol";
 import { z } from "zod";
 import { HANDLE_RE } from "./address.ts";
 
@@ -82,7 +82,15 @@ export const CallEndReason = z.enum([
 /** Answer to `/fed/v1/calls`: ringing now, or refused with a reason. */
 export const CallResult = z.union([
   z.object({ state: z.literal("ringing") }),
-  z.object({ state: z.literal("ended"), reason: CallEndReason }),
+  z.object({
+    state: z.literal("ended"),
+    reason: CallEndReason,
+    /**
+     * `/fed/v1/lounge/dial` only: the guest's call can't ring through; their server's voicemail
+     * offer, for the Lounge phone to play and record (see `/api/vm/*` on the guest's server).
+     */
+    voicemail: VoicemailOffer.optional(),
+  }),
 ]);
 export type CallResult = z.infer<typeof CallResult>;
 

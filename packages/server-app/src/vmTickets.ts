@@ -10,13 +10,13 @@ import {
   LOCAL_HOST,
   type VoicemailOwner,
 } from "@openloungephone/db";
-import type { Party } from "@openloungephone/federation";
+import { baseUrlFor, type Party } from "@openloungephone/federation";
 import type { VoicemailOffer } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { greetingForPeer, receivePersonVoicemail, receiveVoicemail } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
-import { FederationError, fedFetch } from "./federation.ts";
+import { FederationError, fedFetch, outbound } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import type { Vars } from "./httpUtil.ts";
 import {
@@ -47,7 +47,12 @@ export type VmTarget =
       deviceId?: string;
       viaPhone?: string;
       name: string;
-    };
+    }
+  /**
+   * A guest at our Lounge phone called through their own server (`host`), which offered
+   * voicemail with its own ticket: greeting and message are forwarded there.
+   */
+  | { kind: "relay"; host: string; ticket: string; name: string };
 
 /** Who called, as the callee will see them. */
 export interface VmCaller {
@@ -121,6 +126,26 @@ async function targetGreeting(env: ServerEnv, t: VmTarget): Promise<Response> {
     );
   }
   if (t.kind === "device") return greetingResponse(await greetingOf(env, { deviceId: t.deviceId }));
+  if (t.kind === "relay") {
+    try {
+      const res = await outbound(env)(
+        new Request(`${baseUrlFor(t.host)}/api/vm/greeting?ticket=${encodeURIComponent(t.ticket)}`),
+      );
+      const kind = res.headers.get("olp-greeting");
+      if (res.status === 200 && (kind === "name" || kind === "custom")) {
+        return greetingResponse({
+          kind,
+          audio: {
+            data: await res.arrayBuffer(),
+            contentType: res.headers.get("content-type") ?? "audio/webm",
+          },
+        });
+      }
+    } catch (e) {
+      env.log("warn", "voicemail: relayed greeting unavailable", { error: String(e) });
+    }
+    return greetingResponse({ kind: "default" });
+  }
   const conn = await store.connections.get(t.connectionId);
   const me = conn && (await store.getAccount(conn.accountId));
   if (conn?.state !== "active" || !me) return greetingResponse({ kind: "default" });
@@ -164,6 +189,23 @@ async function deliver(
   if (from.check) {
     const entry = await store.getContact(from.check.deviceId, from.check.userId);
     if (!entry?.[from.check.field]) return 403;
+  }
+  if (target.kind === "relay") {
+    // The guest's server checks its own ticket, and delivers as them.
+    if (await store.connections.serverBlocked(target.host)) return 403;
+    try {
+      const res = await outbound(env)(
+        new Request(
+          `${baseUrlFor(target.host)}/api/vm/message?ticket=${encodeURIComponent(target.ticket)}&durationMs=${rec.durationMs}`,
+          { method: "POST", headers: { "content-type": rec.mime }, body: rec.audio },
+        ),
+      );
+      if (res.status === 201) return 201;
+      return res.status === 403 || res.status === 404 ? res.status : 502;
+    } catch (e) {
+      env.log("warn", "voicemail: relay not delivered", { error: String(e) });
+      return 502;
+    }
   }
   if (target.kind === "user" || target.kind === "device") {
     const vm = await depositVoicemail(env, live, {

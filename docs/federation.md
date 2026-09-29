@@ -143,7 +143,7 @@ change). The endpoints:
 | `POST /fed/v1/presence` | `{from, to: [handles], online, available}` — batched, opt-in | `202` |
 | `POST /fed/v1/lounge/claim` | `{from, deviceId, nonce, directory}` — the sender vouches for `from` | `{step: "press_key", expiresAt}` or `{step: "failed", reason}` |
 | `POST /fed/v1/lounge/progress` | `{to: handle, deviceId, step, reason?, expiresAt?}` | `202` |
-| `POST /fed/v1/lounge/dial` | `{callId, for: handle, deviceId, deviceLabel, to: address}` | like `/calls` |
+| `POST /fed/v1/lounge/dial` | `{callId, for: handle, deviceId, deviceLabel, to: address}` | like `/calls`; an `ended` answer may carry the guest's server's `voicemail` offer |
 | `POST /fed/v1/lounge/leave` | `{from, deviceId}` | `202` |
 
 Budgets per sending server (defaults): 300 requests a minute, 500 knocks a day.
@@ -204,7 +204,11 @@ dot; anything older than an hour shows as unknown. Turning it off sends "offline
   signed `POST /fed/v1/voicemail`, `kind=person` for a person). The callee's server checks the
   connection (and a phone's allow-list) again, stores and transcribes it, and puts it in the
   person's own inbox or tells the phone's guardians — exactly like a local voicemail. (The older
-  `POST /api/connections/:id/voicemail?deviceId=` still works for a shared phone.)
+  `POST /api/connections/:id/voicemail?deviceId=` still works for a shared phone.) A guest at
+  another server's Lounge phone gets voicemail too: their own server issues the offer (in the
+  `/fed/v1/lounge/dial` answer or the ended `call.state` on the stream — the only offers that
+  cross servers), and the Lounge phone's server forwards the greeting and the message to
+  `/api/vm/*` on the guest's server, which delivers it as them.
 - **Between households on one server** the same code runs with host `''`: the two hubs relay to
   each other directly (on Cloudflare, household Durable Object to household Durable Object).
 

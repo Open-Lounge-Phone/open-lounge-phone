@@ -22,14 +22,14 @@ export async function socket(url: string) {
   return {
     ws,
     send: (m: Msg) => ws.send(JSON.stringify(m)),
-    next: (t: string) =>
+    next: (t: string, timeout = 10_000) =>
       vi.waitFor(
         () => {
           const i = inbox.findIndex((m) => m.t === t);
           if (i < 0) throw new Error(`waiting for ${t}; inbox: ${JSON.stringify(inbox)}`);
           return inbox.splice(0, i + 1)[i] as Msg;
         },
-        { timeout: 10_000 },
+        { timeout },
       ),
   };
 }

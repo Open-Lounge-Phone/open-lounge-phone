@@ -188,7 +188,8 @@ export async function voicemailAcross(jesse: Person, bob: Person) {
 
 async function endedState(app: Awaited<ReturnType<typeof appSocket>>) {
   for (;;) {
-    const m = await app.next("call.state");
+    // Long enough for an unanswered call to ring out (the callee's ring time, 10–60 s).
+    const m = await app.next("call.state", 45_000);
     if (m.state === "ended") return m;
   }
 }

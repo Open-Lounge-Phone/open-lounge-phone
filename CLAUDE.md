@@ -325,7 +325,12 @@ Keep this section current when finishing a milestone.
   Browser phone: `voicemail` device state, MENU → Voicemail → 1 name / 2 greeting / 3 default.
   Fixes: presence rate limit coalesces (hub alarm), `#invite=` on hashchange, "Use this phone"
   waits for the socket. Tests: `voicemail.test.ts` (mutation-checked), e2e `noAnswerAcross`,
-  live checks 22–23 (not run against production). Guest-at-Lounge relay calls don't offer voicemail yet.
+  live checks 22–23 (not run against production). A guest at another server's Lounge phone gets
+  the offer too: their server issues it (relayDial `room.vm`, sent only over a `loungeRelay`
+  FedConn or in the `/fed/v1/lounge/dial` result), the phone's server wraps it (`relay` target)
+  and forwards greeting and message to `/api/vm/*` there. Remote-callee and guest rooms ring
+  with a 65 s backstop so the callee's server decides. The CF e2e failure was the harness's 10 s
+  message wait vs. a 10 s ring (`socket.next(t, timeout)`); 0012 verified on local D1 with data.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
   (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (code; not deployed) → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.

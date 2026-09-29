@@ -475,6 +475,59 @@ describe("across servers", () => {
     expect((await b.store.callLog(bob.account.id, "jesse@a.test"))[0]?.voicemailId).toBeTruthy();
   });
 
+  it("a guest at another server's Lounge phone gets voicemail too, delivered as them", async () => {
+    const jesse = await a.person("jesse", "Jesse");
+    const carol = await a.person("carol", "Carol");
+    const bob = await b.person("bob", "Bob");
+    await connect(a, jesse, a, carol);
+    const lobby = await b.pairDevice(bob.token, "Lobby", { kind: "lounge" });
+    const deviceId = lobby.deviceId as string;
+    const phone = await b.connectDevice(deviceId, lobby.key?.pair as CryptoKeyPair);
+    const idle = await phone.next("lounge.idle");
+    expectStatus(
+      await b.http("/lounge/settings", { method: "PUT", token: bob.token, body: { guests: true } }),
+      204,
+    );
+    const claimed = await a.http("/lounge/remote", {
+      token: jesse.token,
+      body: { host: "b.test", deviceId, nonce: idle.nonce },
+    });
+    expect(claimed.json).toMatchObject({ step: "press_key" });
+    phone.write({ t: "lounge.press", index: (await phone.next("lounge.challenge")).index });
+    await phone.next("lounge.session");
+    await vi.waitFor(() =>
+      expect(phone.all("config").at(-1)?.buttons).toEqual([{ index: 0, label: "Carol" }]),
+    );
+    await a.http("/voicemail/greeting?kind=name&durationMs=1000", {
+      method: "PUT",
+      token: carol.token,
+      raw: new Uint8Array([8, 8]),
+      type: "audio/webm",
+    });
+    const cApp = await a.connectApp(carol.token);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    await cApp.next("call.ringing");
+    net.timers.advance(RING_TIMEOUT_MS); // Carol doesn't answer
+    const end = await phone.nextState("ended");
+    expect(end).toMatchObject({ reason: "timeout", voicemail: { name: "Carol" } });
+    const ticket = end.voicemail?.ticket as string;
+    // The Lounge phone's server forwards to Jesse's: Carol's greeting, then the message.
+    expect(await greeting(b, ticket)).toMatchObject({
+      status: 200,
+      kind: "name",
+      bytes: new Uint8Array([8, 8]),
+    });
+    expectStatus(await leave(b, ticket), 201);
+    expect(await cApp.next("voicemail.inbox")).toMatchObject({ from: "Jesse" });
+    expect((await a.http("/voicemails", { token: carol.token })).json).toMatchObject([
+      { toUser: carol.user.id, fromLabel: "Jesse" },
+    ]);
+    // Nothing is left on the shared phone's server.
+    expect(await b.store.listVoicemails(bob.household.id)).toEqual([]);
+    expectStatus(await leave(b, ticket), 404);
+  });
+
   it("fetches a greeting only with an active connection", async () => {
     const jesse = await a.person("jesse", "Jesse");
     const eve = await a.person("eve", "Eve");

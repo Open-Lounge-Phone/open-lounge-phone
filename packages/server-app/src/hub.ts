@@ -87,18 +87,26 @@ class FedConn implements Conn {
   private readonly env: ServerEnv;
   private readonly to: { host: string; householdId?: string };
   private readonly leg: string | undefined;
+  private readonly offers: boolean;
 
-  constructor(env: ServerEnv, to: { host: string; householdId?: string }, leg?: string) {
+  constructor(
+    env: ServerEnv,
+    to: { host: string; householdId?: string },
+    leg?: string,
+    offers = false,
+  ) {
     this.env = env;
     this.to = to;
     this.leg = leg;
+    this.offers = offers;
   }
 
   send(msg: ServerToDevice | ServerToApp): void {
     if (msg.t !== "call.state" && msg.t !== "rtc.sdp" && msg.t !== "rtc.ice") return;
     if (msg.t === "call.state" && msg.state === "ringing") return;
-    // A voicemail offer is for a local caller only; it never crosses to the other server.
-    if (msg.t === "call.state" && msg.voicemail) {
+    // A voicemail offer never crosses to the other server, except to a Lounge phone there where
+    // one of our accounts is a guest (it relays the offer to the phone; see `remoteSignal`).
+    if (msg.t === "call.state" && msg.voicemail && !this.offers) {
       const { voicemail: _vm, ...rest } = msg;
       msg = rest;
     }
@@ -1756,6 +1764,7 @@ export class HouseholdHub {
     peerHousehold?: string | undefined;
     leg?: string;
     address?: string;
+    loungeRelay?: boolean;
   }): Peer {
     return this.remoteFromInfo({
       session: newId("s"),
@@ -1768,6 +1777,7 @@ export class HouseholdHub {
       ...(info.peerHousehold ? { peerHousehold: info.peerHousehold } : {}),
       ...(info.leg ? { leg: info.leg } : {}),
       ...(info.address ? { address: info.address } : {}),
+      ...(info.loungeRelay ? { loungeRelay: true } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
     } as PeerInfo);
@@ -1783,6 +1793,7 @@ export class HouseholdHub {
         this.env,
         { host, ...(info.peerHousehold ? { householdId: info.peerHousehold } : {}) },
         info.leg,
+        info.loungeRelay === true,
       ),
     };
   }
@@ -2065,6 +2076,7 @@ export class HouseholdHub {
       const party = remote === room.caller ? "caller" : "callee";
       if (msg.t === "call.state") {
         if (msg.state === "ended") {
+          if (msg.voicemail && party === "callee") this.relayOffer(room, host, msg.voicemail);
           return this.apply(room, { type: "end", reason: msg.reason ?? "hangup" });
         }
         if (msg.state === "connecting" && party === "callee") {
@@ -2201,7 +2213,8 @@ export class HouseholdHub {
       label: entry.label,
       address: entry.id,
     });
-    const room = this.openRoom(device, remote.key);
+    // The guest's server (and the callee's) decide when it stops ringing; this is a backstop.
+    const room = this.openRoom(device, remote.key, undefined, MAX_RING_SECONDS * 1000 + 5_000);
     room.calleePeer = remote;
     this.roomsDirty = true;
     await calls.register(guest.host, room.id, this.householdId);
@@ -2215,9 +2228,27 @@ export class HouseholdHub {
     };
     void placeGuestDial(this.env, guest.host, body).then((r) =>
       r.state === "ended"
-        ? this.run(() => this.apply(room, { type: "end", reason: r.reason }))
+        ? this.run(() => {
+            if (r.voicemail) this.relayOffer(room, guest.host, r.voicemail);
+            return this.apply(room, { type: "end", reason: r.reason });
+          })
         : undefined,
     );
+  }
+
+  /**
+   * A guest's call from our Lounge phone went unanswered and their server offered voicemail:
+   * the phone gets an offer of ours that forwards to theirs (their server delivers it as them).
+   */
+  private relayOffer(room: Room, host: string, offer: VoicemailOffer): void {
+    const phone = room.caller;
+    const guest = phone.kind === "device" ? phone.lounge?.session?.guest : undefined;
+    if (!guest || guest.host !== host || room.calleePeer?.host !== host) return;
+    room.vm = {
+      target: { kind: "relay", host, ticket: offer.ticket, name: offer.name },
+      from: { label: guest.name.slice(0, 24), address: `device:${phone.id}` },
+    };
+    this.roomsDirty = true;
   }
 
   /**
@@ -2239,23 +2270,55 @@ export class HouseholdHub {
         label: req.deviceLabel,
         leg: req.callId,
         address: `device:${req.deviceId}@${req.host}`,
+        loungeRelay: true,
       });
       if (this.busy(caller.key)) return { state: "ended", reason: "busy" };
       const account = (await store.getAccount(conn.accountId)) as Account;
       if (await fairUseProblem(this.env, account.id, "call")) {
         return { state: "ended", reason: "denied" };
       }
+      // Voicemail if it goes unanswered: left as this account, offered to the Lounge phone.
+      const self = (await primaryHousehold(this.env, account.id))?.user;
+      const from: VmCaller = {
+        ...(self ? { userId: self.id } : {}),
+        payer: account.id,
+        label: account.name.slice(0, 24),
+        address: caller.address as string,
+      };
+      const here =
+        conn.peerHost === LOCAL_HOST
+          ? await store.membership(conn.peerAccount, this.householdId)
+          : undefined;
+      const vm: NonNullable<Room["vm"]> = {
+        target: here
+          ? { kind: "user", userId: here.id, name: here.name }
+          : {
+              kind: "connection",
+              connectionId: conn.id,
+              name: (conn.peerName || conn.peerHandle).slice(0, 24),
+            },
+        from,
+      };
+      const refuse = async (reason: "busy" | "unreachable"): Promise<RingResult> => {
+        const voicemail = await this.offer(vm, reason, this.env.now());
+        return { state: "ended", reason, ...(voicemail ? { voicemail } : {}) };
+      };
       let peerHousehold: string | undefined;
       if (conn.peerHost === LOCAL_HOST) {
-        const here = await store.membership(conn.peerAccount, this.householdId);
         if (here) {
           // Someone in this household: ring them here (and wherever else they are).
           const targets = this.reachable(here.id);
           const plans = await this.branchesFor(here.id);
-          if (!targets.length && !plans.length) return { state: "ended", reason: "unreachable" };
-          if (this.busy(userKey(here.id))) return { state: "ended", reason: "busy" };
-          const room = this.openRoom(caller, userKey(here.id));
+          if (!targets.length && !plans.length) return refuse("unreachable");
+          if (this.busy(userKey(here.id))) return refuse("busy");
+          const room = this.openRoom(
+            caller,
+            userKey(here.id),
+            undefined,
+            await this.personRingMs(here.id),
+          );
           room.payer = account.id;
+          room.vm = vm;
           await calls.register(req.host, req.callId, this.householdId);
           this.ringAll(room, targets, plans, account.name.slice(0, 24));
           return { state: "ringing" };
@@ -2272,10 +2335,11 @@ export class HouseholdHub {
         leg,
         address: `${conn.peerHandle}@${conn.peerHost || ownHost(this.env)}`,
       });
-      if (this.busy(callee.key)) return { state: "ended", reason: "busy" };
-      const room = this.openRoom(caller, callee.key);
+      if (this.busy(callee.key)) return refuse("busy");
+      const room = this.openRoom(caller, callee.key, undefined, MAX_RING_SECONDS * 1000 + 5_000);
       room.payer = account.id;
       room.calleePeer = callee;
+      room.vm = vm;
       this.roomsDirty = true;
       await calls.register(req.host, req.callId, this.householdId);
       await calls.register(conn.peerHost, leg, this.householdId);
