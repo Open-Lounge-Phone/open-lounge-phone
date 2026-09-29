@@ -26,6 +26,11 @@
 //     --turnstile-site-key <key> --turnstile-secret <secret> \
 //     --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>]
 //
+// Secrets can also come from the environment instead of flags (flags win), so they stay out of
+// shell history and `ps`: TURN_KEY_ID, TURN_KEY_API_TOKEN, SFU_APP_ID, SFU_APP_SECRET,
+// TURNSTILE_SITE_KEY, TURNSTILE_SECRET. `npx openloungephone deploy cloudflare` (apps/cli) wraps
+// this script with prompts, a preflight and a summary, and passes secrets only that way.
+//
 // Idempotent: creates the D1 database and R2 bucket only if missing, applies pending
 // migrations, deploys the Worker on the custom domain, and on first run sets a one-time
 // SETUP_TOKEN secret and prints the setup link. It also generates the instance's federation key
@@ -63,6 +68,16 @@ const { values: args } = parseArgs({
   },
 });
 
+// Secrets: a flag, else the environment (never printed).
+const fromEnv = (flag: keyof typeof args, name: string): string | undefined => {
+  const v = (args[flag] as string | undefined) ?? process.env[name];
+  return v?.trim() || undefined;
+};
+const turnKeyId = fromEnv("turn-key-id", "TURN_KEY_ID");
+const turnKeyToken = fromEnv("turn-key-token", "TURN_KEY_API_TOKEN");
+const turnstileSiteKey = fromEnv("turnstile-site-key", "TURNSTILE_SITE_KEY");
+const turnstileSecret = fromEnv("turnstile-secret", "TURNSTILE_SECRET");
+
 const instance = args.instance ?? "";
 const domain = args.domain ?? "";
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(instance) || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
@@ -88,11 +103,11 @@ interface InstanceState {
   sfuSet?: boolean;
 }
 
-/** SFU credentials from the flags, else from instances/sfu.env (never printed). */
+/** SFU credentials from the flags or environment, else instances/sfu.env (never printed). */
 function sfuCredentials(): { id: string; secret: string } | undefined {
-  if (args["sfu-app-id"] && args["sfu-app-secret"]) {
-    return { id: args["sfu-app-id"], secret: args["sfu-app-secret"] };
-  }
+  const id = fromEnv("sfu-app-id", "SFU_APP_ID");
+  const secret = fromEnv("sfu-app-secret", "SFU_APP_SECRET");
+  if (id && secret) return { id, secret };
   const file = `${INSTANCES}/sfu.env`;
   if (!existsSync(file)) return undefined;
   const vars = Object.fromEntries(
@@ -126,7 +141,7 @@ const previous: Partial<InstanceState> = existsSync(statePath)
   ? JSON.parse(readFileSync(statePath, "utf8"))
   : {};
 
-const turnNow = !!(args["turn-key-id"] && args["turn-key-token"]);
+const turnNow = !!(turnKeyId && turnKeyToken);
 if (openSignup && !turnNow && !previous.turnSet) {
   console.error(
     "A public instance (--open-signup) needs TURN so people on different networks can talk.\n" +
@@ -210,7 +225,7 @@ const config = {
     PUBLIC_URL: `https://${domain}`,
     // Public instances get the hub's fair-use allowance unless told otherwise.
     ...(openSignup && args["fair-use"] !== "none" ? { FAIR_USE: "hub" } : {}),
-    ...(args["turnstile-site-key"] ? { TURNSTILE_SITE_KEY: args["turnstile-site-key"] } : {}),
+    ...(turnstileSiteKey ? { TURNSTILE_SITE_KEY: turnstileSiteKey } : {}),
     ...(args.operator ? { OPERATORS: args.operator } : {}),
     ...(sponsorUrl ? { SPONSOR_URL: sponsorUrl } : {}),
     ...(funding !== undefined ? { FUNDING_BALANCE_USD: funding } : {}),
@@ -248,15 +263,15 @@ if (!fedKeySet) {
   fedKeySet = true;
 }
 let turnstileSet = previous.turnstileSet === true;
-if (args["turnstile-secret"]) {
+if (turnstileSecret) {
   step("setting the Turnstile secret");
-  wrangler(["secret", "put", "TURNSTILE_SECRET", "-c", configPath], args["turnstile-secret"]);
+  wrangler(["secret", "put", "TURNSTILE_SECRET", "-c", configPath], turnstileSecret);
   turnstileSet = true;
 }
 if (turnNow) {
   step("setting TURN secrets");
-  wrangler(["secret", "put", "TURN_KEY_ID", "-c", configPath], args["turn-key-id"]);
-  wrangler(["secret", "put", "TURN_KEY_API_TOKEN", "-c", configPath], args["turn-key-token"]);
+  wrangler(["secret", "put", "TURN_KEY_ID", "-c", configPath], turnKeyId as string);
+  wrangler(["secret", "put", "TURN_KEY_API_TOKEN", "-c", configPath], turnKeyToken as string);
 }
 
 const sfu = sfuCredentials();

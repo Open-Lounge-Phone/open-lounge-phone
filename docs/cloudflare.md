@@ -22,20 +22,35 @@ What gets created:
 ```sh
 npm install && npm run build
 npx wrangler login                     # once
-cd apps/server-cloudflare
-npm run deploy:instance -- --instance home --domain phone.example.com
+npx openloungephone deploy cloudflare  # asks for the rest
 ```
 
-The script is idempotent. It creates the D1 database `openloungephone-<instance>` and the R2
-bucket `openloungephone-<instance>-voicemail` if they're missing, applies migrations, and
-deploys the Worker `openloungephone-<instance>` on your custom domain (the domain must be a
-zone in the same Cloudflare account). On first run it sets a one-time `SETUP_TOKEN` and prints
-your setup link. It also generates the instance's **federation key** once (secret
-`FED_PRIVATE_KEY`; other servers pin its public half, so it's never regenerated) and sets
-`PUBLIC_URL=https://<domain>`, the host in everyone's `name@host` address. Account-specific IDs
-go to `apps/server-cloudflare/instances/` (gitignored).
+The CLI (`apps/cli`, run from this repository) asks for the instance name, the domain and
+whether sign-up is open, then for the optional keys — a Realtime **TURN** key (calls across
+networks; required for open sign-up), an **SFU** app (rooms of more than 4) and **Turnstile**
+(open sign-up) — **without echoing them**. Keys already in the environment are used without
+asking (`TURN_KEY_ID`, `TURN_KEY_API_TOKEN`, `SFU_APP_ID`, `SFU_APP_SECRET`,
+`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET`); secrets are never taken as command-line flags. Before
+changing anything it runs a preflight — the web apps are built, wrangler is logged in, which
+account (set `CLOUDFLARE_ACCOUNT_ID` if you have several), and that every resource it will
+touch is named `openloungephone-<instance>…` — and shows a summary to confirm. Afterwards it
+checks the new deployment (`openloungephone status`). Non-interactive:
 
-Options:
+```sh
+TURN_KEY_ID=… TURN_KEY_API_TOKEN=… npx openloungephone deploy cloudflare \
+  --instance home --domain phone.example.com --yes      # --dry-run: preflight and summary only
+```
+
+`npx openloungephone help deploy` lists every option. `npx openloungephone doctor` checks
+Node, the build, wrangler and your login; `npx openloungephone status https://<domain>` checks
+a running instance (health, versions, federation key).
+
+Under the hood the CLI runs `scripts/deploy.ts`, which you can also run directly
+(`npm run deploy:instance -- --instance home --domain phone.example.com` in
+`apps/server-cloudflare`; it reads the same environment variables).
+
+Options (of `scripts/deploy.ts`; the CLI takes the same ones, except that the TURN, SFU and
+Turnstile keys come only from the environment or its prompts):
 - `--turn-key-id <id> --turn-key-token <token>`: TURN relay for calls across networks. Create
   a key in the dashboard under Realtime → TURN.
 - `--sfu-app-id <id> --sfu-app-secret <secret>`: the rooms' media relay (dashboard → Realtime →
@@ -62,10 +77,8 @@ Options:
 The public hub is deployed with (see [hub.md](hub.md)):
 
 ```sh
-npm run deploy:instance -- --instance hub --domain hub.openloungephone.app --open-signup \
-  --turn-key-id <id> --turn-key-token <token> \
-  --turnstile-site-key <key> --turnstile-secret <secret> \
-  --operator <your handle> --funding-balance 150
+npx openloungephone deploy cloudflare --instance hub --domain hub.openloungephone.app \
+  --open-signup --operator <your handle> --funding-balance 150   # asks for TURN and Turnstile
 ```
 
 Re-run the same command after pulling updates to migrate and redeploy.
@@ -85,7 +98,8 @@ OLP_E2E_URL=http://localhost:8787 OLP_E2E_SETUP_TOKEN=dev-token npx vitest run t
 ```
 
 Two local instances federating with each other (the interop scenario on Workers: knock, accept,
-cross-server call, voicemail, block, and the server-pair stream closing after a minute idle):
+cross-server call, voicemail, block, and the server-pair stream closing after a minute idle; CI
+runs it on every push in the `Interop` workflow, with no Cloudflare account):
 
 ```sh
 npm run build

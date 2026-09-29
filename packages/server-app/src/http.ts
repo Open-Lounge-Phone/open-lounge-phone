@@ -17,7 +17,8 @@ import {
   sha256,
   type User,
 } from "@openloungephone/db";
-import { Id } from "@openloungephone/protocol";
+import { FEDERATION_VERSION } from "@openloungephone/federation";
+import { Id, PROTOCOL_VERSION } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -31,7 +32,7 @@ import {
 import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { capReached } from "./fairUse.ts";
-import { FederationError, fedFetch, ownHost } from "./federation.ts";
+import { FederationError, fedFetch, ownHost, SOFTWARE } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
@@ -173,7 +174,15 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   const { store } = env;
   const api = new Hono<Vars>();
 
-  api.get("/health", (c) => c.json({ ok: true }));
+  /** For monitors and `openloungephone status`: up, and which software and protocol versions. */
+  api.get("/health", (c) =>
+    c.json({
+      ok: true,
+      software: SOFTWARE,
+      protocol: PROTOCOL_VERSION,
+      federation: env.federationKey ? FEDERATION_VERSION : null,
+    }),
+  );
 
   // --- first-run setup ------------------------------------------------------
 

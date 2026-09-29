@@ -29,7 +29,11 @@ it("pairs a device over real sockets and calls both ways", async () => {
 });
 
 it("serves the API and rejects unknown socket paths", async () => {
-  expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true });
+  expect(await (await fetch(`${base}/api/health`)).json()).toMatchObject({
+    ok: true,
+    software: expect.stringMatching(/^openloungephone\//),
+    protocol: 1,
+  });
   const ws = new WebSocket(`${base.replace("http", "ws")}/ws/nope`);
   await new Promise((resolve) => ws.addEventListener("error", resolve));
 });

@@ -9,14 +9,27 @@ companion app, relayed by your own TURN server only when a direct path is imposs
 > The Docker packaging has not been build-tested yet; please report issues.
 
 ```sh
-git clone <this repo> openloungephone && cd openloungephone
-cp .env.example .env        # edit PUBLIC_URL, TURN_URLS, TURN_SECRET
+git clone https://github.com/Open-Lounge-Phone/open-lounge-phone.git openloungephone
+cd openloungephone && npm install
+npx openloungephone doctor          # Node, Docker, Docker Compose
+npx openloungephone selfhost init   # asks a few questions, writes compose.yaml and .env
 docker compose up -d
-docker compose logs openloungephone   # shows the one-time setup link
+docker compose logs openloungephone # shows the one-time setup link
 ```
+
+`selfhost init` asks for the public URL and whether to bundle a **TURN relay** (coturn, for
+calls across networks) and **LiveKit** (rooms of more than 4); both are compose profiles that
+`.env`'s `COMPOSE_PROFILES` turns on. It writes `.env` with fresh random secrets (`TURN_SECRET`,
+`LIVEKIT_API_SECRET`; mode 600) and never overwrites existing files without `--force`.
+Non-interactive: `npx openloungephone selfhost init --public-url phone.example.com --coturn
+--yes` (`--dir <path>` writes elsewhere; outside this checkout the image is built from the git
+repository). `npx openloungephone help selfhost` lists every option. Prefer to do it by hand?
+Copy `.env.example` to `.env`, edit it, and use the repository's `compose.yaml`.
 
 Open the setup link, create your household, then pair a phone: lift its handset, and it shows a
 6-digit code on its status strip and reads it aloud; enter the code in the companion app.
+Check the server from anywhere with `npx openloungephone status https://phone.example.com`
+(health, versions, federation key).
 
 ## Without Docker
 
@@ -39,7 +52,7 @@ Configuration is by environment variable:
 | `TRANSCRIBE_URL` | unset | OpenAI-compatible `/v1/audio/transcriptions` endpoint for voicemail transcripts |
 | `TRANSCRIBE_MODEL`, `TRANSCRIBE_API_KEY` | `whisper-1`, unset | Passed to that endpoint |
 | `OPEN_SIGNUP` | unset (off) | `1` lets anyone create an account (a passkey, a handle and their own household). Off: people join only through invites; the first-run setup link still creates the first household |
-| `FEDERATION` | on | Connect with people on other Open Lounge Phone servers. `0` turns it off. Needs `PUBLIC_URL` to be the `https://` name other servers reach you at. The server key lives in `DATA_DIR/federation-key.jwk` (back it up; other servers pin it) |
+| `FEDERATION` | on | Connect with people on other Open Lounge Phone servers. `0` turns it off. Needs `PUBLIC_URL` to be the `https://` name other servers reach you at (a server on a `localhost` URL only federates with other `localhost` servers; a public one never contacts loopback, IP-literal or local-network names). The server key lives in `DATA_DIR/federation-key.jwk` (back it up; other servers pin it) |
 | `FAIR_USE`, `FAIR_USE_*` | unset (unlimited) | A fair-use allowance for a public server: `FAIR_USE=hub` applies the hub's defaults; `FAIR_USE_CALL_MINUTES`, `_VOICEMAILS`, `_VOICEMAIL_MB`, `_KNOCKS`, `_PHONES_PER_SPACE`, `_SPACES_PER_ACCOUNT` set or override one (a number, or `unlimited`). See [hub.md](hub.md) |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET` | unset | Cloudflare Turnstile on sign-up (both needed) |
 | `OPERATORS` | unset | Comma-separated handles who see the Operator view |

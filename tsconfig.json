@@ -32,6 +32,9 @@
       "path": "apps/server-cloudflare"
     },
     {
+      "path": "apps/cli"
+    },
+    {
       "path": "tests"
     }
   ]

@@ -1,0 +1,17 @@
+{
+  "name": "openloungephone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open Lounge Phone command line: deploy to your Cloudflare account, set up a self-hosted server, check a server's status, and check this machine.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "openloungephone": "bin/openloungephone.js"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@openloungephone/federation": "0.0.0"
+  }
+}
