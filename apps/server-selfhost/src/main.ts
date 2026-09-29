@@ -29,6 +29,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import {
   blobDir,
   federationKeyFile,
+  federationKeyStore,
   fileBlobStore,
   loopbackFetch,
   openAiTranscriber,
@@ -103,7 +104,12 @@ export async function start(config: Config) {
     ...(config.hub ? { hub: config.hub } : {}),
     trustProxy: config.trustProxy,
     refuseRecordedCalls: config.refuseRecordedCalls,
-    ...(config.federation ? { federationKey: await federationKeyFile(config.dataDir) } : {}),
+    ...(config.federation
+      ? {
+          federationKey: await federationKeyFile(config.dataDir),
+          federationKeys: federationKeyStore(config.dataDir),
+        }
+      : {}),
     fetch: loopbackFetch,
     now: () => Date.now(),
     iceServers: () => buildIceServers(config.ice, Date.now()),

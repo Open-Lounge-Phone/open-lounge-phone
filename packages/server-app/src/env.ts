@@ -50,6 +50,24 @@ export interface CallLinks {
   roomJoin(host: string, body: RoomJoinBody, callerHousehold: string): Promise<RoomJoinResult>;
 }
 
+/** This server's own federation key(s), as stored. */
+export interface StoredFederationKeys {
+  /** The current private key (JWK JSON, as `generateServerKey` makes it). Never logged. */
+  privateKey: string;
+  /** A rotation in (or past) its overlap window: the key it replaced and the hand-over. */
+  rotation?: import("@openloungephone/federation").KeyRotation & {
+    /** The 0.1 statement (`rotation_sig`) for peers running 0.1. */
+    legacy_sig: string;
+  };
+}
+
+/** Storage for this server's own key, so an operator can rotate it without a redeploy. */
+export interface FederationKeyStore {
+  load(): Promise<StoredFederationKeys | undefined>;
+  /** Saves `next` only if the current public key is still `expectPublicKey`. */
+  save(next: StoredFederationKeys, expectPublicKey: string): Promise<boolean>;
+}
+
 /** Everything the server needs from its host platform. Node and Workers each provide one. */
 export interface ServerEnv {
   store: Store;
@@ -71,6 +89,12 @@ export interface ServerEnv {
    * connections between its own accounts still work.
    */
   federationKey?: string;
+  /**
+   * Where the server's own key lives once it can rotate (self-host: files in DATA_DIR). Without
+   * it, `federationKey` is the root key and a rotated key is kept sealed in the database
+   * (`fed_own_key`; the Cloudflare setup). See `ownKeys` in federation.ts.
+   */
+  federationKeys?: FederationKeyStore;
   /** Outbound HTTP for federation (tests route between in-memory servers). Default: `fetch`. */
   fetch?: (request: Request) => Promise<Response>;
   /** Overrides for rate limits (see `DEFAULT_LIMITS`). */

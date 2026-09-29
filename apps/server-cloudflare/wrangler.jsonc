@@ -41,6 +41,9 @@
   //   SETUP_TOKEN          one-time first-run token; open https://<worker>/#setup=<token>
   //   TURN_KEY_ID          Cloudflare Realtime TURN key id (optional; STUN-only without it)
   //   TURN_KEY_API_TOKEN   its API token
-  //   FED_PRIVATE_KEY      federation key (Ed25519 JWK); deploy.ts generates it once
+  //   FED_PRIVATE_KEY      federation root key (Ed25519 JWK); deploy.ts generates it once and
+  //                        never changes it. After an operator rotates the key (Operator view or
+  //                        `openloungephone federation rotate-key`), the signing key lives in D1
+  //                        (fed_own_key), sealed with a key derived from this secret.
   // Vars set by deploy.ts: PUBLIC_URL (https://<domain>), OPEN_SIGNUP.
 }

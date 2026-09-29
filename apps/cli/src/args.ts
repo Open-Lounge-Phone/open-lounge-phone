@@ -37,6 +37,7 @@ export type Command =
   | { kind: "selfhost-init"; opts: SelfhostOptions }
   | { kind: "status"; url: string; json: boolean }
   | { kind: "doctor" }
+  | { kind: "federation-rotate-key"; opts: import("./federation.ts").RotateOptions }
   | { kind: "error"; message: string };
 
 /** Secrets never travel on the command line (shell history, `ps`): env vars or prompts only. */
@@ -46,6 +47,8 @@ const SECRET_FLAGS = [
   "sfu-app-id",
   "sfu-app-secret",
   "turnstile-secret",
+  "token",
+  "session-token",
 ];
 
 const err = (message: string): Command => ({ kind: "error", message });
@@ -65,8 +68,8 @@ export function parseCli(argv: string[]): Command {
   if (secret) {
     return err(
       `${secret.split("=")[0]}: secrets aren't taken as flags (they'd end up in your shell ` +
-        "history). Set TURN_KEY_ID/TURN_KEY_API_TOKEN, SFU_APP_ID/SFU_APP_SECRET or " +
-        "TURNSTILE_SECRET in the environment, or answer the prompts.",
+        "history). Set TURN_KEY_ID/TURN_KEY_API_TOKEN, SFU_APP_ID/SFU_APP_SECRET, " +
+        "TURNSTILE_SECRET or OLP_SESSION_TOKEN in the environment, or answer the prompts.",
     );
   }
   try {
@@ -83,6 +86,8 @@ export function parseCli(argv: string[]): Command {
         if (!normalized) return err(`not a server URL: ${url}`);
         return { kind: "status", url: normalized, json: values.json === true };
       }
+      case "federation":
+        return parseFederation(rest);
       case "doctor": {
         const { positionals } = parse(rest, {});
         if (positionals.length) return err("usage: openloungephone doctor");
@@ -143,6 +148,24 @@ function parseDeploy(argv: string[]): Command {
       : {}),
   };
   return { kind: "deploy", target: "cloudflare", opts };
+}
+
+function parseFederation(argv: string[]): Command {
+  const { values, positionals } = parse(argv, {
+    url: { type: "string" },
+    force: { type: "boolean" },
+    yes: { type: "boolean", short: "y" },
+  });
+  const [sub, extra] = positionals;
+  if (sub !== "rotate-key" || extra || !values.url) {
+    return err("usage: openloungephone federation rotate-key --url <server> [--force] [--yes]");
+  }
+  const url = normalizeUrl(values.url);
+  if (!url) return err(`--url: not a server URL: ${values.url}`);
+  return {
+    kind: "federation-rotate-key",
+    opts: { url, force: values.force === true, yes: values.yes === true },
+  };
 }
 
 function parseSelfhost(argv: string[]): Command {
@@ -213,6 +236,7 @@ Usage:
   openloungephone selfhost init [options]       write compose.yaml and .env for Docker
   openloungephone status <url>                  health, discovery and version of a server
   openloungephone doctor                        check this machine (Node, wrangler, Docker)
+  openloungephone federation rotate-key --url <server>   rotate a server's federation key
   openloungephone help <command>                more about one command
 
 Run it from this repository: npx openloungephone … (after npm install), or
@@ -257,6 +281,19 @@ steps. Asks for anything not given.
 
 Checks a server: /api/health, /.well-known/openloungephone (federation key and version) and
 the software version. Exits 1 if the server isn't healthy.`,
+  federation: `openloungephone federation rotate-key --url <server> [--force] [--yes]
+
+Rotates a server's federation key (Cloudflare or self-hosted; the same as the Operator view's
+"Rotate key" button). The server makes the new key and signs with it at once; its
+/.well-known/openloungephone publishes the old key's signed hand-over for 7 days, so other
+servers re-pin by themselves. Only fingerprints are printed, never keys.
+
+Needs an operator's session: OLP_SESSION_TOKEN in the environment (Operator view → "Copy
+session for the CLI"), or you're asked for it without echo. Never a flag.
+
+  --url <server>   the server, e.g. https://phone.example.com (or http://localhost:8787)
+  --force          rotate again although the last rotation is still in its overlap window
+  -y, --yes        don't ask for confirmation`,
   doctor: `openloungephone doctor
 
 Checks this machine: Node version, this repository's install and build, wrangler (and whether

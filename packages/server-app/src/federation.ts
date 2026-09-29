@@ -2,13 +2,13 @@
 // outbound requests, and the verifying middleware in front of `/fed/v1`.
 import {
   baseUrlFor,
+  checkRotation,
   FEDERATION_PATH,
   FEDERATION_VERSION,
   HOST_RE,
   isFederatableHost,
-  loadServerKey,
+  keyFingerprint,
   MAX_FED_BODY_BYTES,
-  rotationTrusted,
   type ServerKey,
   signRequest,
   verifyRequest,
@@ -17,22 +17,15 @@ import {
 } from "@openloungephone/federation";
 import type { ServerEnv } from "./env.ts";
 import { limitsOf } from "./limits.ts";
+import { federates, operatorAudit, ownKeys } from "./ownKey.ts";
 
 export const SOFTWARE = "openloungephone/0.1";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-const keys = new WeakMap<ServerEnv, Promise<ServerKey>>();
-
-/** This server's key, or undefined when federation isn't configured. */
-export function serverKey(env: ServerEnv): Promise<ServerKey> | undefined {
-  if (!env.federationKey) return undefined;
-  let k = keys.get(env);
-  if (!k) {
-    k = loadServerKey(env.federationKey);
-    keys.set(env, k);
-  }
-  return k;
+/** This server's current signing key, or undefined when federation isn't configured. */
+export async function serverKey(env: ServerEnv): Promise<ServerKey | undefined> {
+  return (await ownKeys(env))?.current;
 }
 
 /** The host in this server's addresses (`handle@host`). */
@@ -62,14 +55,31 @@ export const outbound =
     return env.fetch ? env.fetch(req) : fetch(req);
   };
 
+/**
+ * `.well-known/openloungephone`. During a rotation's overlap it also carries the previous key
+ * and the hand-over (`rotation`, plus the 0.1 `previous_key`/`rotation_sig` pair).
+ */
 export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefined> {
-  const key = await serverKey(env);
-  if (!key) return undefined;
+  const keys = await ownKeys(env);
+  if (!keys) return undefined;
+  const r = keys.rotation;
   return {
     version: FEDERATION_VERSION,
-    server_key: key.publicKey,
+    server_key: keys.current.publicKey,
     federation: FEDERATION_PATH,
     software: SOFTWARE,
+    ...(r
+      ? {
+          previous_key: r.previous_key,
+          rotation_sig: r.legacy_sig,
+          rotation: {
+            previous_key: r.previous_key,
+            created: r.created,
+            expires: r.expires,
+            sig: r.sig,
+          },
+        }
+      : {}),
   };
 }
 
@@ -88,7 +98,8 @@ async function fetchKey(env: ServerEnv, host: string): Promise<WellKnown | undef
 
 /**
  * Another server's key, trusted on first use. A different key later is accepted only if the
- * pinned key signed the rotation; otherwise it's refused (and recorded for the operator).
+ * pinned key signed a current hand-over (`checkRotation`); otherwise it's refused and recorded
+ * for the operator, who may re-trust it. Both outcomes go into the operators' audit trail.
  */
 export async function resolveServerKey(
   env: ServerEnv,
@@ -106,13 +117,23 @@ export async function resolveServerKey(
     return doc.server_key;
   }
   if (doc.server_key === pinned) return pinned;
-  if (await rotationTrusted(doc, pinned)) {
-    await store.pinKey(host, doc.server_key, now);
-    env.log("info", "federation: key rotated", { host });
+  const check = await checkRotation(doc, pinned, host, now);
+  const change = async () => ({
+    host,
+    from: await keyFingerprint(pinned),
+    to: await keyFingerprint(doc.server_key),
+  });
+  if (check.ok) {
+    if (await store.repinKey(host, pinned, doc.server_key, now)) {
+      env.log("info", "federation: key rotated", { host });
+      await operatorAudit(env, null, "fedkey.rotated", await change());
+    }
     return doc.server_key;
   }
-  await store.rejectKey(host, doc.server_key, now);
-  env.log("warn", "federation: SERVER KEY CHANGED; refusing it", { host });
+  if (await store.rejectKey(host, doc.server_key, now)) {
+    await operatorAudit(env, null, "fedkey.refused", { ...(await change()), reason: check.reason });
+  }
+  env.log("warn", "federation: SERVER KEY CHANGED; refusing it", { host, reason: check.reason });
   return pinned;
 }
 
@@ -194,7 +215,7 @@ export async function verifyFedRequest(
     ok: false as const,
     response: Response.json({ error }, { status, ...(headers ? { headers } : {}) }),
   });
-  if (!(await serverKey(env))) return fail(404, "this server doesn't federate");
+  if (!federates(env)) return fail(404, "this server doesn't federate");
   const declared = Number(req.headers.get("content-length") ?? 0);
   if (declared > maxBytes) return fail(413, "too large");
   const body = new Uint8Array(await req.arrayBuffer());

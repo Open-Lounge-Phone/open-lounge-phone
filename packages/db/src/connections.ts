@@ -9,6 +9,32 @@ export const LOCAL_HOST = "";
 /** `peerHandle` of a row that blocks a whole server. */
 export const WHOLE_SERVER = "*";
 
+/** Another server's pinned federation key (see migrations 0008, 0019). */
+export interface PinnedKey {
+  host: string;
+  publicKey: string;
+  firstSeen: number;
+  lastSeen: number;
+  /** When the current key was pinned. */
+  keySince: number;
+  /** A different key the server presented without a valid rotation, awaiting the operator. */
+  rejected: { publicKey: string; at: number } | null;
+}
+
+/** This server's own key after a rotation (stored sealed; see migration 0019). */
+export interface OwnKeyRow {
+  publicKey: string;
+  wrappedKey: string;
+  rotatedAt: number;
+  rotation: {
+    previousKey: string;
+    created: number;
+    expires: number;
+    sig: string;
+    legacySig: string;
+  } | null;
+}
+
 /** One account's view of one other person (see migration 0008). */
 export interface Connection {
   id: string;
@@ -411,26 +437,50 @@ export class ConnectionStore {
     return r?.public_key;
   }
 
-  /** Pins a key (first contact) or replaces it (a rotation the old key signed). */
+  /** Pins a key on first contact (does nothing if the host already has one). */
   async pinKey(host: string, key: string, now: number): Promise<void> {
     await this.sql.run(
-      `INSERT INTO server_keys (host, public_key, first_seen, last_seen) VALUES (?, ?, ?, ?)
-       ON CONFLICT(host) DO UPDATE SET public_key = excluded.public_key, last_seen = excluded.last_seen`,
+      `INSERT INTO server_keys (host, public_key, first_seen, last_seen, key_since)
+       VALUES (?, ?, ?, ?, ?) ON CONFLICT(host) DO NOTHING`,
       host,
       key,
+      now,
       now,
       now,
     );
   }
 
-  /** Records a key that didn't match the pinned one (shown to the operator). */
-  async rejectKey(host: string, key: string, now: number): Promise<void> {
-    await this.sql.run(
-      "UPDATE server_keys SET rejected_key = ?, rejected_at = ? WHERE host = ?",
+  /**
+   * Replaces a pin: a rotation the old key signed, or an operator's re-trust. Only if `oldKey`
+   * is still the pinned key (so two racing updates can't both win); clears a refused change.
+   */
+  async repinKey(host: string, oldKey: string, newKey: string, now: number): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      `UPDATE server_keys SET public_key = ?, key_since = ?, last_seen = ?, rejected_key = NULL,
+         rejected_at = NULL WHERE host = ? AND public_key = ?`,
+      newKey,
+      now,
+      now,
+      host,
+      oldKey,
+    );
+    return changes === 1;
+  }
+
+  /**
+   * Records a key that didn't match the pinned one (shown to the operator). True when it is a
+   * key not recorded before (so it is reported once, not on every request).
+   */
+  async rejectKey(host: string, key: string, now: number): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      `UPDATE server_keys SET rejected_key = ?, rejected_at = ?
+       WHERE host = ? AND (rejected_key IS NULL OR rejected_key != ?)`,
       key,
       now,
       host,
+      key,
     );
+    return changes === 1;
   }
 
   async keyAlerts(): Promise<{ host: string; rejectedAt: number }[]> {
@@ -438,6 +488,97 @@ export class ConnectionStore {
       "SELECT host, rejected_at FROM server_keys WHERE rejected_key IS NOT NULL ORDER BY rejected_at DESC",
     );
     return rows.map((r) => ({ host: r.host, rejectedAt: r.rejected_at }));
+  }
+
+  /** Every other server's pinned key, with a refused change if there is one. */
+  async pinnedKeys(): Promise<PinnedKey[]> {
+    const rows = await this.sql.all<{
+      host: string;
+      public_key: string;
+      first_seen: number;
+      last_seen: number;
+      key_since: number | null;
+      rejected_key: string | null;
+      rejected_at: number | null;
+    }>("SELECT * FROM server_keys ORDER BY host");
+    return rows.map((r) => ({
+      host: r.host,
+      publicKey: r.public_key,
+      firstSeen: r.first_seen,
+      lastSeen: r.last_seen,
+      keySince: r.key_since ?? r.first_seen,
+      rejected: r.rejected_key ? { publicKey: r.rejected_key, at: r.rejected_at ?? 0 } : null,
+    }));
+  }
+
+  async pinnedKeyRow(host: string): Promise<PinnedKey | undefined> {
+    return (await this.pinnedKeys()).find((k) => k.host === host);
+  }
+
+  // --- this server's own key after a rotation (Cloudflare: D1; see migration 0019) ----------
+
+  async ownKey(): Promise<OwnKeyRow | undefined> {
+    const r = await this.sql.first<{
+      public_key: string;
+      wrapped_key: string;
+      previous_key: string | null;
+      rotation_created: number | null;
+      rotation_expires: number | null;
+      rotation_sig: string | null;
+      legacy_sig: string | null;
+      rotated_at: number;
+    }>("SELECT * FROM fed_own_key WHERE id = 1");
+    if (!r) return undefined;
+    return {
+      publicKey: r.public_key,
+      wrappedKey: r.wrapped_key,
+      rotatedAt: r.rotated_at,
+      rotation:
+        r.previous_key && r.rotation_created && r.rotation_expires && r.rotation_sig
+          ? {
+              previousKey: r.previous_key,
+              created: r.rotation_created,
+              expires: r.rotation_expires,
+              sig: r.rotation_sig,
+              legacySig: r.legacy_sig ?? "",
+            }
+          : null,
+    };
+  }
+
+  /**
+   * Stores a new own key, only if the current one is still `expectPublicKey` (a concurrent
+   * rotation loses instead of overwriting). No row yet = the platform's key is current.
+   */
+  async saveOwnKey(row: OwnKeyRow, expectPublicKey: string, hadRow: boolean): Promise<boolean> {
+    const r = row.rotation;
+    const values = [
+      row.publicKey,
+      row.wrappedKey,
+      r?.previousKey ?? null,
+      r?.created ?? null,
+      r?.expires ?? null,
+      r?.sig ?? null,
+      r?.legacySig ?? null,
+      row.rotatedAt,
+    ];
+    if (!hadRow) {
+      const { changes } = await this.sql.run(
+        `INSERT OR IGNORE INTO fed_own_key (id, public_key, wrapped_key, previous_key,
+           rotation_created, rotation_expires, rotation_sig, legacy_sig, rotated_at)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ...values,
+      );
+      return changes === 1;
+    }
+    const { changes } = await this.sql.run(
+      `UPDATE fed_own_key SET public_key = ?, wrapped_key = ?, previous_key = ?,
+         rotation_created = ?, rotation_expires = ?, rotation_sig = ?, legacy_sig = ?, rotated_at = ?
+       WHERE id = 1 AND public_key = ?`,
+      ...values,
+      expectPublicKey,
+    );
+    return changes === 1;
   }
 
   /** Records a signature nonce; false if it was already used. */

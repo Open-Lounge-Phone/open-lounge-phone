@@ -48,6 +48,7 @@ import {
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
+import { federates } from "./ownKey.ts";
 import {
   depositVoicemail,
   type Greeting,
@@ -494,7 +495,7 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
     );
     return c.json({
       address: `${account.handle}@${host}`,
-      federates: !!env.federationKey && !!env.publicUrl,
+      federates: federates(env) && !!env.publicUrl,
       connections: await Promise.all(
         rows
           .filter((r) => r.peerHandle !== WHOLE_SERVER)

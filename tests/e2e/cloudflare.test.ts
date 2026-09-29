@@ -16,6 +16,7 @@ import {
   callAcross,
   knockAndAccept,
   noAnswerAcross,
+  rotateMidCall,
   type ServerTarget,
   signUp,
   voicemailAcross,
@@ -52,6 +53,7 @@ async function start(name: string, attempt: number): Promise<Instance> {
       "OPEN_SIGNUP=1",
       "DEV_LOOPBACK=1",
       "STUN_URLS=",
+      "OPERATORS=jesse,bob",
       `FED_PRIVATE_KEY='${await generateServerKey()}'`,
     ].join("\n"),
   );
@@ -122,7 +124,7 @@ afterAll(() => {
 });
 
 it.skipIf(!enabled)(
-  "two Cloudflare Workers: knock, accept, call, no-answer voicemail, voicemail, block, and the idle stream closes",
+  "two Cloudflare Workers: knock, accept, call, key rotation mid-call, no-answer voicemail, voicemail, block, and the idle stream closes",
   async () => {
     onTestFailed(() =>
       reportLogs(
@@ -134,6 +136,8 @@ it.skipIf(!enabled)(
     const bob = await signUp(b, "bob", "Bob");
     await knockAndAccept(jesse, bob);
     await callAcross(jesse, bob);
+    // The rotated key is sealed in local D1 by FED_PRIVATE_KEY and read by every Durable Object.
+    await rotateMidCall(jesse, bob);
     await noAnswerAcross(jesse, bob);
     await voicemailAcross(jesse, bob);
     // The server that dialed the stream closes it about a minute after the last signal.

@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { formatAddress, isFederatableHost, parseAddress } from "./address.ts";
-import { generateServerKey, loadServerKey, rotationStatement, signBytes } from "./keys.ts";
+import {
+  generateServerKey,
+  keyFingerprint,
+  loadServerKey,
+  MAX_ROTATION_OVERLAP_S,
+  publicKeyOf,
+  ROTATION_OVERLAP_S,
+  rotationStatement,
+  signBytes,
+} from "./keys.ts";
 import { NONCE_TTL_MS, signRequest, type VerifyInput, verifyRequest } from "./signature.ts";
-import { baseUrlFor, rotationTrusted, WellKnown } from "./wellKnown.ts";
+import {
+  baseUrlFor,
+  checkRotation,
+  rotationTrusted,
+  signRotation,
+  WellKnown,
+} from "./wellKnown.ts";
 
 const NOW = Date.UTC(2026, 8, 28, 12);
 const URL_ = "https://b.example/fed/v1/knock";
@@ -114,23 +129,71 @@ describe("RFC 9421 request signatures", () => {
 });
 
 describe("server keys and discovery", () => {
-  it("trusts a rotation only when the pinned key signed it", async () => {
+  it("trusts a rotation only when the pinned key signed a current, timed hand-over", async () => {
     const old = await loadServerKey(await generateServerKey());
     const next = await loadServerKey(await generateServerKey());
+    const host = "a.example";
+    const now = 1_790_000_000;
+    const rotation = await signRotation(old, next.publicKey, host, now, ROTATION_OVERLAP_S);
     const doc = WellKnown.parse({
       version: 1,
       server_key: next.publicKey,
       federation: "/fed/v1",
       previous_key: old.publicKey,
       rotation_sig: await signBytes(old, rotationStatement(next.publicKey)),
+      rotation,
     });
-    expect(await rotationTrusted(doc, old.publicKey)).toBe(true);
-    expect(await rotationTrusted(doc, next.publicKey)).toBe(false);
+    const at = (s: number) => s * 1000;
+    const check = (d: WellKnown, pinned = old.publicKey, h = host, t = now + 60) =>
+      checkRotation(d, pinned, h, at(t));
+    expect(await check(doc)).toEqual({ ok: true });
+    expect(await rotationTrusted(doc, old.publicKey, host, at(now))).toBe(true);
+    // Pinned something else (two rotations behind, or already the new key).
+    expect(await check(doc, next.publicKey)).toEqual({ ok: false, reason: "not_pinned" });
+    // Bound to the host: another server can't reuse it.
+    expect(await check(doc, old.publicKey, "b.example")).toEqual({
+      ok: false,
+      reason: "bad_signature",
+    });
+    // Signed by the new key instead of the old one.
     const forged = {
       ...doc,
-      rotation_sig: await signBytes(next, rotationStatement(next.publicKey)),
+      rotation: await signRotation(next, next.publicKey, host, now, ROTATION_OVERLAP_S),
     };
-    expect(await rotationTrusted(forged, old.publicKey)).toBe(false);
+    expect(
+      await check({ ...forged, rotation: { ...forged.rotation, previous_key: old.publicKey } }),
+    ).toEqual({ ok: false, reason: "bad_signature" });
+    // Tampered window: a longer overlap than the old key signed.
+    const stretched = { ...doc, rotation: { ...rotation, expires: rotation.expires + 86_400 } };
+    expect(await check(stretched)).toEqual({ ok: false, reason: "bad_signature" });
+    // Overlap expiry: once the window has passed the statement no longer counts.
+    expect(await check(doc, old.publicKey, host, rotation.expires)).toEqual({
+      ok: false,
+      reason: "expired",
+    });
+    // From the future, or a window longer than 90 days (even if properly signed).
+    expect(await check(doc, old.publicKey, host, now - 3600)).toEqual({
+      ok: false,
+      reason: "window",
+    });
+    const forever = {
+      ...doc,
+      rotation: await signRotation(old, next.publicKey, host, now, MAX_ROTATION_OVERLAP_S + 1),
+    };
+    expect(await check(forever)).toEqual({ ok: false, reason: "window" });
+    // The 0.1 pair alone (no time) isn't enough.
+    const { rotation: _, ...legacy } = doc;
+    expect(await check(legacy)).toEqual({ ok: false, reason: "none" });
+  });
+
+  it("fingerprints keys like SSH and reads a stored key's public half", async () => {
+    const stored = await generateServerKey();
+    const key = await loadServerKey(stored);
+    expect(publicKeyOf(stored)).toBe(key.publicKey);
+    const fp = await keyFingerprint(key.publicKey);
+    expect(fp).toMatch(/^SHA256:[A-Za-z0-9_-]{43}$/);
+    expect(fp).not.toContain(key.publicKey);
+    expect(await keyFingerprint(key.publicKey)).toBe(fp);
   });
 
   it("uses https except for localhost names", () => {

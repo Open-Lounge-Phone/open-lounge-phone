@@ -1,5 +1,10 @@
 import { readFileSync } from "node:fs";
-import { FED_ENDPOINTS } from "@openloungephone/federation";
+import {
+  FED_ENDPOINTS,
+  keyRotationStatement,
+  MAX_ROTATION_OVERLAP_S,
+  ROTATION_OVERLAP_S,
+} from "@openloungephone/federation";
 import { fillSpec, renderEndpoints } from "@openloungephone/federation/spec";
 import { describe, expect, it } from "vitest";
 
@@ -15,5 +20,19 @@ describe("docs/federation-spec.md", () => {
     for (const e of FED_ENDPOINTS) {
       expect(text.split(`### \`${e.method} ${e.path}\``).length - 1).toBe(1);
     }
+  });
+
+  it("gives the key rotation statement and windows exactly as the code signs and checks them", () => {
+    const statement = keyRotationStatement({
+      host: "<host>",
+      previousKey: "<previous_key>",
+      newKey: "<server_key>",
+      created: "<created>" as unknown as number,
+      expires: "<expires>" as unknown as number,
+    });
+    expect(doc).toContain(`\`\`\`\n${statement}\n\`\`\``);
+    expect(ROTATION_OVERLAP_S).toBe(7 * 86_400);
+    expect(doc).toContain("SHOULD use **7 days**");
+    expect(doc).toContain(`\`expires − created ≤ ${MAX_ROTATION_OVERLAP_S}\``);
   });
 });

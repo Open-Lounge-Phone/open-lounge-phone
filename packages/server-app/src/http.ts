@@ -38,6 +38,7 @@ import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
+import { federates } from "./ownKey.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
 import { publicRecordingRoutes, recordingRoutes } from "./recordings.ts";
 import { roomRoutes } from "./roomsApi.ts";
@@ -180,7 +181,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       ok: true,
       software: SOFTWARE,
       protocol: PROTOCOL_VERSION,
-      federation: env.federationKey ? FEDERATION_VERSION : null,
+      federation: federates(env) ? FEDERATION_VERSION : null,
     }),
   );
 

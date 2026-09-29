@@ -100,3 +100,8 @@ Until hardware exists, open `/device/` in a browser to get an emulated phone. Ad
 Everything lives in `DATA_DIR`: the database `openloungephone.sqlite`, voicemail audio under
 `blobs/`, and the federation key `federation-key.jwk` (the `openloungephone-data` volume with
 Docker). Keep the key: if it changes, other servers refuse yours until their operators re-trust it.
+To replace it on purpose, rotate it (Operator view → **Rotate key**, or
+`OLP_SESSION_TOKEN=… npx openloungephone federation rotate-key --url <your server>`): other
+servers follow by themselves for 7 days, while `federation-key.previous.json` holds the signed
+hand-over (see [federation.md](federation.md#key-rotation-implemented)). Back up both files
+together.

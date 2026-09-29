@@ -746,3 +746,48 @@ describe("0018_recording", () => {
     old.db.close();
   });
 });
+
+describe("0019_key_rotation", () => {
+  it("keeps pinned keys and refused changes; re-pins only over the key it expects", async () => {
+    const old = openBefore("0019");
+    const s = new Store(old.sql);
+    old.db.exec(`
+      INSERT INTO server_keys (host, public_key, first_seen, last_seen, rejected_key, rejected_at)
+      VALUES ('a.example', 'K1', 10, 20, 'K2', 30), ('b.example', 'B1', 5, 6, NULL, NULL);
+    `);
+    expect(migrate(old.db)).toContain("0019_key_rotation.sql");
+    expect(await s.connections.pinnedKeys()).toEqual([
+      {
+        host: "a.example",
+        publicKey: "K1",
+        firstSeen: 10,
+        lastSeen: 20,
+        keySince: 10,
+        rejected: { publicKey: "K2", at: 30 },
+      },
+      {
+        host: "b.example",
+        publicKey: "B1",
+        firstSeen: 5,
+        lastSeen: 6,
+        keySince: 5,
+        rejected: null,
+      },
+    ]);
+    expect(await s.connections.repinKey("a.example", "K0", "K2", 40)).toBe(false);
+    expect(await s.connections.repinKey("a.example", "K1", "K2", 40)).toBe(true);
+    expect(await s.connections.pinnedKeyRow("a.example")).toMatchObject({
+      publicKey: "K2",
+      firstSeen: 10,
+      keySince: 40,
+      rejected: null,
+    });
+    // A refused key is reported once, however often it is presented.
+    expect(await s.connections.rejectKey("b.example", "B2", 50)).toBe(true);
+    expect(await s.connections.rejectKey("b.example", "B2", 51)).toBe(false);
+    expect(await s.connections.ownKey()).toBeUndefined();
+    await s.operatorAudit({ at: 1, actorAccount: null, actorName: "x", action: "a", detail: null });
+    expect(await s.operatorAuditLog()).toMatchObject([{ action: "a", detail: null }]);
+    old.db.close();
+  });
+});

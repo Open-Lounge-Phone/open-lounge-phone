@@ -35,7 +35,17 @@
 // migrations, deploys the Worker on the custom domain, and on first run sets a one-time
 // SETUP_TOKEN secret and prints the setup link. It also generates the instance's federation key
 // (FED_PRIVATE_KEY secret) once — other servers pin it, so it is never regenerated — and sets
-// PUBLIC_URL to https://<domain>. Account-specific IDs are written to
+// PUBLIC_URL to https://<domain>. Keys are never printed.
+//
+// Key rotation is not done here: an operator rotates from the Operator view or with
+// `npx openloungephone federation rotate-key --url https://<domain>` (their session, no
+// redeploy). The Worker then keeps the new key in D1 (`fed_own_key`), sealed with AES-GCM under
+// a key derived from FED_PRIVATE_KEY, and publishes the old key's signed hand-over for 7 days.
+// FED_PRIVATE_KEY therefore stays as the root key: this script must never replace it (the
+// sealed key couldn't be opened any more; federation would stop until it is restored). Why D1
+// and not a secret: a Worker can only write its own secrets with a Cloudflare API token, which it
+// would then have to hold, and `wrangler secret put` makes a new deployment and needs your
+// wrangler login; the sealed D1 row needs neither and is useless without the secret. Account-specific IDs are written to
 // instances/<instance>.json and instances/<instance>.wrangler.jsonc, which are gitignored.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -94,7 +104,10 @@ interface InstanceState {
   ai: boolean;
   openSignup: boolean;
   setupTokenSet: boolean;
-  /** FED_PRIVATE_KEY was set (never regenerated: other servers have the public key pinned). */
+  /**
+   * FED_PRIVATE_KEY was set (never regenerated: other servers have the public key pinned, and
+   * after a rotation it seals the current key in D1).
+   */
   fedKeySet?: boolean;
   /** TURN_KEY_ID / TURN_KEY_API_TOKEN were set. */
   turnSet?: boolean;

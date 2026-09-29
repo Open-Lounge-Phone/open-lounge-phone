@@ -58,7 +58,16 @@ used for development and interop tests):
 - `version` is the highest federation version the server speaks; `federation` is the base path
   of version 1. See §9 for how later versions are advertised.
 - `server_key` is the raw 32-byte Ed25519 public key, base64url without padding.
-- `previous_key` and `rotation_sig` are present only after a key rotation (§3.2).
+- `rotation` (and the 0.1 pair `previous_key`/`rotation_sig`) is present only during a key
+  rotation's overlap window (§3.2):
+
+  ```json
+  { "version": 1, "server_key": "<new key>", "federation": "/fed/v1",
+    "software": "openloungephone/0.1",
+    "previous_key": "<old key>", "rotation_sig": "<0.1 hand-over, see §3.2>",
+    "rotation": { "previous_key": "<old key>", "created": 1790000000,
+                  "expires": 1790604800, "sig": "<base64url Ed25519 signature>" } }
+  ```
 - A server that does not federate answers `404`. The document MAY be cached for up to 300 s
   (`Cache-Control: public, max-age=300`).
 
@@ -75,31 +84,105 @@ When a signature does not verify with the pinned key, the receiver MUST fetch `.
 again, once, and then:
 
 1. same key as pinned → the signature is bad (`401 signature: bad_signature`);
-2. a different key with a valid rotation (§3.2) → pin the new key and verify with it;
+2. a different key with a valid rotation statement (§3.2) → replace the pin with the new key
+   and verify with it;
 3. any other different key → MUST NOT pin it; SHOULD record it for the operator ("SERVER KEY
-   CHANGED"); the request fails with `401`.
+   CHANGED"); the request fails with `401`. Only the operator can then replace the pin
+   (§3.4).
 
 A receiver MUST NOT fetch keys for hosts it would not contact (§10.4).
 
 ### 3.2 Rotation
 
-To rotate, a server publishes its new key as `server_key` together with
+A server rotates its key by generating a new one and, from that moment, signing everything
+(requests and stream frames) with the new key only. For an **overlap window** it publishes
+both keys in `.well-known`: the new one as `server_key`, and a **rotation statement** that hands
+the old key over to the new one:
 
-- `previous_key`: the key it replaces (the one peers have pinned), and
-- `rotation_sig`: the old key's Ed25519 signature, base64url, over the UTF-8 bytes of
-  `openloungephone-key-rotation:<new server_key>`.
+| Field of `rotation` | Meaning |
+|---|---|
+| `previous_key` | The key being replaced: the one peers have pinned (base64url, 43 chars). |
+| `created` | Unix seconds when the rotation was made. |
+| `expires` | Unix seconds when the overlap ends; after it the statement is no longer published. |
+| `sig` | The **old** key's Ed25519 signature (base64url) over the statement below. |
 
-A receiver accepts the new key only if `previous_key` equals its pinned key and `rotation_sig`
-verifies with it. A server SHOULD keep publishing `previous_key`/`rotation_sig` for at least 90
-days after rotating, so peers that were offline catch up; a peer that pinned a key two
-rotations old cannot follow and needs its operator.
+The statement is the UTF-8 text of these six lines joined by `\n` (no trailing newline):
+
+```
+openloungephone-key-rotation-v2
+<host>
+<previous_key>
+<server_key>
+<created>
+<expires>
+```
+
+where `<host>` is the rotating server's host (as in its addresses and `keyid`s) and the
+numbers are decimal. Binding the host, both keys and the window means a statement can't be
+reused by another server, stretched, or replayed after its window.
+
+**Overlap window.** Publishers SHOULD use **7 days** (the reference implementation's fixed
+value) and MUST keep `expires − created` between 1 day and **90 days**. A server SHOULD NOT start
+another rotation while one is in its window (peers still pinning the first key couldn't follow
+two hand-overs; the reference server refuses unless its operator forces it). After `expires`
+the server stops publishing `rotation`, `previous_key` and `rotation_sig`, and nothing is
+signed with the old key again, so the old private key SHOULD be destroyed at rotation time.
+
+**Verification.** When a signature (or stream `hello`) doesn't verify with the pinned key and
+the re-fetched `.well-known` has a different `server_key` (§3.1), the receiver accepts the new
+key **only if all** of these hold, with `now` its own clock in Unix seconds:
+
+1. `rotation` is present and `rotation.previous_key` equals the pinned key (and differs from
+   `server_key`);
+2. `created ≤ now + 300`, `created < expires`, and `expires − created ≤ 7776000` (90 days);
+3. `now < expires`;
+4. `sig` verifies with the **pinned** key over the statement built from the receiver's own
+   view of `host` (the `keyid` or stream `from` it is resolving), `previous_key`,
+   `server_key`, `created` and `expires`.
+
+It then replaces the pin with `server_key` (keeping when it first saw the host, and recording
+when this key was pinned), clears any refused change, and verifies the request with the new key.
+Receivers SHOULD record the change for the operator (the reference server writes it to its
+audit trail). If any check fails, the key change is refused exactly as in §3.1 step 3 and the
+reason is recorded.
+
+A peer that did not contact the rotating server during the whole window, or that pinned a key
+two rotations old, cannot follow; its operator decides (§3.4).
+
+**The 0.1 form.** Open Lounge Phone 0.1 defined only `previous_key` plus `rotation_sig` (the
+old key's signature over `openloungephone-key-rotation:<server_key>`), with no time. No 0.1
+server ever published it (0.1 had no way to rotate). A rotating server SHOULD publish it
+alongside `rotation` during the window so 0.1 receivers can follow; a receiver implementing
+this revision MUST NOT accept a key change from the 0.1 pair alone, because a statement without
+a window could be replayed forever. Both forms are optional fields of `.well-known`, so this is
+an additive change within version 1 (§9).
 
 ### 3.3 Private keys
 
-The private key MUST be generated once per server and kept secret (the reference
-implementation stores it as a JWK: the `FED_PRIVATE_KEY` secret on Cloudflare,
-`DATA_DIR/federation-key.jwk` with mode 600 when self-hosted). Losing it breaks every
-connection with servers that pinned it.
+The private key MUST be kept secret and SHOULD be generated on the server. The reference
+implementation stores it as a JWK:
+
+- **Cloudflare:** the `FED_PRIVATE_KEY` secret, generated once by `scripts/deploy.ts` and never
+  replaced. After a rotation the current key lives in D1 (`fed_own_key`), sealed with AES-256-GCM
+  under a key derived (HKDF-SHA-256) from `FED_PRIVATE_KEY`, with the public key as associated
+  data; the secret thereby becomes the root that protects it. The Worker can rotate without a
+  redeploy and without holding a Cloudflare API token.
+- **Self-hosted:** `DATA_DIR/federation-key.jwk` (mode 600). A rotation replaces it atomically
+  and writes `DATA_DIR/federation-key.previous.json` (mode 600) with the old key's *public*
+  half and the signed statement, removed after the window.
+
+Losing the current key breaks every connection with servers that pinned it (their operators
+must re-trust a new one). Keys are never printed or logged; operators compare **fingerprints**:
+`SHA256:` followed by the base64url SHA-256 of the raw 32-byte public key.
+
+### 3.4 Operator decisions
+
+A refused key change stays pending for the receiving server's operator, who sees the host, the
+pinned key's fingerprint, the new key's fingerprint and when it was presented. After checking
+with the other server's operator out of band, they MAY **re-trust** it: the pin is replaced by
+the presented key. A re-trust MUST apply only to the exact change the operator was shown (the
+reference server requires both fingerprints and refuses with `409` if either changed), and
+SHOULD be recorded with who did it. Alternatively the operator blocks the server (§5).
 
 ## 4. Request signatures (RFC 9421 profile)
 
@@ -287,13 +370,14 @@ Not signed.
 
 | Status | Body | Meaning |
 |---|---|---|
-| 200 | { version: integer, server_key: string (`^[A-Za-z0-9_-]{43}$`), federation: string, software?: string (len ≤64), previous_key?: string (`^[A-Za-z0-9_-]{43}$`), rotation_sig?: string (len ≤128) } | Cacheable for up to 300 s. |
+| 200 | { version: integer, server_key: string (`^[A-Za-z0-9_-]{43}$`), federation: string, software?: string (len ≤64), previous_key?: string (`^[A-Za-z0-9_-]{43}$`), rotation_sig?: string (len ≤128), rotation?: { previous_key: string (`^[A-Za-z0-9_-]{43}$`), created: integer, expires: integer, sig: string (len ≤128) } } | Cacheable for up to 300 s. |
 | 404 | — | The server does not federate. |
 
 **Receiver rules**
 
 - Served over HTTPS (plain HTTP only for `localhost` and `*.localhost`).
 - `server_key` is the raw 32-byte Ed25519 public key, base64url without padding.
+- `rotation` (with the 0.1 pair `previous_key`/`rotation_sig`) is present only during a key rotation's overlap window (§3.2); receivers verify it with `checkRotation`.
 
 ### `POST /fed/v1/knock`
 
@@ -878,9 +962,14 @@ operator. Operators who know each other MAY compare `server_key` values out of b
 ### 10.2 Key compromise and loss
 
 A stolen private key lets the thief speak for every account on that server to every peer, until
-peers stop trusting it. There is no revocation in v1: the victim rotates (§3.2, which the thief
-could also do) and peers' operators re-pin by hand. Keep the key offline-backed-up and
-secret; losing it without a rotation breaks all pins.
+peers stop trusting it. There is no revocation in v1. The victim rotates (§3.2), which moves
+peers that follow within the window to a key the thief doesn't have — but the thief holds the
+old key too and could sign a competing hand-over for peers that haven't followed yet (they would
+also need to serve the victim's `.well-known`, i.e. control its name or TLS). After a known
+compromise, operators SHOULD tell their peers' operators the new fingerprint out of band. On
+Cloudflare, rotating after a leak of `FED_PRIVATE_KEY` only helps as long as the database stays
+private too (the sealed key is derived from that secret). Keep the key backed up and secret;
+losing it without a rotation breaks all pins.
 
 ### 10.3 Replay and binding
 
@@ -931,9 +1020,13 @@ Voicemail tickets are bearer tokens: single use, 10 minutes, forwarded only to t
   generated parts) and `packages/server-app` (`federation.ts`, `fedStream.ts`, `fedCalls.ts`,
   `connections.ts`). Interop tests: `tests/e2e/twoServers.test.ts` (two self-hosted servers)
   and `tests/e2e/cloudflare.test.ts` (two Workers), both run in CI.
-- **Key rotation:** the reference server accepts peers' rotations (§3.2) but has no tool to
-  rotate its own key yet, so it never publishes `previous_key`. Rejected key changes are shown
-  to operators (`keyAlerts`); re-pinning is a manual database change for now.
+- **Key rotation:** operators rotate from the companion's Operator view ("Rotate key") or with
+  `npx openloungephone federation rotate-key --url <server>` (their session in
+  `OLP_SESSION_TOKEN`); both call `POST /api/admin/federation/rotate-key`. The Operator view
+  lists pinned keys (host, fingerprint, first seen, pinned / key change refused) with
+  "Re-trust…" and "Block server…"; every such action, and every automatic re-pin or refusal,
+  goes into the server-wide operator audit trail (`GET /api/admin/audit`). These `/api/admin`
+  routes are the reference server's own, not part of this protocol.
 - **Same server, several households:** calls between households on one server use the same
   code paths with host `''` and direct hub-to-hub delivery instead of HTTP and the stream; that
   is internal and not part of this protocol.

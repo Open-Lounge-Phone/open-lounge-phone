@@ -14,6 +14,7 @@ export * from "./hubAdmin.ts";
 export * from "./ice.ts";
 export * from "./limits.ts";
 export * from "./liveRooms.ts";
+export * from "./ownKey.ts";
 export * from "./people.ts";
 export * from "./sfu.ts";
 export * from "./timeline.ts";

@@ -646,7 +646,7 @@ function SignedIn({
           <Workplace api={api} conn={conn} onBack={() => setRoute({ name: "home" })} />
         )}
         {meInfo?.operator && route.name === "admin" && (
-          <Admin api={baseApi} onBack={() => setRoute({ name: "home" })} />
+          <Admin api={baseApi} sessionToken={token} onBack={() => setRoute({ name: "home" })} />
         )}
         {me && route.name === "voicemail" && (
           <VoicemailInbox

@@ -61,6 +61,7 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
     rules: [
       "Served over HTTPS (plain HTTP only for `localhost` and `*.localhost`).",
       "`server_key` is the raw 32-byte Ed25519 public key, base64url without padding.",
+      "`rotation` (with the 0.1 pair `previous_key`/`rotation_sig`) is present only during a key rotation's overlap window (§3.2); receivers verify it with `checkRotation`.",
     ],
   },
   {

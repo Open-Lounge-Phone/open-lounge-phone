@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { HELP, parseCli } from "./args.ts";
 import { deployCloudflare, execDeployScript } from "./deploy.ts";
 import { doctor, runCommand } from "./doctor.ts";
+import { rotateKey } from "./federation.ts";
 import { type Io, terminalIo } from "./io.ts";
 import { selfhostInit } from "./selfhost.ts";
 import { status } from "./status.ts";
@@ -42,6 +43,8 @@ export async function main(argv: string[], io: Io = terminalIo()): Promise<numbe
         return await status(cmd.url, cmd.json, io);
       case "doctor":
         return doctor(io, REPO_ROOT);
+      case "federation-rotate-key":
+        return await rotateKey(cmd.opts, io, process.env);
       case "selfhost-init":
         return await selfhostInit(cmd.opts, io, REPO_ROOT);
       case "deploy":

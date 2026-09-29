@@ -107,15 +107,56 @@ simply expires) or **Block**. Knocking back someone who knocked you connects you
 - **Server authentication:** every server-to-server request is signed with the server's
   Ed25519 key using HTTP Message Signatures (RFC 9421) and a `keyid` of the host. The receiver
   fetches the key over HTTPS from `.well-known`, pins it on first contact, and alerts on change
-  (TLS plus trust-on-first-use, the same way SSH treats hosts). Key rotation is announced by
-  signing the new key with the old one: `.well-known` then also carries `previous_key` and
-  `rotation_sig` = the old key's signature over `openloungephone-key-rotation:<new key>`.
+  (TLS plus trust-on-first-use, the same way SSH treats hosts). See **Key rotation** below.
 - **Only public servers:** a server with a public name never contacts loopback names, IP
   literals or local-network names (`x@127.0.0.1` can't point it into its own network); servers
   on `*.localhost` (development, interop tests) talk only to each other.
 - **Keys:** Cloudflare keeps the private key in the `FED_PRIVATE_KEY` secret (generated once by
-  `scripts/deploy.ts`, never regenerated); self-host keeps it in `DATA_DIR/federation-key.jwk`
-  (mode 600; back it up). `FEDERATION=0` turns federation off on a self-hosted server.
+  `scripts/deploy.ts`, never regenerated; after a rotation it is the root that seals the current
+  key in D1); self-host keeps it in `DATA_DIR/federation-key.jwk` (mode 600; back it up).
+  `FEDERATION=0` turns federation off on a self-hosted server.
+
+### Key rotation (implemented)
+
+An operator can replace the server's key at any time — routinely, or because the old one may
+have leaked — without breaking connections:
+
+1. **Trigger:** the Operator view's **Rotate key** button, or from a terminal
+   `OLP_SESSION_TOKEN=… npx openloungephone federation rotate-key --url https://your.server`
+   (the token from Operator view → "Copy session for the CLI"; asked for without echo if
+   unset). Both work for Cloudflare and self-hosted servers alike, need an operator's session,
+   and print only fingerprints. There is deliberately no offline command: the running server
+   owns its key, so rotating through it can't race it.
+2. **The server** makes a new Ed25519 key and signs with it immediately. For a 7-day **overlap
+   window** its `.well-known` publishes both keys: the new `server_key` plus a `rotation`
+   statement — `{previous_key, created, expires, sig}`, where the *old* key signs
+   `openloungephone-key-rotation-v2`, the host, both keys and the window (the exact format is
+   in [federation-spec.md §3.2](federation-spec.md#32-rotation)). It also publishes the 0.1
+   `previous_key`/`rotation_sig` pair for servers still on 0.1. A second rotation inside the
+   window is refused unless forced.
+3. **Peers** that pinned the old key see a signature that doesn't verify, fetch `.well-known`
+   once, check the statement (their pinned key signed it, for this host, within its window) and
+   re-pin automatically. No valid statement — none, a bad signature, an expired or overlong
+   window, or only the 0.1 pair — means the change is refused as before.
+4. **Storage:** on Cloudflare the new key goes into D1 (`fed_own_key`), sealed with AES-GCM
+   under a key derived from the `FED_PRIVATE_KEY` secret. We chose this over a secret because a
+   Worker can only set secrets with a Cloudflare API token (which it would then have to hold),
+   and `wrangler secret put` is a new deployment that needs the operator's wrangler login; the
+   sealed row needs neither, and a database copy alone is useless. `deploy.ts` keeps setting
+   `FED_PRIVATE_KEY` only once and never touches it again, so redeploys don't undo a rotation.
+   Self-hosted, `federation-key.jwk` is replaced atomically and `federation-key.previous.json`
+   keeps the old key's public half and the signed statement for the window (both mode 600).
+
+### Pinned keys in the Operator view (implemented)
+
+Operators see every other server's pinned key: host, fingerprint (`SHA256:…`), first seen, and
+status — **pinned**, or **key change refused** with the old and new fingerprints. **Re-trust…**
+asks for confirmation showing both fingerprints and then replaces the pin with the new key
+(it applies only to the exact change shown; check with that server's operator first).
+**Block server…** fills in the existing block form. Everything — rotations, re-trusts, blocks
+and unblocks, suspensions and fair-use exemptions, plus automatic re-pins and refused key
+changes — goes into the server-wide **audit trail** at the bottom of the view. All of it is
+for operators only (`OPERATORS`).
 
 ### `/fed/v1` wire format (version 1)
 
@@ -281,7 +322,8 @@ address. Calls *to* the guest ring the Lounge phone they're at as well as their 
 - Bounded, schema-validated messages (the same zod schemas as the device protocol), replay
   protection (signature `created` within ±5 min plus a nonce cache), and single-use invite
   tokens.
-- Everything is logged with the remote host for the operator.
+- Everything is logged with the remote host for the operator; key changes, re-trusts and
+  blocks also go into the operators' audit trail.
 
 ## Rollout plan
 

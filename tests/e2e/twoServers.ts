@@ -578,3 +578,67 @@ export async function workplaceAcross(server: ServerTarget, bob: Person) {
     for (const app of [bApp, oApp, benApp]) app.ws.close();
   }
 }
+
+async function wellKnown(server: ServerTarget) {
+  const res = await fetch(`${server.base}/.well-known/openloungephone`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as {
+    server_key: string;
+    previous_key?: string;
+    rotation?: { previous_key: string; created: number; expires: number; sig: string };
+  };
+}
+
+/**
+ * Jesse's server rotates its federation key in the middle of a call (her operator: she is one on
+ * A). The call carries on over the already authenticated stream; the next signed requests carry
+ * the new key and Bob's server re-pins by itself from the signed hand-over in `.well-known`, so
+ * calls both ways still work. Needs OPERATORS to name jesse on A and bob on B.
+ */
+export async function rotateMidCall(jesse: Person, bob: Person) {
+  const before = await wellKnown(jesse.server);
+  const [row] = await connections(jesse);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  jApp.send({ t: "call.connection", connectionId: row?.id as string });
+  const callId = (await bApp.next("call.ringing")).callId as string;
+  bApp.send({ t: "call.answer", callId });
+  await jApp.next("rtc.config");
+  await bApp.next("rtc.config");
+  jApp.send({ t: "rtc.sdp", callId, type: "offer", sdp: "v=0 offer" });
+  await bApp.next("rtc.sdp");
+  bApp.send({ t: "rtc.sdp", callId, type: "answer", sdp: "v=0 answer" });
+  await jApp.next("rtc.sdp");
+  for (const app of [jApp, bApp]) {
+    for (;;) if ((await app.next("call.state")).state === "active") break;
+  }
+
+  const rotated = await api(jesse, "/admin/federation/rotate-key", { body: {} });
+  expect(rotated.status, JSON.stringify(rotated.json)).toBe(200);
+  const after = await wellKnown(jesse.server);
+  expect(after.server_key).not.toBe(before.server_key);
+  expect(after.previous_key).toBe(before.server_key);
+  expect(after.rotation?.previous_key).toBe(before.server_key);
+
+  // The live call still signals both ways, then ends from Bob's side.
+  jApp.send({ t: "rtc.ice", callId, candidate: "candidate:1 1 udp 1 192.0.2.1 9 typ host" });
+  expect(await bApp.next("rtc.ice")).toMatchObject({ callId });
+  bApp.send({ t: "call.hangup", callId });
+  for (;;) if ((await jApp.next("call.state")).state === "ended") break;
+  jApp.ws.close();
+  bApp.ws.close();
+
+  // New calls both ways: A's requests are signed with the new key.
+  await callAcross(jesse, bob);
+  await callAcross(bob, jesse);
+  const view = await api(bob, "/admin/federation");
+  expect(view.status).toBe(200);
+  const peer = (view.json.peers as { host: string; fingerprint: string; status: string }[]).find(
+    (p) => p.host === new URL(jesse.server.origin).host,
+  );
+  expect(peer).toMatchObject({ fingerprint: rotated.json.to, status: "pinned" });
+  const audit = (await api(bob, "/admin/audit")).json as { action: string }[];
+  expect(audit.map((e) => e.action)).toContain("fedkey.rotated");
+  const ours = (await api(jesse, "/admin/audit")).json as { action: string }[];
+  expect(ours.map((e) => e.action)).toContain("fedkey.rotate");
+}

@@ -1,4 +1,10 @@
-import { loadServerKey, rotationStatement, signBytes } from "@openloungephone/federation";
+import {
+  loadServerKey,
+  ROTATION_OVERLAP_S,
+  rotationStatement,
+  signBytes,
+  signRotation,
+} from "@openloungephone/federation";
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectStatus, Network, TestServer } from "./testkit.ts";
 
@@ -387,26 +393,32 @@ describe("knocks across servers", () => {
     expect(await b.store.connections.keyAlerts()).toMatchObject([{ host: "a.test" }]);
     expect(await incoming(b, bob)).toEqual([]);
 
-    // A proper rotation: the old key signs the new one, published in .well-known.
+    // A hand-over in the 0.1 form (no time) isn't enough any more; a timed one is.
     const next = await loadServerKey(impostor.env.federationKey as string);
     const old = await loadServerKey(oldKey);
-    const sig = await signBytes(old, rotationStatement(next.publicKey));
+    const legacy = {
+      version: 1,
+      server_key: next.publicKey,
+      federation: "/fed/v1",
+      previous_key: old.publicKey,
+      rotation_sig: await signBytes(old, rotationStatement(next.publicKey)),
+    };
+    let doc: object = legacy;
     const original = net.fetch.bind(net);
-    net.fetch = async (req) => {
-      if (req.url === "https://a.test/.well-known/openloungephone") {
-        return Response.json({
-          version: 1,
-          server_key: next.publicKey,
-          federation: "/fed/v1",
-          previous_key: old.publicKey,
-          rotation_sig: sig,
-        });
-      }
-      return original(req);
+    net.fetch = async (req) =>
+      req.url === "https://a.test/.well-known/openloungephone" ? Response.json(doc) : original(req);
+    expectStatus(await knock(impostor, mallory, "bob@b.test"), 502);
+    expect(await b.store.connections.pinnedKey("a.test")).toBe(old.publicKey);
+    const created = Math.floor(net.timers.now / 1000);
+    doc = {
+      ...legacy,
+      rotation: await signRotation(old, next.publicKey, "a.test", created, ROTATION_OVERLAP_S),
     };
     expectStatus(await knock(impostor, mallory, "bob@b.test"), 202);
     expect(await incoming(b, bob)).toHaveLength(1);
     expect(await b.store.connections.pinnedKey("a.test")).toBe(next.publicKey);
+    // Following the rotation cleared the refused change.
+    expect(await b.store.connections.keyAlerts()).toEqual([]);
   });
 
   it("limits each remote server's request rate", async () => {

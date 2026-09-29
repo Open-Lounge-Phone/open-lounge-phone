@@ -16,6 +16,7 @@ import {
   noAnswerAcross,
   removeAndWipe,
   roomsAcross,
+  rotateMidCall,
   type ServerTarget,
   signUp,
   timelineAcross,
@@ -44,6 +45,8 @@ async function start(name: string, attempt: number): Promise<ServerTarget> {
       DATA_DIR: dir,
       OPEN_SIGNUP: "1",
       STUN_URLS: "",
+      // Each server's own account runs it (the key rotation step).
+      OPERATORS: "jesse,bob",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -88,7 +91,7 @@ afterAll(() => {
   for (const entry of running) stop(entry);
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe, rooms, 3-way, block, workplace transfer", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer", async () => {
   onTestFailed(() =>
     reportLogs(
       running.map((r) => r.log),
@@ -101,6 +104,7 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, wipe
   await callAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);
+  await rotateMidCall(jesse, bob);
   await removeAndWipe(bob);
   await voicemailAcross(jesse, bob);
   // Rooms without a relay (a peer-to-peer mesh), and a 3-way merge across households and servers.

@@ -9,7 +9,13 @@ export interface StatusReport {
   software?: string;
   protocol?: number;
   /** Federation version from .well-known, or null when the server doesn't federate. */
-  federation?: { version: number; path: string; key: string } | null;
+  federation?: {
+    version: number;
+    path: string;
+    key: string;
+    /** A key rotation in its overlap window: the previous key and when the hand-over ends. */
+    rotation?: { previousKey: string; until: number };
+  } | null;
   problems: string[];
 }
 
@@ -60,6 +66,14 @@ export async function checkStatus(
           version: doc.data.version,
           path: doc.data.federation,
           key: doc.data.server_key,
+          ...(doc.data.rotation
+            ? {
+                rotation: {
+                  previousKey: doc.data.rotation.previous_key,
+                  until: doc.data.rotation.expires * 1000,
+                },
+              }
+            : {}),
         };
         report.software ??= doc.data.software;
       } else {
@@ -90,6 +104,16 @@ export function formatStatus(r: StatusReport): string[] {
       row("federation", `v${r.federation.version} at ${r.federation.path}`),
       row("server key", `${k.slice(0, 8)}…${k.slice(-8)}`),
     );
+    const rot = r.federation.rotation;
+    if (rot) {
+      const p = rot.previousKey;
+      lines.push(
+        row(
+          "rotation",
+          `from ${p.slice(0, 8)}…${p.slice(-8)}, hand-over published until ${new Date(rot.until).toISOString().slice(0, 10)}`,
+        ),
+      );
+    }
   }
   for (const p of r.problems) lines.push(row("problem", p));
   return lines;

@@ -1291,3 +1291,12 @@ dl.phone-facts {
     animation: none;
   }
 }
+.admin .key-fp {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.admin .badge.danger {
+  color: var(--danger);
+  border-color: currentColor;
+}

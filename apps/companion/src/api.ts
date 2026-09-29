@@ -459,6 +459,34 @@ export class ApiError extends Error {
   }
 }
 
+/** The operator's view of federation keys: this server's (fingerprints only) and pinned ones. */
+export interface AdminFederation {
+  own: {
+    host: string;
+    fingerprint: string;
+    rotation: { previousFingerprint: string; createdAt: number; expiresAt: number } | null;
+  } | null;
+  peers: {
+    host: string;
+    fingerprint: string;
+    firstSeen: number;
+    keySince: number;
+    lastSeen: number;
+    status: "pinned" | "rejected_change";
+    rejected: { fingerprint: string; at: number } | null;
+    blocked: boolean;
+  }[];
+}
+
+export interface OperatorAuditEntry {
+  id: string;
+  at: number;
+  actorAccount: string | null;
+  actorName: string;
+  action: string;
+  detail: Record<string, unknown> | null;
+}
+
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface ApiOptions {
@@ -652,6 +680,17 @@ export function createApi(opts: ApiOptions) {
     adminBlockServer: (host: string, reason?: string) =>
       request<void>("POST", "/admin/servers/block", { host, ...(reason ? { reason } : {}) }),
     adminUnblockServer: (host: string) => request<void>("DELETE", `/admin/servers/${enc(host)}`),
+    adminFederation: () => request<AdminFederation>("GET", "/admin/federation"),
+    adminRotateKey: (force = false) =>
+      request<{ from: string; to: string; overlapUntil: number; forced?: boolean }>(
+        "POST",
+        "/admin/federation/rotate-key",
+        force ? { force } : {},
+      ),
+    /** Replaces a server's pin with the key it now presents; `from`/`to` as shown. */
+    adminRetrust: (host: string, from: string, to: string) =>
+      request<void>("POST", `/admin/federation/peers/${enc(host)}/retrust`, { from, to }),
+    adminAudit: () => request<OperatorAuditEntry[]>("GET", "/admin/audit"),
 
     // Connections (knock, then talk)
     connections: () => request<ConnectionsInfo>("GET", "/connections"),

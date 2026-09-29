@@ -31,6 +31,32 @@ describe("status", () => {
     expect(formatStatus(r).join("\n")).toMatch(/federation\s+v1 at \/fed\/v1/);
   });
 
+  it("shows a key rotation in its overlap window", async () => {
+    const previous = "B".repeat(43);
+    const r = await checkStatus(
+      "https://a.example",
+      server({
+        "/api/health": () => Response.json({ ok: true }),
+        "/.well-known/openloungephone": () =>
+          Response.json({
+            version: 1,
+            server_key: key,
+            federation: "/fed/v1",
+            rotation: {
+              previous_key: previous,
+              created: 1_790_000_000,
+              expires: 1_790_604_800,
+              sig: "x",
+            },
+          }),
+      }),
+    );
+    expect(r.federation?.rotation).toEqual({ previousKey: previous, until: 1_790_604_800_000 });
+    expect(formatStatus(r).join("\n")).toMatch(
+      /rotation\s+from BBBBBBBB…BBBBBBBB, hand-over published until 2026-09-/,
+    );
+  });
+
   it("a server that doesn't federate, and one that is down", async () => {
     const off = await checkStatus(
       "https://b.example",

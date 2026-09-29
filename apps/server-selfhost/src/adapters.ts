@@ -1,8 +1,13 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { generateServerKey } from "@openloungephone/federation";
-import type { BlobStore, Transcriber } from "@openloungephone/server-app";
+import { generateServerKey, publicKeyOf } from "@openloungephone/federation";
+import type {
+  BlobStore,
+  FederationKeyStore,
+  StoredFederationKeys,
+  Transcriber,
+} from "@openloungephone/server-app";
 
 /** Blobs as files under `root`, with the content type in a sidecar file. */
 export function fileBlobStore(root: string): BlobStore {
@@ -80,6 +85,63 @@ export async function federationKeyFile(dataDir: string): Promise<string> {
   const key = await generateServerKey();
   writeFileSync(path, `${key}\n`, { mode: 0o600, flag: "wx" });
   return key;
+}
+
+/** Writes a file readable only by its owner, atomically (write aside, then rename). */
+function writePrivate(path: string, text: string) {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, text, { mode: 0o600 });
+  renameSync(tmp, path);
+}
+
+/**
+ * This server's key as files in DATA_DIR: `federation-key.jwk` is the current key (created by
+ * `federationKeyFile`); after a rotation, `federation-key.previous.json` holds the key it
+ * replaced (its public half: nothing is signed with it again) and the signed hand-over, which
+ * `.well-known` publishes until the overlap ends; the file is removed after that. Both files are
+ * mode 600; back them up together.
+ */
+export function federationKeyStore(dataDir: string): FederationKeyStore {
+  const keyPath = join(dataDir, "federation-key.jwk");
+  const previousPath = join(dataDir, "federation-key.previous.json");
+  const read = () => (existsSync(keyPath) ? readFileSync(keyPath, "utf8").trim() : undefined);
+  return {
+    async load() {
+      const privateKey = read();
+      if (!privateKey) return undefined;
+      if (!existsSync(previousPath)) return { privateKey };
+      try {
+        const r = JSON.parse(readFileSync(previousPath, "utf8")) as NonNullable<
+          StoredFederationKeys["rotation"]
+        > & { server_key: string };
+        // A hand-over for a key that isn't current (e.g. the key file was restored) is ignored.
+        if (r.server_key !== publicKeyOf(privateKey)) return { privateKey };
+        if (Date.now() >= r.expires * 1000) {
+          rmSync(previousPath, { force: true });
+          return { privateKey };
+        }
+        const { server_key: _, ...rotation } = r;
+        return { privateKey, rotation };
+      } catch {
+        return { privateKey };
+      }
+    },
+    async save(next, expectPublicKey) {
+      // Synchronous from here on: one process, so nothing can interleave.
+      const current = read();
+      if (!current || publicKeyOf(current) !== expectPublicKey) return false;
+      const serverKey = publicKeyOf(next.privateKey);
+      // The hand-over first (it names the new key, so it is ignored until the key file moves).
+      if (next.rotation) {
+        writePrivate(
+          previousPath,
+          `${JSON.stringify({ ...next.rotation, server_key: serverKey })}\n`,
+        );
+      } else rmSync(previousPath, { force: true });
+      writePrivate(keyPath, `${next.privateKey}\n`);
+      return true;
+    },
+  };
 }
 
 /**

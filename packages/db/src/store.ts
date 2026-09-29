@@ -554,6 +554,17 @@ export const isRemoteContactId = (id: string) => id.startsWith("rc_");
 type RemoteContactRow = ContactRow & { id: string; connection_id: string };
 
 /** Typed data access shared by every backend. All times are epoch ms supplied by the caller. */
+/** One entry of the operators' server-wide audit trail (migration 0019). */
+export interface OperatorAuditEntry {
+  id: string;
+  at: number;
+  /** null for something the server did by itself (e.g. following a peer's key rotation). */
+  actorAccount: string | null;
+  actorName: string;
+  action: string;
+  detail: Record<string, unknown> | null;
+}
+
 export class Store {
   private readonly sql: Sql;
   /** Connections, knocks, server keys and rate limits. */
@@ -1065,6 +1076,44 @@ export class Store {
       householdId,
     );
     return r?.account_id;
+  }
+
+  /** Records something an operator did (or an automatic key change: `actor` null). */
+  async operatorAudit(e: Omit<OperatorAuditEntry, "id">): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO operator_audit (id, at, actor_account, actor_name, action, detail)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      newId("oa"),
+      e.at,
+      e.actorAccount,
+      e.actorName.slice(0, 64),
+      e.action,
+      e.detail ? JSON.stringify(e.detail) : null,
+    );
+  }
+
+  /** The operators' audit trail, newest first. */
+  async operatorAuditLog(limit = 200, before?: number): Promise<OperatorAuditEntry[]> {
+    const rows = await this.sql.all<{
+      id: string;
+      at: number;
+      actor_account: string | null;
+      actor_name: string;
+      action: string;
+      detail: string | null;
+    }>(
+      "SELECT * FROM operator_audit WHERE at < ? ORDER BY at DESC, rowid DESC LIMIT ?",
+      before ?? Number.MAX_SAFE_INTEGER,
+      Math.min(Math.max(limit, 1), 500),
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      at: r.at,
+      actorAccount: r.actor_account,
+      actorName: r.actor_name,
+      action: r.action,
+      detail: r.detail ? (JSON.parse(r.detail) as Record<string, unknown>) : null,
+    }));
   }
 
   /** Counts for the operator's overview. */
