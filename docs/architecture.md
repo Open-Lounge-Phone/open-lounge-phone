@@ -259,13 +259,15 @@ The phone has **no main screen**: keycapped keys with per-key LEDs, a small e-in
 handset audio, a ringer speaker, and radios and sensors. Hardware details and part choices live in [hardware/DESIGN.md](../hardware/DESIGN.md).
 
 1. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
-   audio codec, a USB-C (UAC) handset, and MX-style key switches with per-key LEDs, implementing
+   audio codec, an analog handset on a 3.5 mm jack, and MX-style key switches with per-key LEDs, implementing
    the same protocol and the `deviceStep` state machine from `packages/core`.
 2. **Custom PCB** — one board, one BOM (owner, 2026-09-28) in a compact 3D-printed base: an
-   off-the-shelf G-style USB-C handset on a raised hook rest, USB-C power with an optional
-   battery, 12 hot-swap keys with per-key LEDs, the e-ink strip, a hall-effect hook sensor, a light
-   sensor, and NFC for provisioning and Lounge takeover. Schematic done; board placed, routing
-   next.
+   off-the-shelf analog G-style handset (3.5 mm TRRS plug, e.g. the Opis 60s Micro) on a raised
+   hook rest, USB-C power (also flashing and the console) with an optional battery, 12 hot-swap
+   keys with per-key LEDs, the e-ink strip, a hall-effect hook sensor that — with the mute switch —
+   cuts the handset mic's power in hardware, a light sensor, and NFC for provisioning and Lounge
+   takeover. No speakerphone: the speaker rings and speaks prompts. Schematic revised (H5,
+   2026-09-30); layout next (H6).
 3. **Lounge hardware** — the Lounge software works today with the on-screen QR code; the board
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.

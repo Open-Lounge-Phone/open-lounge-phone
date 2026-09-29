@@ -46,7 +46,7 @@ The software works end to end today; the hardware is being designed in the open.
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
 | Firmware | ESP32-S3 firmware, starting on dev boards | not started |
-| Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, USB-C handset port) in a 3D-printable base | schematic done; board placed, routing next; printable prototype box; product enclosure not designed yet |
+| Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, 3.5 mm jack for an analog handset, hardware mic privacy) in a 3D-printable base | schematic revised (H5, 2026-09-30: analog handset, no speakerphone); layout to redo (H6); printable prototype box; product enclosure not designed yet |
 
 More: [architecture](docs/architecture.md), [federation](docs/federation.md) (and its
 [spec](docs/federation-spec.md)),

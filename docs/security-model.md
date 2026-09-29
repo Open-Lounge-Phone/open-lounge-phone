@@ -1,16 +1,26 @@
 # Security model and trust
 
-Status: 2026-09-28 design; the software side is **built** (the four-word fingerprint, the device
+Status: 2026-09-30 design (hardware guarantees re-based on the analog handset, H5 schematic); the software side is **built** (the four-word fingerprint, the device
 page, remove and wipe, retention defaults and transcription per space, and — batch C2 — call
 recording as designed below). Items marked *(planned)* are not built yet.
 
 ## Hardware guarantees (hold even if the firmware is compromised)
 
-- **Physical mute switch** cuts power to the base microphone.
-- **Mic light is wired to the mic's power** *(planned circuit change)*. If the light is off, the mic
-  is unpowered.
-- **Handset is unpowered while hung up** *(planned circuit change)*. The hook sensor also switches
-  off the handset port's power.
+The phone's only microphone is the one in the handset (there is no base microphone and no
+speakerphone, 2026-09-30). These are in the schematic (H5) and checked on its netlist by
+`hardware/schematic/checks.py` (`check_privacy`) on every build; the board is not built yet.
+
+- **Handset mic unpowered on hook and when muted.** The mic's supply passes through the
+  physical **mute switch AND** a switch driven by the **hook sensor** (a Hall sensor under the
+  hook rest): it exists only when the phone is unmuted *and* the handset is lifted. Firmware can
+  read the hook sensor but cannot hold it "lifted", and it reads the mic line only through a
+  diode that cannot feed it, so no software path can power the mic. On hook, the earpiece is
+  disconnected too.
+- **Mic lights are wired to the mic's power.** Two lights, in parallel, are powered by the mic's
+  own supply: if both lights are off, the mic is unpowered. One failed light leaves the other
+  lit; muting or hanging up darkens lights and mic together (within about a millisecond).
+- **A separate red recording light** on its own pin (driven by firmware from the call's
+  recording state, see below).
 - **No camera, no radar.** Nothing on the board can see anyone.
 - **Open hardware** (CERN-OHL-S): the schematic, layout and parts list are public.
 
@@ -53,8 +63,8 @@ recording as designed below). Items marked *(planned)* are not built yet.
 
 1. **Owner and mode:** the strip always shows them, e.g. "Kids · Smith home", "Lounge · free" or
    "Signed in: Jesse".
-2. **Lights and switches with a physical meaning:** the mic-power light, the mute switch, a separate
-   recording light, and an unpowered handset while hung up. Recording is off unless a space enables
+2. **Lights and switches with a physical meaning:** the mic-power lights, the mute switch, a
+   separate recording light, and a handset mic that is unpowered on hook and when muted. Recording is off unless a space enables
    it, and it is always announced.
 3. **MENU → About:**
    - the firmware version and its fingerprint *(firmware fingerprint planned)*

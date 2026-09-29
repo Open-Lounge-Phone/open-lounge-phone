@@ -11,8 +11,16 @@ emulator (`apps/device-web`) as its reference implementation and test peer.
 - Media is WebRTC peer to peer with the ICE servers the server sends in `rtc.config`; enable
   **Opus DTX** (`usedtx=1` in the local description, as `packages/client` `withOpusDtx` does)
   so silence costs almost nothing on a relay.
-- The handset is a USB-C UAC device on the ESP32-S3's native USB (host); the power USB-C port
-  carries the CH340C console/flashing bridge.
+- The handset is analog, on a 3.5 mm TRRS jack (CTIA): the ES8311 records its mic (MIC1, PGA
+  ≈ 18 dB) and drives its earpiece from OUTP; the earpiece switch and the mic supply are
+  switched by the hook sensor and the mute switch in hardware, so firmware only reads HOOK
+  (GPIO17), JACK_DET (GPIO12, high = plug in) and MIC_SENSE (GPIO10, ADC1: ≈ 1.4–2.2 V mic,
+  < 0.1 V inline button pressed or an OMTP plug, only while the mic is powered). The recording
+  light is GPIO13. No speakerphone: the NS4150B (PA_EN, GPIO38) only rings and speaks prompts.
+  If EVT shows receiver-to-mic echo, run AEC with the playback stream as the reference (same
+  I2S clock).
+- Flashing and the console use the ESP32-S3's native USB (USB-Serial-JTAG) on the power USB-C;
+  UART0 pads remain for recovery. See `hardware/schematic/pin_table.yaml`.
 
 ### Modes and remove = wipe (docs/device-lifecycle.md)
 

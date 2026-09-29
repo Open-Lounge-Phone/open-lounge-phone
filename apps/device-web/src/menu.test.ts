@@ -97,9 +97,10 @@ describe("menuStep", () => {
     expect(dim.settings.brightness).toBe(1);
   });
 
-  it("toggles speakerphone", () => {
-    expect(run([menu(), digit(3), digit(1)]).settings.speakerphone).toBe(true);
-    expect(run([menu(), digit(3), digit(1), digit(2)]).settings.speakerphone).toBe(false);
+  it("has no speakerphone item: the phone has a handset only (hardware H5)", () => {
+    const r = run([menu(), digit(3)]);
+    expect(r.state?.screen).toBe("root");
+    expect(r.settings).toEqual(DEFAULT_SETTINGS);
   });
 
   it("MENU closes at the top and returns to the top from a submenu", () => {
@@ -139,7 +140,6 @@ describe("menuView / menuLines", () => {
     expect(root.labels).toEqual({
       1: "Volume",
       2: "Voicemail",
-      3: "Speaker",
       4: "Bright",
       0: "About",
     });
@@ -151,20 +151,13 @@ describe("menuView / menuLines", () => {
 
   it("fits 16-character displays, cycling options with 0 last", () => {
     const root = menuView({ screen: "root", lastInput: 0 }, DEFAULT_SETTINGS, ctx);
-    const seen = [0, 2000, 4000, 6000, 8000].map((t) => menuLines(root, t)[1]);
-    expect(seen).toEqual(["1 VOLUME", "2 VOICEMAIL", "3 SPEAKER", "4 BRIGHT", "0 ABOUT"]);
+    const seen = [0, 2000, 4000, 6000].map((t) => menuLines(root, t)[1]);
+    expect(seen).toEqual(["1 VOLUME", "2 VOICEMAIL", "4 BRIGHT", "0 ABOUT"]);
     for (const line of seen) expect(line?.length ?? 0).toBeLessThanOrEqual(16);
   });
 
   it("prompts every screen in words", () => {
-    for (const screen of [
-      "root",
-      "volume",
-      "voicemail",
-      "speaker",
-      "brightness",
-      "about",
-    ] as const) {
+    for (const screen of ["root", "volume", "voicemail", "brightness", "about"] as const) {
       expect(menuPrompt({ screen, lastInput: 0 }, DEFAULT_SETTINGS, ctx).length).toBeGreaterThan(5);
     }
   });

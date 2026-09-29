@@ -70,5 +70,5 @@ the phone.
      second-hand and handed-down phones easy.
 
 See [security-model.md](security-model.md) for the protections and trust signals. It covers the
-hardware mute, the mic-power light, the handset being unpowered on-hook, secure boot, and the
-four-word device fingerprint.
+hardware mute, the mic-power lights, the handset mic being unpowered on hook and when muted,
+secure boot, and the four-word device fingerprint.

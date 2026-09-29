@@ -16,7 +16,6 @@ export type MenuScreen =
   | "voicemail"
   /** Recording the greeting: BACK (or any key) finishes. */
   | "greeting"
-  | "speaker"
   | "brightness"
   | "about"
   /** During a call or in a room: hold / add caller, merge, transfer, mute. */
@@ -35,14 +34,13 @@ export interface MenuState {
 }
 
 export interface Settings {
-  /** Earpiece/ringer volume, 0–10. */
+  /** Earpiece/ringer volume, 0–10. (No speakerphone: the phone has a handset only.) */
   volume: number;
-  speakerphone: boolean;
   /** Display brightness level, 1–5. */
   brightness: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { volume: 6, speakerphone: false, brightness: 5 };
+export const DEFAULT_SETTINGS: Settings = { volume: 6, brightness: 5 };
 export const MENU_TIMEOUT_MS = 20_000;
 
 export type MenuEvent =
@@ -117,7 +115,6 @@ export function fingerprintLines(words: readonly string[]): string[] {
 const ROOT_OPTIONS: { digit: number; label: string; screen: MenuScreen; spoken: string }[] = [
   { digit: 1, label: "Volume", screen: "volume", spoken: "volume" },
   { digit: 2, label: "Voicemail", screen: "voicemail", spoken: "voicemail" },
-  { digit: 3, label: "Speaker", screen: "speaker", spoken: "speakerphone" },
   { digit: 4, label: "Bright", screen: "brightness", spoken: "brightness" },
   { digit: 0, label: "About", screen: "about", spoken: "about this phone" },
 ];
@@ -210,12 +207,6 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         labels: {},
         backLabel: "Done",
       };
-    case "speaker":
-      return {
-        ...base,
-        title: `SPEAKER ${settings.speakerphone ? "ON" : "OFF"}`,
-        labels: { 1: "On", 2: "Off" },
-      };
     case "brightness":
       return {
         ...base,
@@ -273,8 +264,6 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       return state.recording === "name"
         ? PROMPT_TEXT["greet.say_name"]
         : PROMPT_TEXT["greet.say_greeting"];
-    case "speaker":
-      return `Speakerphone is ${settings.speakerphone ? "on" : "off"}. Press 1 for on, 2 for off.`;
     case "brightness":
       return `Brightness ${settings.brightness}. Press 1 for dimmer, 2 for brighter.`;
     case "call": {
@@ -400,15 +389,6 @@ export function menuStep(
       if (d !== 1 && d !== 2) return { state: touched, settings };
       const volume = clamp(settings.volume + (d === 2 ? 1 : -1), 0, 10);
       return { state: touched, settings: { ...settings, volume }, say: `Volume ${volume}` };
-    }
-    case "speaker": {
-      if (d !== 1 && d !== 2) return { state: touched, settings };
-      const speakerphone = d === 1;
-      return {
-        state: touched,
-        settings: { ...settings, speakerphone },
-        say: `Speakerphone ${speakerphone ? "on" : "off"}`,
-      };
     }
     case "voicemail": {
       if (!ctx.greeting?.canRecord || (d !== 1 && d !== 2 && d !== 3)) {

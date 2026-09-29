@@ -937,7 +937,7 @@ function applyMenu(event: MenuEvent): void {
   }
   if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
   if (r.action?.type === "extension") {
-    // Dialing needs the handset (or speaker) up.
+    // Dialing needs the handset up.
     if (!hookUp) toggleHook();
     step({ type: "extension", number: r.action.number });
   }
@@ -1208,9 +1208,8 @@ function render(): void {
     : "—";
   fact("menu").textContent = menu ? menu.screen : "closed";
   fact("fingerprint").textContent = fingerprint.join(" ");
-  fact("settings").textContent = `volume ${settings.volume}/10 · speakerphone ${
-    settings.speakerphone ? "on" : "off"
-  } · brightness ${settings.brightness}/5`;
+  fact("settings").textContent =
+    `volume ${settings.volume}/10 · brightness ${settings.brightness}/5`;
 }
 
 /** The voicemail flow as the display shows it. */
