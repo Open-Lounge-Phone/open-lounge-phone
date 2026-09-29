@@ -10,12 +10,12 @@ const num = (name: string, fallback: number): number => {
 };
 
 /**
- * GitHub Sponsors link, set at build time (`SPONSOR_URL`). The same setting as the hub's. While
- * it's unset, no Sponsor button is shown anywhere — never a placeholder.
+ * GitHub Sponsors link for the project (owner, 2026-09-29). A fork can override it with
+ * `SPONSOR_URL` at build time, or hide the button with `SPONSOR_URL=none`.
  */
-export const SPONSOR_URL = /^https:\/\/\S+$/.test(env("SPONSOR_URL") ?? "")
-  ? (env("SPONSOR_URL") as string)
-  : undefined;
+const PROJECT_SPONSOR_URL = "https://github.com/sponsors/previousdolphin";
+const sponsorSetting = env("SPONSOR_URL") ?? PROJECT_SPONSOR_URL;
+export const SPONSOR_URL = /^https:\/\/\S+$/.test(sponsorSetting) ? sponsorSetting : undefined;
 
 /** The hub's funding, as configured for the build (defaults: the hub's current numbers). */
 export const FUNDING: FundingConfig = {
