@@ -145,6 +145,12 @@ custom footprints are not done yet.
   creates the household + first guardian and returns a bearer session token. Passkeys come in M4.
 
 ## Conventions
+- **Docs stay current (owner rule, 2026-09-28):** every feature or phase updates README.md, `docs/`,
+  the site (`apps/site/src/content-src/`) and hardware docs in the same change; superseded claims
+  are removed, and future work is marked as planned. Site and hub footers say "Proudly supported by
+  unsubscribe.llc" (https://www.unsubscribe.llc/). Donations go through GitHub Sponsors via a single
+  `SPONSOR_URL` config (hidden until set, never a placeholder). The hub is free and donation-funded.
+  For full security, people run their own server.
 - npm workspaces (pnpm is not installed on the owner's machine). Node ≥ 22.
 - TypeScript 7, `moduleResolution: Bundler`, and **relative imports use the `.ts` extension**
   (`import { x } from "./x.ts"`) so Node can run sources directly via type stripping. Workspace
