@@ -43,15 +43,19 @@ export function ManageDevice({
   /** Allow-list entries that come from connections, by their `rc_…` id. */
   const [remote, setRemote] = useState<Map<string, RemoteContactInfo>>(new Map());
   const [connections, setConnections] = useState<ConnectionView[]>([]);
+  /** A fresh copy of the phone (last seen and software change while it's connected). */
+  const [fresh, setFresh] = useState<DeviceSummary>();
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
     try {
-      const [u, c, conns] = await Promise.all([
+      const [u, c, conns, list] = await Promise.all([
         api.users(),
         api.contacts(deviceId),
         api.connections().catch(() => undefined),
+        api.devices().catch(() => undefined),
       ]);
+      setFresh(list?.find((d) => d.id === deviceId));
       setUsers(u);
       setContacts(c.contacts);
       setButtons(c.buttons);
@@ -103,7 +107,7 @@ export function ManageDevice({
       {device && (
         <PhoneSettings
           api={api}
-          device={device}
+          device={fresh ? { ...device, ...fresh } : device}
           meId={meId}
           onChanged={onChanged}
           onRemoved={onRemoved}

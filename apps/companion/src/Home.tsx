@@ -227,7 +227,7 @@ function OpenElsewhere({ meId, userName }: { meId: string; userName: string }) {
       </button>
       <p className="hint">
         If you're signed in on that device it pairs itself; otherwise it shows a code — pair it here
-        with “This is my own phone” ticked.
+        as “My own phone”.
         {note && <span className="share-note"> {note}</span>}
       </p>
     </div>
