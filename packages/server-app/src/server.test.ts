@@ -1,4 +1,4 @@
-import { Store, type User } from "@openloungephone/db";
+import { HANDLE_CHANGE_INTERVAL_MS, Store, type User } from "@openloungephone/db";
 import { migrate, openSqlite } from "@openloungephone/db/node";
 import {
   encode,
@@ -129,13 +129,21 @@ beforeEach(() => {
 
 async function http(
   path: string,
-  init: { method?: string; token?: string; body?: unknown; raw?: BodyInit; type?: string } = {},
+  init: {
+    method?: string;
+    token?: string;
+    body?: unknown;
+    raw?: BodyInit;
+    type?: string;
+    household?: string;
+  } = {},
 ) {
   const res = await api.request(path, {
     method: init.method ?? (init.body || init.raw ? "POST" : "GET"),
     headers: {
       "content-type": init.type ?? "application/json",
       ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+      ...(init.household ? { "x-household": init.household } : {}),
     },
     ...(init.body ? { body: JSON.stringify(init.body) } : {}),
     ...(init.raw ? { body: init.raw } : {}),
@@ -1431,5 +1439,328 @@ describe("Lounge phones", () => {
     await takeOver(dadApp, phone, deviceId, idle.nonce);
     expect((await http(`/users/${dad.id}`, { method: "DELETE", token })).status).toBe(204);
     expect(await phone.next("lounge.ended")).toMatchObject({ reason: "removed" });
+  });
+});
+
+// --- accounts, sign-up and several households (P1) -------------------------------------------
+
+/** Minimal CBOR encoder (ints, byte/text strings, maps) for fake WebAuthn attestations. */
+function cbor(value: unknown): Uint8Array {
+  const head = (major: number, n: number): number[] =>
+    n < 24
+      ? [(major << 5) | n]
+      : n < 256
+        ? [(major << 5) | 24, n]
+        : [(major << 5) | 25, n >> 8, n & 0xff];
+  const parts: number[] = [];
+  const put = (v: unknown): void => {
+    if (typeof v === "number") parts.push(...(v >= 0 ? head(0, v) : head(1, -1 - v)));
+    else if (typeof v === "string") {
+      const bytes = new TextEncoder().encode(v);
+      parts.push(...head(3, bytes.length), ...bytes);
+    } else if (v instanceof Uint8Array) parts.push(...head(2, v.length), ...v);
+    else if (v instanceof Map) {
+      parts.push(...head(5, v.size));
+      for (const [k, val] of v) {
+        put(k);
+        put(val);
+      }
+    } else throw new Error("unsupported");
+  };
+  put(value);
+  return new Uint8Array(parts);
+}
+
+/** A software passkey: answers a registration challenge with a "none" attestation. */
+async function fakeRegistration(options: { challenge: string; rp: { id: string } }) {
+  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+  ])) as CryptoKeyPair;
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  const credId = crypto.getRandomValues(new Uint8Array(16));
+  const cose = cbor(
+    new Map<number, unknown>([
+      [1, 2],
+      [3, -7],
+      [-1, 1],
+      [-2, raw.slice(1, 33)],
+      [-3, raw.slice(33, 65)],
+    ]),
+  );
+  const rpIdHash = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(options.rp.id)),
+  );
+  const authData = new Uint8Array([
+    ...rpIdHash,
+    0x45, // user present + verified + attested credential data
+    0,
+    0,
+    0,
+    0,
+    ...new Uint8Array(16),
+    0,
+    credId.length,
+    ...credId,
+    ...cose,
+  ]);
+  const clientData = JSON.stringify({
+    type: "webauthn.create",
+    challenge: options.challenge,
+    origin: "http://localhost",
+    crossOrigin: false,
+  });
+  const id = toBase64Url(credId);
+  return {
+    id,
+    rawId: id,
+    type: "public-key",
+    clientExtensionResults: {},
+    response: {
+      clientDataJSON: toBase64Url(new TextEncoder().encode(clientData)),
+      attestationObject: toBase64Url(
+        cbor(
+          new Map<string, unknown>([
+            ["fmt", "none"],
+            ["attStmt", new Map()],
+            ["authData", authData],
+          ]),
+        ),
+      ),
+      transports: ["internal"],
+    },
+  };
+}
+
+async function signUp(handle: string, name = "Jesse") {
+  const opts = await http("/signup/options", { body: { handle, name, timeZone: "UTC" } });
+  expect(opts.status).toBe(200);
+  const response = await fakeRegistration(opts.json.options);
+  const res = await http("/signup", { body: { challengeId: opts.json.challengeId, response } });
+  expect(res.status).toBe(201);
+  return {
+    token: res.json.token as string,
+    user: res.json.user as User,
+    householdId: res.json.household.id as string,
+    json: res.json,
+    response,
+    challengeId: opts.json.challengeId as string,
+  };
+}
+
+describe("open sign-up", () => {
+  it("is closed unless OPEN_SIGNUP is on", async () => {
+    expect((await http("/setup")).json).toMatchObject({ signup: false });
+    const opts = await http("/signup/options", {
+      body: { handle: "jesse", name: "Jesse", timeZone: "UTC" },
+    });
+    expect(opts.status).toBe(403);
+    const direct = await http("/signup", {
+      body: { challengeId: "ch_aaaaaaaaaaaaaaaa", response: { id: "x" } },
+    });
+    expect(direct.status).toBe(403);
+    // A challenge issued while sign-up was open can't be completed after it closes.
+    env.openSignup = true;
+    const open = await http("/signup/options", {
+      body: { handle: "jesse", name: "Jesse", timeZone: "UTC" },
+    });
+    env.openSignup = false;
+    const late = await http("/signup", {
+      body: {
+        challengeId: open.json.challengeId,
+        response: await fakeRegistration(open.json.options),
+      },
+    });
+    expect(late.status).toBe(403);
+    expect(await store.accountByHandle("jesse")).toBeUndefined();
+  });
+
+  it("creates an account, a passkey and a personal household; handles stay unique", async () => {
+    env.openSignup = true;
+    expect((await http("/setup")).json).toMatchObject({ signup: true });
+    const a = await signUp("jesse");
+    expect(a.json.account).toMatchObject({ handle: "jesse", address: "jesse@localhost" });
+    expect(a.json.household.name).toBe("Jesse's home");
+    expect(a.user.role).toBe("guardian");
+    const me = await http("/me", { token: a.token });
+    expect(me.json.account.address).toBe("jesse@localhost");
+    expect(me.json.memberships).toHaveLength(1);
+    expect((await http("/passkeys", { token: a.token })).json).toHaveLength(1);
+    // Replaying the same challenge fails; the handle is now taken.
+    const replay = await http("/signup", {
+      body: { challengeId: a.challengeId, response: a.response },
+    });
+    expect(replay.status).toBe(400);
+    const taken = await http("/signup/options", {
+      body: { handle: "JESSE", name: "J", timeZone: "UTC" },
+    });
+    expect(taken.status).toBe(409);
+    for (const handle of ["j", "no spaces", "admin", "x".repeat(31)]) {
+      const bad = await http("/signup/options", { body: { handle, name: "J", timeZone: "UTC" } });
+      expect(bad.status).toBe(400);
+    }
+    const tz = await http("/signup/options", {
+      body: { handle: "okay", name: "J", timeZone: "Nowhere/X" },
+    });
+    expect(tz.status).toBe(400);
+  });
+
+  it("refuses a second sign-up that raced for the same handle", async () => {
+    env.openSignup = true;
+    const body = { handle: "sam", name: "Sam", timeZone: "UTC" };
+    const first = await http("/signup/options", { body });
+    const second = await http("/signup/options", { body });
+    const ok = await http("/signup", {
+      body: {
+        challengeId: first.json.challengeId,
+        response: await fakeRegistration(first.json.options),
+      },
+    });
+    expect(ok.status).toBe(201);
+    const lost = await http("/signup", {
+      body: {
+        challengeId: second.json.challengeId,
+        response: await fakeRegistration(second.json.options),
+      },
+    });
+    expect(lost.status).toBe(409);
+  });
+});
+
+describe("one account, several households", () => {
+  it("adds a household, switches, and keeps each household's phones apart", async () => {
+    const g = await setup();
+    const home = g.user.householdId;
+    await pairDevice(g.token, "Kid phone");
+    const created = await http("/households", { token: g.token, body: { name: "Gran's" } });
+    expect(created.status).toBe(201);
+    const gran = created.json.household.id as string;
+    // The new household is now active, and it has no phones yet.
+    expect((await http("/me", { token: g.token })).json.household.id).toBe(gran);
+    expect((await http("/devices", { token: g.token })).json).toEqual([]);
+    // Per request, the header picks a household without changing the default.
+    expect((await http("/devices", { token: g.token, household: home })).json).toHaveLength(1);
+    const me = await http("/me", { token: g.token });
+    expect(me.json.memberships.map((m: { householdName: string }) => m.householdName)).toEqual([
+      "Home",
+      "Gran's",
+    ]);
+    expect(
+      (await http("/me/household", { method: "PUT", token: g.token, body: { householdId: home } }))
+        .status,
+    ).toBe(204);
+    expect((await http("/me", { token: g.token })).json.household.id).toBe(home);
+    // The companion socket can join either household.
+    const app = openApp();
+    app.write({ t: "app.hello", proto: 1, token: g.token, household: gran });
+    await app.next("app.ready");
+  });
+
+  it("joins another household through an invite while signed in", async () => {
+    const g = await setup();
+    const other = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Eve" },
+      0,
+    );
+    const eveToken = await store.createSession(other.guardian.id, timers.now);
+    const invite = await http("/invites", {
+      token: eveToken,
+      body: { name: "Mom", role: "guardian" },
+    });
+    const preview = await http(`/invites/${invite.json.token}`);
+    expect(preview.json.householdId).toBe(other.household.id);
+    const joined = await http("/invites/accept", {
+      token: g.token,
+      body: { token: invite.json.token },
+    });
+    expect(joined.status).toBe(201);
+    expect(joined.json.token).toBe(g.token);
+    expect(joined.json.user.accountId).toBe(g.user.accountId);
+    const me = await http("/me", { token: g.token });
+    expect(me.json.household.id).toBe(other.household.id);
+    expect(me.json.memberships).toHaveLength(2);
+    // Already a member: a second invite is refused and left unused.
+    const again = await http("/invites", { token: eveToken, body: { name: "M", role: "contact" } });
+    const dup = await http("/invites/accept", {
+      token: g.token,
+      body: { token: again.json.token },
+    });
+    expect(dup.status).toBe(409);
+    expect(await store.peekInvite(again.json.token, timers.now)).toBeDefined();
+  });
+
+  it("denies acting in households the account isn't in", async () => {
+    const g = await setup();
+    const other = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Eve" },
+      0,
+    );
+    const eveToken = await store.createSession(other.guardian.id, timers.now);
+    const { deviceId } = await pairDevice(eveToken, "Eve's kid");
+    const foreign = other.household.id;
+    for (const path of ["/devices", "/users", "/quiet-hours", "/me"]) {
+      const res = await http(path, { token: g.token, household: foreign });
+      expect(res.status).toBe(403);
+    }
+    const hijack = await http(`/devices/${deviceId}`, {
+      method: "PATCH",
+      token: g.token,
+      household: foreign,
+      body: { name: "Mine" },
+    });
+    expect(hijack.status).toBe(403);
+    expect((await store.getDevice(deviceId))?.name).toBe("Eve's kid");
+    const sw = await http("/me/household", {
+      method: "PUT",
+      token: g.token,
+      body: { householdId: foreign },
+    });
+    expect(sw.status).toBe(404);
+    expect((await http("/me", { token: g.token })).json.household.id).toBe(g.user.householdId);
+    const app = openApp();
+    app.write({ t: "app.hello", proto: 1, token: g.token, household: foreign });
+    await vi.waitFor(() => expect(app.closed?.code).toBe(CloseCode.unauthorized));
+    // A gateway serving only the other household (a Durable Object) refuses this session.
+    const eveOnly = new Gateway(env, { household: foreign });
+    const conn = new FakeConn();
+    conn.handler = eveOnly.openApp(conn);
+    conn.write({ t: "app.hello", proto: 1, token: g.token });
+    await vi.waitFor(() => expect(conn.closed?.code).toBe(CloseCode.unauthorized));
+  });
+
+  it("lets only guardians add households on an invite-only server", async () => {
+    const g = await setup();
+    const kid = await store.createUser(
+      { householdId: g.user.householdId, name: "Kid", role: "contact" },
+      0,
+    );
+    const kidToken = await store.createSession(kid.id, timers.now);
+    expect((await http("/households", { token: kidToken, body: { name: "Mine" } })).status).toBe(
+      403,
+    );
+    env.openSignup = true;
+    expect((await http("/households", { token: kidToken, body: { name: "Mine" } })).status).toBe(
+      201,
+    );
+  });
+});
+
+describe("handles", () => {
+  it("validates, keeps unique, and rate-limits changes", async () => {
+    const g = await setup();
+    expect((await http("/me", { token: g.token })).json.account.handle).toBe("mom");
+    await store.createAccount({ name: "Taken", handle: "taken" }, 0);
+    const change = (handle: string) =>
+      http("/account", { method: "PATCH", token: g.token, body: { handle } });
+    expect((await change("x")).status).toBe(400);
+    expect((await change("root")).status).toBe(400);
+    expect((await change("taken")).status).toBe(409);
+    const ok = await change("Jesse.G");
+    expect(ok.status).toBe(200);
+    expect(ok.json.address).toBe("jesse.g@localhost");
+    expect((await change("jesse.h")).status).toBe(429);
+    timers.advance(HANDLE_CHANGE_INTERVAL_MS);
+    expect((await change("jesse.h")).status).toBe(200);
+    // The old handle is free again.
+    expect(await store.accountByHandle("jesse.g")).toBeUndefined();
   });
 });

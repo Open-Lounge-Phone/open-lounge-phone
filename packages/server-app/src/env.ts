@@ -29,6 +29,11 @@ export interface ServerEnv {
   defer(work: Promise<unknown>): void;
   /** Canonical public URL (e.g. behind a TLS proxy); passkeys bind to its host. */
   publicUrl?: string;
+  /**
+   * Open sign-up (`OPEN_SIGNUP=1`): anyone may create an account with a passkey, which also
+   * creates their own household. Off by default; then people join only through invites.
+   */
+  openSignup?: boolean;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;

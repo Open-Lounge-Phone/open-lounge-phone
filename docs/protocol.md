@@ -332,6 +332,7 @@ First message from a companion app.
 | `id` | string (len ≤64) |  |  |
 | `proto` | integer | yes |  |
 | `token` | string (len ≥16, len ≤512) | yes |  |
+| `household` | string (len ≤64) |  |  |
 
 ### `call.dial`
 

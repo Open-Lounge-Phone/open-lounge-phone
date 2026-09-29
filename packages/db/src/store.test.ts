@@ -1,7 +1,10 @@
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { newPairingCode } from "./crypto.ts";
-import { migrate, openSqlite } from "./node.ts";
-import { PAIRING_TTL_MS, SESSION_TTL_MS, Store } from "./store.ts";
+import { MIGRATIONS_DIR, migrate, openSqlite } from "./node.ts";
+import { handleFromName, handleProblem, PAIRING_TTL_MS, SESSION_TTL_MS, Store } from "./store.ts";
 
 const T0 = 1_780_000_000_000;
 const KEY = "k".repeat(43);
@@ -186,14 +189,15 @@ describe("passkey challenges", () => {
   it("are single use and kind-specific", async () => {
     const { guardian } = await household();
     const id = await store.saveChallenge(
-      { kind: "register", challenge: "abc", userId: guardian.id },
+      { kind: "register", challenge: "abc", accountId: guardian.accountId },
       T0,
     );
     expect(await store.takeChallenge(id, "login", T0)).toBeUndefined();
     const again = await store.saveChallenge({ kind: "login", challenge: "xyz" }, T0);
     expect(await store.takeChallenge(again, "login", T0)).toEqual({
       challenge: "xyz",
-      userId: null,
+      accountId: null,
+      data: null,
     });
     expect(await store.takeChallenge(again, "login", T0)).toBeUndefined();
   });
@@ -202,7 +206,7 @@ describe("passkey challenges", () => {
     const { guardian } = await household();
     await store.addPasskey({
       id: "cred1",
-      userId: guardian.id,
+      accountId: guardian.accountId,
       publicKey: "pk",
       counter: 0,
       transports: ["internal"],
@@ -211,8 +215,8 @@ describe("passkey challenges", () => {
     });
     await store.touchPasskey("cred1", 5, T0 + 1);
     expect(await store.getPasskey("cred1")).toMatchObject({ counter: 5, lastUsedAt: T0 + 1 });
-    expect(await store.deletePasskey("cred1", "usr_other")).toBe(false);
-    expect(await store.deletePasskey("cred1", guardian.id)).toBe(true);
+    expect(await store.deletePasskey("cred1", "acc_other")).toBe(false);
+    expect(await store.deletePasskey("cred1", guardian.accountId)).toBe(true);
   });
 });
 
@@ -283,5 +287,134 @@ describe("single use under concurrency", () => {
       store.takeChallenge(id, "login", T0),
     ]);
     expect(results.filter(Boolean)).toHaveLength(1);
+  });
+});
+
+describe("0006_accounts backfill", () => {
+  it("gives every existing person an account with a unique handle, keeping sessions and passkeys", async () => {
+    // A database as it was before accounts: migrations up to 0005 only.
+    const dir = mkdtempSync(join(tmpdir(), "olp-mig-"));
+    for (const f of readdirSync(MIGRATIONS_DIR).filter((f) => f < "0006")) {
+      copyFileSync(join(MIGRATIONS_DIR, f), join(dir, f));
+    }
+    const old = openSqlite(":memory:");
+    migrate(old.db, dir);
+    rmSync(dir, { recursive: true, force: true });
+    old.db.exec(`
+      INSERT INTO households (id, name, time_zone, created_at) VALUES ('hh_1', 'Home', 'UTC', 1);
+      INSERT INTO users (id, household_id, name, role, created_at) VALUES
+        ('usr_AAAAAAAAAAAAAAAA', 'hh_1', 'Mom', 'guardian', 1),
+        ('usr_BBBBBBBBBBBBBBBB', 'hh_1', 'mom', 'contact', 2),
+        ('usr_CCCCCCCCCCCCCCCC', 'hh_1', 'Grandma Jo', 'contact', 3),
+        ('usr_DDDDDDDDDDDDDDDD', 'hh_1', 'José', 'contact', 4),
+        ('usr_EEEEEEEEEEEEEEEE', 'hh_1', 'Zoë', 'contact', 5),
+        ('usr_FFFFFFFFFFFFFFFF', 'hh_1', 'M', 'contact', 6),
+        ('usr_GGGGGGGGGGGGGGGG', 'hh_1', 'MOM', 'contact', 7);
+      INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
+        VALUES ('h1', 'usr_AAAAAAAAAAAAAAAA', 1, 9999999999999);
+      INSERT INTO passkeys (id, user_id, public_key, name, created_at)
+        VALUES ('cred1', 'usr_CCCCCCCCCCCCCCCC', 'pk', 'Laptop', 1);
+    `);
+    expect(migrate(old.db)).toContain("0006_accounts.sql");
+    const rows = old.db
+      .prepare(
+        "SELECT u.name, a.handle, a.name AS account_name FROM users u JOIN accounts a ON a.id = u.account_id ORDER BY u.created_at",
+      )
+      .all() as { name: string; handle: string; account_name: string }[];
+    expect(rows.map((r) => [r.name, r.handle])).toEqual([
+      ["Mom", "mom"],
+      ["mom", "mom-2"],
+      ["Grandma Jo", "grandma.jo"],
+      ["José", "user"],
+      ["Zoë", "user-2"],
+      ["M", "user-3"],
+      ["MOM", "mom-3"],
+    ]);
+    for (const r of rows) {
+      expect(r.account_name).toBe(r.name);
+      expect(handleProblem(r.handle)).toBeUndefined();
+    }
+    const s = new Store(old.sql);
+    const user = await s.getUser("usr_AAAAAAAAAAAAAAAA");
+    expect(old.db.prepare("SELECT account_id, user_id FROM sessions").get()).toEqual({
+      account_id: user?.accountId,
+      user_id: "usr_AAAAAAAAAAAAAAAA",
+    });
+    const grandma = await s.getUser("usr_CCCCCCCCCCCCCCCC");
+    expect((await s.getPasskey("cred1"))?.accountId).toBe(grandma?.accountId);
+    old.db.close();
+  });
+});
+
+describe("accounts and handles", () => {
+  it("validates handles", () => {
+    for (const ok of ["jo", "jesse", "jesse.garcia", "a_b-c", "x".repeat(30)]) {
+      expect(handleProblem(ok)).toBeUndefined();
+    }
+    for (const bad of ["j", "Jesse", "jes se", "jö", "x".repeat(31), "a@b", "", "admin"]) {
+      expect(handleProblem(bad)).toBeDefined();
+    }
+    expect(handleFromName("José Díaz")).toBe("jose.diaz");
+    expect(handleFromName("  Grandma  ")).toBe("grandma");
+    expect(handleFromName("🙂")).toBe("user");
+    expect(handleFromName("Admin")).toBe("user");
+  });
+
+  it("keeps handles unique, derives unique ones from names, and changes them", async () => {
+    const a = await store.createAccount({ name: "Jesse", handle: "jesse" }, T0);
+    expect(a?.handle).toBe("jesse");
+    expect(await store.createAccount({ name: "Other", handle: "jesse" }, T0)).toBeUndefined();
+    expect((await store.createAccount({ name: "Jesse" }, T0))?.handle).toBe("jesse-2");
+    const b = await store.createAccount({ name: "Bo", handle: "bo" }, T0);
+    expect(await store.setHandle(b?.id ?? "", "jesse", T0)).toBe(false);
+    expect(await store.setHandle(b?.id ?? "", "bobby", T0 + 1)).toBe(true);
+    expect(await store.accountByHandle("BOBBY")).toMatchObject({
+      id: b?.id,
+      handleChangedAt: T0 + 1,
+    });
+    expect(await store.accountByHandle("bo")).toBeUndefined();
+  });
+
+  it("lets one account belong to two households and switch between them", async () => {
+    const { household: home, guardian } = await household();
+    const { household: gran } = await store.createHousehold(
+      { name: "Gran's", timeZone: "UTC", guardianName: "Mom", accountId: guardian.accountId },
+      T0,
+    );
+    const memberships = await store.listMemberships(guardian.accountId);
+    expect(memberships.map((m) => m.household.name)).toEqual(["Home", "Gran's"]);
+    const token = await store.createSession(guardian.id, T0);
+    expect((await store.userForToken(token, T0))?.householdId).toBe(home.id);
+    const granMember = await store.membership(guardian.accountId, gran.id);
+    await store.setSessionUser(token, granMember?.id ?? "");
+    expect((await store.userForToken(token, T0))?.householdId).toBe(gran.id);
+    // Another account's membership can't be made active.
+    const stranger = await store.createHousehold(
+      { name: "Else", timeZone: "UTC", guardianName: "Eve" },
+      T0,
+    );
+    await store.setSessionUser(token, stranger.guardian.id);
+    expect((await store.userForToken(token, T0))?.householdId).toBe(gran.id);
+  });
+
+  it("falls back to another household when removed, and ends the account with the last one", async () => {
+    const { household: home, guardian } = await household();
+    const kid = await store.createUser({ householdId: home.id, name: "Kid", role: "contact" }, T0);
+    const { household: other, guardian: eve } = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Eve" },
+      T0,
+    );
+    const kidThere = await store.createUser(
+      { householdId: other.id, name: "Kid", role: "contact", accountId: kid.accountId },
+      T0,
+    );
+    const token = await store.createSession(kidThere.id, T0);
+    await store.deleteUser(kidThere.id);
+    expect((await store.userForToken(token, T0))?.householdId).toBe(home.id);
+    await store.deleteUser(kid.id);
+    expect(await store.sessionForToken(token, T0)).toBeUndefined();
+    expect(await store.getAccount(kid.accountId)).toBeUndefined();
+    expect(await store.getAccount(guardian.accountId)).toBeDefined();
+    expect(await store.getAccount(eve.accountId)).toBeDefined();
   });
 });

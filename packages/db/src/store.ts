@@ -17,12 +17,77 @@ export interface Household {
   createdAt: number;
 }
 
+/** A membership: one account's role (and name) in one household. */
 export interface User {
   id: string;
   householdId: string;
+  /** The person's account on this server (shared across their households). */
+  accountId: string;
   name: string;
   role: Role;
 }
+
+/** A person on this server, addressed as `handle@host`. */
+export interface Account {
+  id: string;
+  handle: string;
+  name: string;
+  createdAt: number;
+  handleChangedAt: number | null;
+}
+
+/** One of an account's households, with its role there. */
+export interface Membership {
+  user: User;
+  household: Household;
+}
+
+/** Handles are unique per server: 2–30 of a-z, 0-9, ".", "_" and "-". */
+export const HANDLE_RE = /^[a-z0-9._-]{2,30}$/;
+/** Handles that would read as the server itself or its staff. */
+export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
+  "admin",
+  "administrator",
+  "root",
+  "system",
+  "support",
+  "help",
+  "hub",
+  "server",
+  "operator",
+  "postmaster",
+  "abuse",
+  "security",
+  "openloungephone",
+  "noreply",
+  "no-reply",
+]);
+
+/** Why a handle can't be used, or undefined when it's fine (uniqueness is checked separately). */
+export function handleProblem(handle: string): string | undefined {
+  if (!HANDLE_RE.test(handle)) {
+    return "use 2-30 lower-case letters, digits, dots, dashes or underscores";
+  }
+  if (RESERVED_HANDLES.has(handle)) return "that handle is reserved";
+  return undefined;
+}
+
+/** A handle suggestion from a display name ("José Díaz" → "jose.diaz"). */
+export function handleFromName(name: string): string {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/'/g, "")
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 24)
+    .replace(/\.+$/, "");
+  return slug.length >= 2 && !RESERVED_HANDLES.has(slug) ? slug : "user";
+}
+
+/** Minimum time between two handle changes. */
+export const HANDLE_CHANGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type KeyAlg = "ed25519" | "p256";
 export type PhoneKind = "kids" | "lounge";
@@ -93,7 +158,7 @@ export interface Invite {
 
 export interface Passkey {
   id: string;
-  userId: string;
+  accountId: string;
   publicKey: string;
   counter: number;
   transports: string[];
@@ -150,7 +215,7 @@ const toVoicemail = (r: VoicemailRow): Voicemail => ({
 
 type PasskeyRow = {
   id: string;
-  user_id: string;
+  account_id: string;
   public_key: string;
   counter: number;
   transports: string;
@@ -160,7 +225,7 @@ type PasskeyRow = {
 };
 const toPasskey = (r: PasskeyRow): Passkey => ({
   id: r.id,
-  userId: r.user_id,
+  accountId: r.account_id,
   publicKey: r.public_key,
   counter: r.counter,
   transports: JSON.parse(r.transports) as string[],
@@ -180,7 +245,27 @@ type DeviceRow = {
   created_at: number;
   last_seen: number | null;
 };
-type UserRow = { id: string; household_id: string; name: string; role: Role };
+type UserRow = {
+  id: string;
+  household_id: string;
+  account_id: string;
+  name: string;
+  role: Role;
+};
+type AccountRow = {
+  id: string;
+  handle: string;
+  name: string;
+  created_at: number;
+  handle_changed_at: number | null;
+};
+const toAccount = (r: AccountRow): Account => ({
+  id: r.id,
+  handle: r.handle,
+  name: r.name,
+  createdAt: r.created_at,
+  handleChangedAt: r.handle_changed_at,
+});
 type ContactRow = {
   user_id: string;
   label: string;
@@ -203,6 +288,7 @@ const toDevice = (r: DeviceRow): Device => ({
 const toUser = (r: UserRow): User => ({
   id: r.id,
   householdId: r.household_id,
+  accountId: r.account_id,
   name: r.name,
   role: r.role,
 });
@@ -243,6 +329,114 @@ export class Store {
     }
   }
 
+  // --- accounts -------------------------------------------------------------
+
+  /**
+   * Creates an account. With no handle, one is derived from the name and made unique ("mom",
+   * "mom-2", ...). An explicit handle that is taken returns undefined.
+   */
+  async createAccount(
+    input: { name: string; handle?: string },
+    now: number,
+  ): Promise<Account | undefined> {
+    const id = newId("acc");
+    const candidates = input.handle ? [input.handle] : this.handleCandidates(input.name);
+    for (const handle of candidates) {
+      const { changes } = await this.sql.run(
+        "INSERT OR IGNORE INTO accounts (id, handle, name, created_at) VALUES (?, ?, ?, ?)",
+        id,
+        handle,
+        input.name,
+        now,
+      );
+      if (changes === 1) {
+        return { id, handle, name: input.name, createdAt: now, handleChangedAt: null };
+      }
+    }
+    return undefined;
+  }
+
+  private *handleCandidates(name: string): Generator<string> {
+    const base = handleFromName(name);
+    yield base;
+    for (let n = 2; n < 10; n++) yield `${base}-${n}`;
+    for (;;) yield `${base}-${newPairingCode()}`;
+  }
+
+  async getAccount(id: string): Promise<Account | undefined> {
+    const r = await this.sql.first<AccountRow>("SELECT * FROM accounts WHERE id = ?", id);
+    return r && toAccount(r);
+  }
+
+  async accountByHandle(handle: string): Promise<Account | undefined> {
+    const r = await this.sql.first<AccountRow>(
+      "SELECT * FROM accounts WHERE handle = ?",
+      handle.toLowerCase(),
+    );
+    return r && toAccount(r);
+  }
+
+  /** Changes a handle. Validate with `handleProblem` first. False when it's taken. */
+  async setHandle(accountId: string, handle: string, now: number): Promise<boolean> {
+    try {
+      const { changes } = await this.sql.run(
+        "UPDATE accounts SET handle = ?, handle_changed_at = ? WHERE id = ?",
+        handle,
+        now,
+        accountId,
+      );
+      return changes === 1;
+    } catch (e) {
+      if (/UNIQUE/i.test(String(e))) return false;
+      throw e;
+    }
+  }
+
+  async setAccountName(accountId: string, name: string): Promise<void> {
+    await this.sql.run("UPDATE accounts SET name = ? WHERE id = ?", name, accountId);
+  }
+
+  /** Every household the account belongs to, oldest membership first. */
+  async listMemberships(accountId: string): Promise<Membership[]> {
+    const rows = await this.sql.all<
+      UserRow & { h_name: string; h_time_zone: string; h_created_at: number }
+    >(
+      `SELECT u.id, u.household_id, u.account_id, u.name, u.role,
+         h.name AS h_name, h.time_zone AS h_time_zone, h.created_at AS h_created_at
+       FROM users u JOIN households h ON h.id = u.household_id
+       WHERE u.account_id = ? ORDER BY u.created_at, u.rowid`,
+      accountId,
+    );
+    return rows.map((r) => ({
+      user: toUser(r),
+      household: {
+        id: r.household_id,
+        name: r.h_name,
+        timeZone: r.h_time_zone,
+        createdAt: r.h_created_at,
+      },
+    }));
+  }
+
+  /** The account's membership in a household, if it has one. */
+  async membership(accountId: string, householdId: string): Promise<User | undefined> {
+    const r = await this.sql.first<UserRow>(
+      "SELECT * FROM users WHERE account_id = ? AND household_id = ?",
+      accountId,
+      householdId,
+    );
+    return r && toUser(r);
+  }
+
+  /** Households in which the account is a guardian (for quotas). */
+  async countGuardianships(accountId: string): Promise<number> {
+    const r = await this.sql.first<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM users WHERE account_id = ? AND role = 'guardian'",
+      accountId,
+    );
+    return r?.n ?? 0;
+  }
+
   // --- households & users -------------------------------------------------
 
   async countHouseholds(): Promise<number> {
@@ -250,11 +444,17 @@ export class Store {
     return row?.n ?? 0;
   }
 
-  /** Creates a household with its first guardian. */
+  /**
+   * Creates a household with its first guardian. With `accountId` the guardian is that account's
+   * new membership; otherwise a new account is created for them.
+   */
   async createHousehold(
-    input: { name: string; timeZone: string; guardianName: string },
+    input: { name: string; timeZone: string; guardianName: string; accountId?: string },
     now: number,
   ): Promise<{ household: Household; guardian: User }> {
+    const accountId =
+      input.accountId ??
+      ((await this.createAccount({ name: input.guardianName }, now)) as Account).id;
     const household: Household = {
       id: newId("hh"),
       name: input.name,
@@ -264,6 +464,7 @@ export class Store {
     const guardian: User = {
       id: newId("usr"),
       householdId: household.id,
+      accountId,
       name: input.guardianName,
       role: "guardian",
     };
@@ -274,8 +475,8 @@ export class Store {
       },
       {
         query:
-          "INSERT INTO users (id, household_id, name, role, created_at) VALUES (?, ?, ?, ?, ?)",
-        params: [guardian.id, household.id, guardian.name, guardian.role, now],
+          "INSERT INTO users (id, household_id, account_id, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        params: [guardian.id, household.id, accountId, guardian.name, guardian.role, now],
       },
     ]);
     return { household, guardian };
@@ -291,15 +492,28 @@ export class Store {
     return r && { id: r.id, name: r.name, timeZone: r.time_zone, createdAt: r.created_at };
   }
 
+  /**
+   * Adds a person to a household. With `accountId` it's another membership of that account;
+   * otherwise a new account is created for them.
+   */
   async createUser(
-    input: { householdId: string; name: string; role: Role },
+    input: { householdId: string; name: string; role: Role; accountId?: string },
     now: number,
   ): Promise<User> {
-    const user: User = { id: newId("usr"), ...input };
+    const accountId =
+      input.accountId ?? ((await this.createAccount({ name: input.name }, now)) as Account).id;
+    const user: User = {
+      id: newId("usr"),
+      householdId: input.householdId,
+      accountId,
+      name: input.name,
+      role: input.role,
+    };
     await this.sql.run(
-      "INSERT INTO users (id, household_id, name, role, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO users (id, household_id, account_id, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
       user.id,
       user.householdId,
+      user.accountId,
       user.name,
       user.role,
       now,
@@ -325,9 +539,21 @@ export class Store {
     return new Map(rows.map((r) => [r.id, r.available === 1]));
   }
 
-  /** Removes a person; their sessions, passkeys, allow-list entries and keys go with them. */
+  /**
+   * Removes a person from a household; their allow-list entries and keys there go with it. An
+   * account left with no household at all is deleted with its sessions and passkeys.
+   */
   async deleteUser(id: string): Promise<void> {
-    await this.sql.run("DELETE FROM users WHERE id = ?", id);
+    const user = await this.getUser(id);
+    if (!user) return;
+    await this.sql.batch([
+      { query: "DELETE FROM users WHERE id = ?", params: [id] },
+      {
+        query:
+          "DELETE FROM accounts WHERE id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE account_id = ?)",
+        params: [user.accountId, user.accountId],
+      },
+    ]);
   }
 
   async listUsers(householdId: string): Promise<User[]> {
@@ -340,12 +566,24 @@ export class Store {
 
   // --- sessions -----------------------------------------------------------
 
-  /** Returns the bearer token; only its hash is stored. */
+  /** Signs in the membership's account with that household active. Returns the bearer token. */
   async createSession(userId: string, now: number): Promise<string> {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error(`unknown user ${userId}`);
+    return this.createAccountSession(user.accountId, user.id, now);
+  }
+
+  /** Returns the bearer token; only its hash is stored. `userId` is the active membership. */
+  async createAccountSession(
+    accountId: string,
+    userId: string | null,
+    now: number,
+  ): Promise<string> {
     const token = newToken();
     await this.sql.run(
-      "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO sessions (token_hash, account_id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
       await sha256(token),
+      accountId,
       userId,
       now,
       now + SESSION_TTL_MS,
@@ -353,14 +591,48 @@ export class Store {
     return token;
   }
 
-  async userForToken(token: string, now: number): Promise<User | undefined> {
-    const r = await this.sql.first<UserRow>(
-      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`,
-      await sha256(token),
+  /**
+   * Resolves a session: its account and active membership. When the active membership is gone
+   * (removed from that household), the account's oldest remaining membership becomes active;
+   * `user` is undefined only for an account that belongs to no household.
+   */
+  async sessionForToken(
+    token: string,
+    now: number,
+  ): Promise<{ account: Account; user: User | undefined } | undefined> {
+    const hash = await sha256(token);
+    const s = await this.sql.first<{ account_id: string; user_id: string | null }>(
+      "SELECT account_id, user_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
+      hash,
       now,
     );
-    return r && toUser(r);
+    if (!s) return undefined;
+    const account = await this.getAccount(s.account_id);
+    if (!account) return undefined;
+    let user = s.user_id ? await this.getUser(s.user_id) : undefined;
+    if (!user || user.accountId !== account.id) {
+      user = (await this.listMemberships(account.id))[0]?.user;
+      if (user) {
+        await this.sql.run("UPDATE sessions SET user_id = ? WHERE token_hash = ?", user.id, hash);
+      }
+    }
+    return { account, user };
+  }
+
+  /** The session's active membership (see `sessionForToken`). */
+  async userForToken(token: string, now: number): Promise<User | undefined> {
+    return (await this.sessionForToken(token, now))?.user;
+  }
+
+  /** Makes another of the session's own memberships active. */
+  async setSessionUser(token: string, userId: string): Promise<void> {
+    await this.sql.run(
+      `UPDATE sessions SET user_id = ? WHERE token_hash = ?
+       AND account_id = (SELECT account_id FROM users WHERE id = ?)`,
+      userId,
+      await sha256(token),
+      userId,
+    );
   }
 
   async deleteSession(token: string): Promise<void> {
@@ -719,8 +991,12 @@ export class Store {
     );
   }
 
-  /** Consumes an invite (single use) and returns the person it signs in, creating them if new. */
-  async acceptInvite(token: string, now: number): Promise<User | undefined> {
+  /**
+   * Consumes an invite (single use) and returns the membership it signs in. A sign-in link
+   * returns its existing person; otherwise a new membership is created, for `accountId` when the
+   * person accepting is already signed in, else for a new account.
+   */
+  async acceptInvite(token: string, now: number, accountId?: string): Promise<User | undefined> {
     const invite = await this.peekInvite(token, now);
     if (!invite) return undefined;
     const { changes } = await this.sql.run(
@@ -730,7 +1006,12 @@ export class Store {
     if (changes !== 1) return undefined; // accepted concurrently
     if (invite.userId) return this.getUser(invite.userId);
     return this.createUser(
-      { householdId: invite.householdId, name: invite.name, role: invite.role },
+      {
+        householdId: invite.householdId,
+        name: invite.name,
+        role: invite.role,
+        ...(accountId ? { accountId } : {}),
+      },
       now,
     );
   }
@@ -738,7 +1019,13 @@ export class Store {
   // --- passkeys ---------------------------------------------------------------
 
   async saveChallenge(
-    input: { kind: "register" | "login"; challenge: string; userId?: string },
+    input: {
+      kind: "register" | "login" | "signup";
+      challenge: string;
+      accountId?: string;
+      /** Small JSON-able payload kept until the challenge is taken (sign-up details). */
+      data?: unknown;
+    },
     now: number,
   ): Promise<string> {
     const id = newId("ch");
@@ -746,8 +1033,15 @@ export class Store {
       { query: "DELETE FROM auth_challenges WHERE expires_at <= ?", params: [now] },
       {
         query:
-          "INSERT INTO auth_challenges (id, challenge, kind, user_id, expires_at) VALUES (?, ?, ?, ?, ?)",
-        params: [id, input.challenge, input.kind, input.userId ?? null, now + CHALLENGE_TTL_MS],
+          "INSERT INTO auth_challenges (id, challenge, kind, account_id, data, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+        params: [
+          id,
+          input.challenge,
+          input.kind,
+          input.accountId ?? null,
+          input.data === undefined ? null : JSON.stringify(input.data),
+          now + CHALLENGE_TTL_MS,
+        ],
       },
     ]);
     return id;
@@ -756,25 +1050,35 @@ export class Store {
   /** Single use: the challenge is deleted whether or not verification later succeeds. */
   async takeChallenge(
     id: string,
-    kind: "register" | "login",
+    kind: "register" | "login" | "signup",
     now: number,
-  ): Promise<{ challenge: string; userId: string | null } | undefined> {
-    const r = await this.sql.first<{ challenge: string; user_id: string | null }>(
-      "SELECT challenge, user_id FROM auth_challenges WHERE id = ? AND kind = ? AND expires_at > ?",
+  ): Promise<{ challenge: string; accountId: string | null; data: unknown } | undefined> {
+    const r = await this.sql.first<{
+      challenge: string;
+      account_id: string | null;
+      data: string | null;
+    }>(
+      "SELECT challenge, account_id, data FROM auth_challenges WHERE id = ? AND kind = ? AND expires_at > ?",
       id,
       kind,
       now,
     );
     const { changes } = await this.sql.run("DELETE FROM auth_challenges WHERE id = ?", id);
-    return r && changes === 1 ? { challenge: r.challenge, userId: r.user_id } : undefined;
+    return r && changes === 1
+      ? {
+          challenge: r.challenge,
+          accountId: r.account_id,
+          data: r.data === null ? null : (JSON.parse(r.data) as unknown),
+        }
+      : undefined;
   }
 
   async addPasskey(p: Omit<Passkey, "lastUsedAt">): Promise<void> {
     await this.sql.run(
-      `INSERT INTO passkeys (id, user_id, public_key, counter, transports, name, created_at)
+      `INSERT INTO passkeys (id, account_id, public_key, counter, transports, name, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       p.id,
-      p.userId,
+      p.accountId,
       p.publicKey,
       p.counter,
       JSON.stringify(p.transports),
@@ -788,10 +1092,10 @@ export class Store {
     return r && toPasskey(r);
   }
 
-  async listPasskeys(userId: string): Promise<Passkey[]> {
+  async listPasskeys(accountId: string): Promise<Passkey[]> {
     const rows = await this.sql.all<PasskeyRow>(
-      "SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at",
-      userId,
+      "SELECT * FROM passkeys WHERE account_id = ? ORDER BY created_at",
+      accountId,
     );
     return rows.map(toPasskey);
   }
@@ -805,11 +1109,11 @@ export class Store {
     );
   }
 
-  async deletePasskey(id: string, userId: string): Promise<boolean> {
+  async deletePasskey(id: string, accountId: string): Promise<boolean> {
     const { changes } = await this.sql.run(
-      "DELETE FROM passkeys WHERE id = ? AND user_id = ?",
+      "DELETE FROM passkeys WHERE id = ? AND account_id = ?",
       id,
-      userId,
+      accountId,
     );
     return changes === 1;
   }

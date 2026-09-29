@@ -46,6 +46,7 @@ export async function start(config: Config) {
       work.catch((e) => console.error("[error] background task failed", e));
     },
     ...(config.publicUrlExplicit ? { publicUrl: config.publicUrl } : {}),
+    openSignup: config.openSignup,
     now: () => Date.now(),
     iceServers: () => buildIceServers(config.ice, Date.now()),
     setTimer: (fn, ms) => {
@@ -126,6 +127,7 @@ export async function start(config: Config) {
 
   const setupToken = await ensureSetupToken(env);
   console.log(`Open Lounge Phone listening on ${config.publicUrl}`);
+  if (config.openSignup) console.log("  Open sign-up is ON: anyone can create an account.");
   if (setupToken) {
     console.log(`\n  First run! Open this link to create your household:\n`);
     console.log(`    ${config.publicUrl}/#setup=${setupToken}\n`);

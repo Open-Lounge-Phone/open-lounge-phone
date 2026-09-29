@@ -2,6 +2,10 @@
 //
 //   node scripts/deploy.ts --instance l1 --domain l1.openloungephone.app [--no-ai]
 //                          [--turn-key-id ID --turn-key-token TOKEN] [--new-setup-token]
+//                          [--open-signup]
+//
+// --open-signup lets anyone create an account on the instance (a public hub). Without it the
+// instance is invite-only; every deploy sets the flag, so omitting it closes sign-up again.
 //
 // Idempotent: creates the D1 database and R2 bucket only if missing, applies pending
 // migrations, deploys the Worker on the custom domain, and on first run sets a one-time
@@ -24,6 +28,7 @@ const { values: args } = parseArgs({
     "turn-key-id": { type: "string" },
     "turn-key-token": { type: "string" },
     "new-setup-token": { type: "boolean", default: false },
+    "open-signup": { type: "boolean", default: false },
   },
 });
 
@@ -41,6 +46,7 @@ interface InstanceState {
   database: { name: string; id: string };
   bucket: string;
   ai: boolean;
+  openSignup: boolean;
   setupTokenSet: boolean;
 }
 
@@ -118,6 +124,7 @@ const config = {
   ],
   r2_buckets: [{ binding: "BLOBS", bucket_name: bucket }],
   ...(ai ? { ai: { binding: "AI" } } : {}),
+  vars: { ...(base.vars as object | undefined), OPEN_SIGNUP: args["open-signup"] ? "1" : "0" },
   routes: [{ pattern: domain, custom_domain: true }],
   workers_dev: false,
 };
@@ -157,11 +164,17 @@ const state: InstanceState = {
   database: { name: dbName, id: db.uuid },
   bucket,
   ai,
+  openSignup: args["open-signup"] === true,
   setupTokenSet: previous.setupTokenSet || setupToken !== undefined,
 };
 writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 
 console.log(`\n✔ Open Lounge Phone "${instance}" is live at https://${domain}`);
+console.log(
+  args["open-signup"]
+    ? "  Open sign-up is ON: anyone can create an account."
+    : "  Invite-only (pass --open-signup to let anyone create an account).",
+);
 if (setupToken) {
   console.log(`\n  Create your household (works once, until the first household exists):`);
   console.log(`\n    https://${domain}/#setup=${setupToken}\n`);

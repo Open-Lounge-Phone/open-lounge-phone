@@ -1,4 +1,4 @@
-import type { Household, Role, Store, User } from "@openloungephone/db";
+import type { Account, Household, Role, User } from "@openloungephone/db";
 import { fromBase64Url, Id, toBase64Url } from "@openloungephone/protocol";
 import {
   generateAuthenticationOptions,
@@ -8,9 +8,10 @@ import {
 } from "@simplewebauthn/server";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { accountView, resolveSession, serverHost } from "./accounts.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
-import { body, guardianOnly, type Vars } from "./httpUtil.ts";
+import { body, guardianOnly, relyingParty, type Vars } from "./httpUtil.ts";
 
 const Name = z.string().trim().min(1).max(24);
 
@@ -30,16 +31,19 @@ const LoginVerifyBody = z.object({
   response: z.looseObject({ id: z.string() }),
 });
 
-/** Relying-party identity: PUBLIC_URL when configured (reverse proxies), else the request URL. */
-function relyingParty(env: ServerEnv, requestUrl: string): { rpID: string; origin: string } {
-  const url = new URL(env.publicUrl ?? requestUrl);
-  return { rpID: url.hostname, origin: url.origin };
-}
-
-async function signIn(store: Store, user: User, now: number) {
-  const token = await store.createSession(user.id, now);
+async function signIn(
+  env: ServerEnv,
+  requestUrl: string,
+  user: User,
+  now: number,
+  existingToken?: string,
+) {
+  const { store } = env;
+  const token = existingToken ?? (await store.createSession(user.id, now));
+  if (existingToken) await store.setSessionUser(existingToken, user.id);
   const household = (await store.getHousehold(user.householdId)) as Household;
-  return { token, user, household };
+  const account = (await store.getAccount(user.accountId)) as Account;
+  return { token, user, household, account: accountView(account, serverHost(env, requestUrl)) };
 }
 
 /** Routes that work without a session: invite acceptance and passkey sign-in. */
@@ -51,6 +55,7 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
     if (!invite) return c.json({ error: "this invite link has expired or was already used" }, 404);
     const household = await store.getHousehold(invite.householdId);
     return c.json({
+      householdId: invite.householdId,
       householdName: household?.name ?? "",
       name: invite.name,
       role: invite.role,
@@ -58,13 +63,28 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
     });
   });
 
+  /**
+   * Accepts an invite. Signed in (a bearer token), a new-person invite adds a membership to your
+   * existing account and makes that household active; otherwise it creates a new person. A
+   * sign-in link always signs in the person it names.
+   */
   api.post("/invites/accept", async (c) => {
     const b = await body(c.req.raw, TokenBody);
     if (b instanceof Response) return b;
     const now = env.now();
-    const user = await store.acceptInvite(b.token, now);
-    if (!user) return c.json({ error: "this invite link has expired or was already used" }, 404);
-    return c.json(await signIn(store, user, now), 201);
+    const gone = () => c.json({ error: "this invite link has expired or was already used" }, 404);
+    const invite = await store.peekInvite(b.token, now);
+    if (!invite) return gone();
+    const header = c.req.header("authorization") ?? "";
+    const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const session = bearer ? await resolveSession(store, bearer, undefined, now) : undefined;
+    const account = typeof session === "object" && !invite.userId ? session.account : undefined;
+    if (account && (await store.membership(account.id, invite.householdId))) {
+      return c.json({ error: "you're already in this household" }, 409);
+    }
+    const user = await store.acceptInvite(b.token, now, account?.id);
+    if (!user) return gone();
+    return c.json(await signIn(env, c.req.url, user, now, account ? bearer : undefined), 201);
   });
 
   api.post("/passkeys/login/options", async (c) => {
@@ -107,9 +127,9 @@ export function publicPeopleRoutes(api: Hono<Vars>, env: ServerEnv): void {
       env.log("warn", "passkey sign-in rejected", { error: String(e) });
       return c.json({ error: "sign-in failed; try again" }, 401);
     }
-    const user = await store.getUser(passkey.userId);
+    const [user] = (await store.listMemberships(passkey.accountId)).map((m) => m.user);
     if (!user) return c.json({ error: "sign-in failed; try again" }, 401);
-    return c.json(await signIn(store, user, now));
+    return c.json(await signIn(env, c.req.url, user, now));
   });
 }
 
@@ -153,47 +173,46 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
   });
 
   api.get("/passkeys", async (c) => {
-    const passkeys = await store.listPasskeys(c.get("user").id);
+    const passkeys = await store.listPasskeys(c.get("account").id);
     return c.json(
       passkeys.map(({ id, name, createdAt, lastUsedAt }) => ({ id, name, createdAt, lastUsedAt })),
     );
   });
 
   api.delete("/passkeys/:id", async (c) => {
-    const ok = await store.deletePasskey(c.req.param("id"), c.get("user").id);
+    const ok = await store.deletePasskey(c.req.param("id"), c.get("account").id);
     return ok ? c.body(null, 204) : c.json({ error: "not found" }, 404);
   });
 
   api.post("/passkeys/register/options", async (c) => {
-    const user = c.get("user");
-    const household = await store.getHousehold(user.householdId);
+    const account = c.get("account");
     const { rpID } = relyingParty(env, c.req.url);
-    const existing = await store.listPasskeys(user.id);
+    const existing = await store.listPasskeys(account.id);
     const options = await generateRegistrationOptions({
       rpName: "Open Lounge Phone",
       rpID,
-      userName: `${user.name} (${household?.name ?? "Open Lounge Phone"})`,
-      userDisplayName: user.name,
-      userID: new TextEncoder().encode(user.id),
+      userName: `${account.handle}@${serverHost(env, c.req.url)}`,
+      userDisplayName: account.name,
+      userID: new TextEncoder().encode(account.id),
       attestationType: "none",
       // biome-ignore lint/suspicious/noExplicitAny: stored as strings
       excludeCredentials: existing.map((p) => ({ id: p.id, transports: p.transports as any })),
       authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
     });
     const challengeId = await store.saveChallenge(
-      { kind: "register", challenge: options.challenge, userId: user.id },
+      { kind: "register", challenge: options.challenge, accountId: account.id },
       env.now(),
     );
     return c.json({ challengeId, options });
   });
 
   api.post("/passkeys/register/verify", async (c) => {
-    const user = c.get("user");
+    const account = c.get("account");
     const b = await body(c.req.raw, RegisterVerifyBody);
     if (b instanceof Response) return b;
     const now = env.now();
     const challenge = await store.takeChallenge(b.challengeId, "register", now);
-    if (!challenge || challenge.userId !== user.id) {
+    if (!challenge || challenge.accountId !== account.id) {
       return c.json({ error: "that took too long; try again" }, 400);
     }
     const { rpID, origin } = relyingParty(env, c.req.url);
@@ -211,7 +230,7 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
       const { credential } = result.registrationInfo;
       await store.addPasskey({
         id: credential.id,
-        userId: user.id,
+        accountId: account.id,
         publicKey: toBase64Url(credential.publicKey),
         counter: credential.counter,
         transports: credential.transports ?? [],

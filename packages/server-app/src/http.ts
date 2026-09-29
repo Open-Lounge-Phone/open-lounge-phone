@@ -3,6 +3,14 @@ import { newToken, sha256, type User } from "@openloungephone/db";
 import { Id } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
+import {
+  accountRoutes,
+  accountView,
+  householdHint,
+  resolveSession,
+  serverHost,
+  signupRoutes,
+} from "./accounts.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
@@ -82,7 +90,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   // --- first-run setup ------------------------------------------------------
 
-  api.get("/setup", async (c) => c.json({ needed: (await store.countHouseholds()) === 0 }));
+  // `signup`: the server has open sign-up, so the companion offers "Create an account".
+  api.get("/setup", async (c) =>
+    c.json({ needed: (await store.countHouseholds()) === 0, signup: env.openSignup === true }),
+  );
 
   api.post("/setup", async (c) => {
     const b = await body(c.req.raw, SetupBody);
@@ -103,9 +114,19 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       now,
     );
     const token = await store.createSession(guardian.id, now);
-    return c.json({ token, user: guardian, household }, 201);
+    const account = await store.getAccount(guardian.accountId);
+    return c.json(
+      {
+        token,
+        user: guardian,
+        household,
+        ...(account ? { account: accountView(account, serverHost(env, c.req.url)) } : {}),
+      },
+      201,
+    );
   });
 
+  signupRoutes(api, env);
   publicPeopleRoutes(api, env);
 
   // --- authenticated --------------------------------------------------------
@@ -113,9 +134,27 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.use("/*", async (c, next) => {
     const header = c.req.header("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    const user = token ? await store.userForToken(token, env.now()) : undefined;
-    if (!user) return c.json({ error: "unauthorized" }, 401);
-    c.set("user", user);
+    const session = await resolveSession(
+      store,
+      token,
+      householdHint((n) => c.req.header(n)),
+      env.now(),
+    );
+    if (session === "unauthorized") return c.json({ error: "unauthorized" }, 401);
+    if (session === "not_member") return c.json({ error: "not a member of that household" }, 403);
+    c.set("account", session.account);
+    c.set("member", session.member);
+    c.set("token", token);
+    await next();
+  });
+
+  accountRoutes(api, env);
+
+  // Everything below acts inside the active household.
+  api.use("/*", async (c, next) => {
+    const member = c.get("member");
+    if (!member) return c.json({ error: "you're not in a household yet" }, 403);
+    c.set("user", member);
     await next();
   });
 
@@ -131,21 +170,6 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!device) return undefined;
     return user.role === "guardian" || device.ownerUserId === user.id ? device : undefined;
   };
-
-  api.get("/me", async (c) => {
-    const user = c.get("user");
-    const [household, availability] = await Promise.all([
-      store.getHousehold(user.householdId),
-      store.availability(user.householdId),
-    ]);
-    // `available`: whether this person is taking app-to-app calls (see presence.set).
-    return c.json({ user, household, available: availability.get(user.id) ?? true });
-  });
-
-  api.post("/logout", async (c) => {
-    await store.deleteSession(c.req.header("authorization")?.slice(7) ?? "");
-    return c.body(null, 204);
-  });
 
   api.get("/users", async (c) => c.json(await store.listUsers(c.get("user").householdId)));
 

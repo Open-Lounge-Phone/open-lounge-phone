@@ -18,6 +18,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     publicUrl: (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, ""),
     /** Only an explicit PUBLIC_URL pins passkeys to a host; otherwise the request host is used. */
     publicUrlExplicit: env.PUBLIC_URL !== undefined,
+    /** OPEN_SIGNUP=1: anyone can create an account (and their own household). Off by default. */
+    openSignup: env.OPEN_SIGNUP === "1" || env.OPEN_SIGNUP === "true",
     transcribe: env.TRANSCRIBE_URL
       ? {
           url: env.TRANSCRIBE_URL,

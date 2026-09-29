@@ -30,7 +30,9 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdObject", "PairingObject"] }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // OPEN_SIGNUP "1" lets anyone create an account; `scripts/deploy.ts --open-signup` sets it.
+  "vars": { "OPEN_SIGNUP": "0" }
   // Secrets (wrangler secret put):
   //   SETUP_TOKEN          one-time first-run token; open https://<worker>/#setup=<token>
   //   TURN_KEY_ID          Cloudflare Realtime TURN key id (optional; STUN-only without it)

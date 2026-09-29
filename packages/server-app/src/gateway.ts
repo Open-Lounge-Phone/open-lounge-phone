@@ -326,7 +326,14 @@ export class Gateway implements Coordinator {
         conn.send({ t: "error", code: "unsupported_version", message: "please reload the app" });
         return refuse(CloseCode.badHandshake, "unsupported protocol version");
       }
-      const user = await this.env.store.userForToken(msg.token, this.env.now());
+      // The household comes from the hello, else the object's own household (Cloudflare routes
+      // by `?household=`), else the session's active one. It must be one of the account's.
+      const session = await this.env.store.sessionForToken(msg.token, this.env.now());
+      const target = msg.household ?? this.household;
+      const user =
+        session && target
+          ? await this.env.store.membership(session.account.id, target)
+          : session?.user;
       if (!user || !this.allowed(user.householdId)) {
         conn.send({ t: "error", code: "unauthorized", message: "session expired" });
         return refuse(CloseCode.unauthorized, "unauthorized");

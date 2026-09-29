@@ -35,6 +35,7 @@ Options:
   a key in the dashboard under Realtime → TURN.
 - `--no-ai`: skip Workers AI voicemail transcripts.
 - `--new-setup-token`: issue a fresh setup link (only useful before the first household exists).
+- `--open-signup`: let anyone create an account on the instance (sets the `OPEN_SIGNUP` var; a public hub). Every deploy sets it, so leaving the flag out makes the instance invite-only again.
 
 Re-run the same command after pulling updates to migrate and redeploy.
 

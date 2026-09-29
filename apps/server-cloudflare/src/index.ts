@@ -28,6 +28,8 @@ export interface Env {
   PAIRING: DurableObjectNamespace<PairingObject>;
   ASSETS: Fetcher;
   SETUP_TOKEN?: string;
+  /** "1" = open sign-up (wrangler var; `scripts/deploy.ts --open-signup`). Off by default. */
+  OPEN_SIGNUP?: string;
   TURN_KEY_ID?: string;
   TURN_KEY_API_TOKEN?: string;
   /** Comma-separated; used when no TURN key is configured. */
@@ -122,6 +124,7 @@ function serverEnv(
     blobs: r2Blobs(env.BLOBS),
     ...(env.AI ? { transcriber: workersAiTranscriber(env.AI) } : {}),
     defer: waitUntil,
+    openSignup: env.OPEN_SIGNUP === "1",
     now: () => Date.now(),
     iceServers: () => iceServers(env),
     setTimer: (fn, ms) => {
@@ -324,7 +327,9 @@ app.all("/api/*", (c) => {
   return api.fetch(c.req.raw, c.env, c.executionCtx);
 });
 
-// Sockets are routed by a hint in the URL; the object still authenticates every connection.
+// Sockets are routed by a hint in the URL; the object still authenticates every connection. An
+// app socket goes to the household it names; the object only accepts it when the session's
+// account is a member of that household.
 app.get("/ws/device", async (c) => {
   const deviceId = c.req.query("device") ?? null;
   const device = isId(deviceId) ? await new Store(d1Sql(c.env.DB)).getDevice(deviceId) : undefined;

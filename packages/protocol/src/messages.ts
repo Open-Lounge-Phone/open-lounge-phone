@@ -331,6 +331,8 @@ export const AppHello = z
     ...Ref,
     proto: z.number().int().positive(),
     token: z.string().min(16).max(512),
+    /** One of the account's households to act in; default: the session's active household. */
+    household: Id.optional(),
   })
   .describe("First message from a companion app.");
 
