@@ -1,10 +1,10 @@
 """Build a KiCad board from the SKiDL netlist + boards.yaml + placement.yaml (KiCad Python).
 
-    python build_board.py main|plate  [--stage place|route|all]
+    python build_board.py main  [--stage place|route|all]
 
 Stages (all by default):
-  place  project files, outline, holes, keep-outs, footprints (all variants' footprints placed,
-         DNP from --variant), zones, silkscreen, GND fan-out vias, hand routes (USB pair)
+  place  project files, outline, holes, keep-outs, footprints, zones, silkscreen, GND
+         fan-out vias, hand routes (USB pair)
   route  Specctra DSN -> FreeRouting (headless) -> SES import
   all    place + route + zone fill + GND stitching + deterministic save
 
@@ -902,7 +902,7 @@ def build_place(board_name: str, variant: str, cfg_all: dict, placement: dict, o
 
     apply_netclasses(board, cfg, net)
     # board texts first: auto_place keeps parts off them (silk must stay clear of pads)
-    for name, (x, y) in key_labels.items():  # key legends (assembly aid; under the plate)
+    for name, (x, y) in key_labels.items():  # key legends (assembly aid; under the keycaps)
         text(board, name, x, y + 9.0 if y > h / 2 else y - 8.4, size=1.0)
     for t in cfg.get("texts", []):
         text(board, t[0], t[1], t[2], size=t[3] if len(t) > 3 else 1.0,
@@ -1003,51 +1003,6 @@ def autoroute(board_name: str, cfg_all: dict, variant: str, passes: int = 100,
     if not pcbnew.ImportSpecctraSES(board, str(ses)):
         raise SystemExit("SES import failed")
     save_board(board, pcb)
-
-
-def build_plate(cfg_all: dict, variant: str) -> Path:
-    """FR4 key plate (no copper): MX cut-outs at the board key grid, the e-ink pocket, screw
-    clearance holes and light-pipe holes. Written as its own 2-layer KiCad board + DXF."""
-    main, pc = cfg_all["main"], cfg_all["plate"]
-    ox, oy = pc.get("origin", [0.0, 0.0])
-    out = KICAD_OUT / "plate"
-    out.mkdir(parents=True, exist_ok=True)
-    board = pcbnew.BOARD()
-    board.SetCopperLayerCount(2)
-    tb = board.GetTitleBlock()
-    tb.SetTitle(pc["title"])
-    tb.SetRevision("r0.1")
-    tb.SetCompany("Open Lounge Phone - CERN-OHL-S-2.0")
-    w, h = pc["size"]
-    rounded_outline(board, w, h, pc["corner_radius"])
-    net = nl.read(BUILD / "main" / "main.net")
-    names = [re.fullmatch(r"key (\w+)", c.fields.get("Note", "")).group(1)
-             for c in net.comps.values() if c.fields.get("SpecKey") == "HOTSWAP"]
-    half = pc["cutout"] / 2
-    for x, y in key_positions(main["keys"], names).values():
-        x, y = x - ox, y - oy
-        for a_, b_ in zip([(x - half, y - half), (x + half, y - half), (x + half, y + half),
-                           (x - half, y + half)],
-                          [(x + half, y - half), (x + half, y + half), (x - half, y + half),
-                           (x - half, y - half)]):
-            add_shape(board, pcbnew.Edge_Cuts, "seg", [a_, b_])
-    x0, y0, x1, y1 = main["panel"]
-    x0, y0, x1, y1 = x0 - ox, y0 - oy, x1 - ox, y1 - oy
-    c = pc["pocket_clearance"]
-    for a_, b_ in zip([(x0 - c, y0 - c), (x1 + c, y0 - c), (x1 + c, y1 + c), (x0 - c, y1 + c)],
-                      [(x1 + c, y0 - c), (x1 + c, y1 + c), (x0 - c, y1 + c), (x0 - c, y0 - c)]):
-        add_shape(board, pcbnew.Edge_Cuts, "seg", [a_, b_])
-    for x, y in pc["holes"]:
-        add_shape(board, pcbnew.Edge_Cuts, "circle", [(x, y), pc["holes_d"] / 2])
-    for x, y, d in pc.get("light_holes", []):
-        add_shape(board, pcbnew.Edge_Cuts, "circle", [(x, y), d / 2])
-    text(board, "Open Lounge Phone key plate r0.1  FR4 1.5 mm, no copper  CERN-OHL-S-2.0",
-         w / 2, 82.2, size=1.0)
-    pcb = out / "plate.kicad_pcb"
-    save_board(board, pcb)
-    (out / "plate.kicad_pro").write_text(json.dumps({"meta": {"filename": "plate.kicad_pro",
-                                                              "version": 3}}, indent=2) + "\n")
-    return pcb
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1535,7 +1490,7 @@ def nl_sort(ref: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("board", choices=["main", "plate"])
+    ap.add_argument("board", choices=["main"])
     ap.add_argument("--variant", default="main", help="one board since 2026-09-28")
     ap.add_argument("--passes", type=int, default=100)
     ap.add_argument("--threads", type=int, default=1)
@@ -1549,9 +1504,6 @@ def main():
     cfg = load_yaml(LAYOUT / "boards.yaml")
     placement = load_yaml(LAYOUT / "placement.yaml") or {}
     out = KICAD_OUT / a.board
-    if a.board == "plate":
-        print(f"wrote {build_plate(cfg, a.variant)}")
-        return
     if a.stage == "sync":
         sync_fields(a.board, cfg, a.variant)
         return

@@ -1,3 +1,0 @@
-main: 241 parts, 144 nets, 0 check errors; ERC 0 errors / 9 warnings
-I2C bus (main): OK, 0x18 main:U6(ES8311), 0x19 main:U12(LIS2DH12), 0x29 main:U18(LTR-303ALS), 0x36 main:U14(MAX17048), 0x40 main:U7(ES7210), 0x53 main:U19(ST25DV04K), 0x57 main:U19(ST25DV04K), 0x58 main:U17(AW9523B)
-cost (main): $39.99 @1k, $38.12 @10k; one-off $208.49/phone (JLC PCBA, 2 built), $409.27 (OSH Park bare + hand); extended parts 35

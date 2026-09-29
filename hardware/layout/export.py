@@ -1,19 +1,18 @@
-"""Fab + review outputs per board and variant (KiCad Python + kicad-cli).
+"""Fab + review outputs for the board (KiCad Python + kicad-cli).
 
-    python export.py main|plate 
+    python export.py main
 
-Writes build/<board>-<variant>/layout/ (plate: build/plate/):
-  gerbers/  Gerber X2 + Excellon (PTH/NPTH) + job file, and <board>-<variant>-gerbers.zip
-  <board>-<variant>.ipc2581.xml   IPC-2581C (stackup, netlist, BOM with MPN/manufacturer/LCSC)
+Writes build/<board>/layout/ (generated, not committed; `make layout`):
+  gerbers/  Gerber X2 + Excellon (PTH/NPTH) + job file, and <board>-gerbers.zip
+  <board>.ipc2581.xml   IPC-2581C (stackup, netlist, BOM with MPN/manufacturer/LCSC)
   cpl-jlc.csv      JLCPCB CPL (Designator, Mid X, Mid Y, Layer, Rotation), fitted parts only
   cpl.csv          generic pick-and-place (Ref, Value, Footprint, X, Y, Rot, Side), fitted only
   bom-jlc.csv      JLCPCB BOM (copied from the schematic build, fitted parts only)
   bom.csv          generic BOM: MPN, manufacturer, LCSC, DigiKey/Mouser search links, DNP
-  <board>-<variant>.step          3D assembly (DNP parts left out)
+  <board>.step     3D assembly (DNP parts left out)
   render-top.png, render-bottom.png, render-iso.png   kicad-cli 3D renders (DNP left out)
   README.md        what each file is
-Variants differ only by DNP: the committed board has every footprint; DNP flags are set from
-build/<board>-<variant>/<board>.net on a temporary copy before exporting.
+DNP flags are set from build/<board>/<board>.net on a temporary copy before exporting.
 """
 
 from __future__ import annotations
@@ -195,43 +194,12 @@ def export_board(board_name: str, variant: str) -> None:
     print(f"exported {board_name} -> {out}")
 
 
-def export_plate() -> None:
-    out = BUILD / "plate"
-    out.mkdir(parents=True, exist_ok=True)
-    pcb = KICAD_OUT / "plate" / "plate.kicad_pcb"
-    g = out / "gerbers"
-    if g.exists():
-        shutil.rmtree(g)
-    g.mkdir()
-    cli("pcb", "export", "gerbers", pcb, "-o", g, "-l", "Edge.Cuts,F.SilkS,F.Mask,B.Mask")
-    cli("pcb", "export", "drill", pcb, "-o", g, "--format", "excellon", "--excellon-units", "mm")
-    for f in g.iterdir():
-        strip_dates(f)
-    deterministic_zip(g, out / "plate-gerbers.zip")
-    cli("pcb", "export", "dxf", pcb, "-o", out / "plate-outline.dxf", "-l", "Edge.Cuts",
-        "--mode-single", "--ou", "mm")
-    strip_dates(out / "plate-outline.dxf")
-    common = ["--width", "1600", "--height", "1200", "--quality", "basic", "--background",
-              "opaque"]
-    cli("pcb", "render", pcb, "-o", out / "render-top.png", "--side", "top", *common)
-    (out / "README.md").write_text(
-        "# Key plate outputs\n\nFR4 1.5-1.6 mm, **no copper** (order as a 2-layer board with no "
-        "copper, or laser/CNC-cut the DXF).\nMX cut-outs 14.0 mm at 19.05 mm pitch, e-ink pocket "
-        "79.4 x 37.1 mm, M2.5 clearance holes, light-pipe holes.\n\n- `plate-gerbers.zip`, "
-        "`gerbers/`: outline + silk\n- `plate-outline.dxf`: outline for laser/CNC (mm)\n"
-        "- `render-top.png`\n")
-    print(f"exported plate -> {out}")
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("board", choices=["main", "plate"])
+    ap.add_argument("board", choices=["main"])
     ap.add_argument("--variant", default="main", help="one board since 2026-09-28")
     a = ap.parse_args()
-    if a.board == "plate":
-        export_plate()
-    else:
-        export_board(a.board, a.variant)
+    export_board(a.board, a.variant)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Read a KiCad netlist (the SKiDL output in build/<board>-<variant>/<board>.net).
+"""Read a KiCad netlist (the SKiDL output in build/<board>/<board>.net).
 
 Tiny s-expression reader, no KiCad dependency, so it runs under KiCad's bundled Python and the
 project venv alike.

@@ -5,7 +5,7 @@ connects to and the buses fan out in order.
     python pinswap.py [board.kicad_pcb] [--out pinswap.json]
 
 Only ICs and connectors count (passives are re-placed next to whatever pin they end up on);
-a series resistor is looked through (LD_TX -> 1k -> radar socket counts as LD_TX -> socket).
+a series resistor is looked through (a net -> 1k -> connector counts as net -> connector).
 Cost = 5 x crossings + wiring length of the signal nets in bus / daisy-chain order
 (metrics.signal_chains). Pairwise swaps until nothing improves (deterministic).
 

@@ -1,7 +1,7 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build lcsc footprints clean layout tools freerouting enclosure review
+.PHONY: all venv build lcsc footprints clean layout tools freerouting proto review
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
@@ -17,7 +17,7 @@ venv: .venv/.ok
 	.venv/bin/pip install -q -r requirements.txt
 	touch $@
 
-# ERC + checks + netlist + BOM for the one board (offline; uses lcsc_cache.json)
+# ERC + checks + netlist + BOM + cost for the board into build/ (offline; uses lcsc_cache.json)
 build: venv
 	cd schematic && ../$(PY) build.py
 
@@ -50,14 +50,14 @@ freerouting: .tools/freerouting-$(FR_VERSION).jar
 	curl -fsSL -o $@ \
 	  https://github.com/freerouting/freerouting/releases/download/v$(FR_VERSION)/freerouting-$(FR_VERSION).jar
 
-# Boards (place + grid router, cached on an input hash), key plate, checks, fab outputs.
+# Board (place + grid router, cached on an input hash), checks, fab outputs into build/.
 # FORCE=1 re-routes every board. Fails on DRC errors / unrouted nets / layout-check errors.
 layout: tools
 	cd layout && $(KPY) run_layout.py $(if $(FORCE),--force,)
 
-# Enclosure (code CAD in enclosure/, see enclosure/ENCLOSURE.md)
-enclosure:
-	$(MAKE) -C enclosure enclosure
+# Prototype box (code CAD in enclosure/, see enclosure/PROTO_BOX.md)
+proto:
+	$(MAKE) -C enclosure proto
 
 # Review pack (build/review/): schematic sheets, per-layer board PDF, 3D renders, DRC summary
 review: venv

@@ -1,7 +1,7 @@
 # Board-level layout definition (outline, holes, keep-outs, zones, net classes, key grid).
 # Coordinates are mm, board-relative: x right, y DOWN from the board's top-left corner.
-# Main board: top edge = rear wall (2x USB-C, ESP32 antenna), bottom edge = front (radar, mic),
-# right edge = VOL-/VOL+/MUTE. Deck board: top edge = rear key row, bottom edge = front key row.
+# One board: top edge = rear wall (handset USB-C, ESP32 antenna), bottom edge = front,
+# right edge = power USB-C and VOL-/VOL+/MUTE. Keys in two rows (rear and front).
 # Component positions live in placement.yaml.
 
 # Design rules = intersection of common 4-layer capabilities (JLCPCB, PCBWay, OSH Park,
@@ -66,12 +66,12 @@ main:
   # free on the top side); e-ink panel (at plate level, parts <= 2.8 mm may sit under it) over
   # x 41-120, y 25.45-62.15; left end: audio (codecs, amp, speaker connector, base mic) + NFC
   # coil (front-left); right end: handset USB-C (rear x 153.8), power USB-C (right wall y 40), power path, hall,
-  # CH340C, RESET/BOOT, radar, side controls (bottom side); ESP32 right of the panel.
+  # CH340C, RESET/BOOT, side controls (bottom side); ESP32 right of the panel.
   size: [180, 88]
   corner_radius: 8.5      # clears the shell's inner corner radius
   hook_post_x: 171.0      # hall U10 at (171.0, 18.8) under the right-hand plunger
   holes:   # M2.5 plated, GND; [x, y]
-    - [34.7, 5.0]     # support / plate screws (the old deck standoff positions)
+    - [34.7, 5.0]     # support holes
     - [145.3, 5.0]
     - [34.7, 82.6]
     - [145.3, 82.6]
@@ -84,7 +84,7 @@ main:
   place_gap: 0.25        # auto-placed passives: courtyard gap to each other (routing channels)
   fine_pitch_gap: 1.0    # ... and to fine-pitch ICs (QFN pins need escape room)
   # 12 keys in two rows of six (owner decision 2026-09-27): rear 1 2 3 4 5 MENU, front
-  # 6 7 8 9 0 BACK; the old deck origin (31.5, 1.8) is kept, so the key grid is unchanged.
+  # 6 7 8 9 0 BACK.
   keys:
     pitch: 19.05
     x0: 42.4
@@ -158,18 +158,4 @@ main:
     - ["RST", 163.0, 12.5, 0.8]
     - ["BOOT", 163.4, 20.8, 0.8]
     - ["TEST PADS 2.54 mm", 162.35, 14.6, 0.8, bottom]
-    - ["DNP by variant: e-ink J6+boost, Qwiic J3, radar J5 Q2 Q3, supercap C7, battery J2 U14", 90.0, 86.4, 0.8, bottom]
 
-plate:
-  title: "Open Lounge Phone key plate (FR4 1.5 mm, no copper)"
-  size: [117, 84]
-  corner_radius: 1.5
-  cutout: 14.0          # MX plate cutout
-  origin: [31.5, 1.8]   # plate (0,0) in board coordinates; keys/panel/holes follow the board
-  holes: [[3.2, 3.2], [113.8, 3.2], [3.2, 80.8], [113.8, 80.8]]
-  holes_d: 2.7          # M2.5 clearance at deck holes 1-4 (countersink for flush heads)
-  # deck hole 5 is screwed before the plate goes on (no plate hole: the web would be 0.4 mm)
-  pocket_clearance: 0.2 # e-ink pocket = 79.0 x 36.7 panel outline + 0.2 mm all round
-  light_holes:          # [x, y, d] in plate coordinates: status LED, privacy LED, ALS
-    - [95.5, 61.0, 3.2]    # status LED D21 (127.0, 62.8)
-    - [108.5, 61.8, 2.0]   # ALS U18 (140.0, 63.6); the privacy LED D22 (158.5, 67.5) is off the plate

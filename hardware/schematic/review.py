@@ -1,6 +1,6 @@
 """Schematic review sheets (PDF) generated from the SKiDL netlist.
 
-    ../.venv/bin/python review.py [--variant lounge] [--out ../build/review/schematic.pdf]
+    ../.venv/bin/python review.py [--out ../build/review/schematic.pdf]
 
 The schematic is code (board_main.py, ui.py), so there is no drawn sheet. This renders a
 "net-label schematic" per subsystem instead: every IC/connector/switch is a box with its pin
@@ -8,7 +8,7 @@ numbers and names, and each pin's net name sits at the pin end (same name = conn
 net labels in KiCad). Passives, which make up most of the part count, are listed per subsystem
 with the two nets they join. Page 1 is the block overview and the GPIO map (pin_table.yaml).
 
-The lounge variant is the default because it fits the most parts; DNP parts are marked.
+DNP parts are marked.
 """
 
 from __future__ import annotations
@@ -150,7 +150,6 @@ def new_page(pdf, title, sub=""):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variant", default="lounge")
     ap.add_argument("--out", default=str(HW / "build" / "review" / "schematic.pdf"))
     a = ap.parse_args()
     net = nl.read(HW / "build" / "main" / "main.net")
@@ -169,8 +168,7 @@ def main() -> int:
 
     with PdfPages(out) as pdf:
         # ---- page 1: overview + GPIO map
-        fig, ax = new_page(pdf, "Open Lounge Phone - schematic review (single board, "
-                           f"variant {a.variant})",
+        fig, ax = new_page(pdf, "Open Lounge Phone - schematic review (single board)",
                            "One 180 x 88 mm 4-layer board (owner decision 2026-09-27). Pages 2+: "
                            "one sheet per subsystem; ICs as boxes with net labels, then the "
                            "passives of that subsystem.")

@@ -7,11 +7,10 @@ warn_at_scale_usd: 40      # WARN when the 1k-qty electronics total exceeds this
 
 scales: [1000, 10000]
 
-# Bare PCBs, per board, at volume (DESIGN.md §12; 4-layer 1.6 mm ENIG, plate = bare FR4).
+# Bare PCB per phone at volume (DESIGN.md §12; 4-layer 1.6 mm ENIG, 180 x 88 mm).
 pcb_at_scale:
-  # one 180 x 88 board since 2026-09-27 (deck merged in): old main 144 x 80 scaled by area
-  1000: {main: 1.65, plate: 0.36}
-  10000: {main: 1.17, plate: 0.24}
+  1000: {main: 1.65}
+  10000: {main: 1.17}
 # SMT + THT assembly per phone (one double-sided board, extended-part fees amortised).
 assembly_at_scale:
   1000: 2.00
@@ -21,7 +20,7 @@ one_off:
   phones: 2                 # smallest JLC PCBA quantity; the other 3 bare boards are spares
   boards_ordered: 5
   jlc:                      # reference quote (EST, jlcpcb.com list prices seen 2026-09)
-    pcb: {main: 45.0, plate: 8.0}   # 5 pcs; 4L 1.6 mm ENIG 180 x 88; plate 2L no copper
+    pcb: {main: 45.0}               # 5 pcs; 4L 1.6 mm ENIG 180 x 88
     shipping: 20.0
     pcba_setup: {main: 50.0}        # standard PCBA, double-sided (sockets + LEDs on the bottom)
     stencil: {main: 15.8}
@@ -30,17 +29,15 @@ one_off:
     joints: {main: 1070}            # EST from pad counts of fitted parts
   osh_park:                 # published formula (docs.oshpark.com, 2026-09-27): 3 copies
     per_sq_in_4layer: 10.0
-    per_sq_in_2layer: 5.0
     copies: 3
-    boards_mm: {main: [180, 88], plate: [117, 84]}
+    boards_mm: {main: [180, 88]}
   hand_assembly_min_line_usd: 0.10  # LCSC cut-tape minimums make each BOM line cost >= ~$0.10
 
 # Fitted on-board parts with no LCSC/JLC price (value per phone).
 unpriced:
-  SE-5R5-D474VYV: {scale: 0.50, retail: 1.50}   # 0.47 F 5.5 V supercap (Lounge), DESIGN.md §12
   PCB coil (copper): {scale: 0.0, retail: 0.0}
 
-# Off-board electronics included in DESIGN.md §12.3 totals. `when` filters by variant.
+# Off-board electronics included in DESIGN.md §12.3 totals.
 off_board:
   mx_switches_x12:   {scale: 3.00, retail: 5.40}
   keycaps:           {scale: 1.44, retail: 3.60}   # 12 printed DSA (digits, MENU, BACK)

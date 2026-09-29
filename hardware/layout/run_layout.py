@@ -1,4 +1,4 @@
-"""`make layout`: footprints -> boards (place + route, cached) -> plate -> checks -> exports.
+"""`make layout`: footprints -> boards (place + route, cached) -> checks -> exports.
 
     python run_layout.py [--force] [--boards main]
 
@@ -72,8 +72,6 @@ def main() -> int:
             if run("build_board.py", b, "--stage", "all", "--passes", a.passes):
                 return 1
             stamp.write_text(want + "\n")
-    if run("build_board.py", "plate") or run("export.py", "plate"):
-        return 1
     for b in boards:
         out = BUILD / b / "layout"
         if run("checks.py", b, "--out", out):

@@ -1,7 +1,7 @@
 #!/bin/bash
 # `make review`: regenerate the review pack in hardware/build/review/
 #   schematic.pdf (schematic/review.py), <board>-layers.pdf (one page per layer, with the
-#   outline on every page), <board>-top/bottom.png (3D renders), <board>-drc.txt/.json, plate.
+#   outline on every page), <board>-top/bottom.png (3D renders), <board>-drc.txt/.json.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP=${KICAD_APP:-$HOME/Applications/KiCad/KiCad.app}
@@ -20,8 +20,4 @@ for b in main; do
   python3 layout/drcsum.py "$OUT/$b-drc.json" > "$OUT/$b-drc.txt"
   head -1 "$OUT/$b-drc.txt"
 done
-if [ -f kicad/plate/plate.kicad_pcb ]; then
-  "$K" pcb export pdf --mode-multipage -l Edge.Cuts,F.Silkscreen -o "$OUT/plate.pdf" \
-    kicad/plate/plate.kicad_pcb >/dev/null
-fi
 ls -la "$OUT"

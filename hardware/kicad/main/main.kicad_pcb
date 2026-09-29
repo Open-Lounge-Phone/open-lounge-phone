@@ -59741,18 +59741,6 @@
 			)
 		)
 	)
-	(gr_text "DNP by variant: e-ink J6+boost, Qwiic J3, radar J5 Q2 Q3, supercap C7, battery J2 U14"
-		(at 130 126.4 0)
-		(layer "B.SilkS")
-		(uuid "d178b8e7-1ad7-4754-a6f1-d72809f7ee43")
-		(effects
-			(font
-				(size 0.8 0.8)
-				(thickness 0.12)
-			)
-			(justify mirror)
-		)
-	)
 	(gr_text "HANDSET"
 		(at 189.8 49.6 0)
 		(layer "B.SilkS")

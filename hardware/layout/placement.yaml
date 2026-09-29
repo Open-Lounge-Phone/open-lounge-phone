@@ -1,8 +1,7 @@
 # Component placement: ref: [x, y, rotation_deg, side]  (side defaults to top)
 # Board-relative mm, x right, y DOWN from the top-left corner (see boards.yaml for outlines).
-# Grouped by functional block; every netlist ref must appear (the deck key grid - sockets,
-# key LEDs, their caps and key pull-ups - is generated from boards.yaml `keys`).
-# All footprints of all variants are placed; variants differ only by DNP.
+# Grouped by functional block; every netlist ref must appear (the key grid - sockets, key
+# LEDs, their caps and key pull-ups - is generated from boards.yaml `keys`).
 
 main:
   # Single board (owner decision 2026-09-27), 180 x 88 mm, R8.5 corners. Key sockets, key LEDs
@@ -10,7 +9,7 @@ main:
   # capacitors, beads, small transistors and test pads are placed automatically next to the pin
   # they serve (build_board.auto_place); list a ref here to pin it by hand.
   # Proto box rules (enclosure/proto_box.py): top parts <= 3.0 mm (<= 3.8 with a lid pocket),
-  # under the e-ink panel <= 2.8 mm; tall parts (JST-PH, supercap, side controls) on the bottom.
+  # under the e-ink panel <= 2.8 mm; tall parts (JST-PH, side controls) on the bottom.
   # Floorplan A3 (owner, 2026-09-28): one board, one BOM. Every connection short and direct,
   # blocks as local clusters, only a few buses between them (LAYOUT.md §5 plan table).
   #   right end: both USB-C (handset on the rear wall next to the ESP32, power on the right

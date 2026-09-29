@@ -10,3 +10,8 @@ __pycache__/
 kicad/*/route/
 *-backups/
 fp-info-cache
+# generated outputs: `make build` (schematic, BOM, netlist, checks, cost), `make layout`
+# (fab outputs), `make review` (review PDFs and images). Not committed; fab outputs ship as
+# GitHub Release assets when the board is final.
+build/
+kicad/*/unrouted.txt
