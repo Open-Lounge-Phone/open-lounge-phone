@@ -15,6 +15,7 @@ import {
   block,
   callAcross,
   knockAndAccept,
+  noAnswerAcross,
   type ServerTarget,
   signUp,
   voicemailAcross,
@@ -118,12 +119,13 @@ afterAll(() => {
 });
 
 it.skipIf(!enabled)(
-  "two Cloudflare Workers: knock, accept, call, voicemail, block, and the idle stream closes",
+  "two Cloudflare Workers: knock, accept, call, no-answer voicemail, voicemail, block, and the idle stream closes",
   async () => {
     const jesse = await signUp(a, "jesse", "Jesse");
     const bob = await signUp(b, "bob", "Bob");
     await knockAndAccept(jesse, bob);
     await callAcross(jesse, bob);
+    await noAnswerAcross(jesse, bob);
     await voicemailAcross(jesse, bob);
     // The server that dialed the stream closes it about a minute after the last signal.
     const dialed = () =>

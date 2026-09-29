@@ -54,8 +54,8 @@ export interface Snapshot {
   lounge?: LoungeClaim;
   /** Bumped on every `connections.changed` (a knock arrived, someone accepted…). */
   connectionsSeq?: number;
-  /** Latest `voicemail.new`; `seq` changes on every announcement. */
-  voicemail?: { seq: number; id: string; deviceId: string; from: string };
+  /** Latest `voicemail.new` (a phone's) or `voicemail.inbox` (yours); `seq` changes each time. */
+  voicemail?: { seq: number; id: string; deviceId?: string; from: string };
 }
 
 type Rtc = Extract<ServerToApp, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -284,7 +284,7 @@ export class Connection {
     this.tones.play(toneFor(view));
     if (view.phase === "ended" || view.phase === "idle") this.teardown();
     clearTimeout(this.dismissTimer);
-    // A quiet-hours refusal stays up so the caller can record a message.
+    // An unanswered call with a voicemail offer stays up while the caller leaves a message.
     if (view.phase === "ended" && !canLeaveVoicemail(view)) {
       this.dismissTimer = setTimeout(() => this.dismiss(), ENDED_DISPLAY_MS);
     }
@@ -340,11 +340,12 @@ export class Connection {
         });
         return;
       case "voicemail.new":
+      case "voicemail.inbox":
         this.set({
           voicemail: {
             seq: (this.snap.voicemail?.seq ?? 0) + 1,
             id: msg.id,
-            deviceId: msg.deviceId,
+            ...(msg.t === "voicemail.new" ? { deviceId: msg.deviceId } : {}),
             from: msg.from,
           },
         });

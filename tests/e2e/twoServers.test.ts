@@ -11,6 +11,7 @@ import {
   block,
   callAcross,
   knockAndAccept,
+  noAnswerAcross,
   type ServerTarget,
   signUp,
   voicemailAcross,
@@ -82,6 +83,7 @@ it("two servers: sign up on each, knock, accept, call, voicemail, block", async 
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
   await callAcross(jesse, bob);
+  await noAnswerAcross(jesse, bob);
   await voicemailAcross(jesse, bob);
   await block(jesse, bob);
-}, 60_000);
+}, 90_000);

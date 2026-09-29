@@ -30,6 +30,47 @@ const menu = (now = 0): MenuEvent => ({ type: "menu", now });
 const back = (now = 0): MenuEvent => ({ type: "back", now });
 const digit = (d: number, now = 0): MenuEvent => ({ type: "digit", digit: d, now });
 
+describe("recording the greeting (MENU → Voicemail)", () => {
+  const g = (canRecord: boolean) => ({
+    ...ctx,
+    greeting: { kind: "default" as const, canRecord },
+  });
+  const step = (state: MenuState | undefined, e: MenuEvent, c = g(true)) =>
+    menuStep(state, DEFAULT_SETTINGS, e, c);
+
+  it("offers name, greeting and default when allowed", () => {
+    const vm = step(step(undefined, menu()).state, digit(2)).state as MenuState;
+    expect(vm.screen).toBe("voicemail");
+    expect(menuView(vm, DEFAULT_SETTINGS, g(true)).labels).toEqual({
+      1: "Name",
+      2: "Greeting",
+      3: "Default",
+    });
+    expect(menuPrompt(vm, DEFAULT_SETTINGS, g(true))).toMatch(/standard greeting\. Press 1/);
+    const name = step(vm, digit(1));
+    expect(name.state).toMatchObject({ screen: "greeting", recording: "name" });
+    expect(name.action).toEqual({ type: "greeting", kind: "name" });
+    expect(name.say).toMatch(/Say your name after the tone/);
+    // No menu timeout while recording; any key finishes it.
+    expect(step(name.state, { type: "tick", now: MENU_TIMEOUT_MS * 3 }).state).toBeDefined();
+    const done = step(name.state, back(5));
+    expect(done.action).toEqual({ type: "greeting-stop" });
+    const saved = step(done.state, { type: "greeting-done", ok: true, now: 6 });
+    expect(saved.state?.screen).toBe("voicemail");
+    expect(saved.say).toBe("Greeting saved.");
+    expect(step(vm, digit(3)).action).toEqual({ type: "greeting-reset" });
+    // A call or the handset mid-recording discards it.
+    expect(step(name.state, { type: "exit" }).action).toEqual({ type: "greeting-cancel" });
+  });
+
+  it("tells a child to ask a grown-up when the guardians turned it off", () => {
+    const vm = step(step(undefined, menu()).state, digit(2), g(false)).state as MenuState;
+    expect(menuView(vm, DEFAULT_SETTINGS, g(false)).labels).toEqual({});
+    expect(menuPrompt(vm, DEFAULT_SETTINGS, g(false))).toMatch(/Ask a grown-up/);
+    expect(step(vm, digit(1), g(false)).action).toBeUndefined();
+  });
+});
+
 describe("menuStep", () => {
   it("opens with MENU and announces the options", () => {
     const r = run([menu()]);

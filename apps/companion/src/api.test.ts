@@ -80,15 +80,17 @@ describe("createApi", () => {
 });
 
 describe("M4 endpoints", () => {
-  it("uploads voicemail as a raw audio body with its type", async () => {
-    const fetch = fakeFetch(201, { id: "vm_1" });
+  it("uploads a greeting as a raw audio body with its type", async () => {
+    const fetch = fakeFetch(204, undefined);
     const api = createApi({ token: "t".repeat(20), fetch });
     const blob = new Blob([new Uint8Array(10)], { type: "audio/webm;codecs=opus" });
-    expect(await api.leaveVoicemail("dev 1", blob, 4200.4)).toEqual({ id: "vm_1" });
+    await api.setGreeting("name", blob, 2200.4, "dev 1");
     const [url, init] = fetch.mock.calls[0] ?? [];
-    expect(url).toBe("/api/devices/dev%201/voicemail?durationMs=4200");
+    expect(url).toBe("/api/devices/dev%201/greeting?kind=name&durationMs=2200");
     expect(init?.headers).toMatchObject({ "content-type": "audio/webm;codecs=opus" });
     expect(init?.body).toBe(blob);
+    await api.setGreeting("custom", blob, 1);
+    expect(fetch.mock.calls[1]?.[0]).toBe("/api/voicemail/greeting?kind=custom&durationMs=1");
   });
 
   it("surfaces server errors from raw requests", async () => {
@@ -99,7 +101,7 @@ describe("M4 endpoints", () => {
       onUnauthorized,
     });
     const err = await api
-      .leaveVoicemail("d", new Blob(["x"], { type: "audio/ogg" }), 1)
+      .setGreeting("name", new Blob(["x"], { type: "audio/ogg" }), 1)
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 403, message: "not allowed" });

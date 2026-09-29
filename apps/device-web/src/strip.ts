@@ -18,6 +18,8 @@ export interface StatusInput {
   power?: { reduced: boolean };
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
+  /** Leaving a voicemail after an unanswered call (and its outcome, shortly after hang-up). */
+  leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
   now: number;
 }
 
@@ -83,9 +85,21 @@ export function statusLines(input: StatusInput): StatusLines {
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
     }
+    case "voicemail": {
+      const stage = input.leave?.stage ?? "greeting";
+      if (stage === "recording") {
+        return [`RECORDING ${clock(input.leave?.remainingMs ?? 0)}`, "HANG UP TO SEND"];
+      }
+      if (stage === "failed") return ["MESSAGE NOT SENT", "HANG UP"];
+      return ["LEAVE A MESSAGE", clip(name || s.offer.name)];
+    }
     default:
       break;
   }
+  // Just hung up after leaving a message.
+  if (input.leave?.stage === "sending") return ["SENDING MESSAGE"];
+  if (input.leave?.stage === "sent") return ["MESSAGE SENT"];
+  if (input.leave?.stage === "failed") return ["MESSAGE NOT SENT"];
 
   const low = battery && !battery.charging && battery.pct < 20;
   const lowLine = low ? `LOW BATTERY ${battery.pct}%` : undefined;

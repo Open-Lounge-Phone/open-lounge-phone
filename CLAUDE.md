@@ -144,6 +144,8 @@ custom footprints are not done yet.
 - **Device auth:** Ed25519 keypair generated on the device; pairing via a 6-digit code the
   device announces; each connection answers a signed `auth.challenge`.
 - **Voicemail:** recorded by the *caller's* client (MediaRecorder/Opus), uploaded, transcribed.
+  Every unanswered call (no answer, declined, busy, quiet hours, unavailable, offline) offers it
+  via a single-use ticket in `call.state.voicemail`; see "Voicemail everywhere" below.
 - **Storage:** plain SQL migrations in `packages/db/migrations` shared by D1 and `node:sqlite`
   (no Drizzle, no native modules). Self-host tracks applied migrations in the same
   `d1_migrations` table wrangler uses.
@@ -305,6 +307,25 @@ Keep this section current when finishing a milestone.
   verified locally: `tests/e2e/cloudflare.test.ts` (opt-in, `OLP_E2E_CLOUDFLARE=1`) runs the
   two-server scenario on two `wrangler dev` instances incl. the FederationObject idle close;
   `DEV_LOOPBACK=1` is the dev-only `*.localhost` switch.
+- **Voicemail everywhere + greetings (2026-09-29):** migrations `0011_presence_pending.sql`
+  (coalesced presence) and `0012_voicemail_everywhere.sql` (`voicemails` rebuilt: `device_id`
+  nullable + `to_user` + `from_address`, call_log links kept; `voicemail_prefs` per account/phone:
+  ring seconds, child may record, greeting blob; `voicemail_tickets`). Hub: `room.vm`
+  (target + caller) set at dial, offer on `refuse`/`apply(ended)` when `goesToVoicemail`
+  (`packages/core/voicemail.ts`), per-callee ring time (`RING_TIMEOUT_MS` 25 s default, remote
+  legs use a 65 s backstop), `greeting.begin/reset` from phones. `vmTickets.ts`: public
+  `/api/vm/{greeting,message}` (and `POST /api/vm/greeting` for phones), delivery to a person,
+  phone or connection (`/fed/v1/voicemail kind=person`, `/fed/v1/greeting` in connections.ts,
+  active connection required). `voicemail.ts`: inbox for everyone (own + guardians' phones),
+  `/api/voicemail/{settings,greeting}`, `/api/devices/:id/{voicemail,greeting}`. Protocol
+  (additive): `call.state.voicemail`, `config.greeting`, `greeting.begin/reset/ticket/done`,
+  `voicemail.inbox`, `VoicemailPrompt` ids for firmware. Client: `recorder.ts`, `voicemail.ts`
+  (`LeaveMessage`, `browserVoice`). Companion: `LeaveVoicemail` (greeting → tone → record → Hang up
+  & send), `GreetingEditor` (Voicemail tab; phone Manage page), Voicemail tab for all members.
+  Browser phone: `voicemail` device state, MENU → Voicemail → 1 name / 2 greeting / 3 default.
+  Fixes: presence rate limit coalesces (hub alarm), `#invite=` on hashchange, "Use this phone"
+  waits for the socket. Tests: `voicemail.test.ts` (mutation-checked), e2e `noAnswerAcross`,
+  live checks 22–23 (not run against production). Guest-at-Lounge relay calls don't offer voicemail yet.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
   (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (code; not deployed) → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
@@ -324,7 +345,8 @@ Keep this section current when finishing a milestone.
 ## Client notes
 - `packages/client`: `ProtocolSocket` (reconnect with backoff, 25s app ping), `CallMedia`
   (audio-only RTCPeerConnection; queues ICE until the remote description is set), `TonePlayer`
-  (Web Audio call-progress tones; unlock on a user gesture).
+  (Web Audio call-progress tones; unlock on a user gesture), `VoicemailRecorder`, and
+  `LeaveMessage` (fetch greeting → play → tone → record → upload with the offer's ticket).
 - `apps/device-web` (vanilla TS): runs `deviceStep`; pure `leds.ts` and `strip.ts` (≤2 lines ×
   16 chars) with tests; `segments.ts` 14-segment SVG font. Query params: `?profile=` (separate
   identity per emulated phone; IndexedDB non-extractable Ed25519 key), `?keys=1-8`,

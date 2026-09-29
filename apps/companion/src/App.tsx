@@ -346,13 +346,13 @@ function SignedIn({
   };
 
   const countUnheard = useCallback(async () => {
-    if (!guardian || !householdId) return;
+    if (!householdId) return;
     try {
       setUnheard((await api.voicemails()).filter((v) => !v.heardAt).length);
     } catch {
       // The inbox shows its own errors.
     }
-  }, [api, guardian, householdId]);
+  }, [api, householdId]);
 
   useEffect(() => {
     void countUnheard();
@@ -413,11 +413,9 @@ function SignedIn({
           <Tab route={route} name="home" onGo={setRoute}>
             Home
           </Tab>
-          {guardian && (
-            <Tab route={route} name="voicemail" onGo={setRoute}>
-              Voicemail{unheard > 0 && <span className="count">{unheard}</span>}
-            </Tab>
-          )}
+          <Tab route={route} name="voicemail" onGo={setRoute}>
+            Voicemail{unheard > 0 && <span className="count">{unheard}</span>}
+          </Tab>
           {guardian && (
             <Tab route={route} name="people" onGo={setRoute}>
               People
@@ -639,22 +637,20 @@ function SignedIn({
       {toast && (
         <div className="toast" role="status">
           <span>{toast}</span>
-          {guardian && (
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setToast(undefined);
-                setRoute({ name: "voicemail" });
-              }}
-            >
-              Listen
-            </button>
-          )}
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setToast(undefined);
+              setRoute({ name: "voicemail" });
+            }}
+          >
+            Listen
+          </button>
         </div>
       )}
 
-      {conn && <CallOverlay snap={snap} conn={conn} api={api} />}
+      {conn && <CallOverlay snap={snap} conn={conn} />}
     </div>
   );
 }

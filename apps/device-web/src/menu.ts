@@ -2,12 +2,23 @@
  * The phone's on-device menu. MENU opens it; each digit picks the option shown for it on the
  * display (or spoken, on phones without one); BACK steps out. Pure, so firmware can mirror it.
  */
+import { PROMPT_TEXT } from "@openloungephone/core";
 import { STATUS_WIDTH } from "./strip.ts";
 
-export type MenuScreen = "root" | "volume" | "voicemail" | "speaker" | "brightness" | "about";
+export type MenuScreen =
+  | "root"
+  | "volume"
+  | "voicemail"
+  /** Recording the greeting: BACK (or any key) finishes. */
+  | "greeting"
+  | "speaker"
+  | "brightness"
+  | "about";
 
 export interface MenuState {
   screen: MenuScreen;
+  /** On the `greeting` screen: which greeting is being recorded. */
+  recording?: "name" | "custom";
   /** Epoch ms of the last key press, for the inactivity timeout. */
   lastInput: number;
 }
@@ -28,6 +39,8 @@ export type MenuEvent =
   | { type: "back"; now: number }
   | { type: "digit"; digit: number; now: number }
   | { type: "tick"; now: number }
+  /** The greeting recording finished (saved, or not). */
+  | { type: "greeting-done"; ok: boolean; notAllowed?: boolean; now: number }
   /** Handset lifted or a call arrived: leave immediately. */
   | { type: "exit" };
 
@@ -37,10 +50,21 @@ export interface MenuContext {
   fw: string;
   /** A Lounge phone someone is using: adds "Open to chat" and "Log out". */
   lounge?: { openToChat: boolean };
+  /** The phone's voicemail greeting (absent on Lounge phones). */
+  greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
 }
 
-/** Something the phone must tell the server (Lounge phone menu items). */
-export type MenuAction = { type: "chat"; open: boolean } | { type: "logout" };
+/** Something the phone must do or tell the server (greetings, Lounge phone items). */
+export type MenuAction =
+  | { type: "chat"; open: boolean }
+  | { type: "logout" }
+  /** Ask to record a greeting (`greeting.begin`); the phone records once the server agrees. */
+  | { type: "greeting"; kind: "name" | "custom" }
+  /** Stop recording the greeting and save it. */
+  | { type: "greeting-stop" }
+  /** Interrupted (a call, the handset): discard it. */
+  | { type: "greeting-cancel" }
+  | { type: "greeting-reset" };
 
 export interface MenuResult {
   /** undefined = menu closed. */
@@ -86,6 +110,10 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
+/** Voicemail screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
+const GREETING_LABELS = { 1: "Name", 2: "Greeting", 3: "Default" } as const;
+const GREETING_TEXT = { default: "standard", name: "your name", custom: "your own" } as const;
+
 export function menuView(state: MenuState, settings: Settings, ctx: MenuContext): MenuView {
   const base = { menuLabel: "Close", backLabel: "Back" };
   switch (state.screen) {
@@ -106,7 +134,14 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
       return {
         ...base,
         title: ctx.missedCount ? `${ctx.missedCount} VOICEMAIL` : "NO VOICEMAIL",
+        labels: ctx.greeting?.canRecord ? { ...GREETING_LABELS } : {},
+      };
+    case "greeting":
+      return {
+        ...base,
+        title: state.recording === "name" ? "SAY YOUR NAME" : "RECORDING",
         labels: {},
+        backLabel: "Done",
       };
     case "speaker":
       return {
@@ -136,10 +171,21 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
     }
     case "volume":
       return `Volume ${settings.volume}. Press 1 for quieter, 2 for louder.`;
-    case "voicemail":
-      return ctx.missedCount
+    case "voicemail": {
+      const messages = ctx.missedCount
         ? `You have voicemail from ${ctx.missedCount} ${ctx.missedCount === 1 ? "person" : "people"}. Playing messages on the phone is not available yet; a grown-up can play them in the app.`
         : "You have no new voicemail.";
+      const g = ctx.greeting;
+      if (!g) return messages;
+      const now = ` Callers hear the ${GREETING_TEXT[g.kind]} greeting.`;
+      return g.canRecord
+        ? `${messages}${now} Press 1 to record your name, 2 to record a greeting, 3 for the standard greeting.`
+        : `${messages}${now} ${PROMPT_TEXT["greet.not_allowed"]}`;
+    }
+    case "greeting":
+      return state.recording === "name"
+        ? PROMPT_TEXT["greet.say_name"]
+        : PROMPT_TEXT["greet.say_greeting"];
     case "speaker":
       return `Speakerphone is ${settings.speakerphone ? "on" : "off"}. Press 1 for on, 2 for off.`;
     case "brightness":
@@ -155,11 +201,28 @@ export function menuStep(
   event: MenuEvent,
   ctx: MenuContext,
 ): MenuResult {
-  if (event.type === "exit") return { state: undefined, settings };
+  if (event.type === "exit") {
+    // Leaving mid-recording (a call, the handset) keeps nothing.
+    return state?.screen === "greeting"
+      ? { state: undefined, settings, action: { type: "greeting-cancel" } }
+      : { state: undefined, settings };
+  }
   if (event.type === "tick") {
-    if (state && event.now - state.lastInput >= MENU_TIMEOUT_MS)
+    // No timeout while recording: the recording has its own limit.
+    if (state && state.screen !== "greeting" && event.now - state.lastInput >= MENU_TIMEOUT_MS)
       return { state: undefined, settings };
     return { state, settings };
+  }
+  if (event.type === "greeting-done") {
+    if (!state) return { state, settings };
+    const next: MenuState = { screen: "voicemail", lastInput: event.now };
+    return {
+      state: next,
+      settings,
+      say: event.ok
+        ? PROMPT_TEXT["greet.saved"]
+        : PROMPT_TEXT[event.notAllowed ? "greet.not_allowed" : "greet.not_saved"],
+    };
   }
 
   const enter = (screen: MenuScreen, s: Settings = settings): MenuResult => {
@@ -171,6 +234,11 @@ export function menuStep(
     return event.type === "menu" ? enter("root") : { state, settings };
   }
   const touched = { ...state, lastInput: event.now };
+
+  // Recording the greeting: any key finishes it (the phone then saves it and says so).
+  if (state.screen === "greeting") {
+    return { state: touched, settings, action: { type: "greeting-stop" } };
+  }
 
   if (event.type === "menu") {
     // MENU at the top closes the menu; anywhere else it returns to the top.
@@ -211,6 +279,27 @@ export function menuStep(
         state: touched,
         settings: { ...settings, speakerphone },
         say: `Speakerphone ${speakerphone ? "on" : "off"}`,
+      };
+    }
+    case "voicemail": {
+      if (!ctx.greeting?.canRecord || (d !== 1 && d !== 2 && d !== 3)) {
+        return { state: touched, settings };
+      }
+      if (d === 3) {
+        return {
+          state: touched,
+          settings,
+          say: PROMPT_TEXT["greet.default"],
+          action: { type: "greeting-reset" },
+        };
+      }
+      const kind = d === 1 ? "name" : "custom";
+      const next: MenuState = { screen: "greeting", recording: kind, lastInput: event.now };
+      return {
+        state: next,
+        settings,
+        say: menuPrompt(next, settings, ctx),
+        action: { type: "greeting", kind },
       };
     }
     case "brightness": {

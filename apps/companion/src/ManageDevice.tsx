@@ -8,6 +8,7 @@ import type {
   User,
 } from "./api.ts";
 import { hostBadge } from "./connectionGroups.ts";
+import { GreetingEditor } from "./GreetingEditor.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
 
@@ -107,6 +108,13 @@ export function ManageDevice({
           onRemoved={onRemoved}
           onError={setError}
         />
+      )}
+
+      {device && guardian && !device.ownerUserId && device.kind !== "lounge" && (
+        <>
+          <h3>Voicemail</h3>
+          <GreetingEditor api={api} deviceId={device.id} />
+        </>
       )}
 
       <h3>Allowed people</h3>

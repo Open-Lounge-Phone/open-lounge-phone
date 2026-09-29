@@ -18,6 +18,8 @@ export interface DeviceConfig {
   quietUntil?: string;
   /** Callers with unheard voicemail, newest first. */
   missed?: { from: string }[];
+  /** The phone's voicemail greeting, and whether MENU → Voicemail may change it. */
+  greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
 }
 
 export interface LedInput {
@@ -88,6 +90,10 @@ export function ledsFor(input: LedInput): LedState {
       break;
     case "incall":
       set(activeKey, { color: "green", mode: "on" });
+      break;
+    case "voicemail":
+      // Leaving a message: the called key glows red, like a recording light.
+      set(activeKey, { color: "red", mode: "on" });
       break;
     case "incoming": {
       const match = config?.buttons.find((b) => b.label === s.from);

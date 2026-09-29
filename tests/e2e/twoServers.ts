@@ -167,23 +167,13 @@ export async function voicemailAcross(jesse: Person, bob: Person) {
   expect(row?.phones).toEqual([{ deviceId, label: "Kid phone" }]);
   const jApp = await appSocket(jesse);
   jApp.send({ t: "call.phone", connectionId: row?.id as string, deviceId: deviceId as string });
-  for (;;) {
-    const m = await jApp.next("call.state");
-    if (m.state === "ended") {
-      expect(m.reason).toBe("voicemail");
-      break;
-    }
-  }
+  const ended = await endedState(jApp);
+  expect(ended.reason).toBe("voicemail");
+  // The offer's ticket is the only credential the message needs (phones use it too).
+  const ticket = (ended.voicemail as { ticket: string }).ticket;
   const bApp = await appSocket(bob);
   const recording = new Uint8Array(2048).map((_, i) => i % 199);
-  const vm = await fetch(
-    `${jesse.server.base}/api/connections/${row?.id}/voicemail?deviceId=${deviceId}&durationMs=1500`,
-    {
-      method: "POST",
-      headers: { authorization: `Bearer ${jesse.token}`, "content-type": "audio/webm" },
-      body: recording,
-    },
-  );
+  const vm = await leaveMessage(jesse.server, ticket, recording, 1500);
   expect(vm.status).toBe(201);
   expect(await bApp.next("voicemail.new")).toMatchObject({ deviceId, from: "Jesse" });
   const list = (await api(bob, "/voicemails")).json as { id: string }[];
@@ -192,6 +182,70 @@ export async function voicemailAcross(jesse: Person, bob: Person) {
   });
   expect(new Uint8Array(await audio.arrayBuffer())).toEqual(recording);
   phone.ws.close();
+  jApp.ws.close();
+  bApp.ws.close();
+}
+
+async function endedState(app: Awaited<ReturnType<typeof appSocket>>) {
+  for (;;) {
+    const m = await app.next("call.state");
+    if (m.state === "ended") return m;
+  }
+}
+
+/** Leaves a message with a voicemail offer's ticket, on the caller's own server. */
+function leaveMessage(
+  server: ServerTarget,
+  ticket: string,
+  audio: Uint8Array<ArrayBuffer>,
+  durationMs: number,
+) {
+  return fetch(
+    `${server.base}/api/vm/message?ticket=${encodeURIComponent(ticket)}&durationMs=${durationMs}`,
+    { method: "POST", headers: { "content-type": "audio/webm" }, body: audio },
+  );
+}
+
+/**
+ * Bob records his name as his greeting and rings for 10 s. Jesse's call across servers isn't
+ * answered: her server fetches Bob's greeting from his (a signed request, only because they're
+ * connected), and her message lands in Bob's own inbox.
+ */
+export async function noAnswerAcross(jesse: Person, bob: Person) {
+  const name = new Uint8Array(600).map((_, i) => (i * 7) % 251);
+  const put = await fetch(`${bob.server.base}/api/voicemail/greeting?kind=name&durationMs=1800`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${bob.token}`, "content-type": "audio/webm" },
+    body: name,
+  });
+  expect(put.status).toBe(204);
+  const ring = await api(bob, "/voicemail/settings", {
+    method: "PATCH",
+    body: { ringSeconds: 10 },
+  });
+  expect(ring.status).toBe(204);
+  const [row] = await connections(jesse);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  jApp.send({ t: "call.connection", connectionId: row?.id as string });
+  await bApp.next("call.ringing");
+  // Nobody answers.
+  const ended = await endedState(jApp);
+  expect(ended.reason).toBe("timeout");
+  const offer = ended.voicemail as { ticket: string; name: string };
+  expect(offer.name).toBe("Bob");
+  const greeting = await fetch(
+    `${jesse.server.base}/api/vm/greeting?ticket=${encodeURIComponent(offer.ticket)}`,
+  );
+  expect(greeting.status).toBe(200);
+  expect(greeting.headers.get("olp-greeting")).toBe("name");
+  expect(new Uint8Array(await greeting.arrayBuffer())).toEqual(name);
+  const message = new Uint8Array(1500).map((_, i) => i % 97);
+  expect((await leaveMessage(jesse.server, offer.ticket, message, 4000)).status).toBe(201);
+  expect(await bApp.next("voicemail.inbox")).toMatchObject({ from: "Jesse" });
+  const inbox = (await api(bob, "/voicemails")).json as { toUser: string; fromLabel: string }[];
+  expect(inbox[0]).toMatchObject({ fromLabel: "Jesse", deviceId: null });
+  expect(inbox[0]?.toUser).toBeTruthy();
   jApp.ws.close();
   bApp.ws.close();
 }

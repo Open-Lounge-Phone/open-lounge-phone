@@ -96,9 +96,43 @@ no shared secret is ever stored on the device.
 both sides negotiate media via the configured provider → handset down ends the room.
 
 **Inbound call.** A contact dials the phone → `authorizeInbound`. Outside quiet hours the phone
-rings. During quiet hours the caller records a voicemail instead; it is stored in the blob store,
-transcribed (Workers AI Whisper or a local whisper.cpp), and shown to guardians. The phone never
-rings.
+rings. During quiet hours the call goes straight to voicemail (below). The phone never rings.
+
+**Voicemail everywhere.** Any call that was allowed but isn't answered goes to voicemail: no
+answer within the callee's ring time (per person or phone, default 25 s, `voicemail_prefs`),
+declined, busy, quiet hours, unavailable, or offline (`goesToVoicemail` in `packages/core`). The
+caller's hub then ends the call with `call.state {state: "ended", voicemail: {ticket, name,
+maxMs, prompts}}` — to the caller only, and never across servers. The **ticket** (single use,
+10 minutes, `voicemail_tickets`, `vmTickets.ts`) stands for the dial that was already
+authorized, so no new permission check is invented: whoever couldn't have called can't leave a
+message, and a kid's allow-list entry is re-checked when the message arrives. It is also the
+only credential needed, so a phone (which has no HTTP session) can use it:
+`GET /api/vm/greeting?ticket=` (the greeting audio, or 204 for the spoken default) and
+`POST /api/vm/message?ticket=` (the message, ≤ 2 minutes). The message lands in the right inbox
+(`voicemails.device_id` for a kids' phone → its guardians and "missed" on the phone;
+`voicemails.to_user` for a person → their own inbox, across all their spaces, never a shared
+Lounge phone); it's stored in the blob store, transcribed (Workers AI Whisper or an
+OpenAI-compatible endpoint), linked to the callee's call-log row (the buddy timeline), and
+announced (`voicemail.new` to guardians, `voicemail.inbox` to the person). For someone on
+another server (or another household here) the ticket names the connection: the caller's server
+fetches their greeting with a signed `POST /fed/v1/greeting` and delivers the message with
+`POST /fed/v1/voicemail`; the other server checks the connection (and, for a phone, its
+allow-list) itself.
+
+**Greetings.** Three kinds per person and per kids' phone: the spoken default ("<Name> can't take
+your call. Leave a message after the tone."), a recorded **name** (≤ 3 s) inside that sentence,
+or a **custom** greeting (≤ 30 s), stored as blobs. The companion records, plays back and resets
+them; a phone records its own from MENU → Voicemail (`greeting.begin` → `greeting.ticket` →
+`POST /api/vm/greeting?ticket=`), which guardians can switch off. Callers play the greeting from
+`greetingScript` (`packages/core`): the browser uses speech synthesis for the spoken parts;
+firmware plays pre-recorded **prompt ids** (`VoicemailPrompt` in the protocol). The browser
+flow (fetch, play, tone, record, upload) is `LeaveMessage` in `packages/client`, shared by the
+companion and the browser phone.
+
+**Presence rate limit.** Presence shared with connections is limited to 5 updates per account
+per 10 s. A change inside a full window isn't dropped: the latest state waits in
+`presence_pending` and the hub sends it when the window opens, on its own `wakeAt` alarm (the
+Durable Object alarm on Cloudflare) — no timers.
 
 **Any device as a phone.** The browser phone (`apps/device-web`, served at `/device/`) is an
 installable web app with its own manifest and service worker. On a small or installed screen it

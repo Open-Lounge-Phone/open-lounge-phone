@@ -64,11 +64,12 @@ export const VoicemailPrompt = z
     "greet.say_name",
     "greet.say_greeting",
     "greet.saved",
+    "greet.not_saved",
     "greet.default",
     "greet.not_allowed",
   ])
   .describe(
-    'Audio prompt ids, pre-recorded on hardware (the browser phone speaks them). Slots: `name` = the recorded name when the greeting is `name`, else `name` spoken (hardware without speech plays `vm.person`, "The person you called"); `greeting` = the recorded custom greeting. Fixed: `vm.cant_take` "can\'t take your call.", `vm.leave_message` "Leave a message after the tone.", `vm.tone` the beep, `vm.sent` "Message sent.", `vm.not_sent` "Your message wasn\'t sent.", `greet.say_name` "Say your name after the tone, then press BACK.", `greet.say_greeting` "Record your greeting after the tone, then press BACK.", `greet.saved` "Greeting saved.", `greet.default` "Callers will hear the standard greeting.", `greet.not_allowed` "Ask a grown-up to change the greeting."',
+    'Audio prompt ids, pre-recorded on hardware (the browser phone speaks them). Slots: `name` = the recorded name when the greeting is `name`, else `name` spoken (hardware without speech plays `vm.person`, "The person you called"); `greeting` = the recorded custom greeting. Fixed: `vm.cant_take` "can\'t take your call.", `vm.leave_message` "Leave a message after the tone.", `vm.tone` the beep, `vm.sent` "Message sent.", `vm.not_sent` "Your message wasn\'t sent.", `greet.say_name` "Say your name after the tone, then press BACK.", `greet.say_greeting` "Record your greeting after the tone, then press BACK.", `greet.saved` "Greeting saved.", `greet.not_saved` "The greeting wasn\'t saved.", `greet.default` "Callers will hear the standard greeting.", `greet.not_allowed` "Ask a grown-up to change the greeting."',
   );
 export type VoicemailPrompt = z.infer<typeof VoicemailPrompt>;
 

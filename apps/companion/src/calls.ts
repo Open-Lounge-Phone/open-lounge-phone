@@ -1,5 +1,5 @@
 import type { Tone } from "@openloungephone/client";
-import type { EndReason, ServerToApp } from "@openloungephone/protocol";
+import type { EndReason, ServerToApp, VoicemailOffer } from "@openloungephone/protocol";
 
 /** What the call UI shows. At most one call at a time. */
 export type CallView =
@@ -33,6 +33,8 @@ export type CallView =
       via?: string;
       /** The server's own explanation, if it gave one (e.g. a fair-use allowance). */
       note?: string;
+      /** Unanswered: a message may be left (greeting, tone, record, hang up to send). */
+      voicemail?: VoicemailOffer;
     };
 
 export type CallEvent =
@@ -132,6 +134,7 @@ function stateFor(
           ...(view.phase === "outgoing" && view.person ? { person: true } : {}),
           ...(view.phase === "outgoing" && view.via ? { via: view.via } : {}),
           ...(msg.note ? { note: msg.note } : {}),
+          ...(msg.voicemail && view.phase === "outgoing" ? { voicemail: msg.voicemail } : {}),
         },
       };
     case "requesting":
@@ -161,9 +164,9 @@ export function toneFor(view: CallView): Tone {
   return "none";
 }
 
-/** A refused call to a phone in quiet hours can be followed by a recorded message. */
+/** An unanswered call the server offered voicemail for (to anyone: a person or a phone). */
 export function canLeaveVoicemail(view: CallView): view is Extract<CallView, { phase: "ended" }> & {
-  deviceId: string;
+  voicemail: VoicemailOffer;
 } {
-  return view.phase === "ended" && view.reason === "voicemail" && !!view.deviceId;
+  return view.phase === "ended" && !!view.voicemail;
 }

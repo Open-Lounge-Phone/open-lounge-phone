@@ -60,6 +60,18 @@ describe("statusLines", () => {
     ]);
   });
 
+  it("guides leaving a voicemail, and confirms it after hang-up", () => {
+    const offer = { ticket: "t".repeat(20), name: "Grandma", maxMs: 120_000, prompts: [] };
+    const vm = { kind: "voicemail" as const, offer };
+    expect(lines({ deviceState: vm })).toEqual(["LEAVE A MESSAGE", "GRANDMA"]);
+    expect(lines({ deviceState: vm, leave: { stage: "recording", remainingMs: 95_000 } })).toEqual([
+      "RECORDING 01:35",
+      "HANG UP TO SEND",
+    ]);
+    expect(lines({ leave: { stage: "sent" } })).toEqual(["MESSAGE SENT"]);
+    expect(lines({ leave: { stage: "failed" } })).toEqual(["MESSAGE NOT SENT"]);
+  });
+
   it("explains failed calls", () => {
     const after = (lastEnd: "denied" | "busy" | "timeout" | "hangup") =>
       lines({ deviceState: { kind: "offhook", lastEnd } });

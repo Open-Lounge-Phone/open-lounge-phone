@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api, DeviceSummary, VoicemailSummary } from "./api.ts";
+import { GreetingEditor } from "./GreetingEditor.tsx";
 import { formatDuration, formatWhen, transcriptText } from "./text.ts";
 
 const POLL_MS = 5000;
@@ -60,6 +61,7 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
         ← Back
       </button>
       <h2>Voicemail</h2>
+      <GreetingEditor api={api} />
       {error && (
         <p className="error" role="alert">
           {error}
@@ -69,7 +71,8 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
         <div className="card empty">
           <p>No messages.</p>
           <p className="muted">
-            When someone calls during quiet hours, they can leave a message here.
+            When a call isn't answered — you're busy, away or not taking calls, or it's quiet hours
+            for a phone — the caller can leave a message here.
           </p>
         </div>
       )}
@@ -82,8 +85,8 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
                   {!v.heardAt && <span className="badge">New</span>} {v.fromLabel}
                 </div>
                 <div className="muted small">
-                  for {deviceName(v.deviceId)} · {formatWhen(v.createdAt, now)} ·{" "}
-                  {formatDuration(v.durationMs)}
+                  {v.deviceId ? `for ${deviceName(v.deviceId)}` : "for you"} ·{" "}
+                  {formatWhen(v.createdAt, now)} · {formatDuration(v.durationMs)}
                 </div>
               </div>
             </div>

@@ -213,7 +213,10 @@ export type TranscriptStatus = "pending" | "done" | "failed" | "unavailable";
 
 export interface VoicemailSummary {
   id: string;
-  deviceId: string;
+  /** Left for a household phone (guardians see these)… */
+  deviceId: string | null;
+  /** …or for you (your own inbox). */
+  toUser: string | null;
   fromUser: string | null;
   fromLabel: string;
   createdAt: number;
@@ -222,6 +225,18 @@ export interface VoicemailSummary {
   transcript: string | null;
   transcriptStatus: TranscriptStatus;
   heardAt: number | null;
+}
+
+export type GreetingKind = "default" | "name" | "custom";
+
+/** Voicemail settings of a person (yours) or a kids' phone. */
+export interface VoicemailSettings {
+  ringSeconds: number;
+  greeting: { kind: GreetingKind; durationMs?: number };
+  /** Who callers hear named in the default greeting. */
+  name: string;
+  /** Kids' phones: the child may record the phone's greeting from its menu. */
+  childGreeting?: boolean;
 }
 
 /** Passkey ceremony options as returned by the server (passed through to the browser API). */
@@ -414,20 +429,6 @@ export function createApi(opts: ApiOptions) {
     blockConnection: (id: string) => request<void>("POST", `/connections/${enc(id)}/block`),
     removeConnection: (id: string) => request<void>("DELETE", `/connections/${enc(id)}`),
     blockServer: (host: string) => request<void>("POST", "/connections/block-server", { host }),
-    /** Voicemail for a phone a connection shared (its server checks the allow-list). */
-    leaveConnectionVoicemail: async (
-      connectionId: string,
-      deviceId: string,
-      audio: Blob,
-      durationMs: number,
-    ) =>
-      (
-        await send(
-          "POST",
-          `/connections/${enc(connectionId)}/voicemail?deviceId=${enc(deviceId)}&durationMs=${Math.round(durationMs)}`,
-          { body: audio },
-        )
-      ).json() as Promise<{ ok: true }>,
     putContact: (deviceId: string, contact: ContactEntry) => {
       const { id, ...rest } = contact;
       return request<void>("PUT", `/devices/${enc(deviceId)}/contacts/${enc(id)}`, rest);
@@ -462,14 +463,48 @@ export function createApi(opts: ApiOptions) {
       (await send("GET", `/voicemails/${enc(id)}/audio`)).blob(),
     markHeard: (id: string) => request<void>("POST", `/voicemails/${enc(id)}/heard`),
     deleteVoicemail: (id: string) => request<void>("DELETE", `/voicemails/${enc(id)}`),
-    leaveVoicemail: async (deviceId: string, audio: Blob, durationMs: number) =>
-      (await (
-        await send(
-          "POST",
-          `/devices/${enc(deviceId)}/voicemail?durationMs=${Math.round(durationMs)}`,
-          { body: audio },
-        )
-      ).json()) as { id: string },
+
+    /**
+     * Voicemail settings and greeting: yours (`deviceId` undefined) or a kids' phone's
+     * (guardians).
+     */
+    voicemailSettings: (deviceId?: string) =>
+      request<VoicemailSettings>(
+        "GET",
+        deviceId ? `/devices/${enc(deviceId)}/voicemail` : "/voicemail/settings",
+      ),
+    setVoicemailSettings: (
+      patch: { ringSeconds?: number; childGreeting?: boolean },
+      deviceId?: string,
+    ) =>
+      request<void>(
+        "PATCH",
+        deviceId ? `/devices/${enc(deviceId)}/voicemail` : "/voicemail/settings",
+        patch,
+      ),
+    greetingAudio: async (deviceId?: string) => {
+      const res = await send(
+        "GET",
+        deviceId ? `/devices/${enc(deviceId)}/greeting/audio` : "/voicemail/greeting/audio",
+      );
+      return res.status === 200 ? res.blob() : undefined;
+    },
+    setGreeting: async (
+      kind: "name" | "custom",
+      audio: Blob,
+      durationMs: number,
+      deviceId?: string,
+    ) => {
+      const path = deviceId ? `/devices/${enc(deviceId)}/greeting` : "/voicemail/greeting";
+      await send("PUT", `${path}?kind=${kind}&durationMs=${Math.round(durationMs)}`, {
+        body: audio,
+      });
+    },
+    resetGreeting: (deviceId?: string) =>
+      request<void>(
+        "DELETE",
+        deviceId ? `/devices/${enc(deviceId)}/greeting` : "/voicemail/greeting",
+      ),
   };
 }
 

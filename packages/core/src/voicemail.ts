@@ -58,6 +58,7 @@ export const PROMPT_TEXT: Record<Exclude<VoicemailPrompt, "name" | "greeting">, 
   "greet.say_name": "Say your name after the tone, then press back.",
   "greet.say_greeting": "Record your greeting after the tone, then press back.",
   "greet.saved": "Greeting saved.",
+  "greet.not_saved": "The greeting wasn't saved.",
   "greet.default": "Callers will hear the standard greeting.",
   "greet.not_allowed": "Ask a grown-up to change the greeting.",
 };

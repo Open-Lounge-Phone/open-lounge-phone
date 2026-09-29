@@ -1,16 +1,22 @@
 import {
+  browserVoice,
   CallMedia,
   getMicrophone,
+  LeaveMessage,
+  type LeaveState,
   ProtocolSocket,
   type SocketStatus,
   socketUrl,
   TonePlayer,
+  uploadGreeting,
+  VoicemailRecorder,
 } from "@openloungephone/client";
 import {
   type DeviceInput,
   type DeviceState,
   deviceStep,
   initialDeviceState,
+  PROMPT_TEXT,
   soundFor,
 } from "@openloungephone/core";
 import {
@@ -148,8 +154,19 @@ let lounge: LoungeView = {};
 let challengeTimer: ReturnType<typeof setTimeout> | undefined;
 let qrTimer: ReturnType<typeof setTimeout> | undefined;
 let lastQrAsk = 0;
+/** Leaving a voicemail after an unanswered call (and its outcome for a moment after). */
+let leaveFlow: LeaveMessage | undefined;
+let leave: LeaveState | undefined;
+let leaveTicker: ReturnType<typeof setInterval> | undefined;
+let leaveClear: ReturnType<typeof setTimeout> | undefined;
+/** Recording the phone's greeting from MENU → Voicemail. */
+let greetingRec:
+  | { kind: "name" | "custom"; stage: "asking" | "recording"; recorder?: VoicemailRecorder }
+  | undefined;
 
 const tones = new TonePlayer();
+/** Greetings and prompts through the handset (on hardware: pre-recorded prompt ids). */
+const voice = browserVoice({ volume: () => settings.volume / 10 });
 const identity = await loadOrCreateIdentity(profile);
 
 // --- developer log -------------------------------------------------------------
@@ -272,6 +289,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
         quiet: msg.quiet,
         ...(msg.quietUntil ? { quietUntil: msg.quietUntil } : {}),
         ...(msg.missed ? { missed: msg.missed } : {}),
+        ...(msg.greeting ? { greeting: msg.greeting } : {}),
       };
       // Chime once for a newly missed caller, but never over a call or a lifted handset.
       if (authed && hasNewMissed(config, next) && !hookUp && deviceState.kind === "idle") {
@@ -296,6 +314,17 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
     case "rtc.config":
       iceByCall.set(msg.callId, msg.iceServers);
+      break;
+    case "greeting.ticket":
+      void recordGreeting(msg.kind, msg.ticket, msg.maxMs);
+      break;
+    case "greeting.done":
+      if (msg.result === "not_allowed") {
+        greetingRec = undefined;
+        if (menu?.screen === "greeting") {
+          applyMenu({ type: "greeting-done", ok: false, notAllowed: true, now: Date.now() });
+        } else speak(PROMPT_TEXT["greet.not_allowed"]);
+      }
       break;
     case "lounge.idle":
       lounge = { ...lounge, nonce: { nonce: msg.nonce, expiresAt: msg.expiresAt } };
@@ -408,6 +437,8 @@ function step(input: DeviceInput): void {
     void startMedia(s.callId, prev.kind === "dialing");
   }
   if (s.kind !== "incall" && call) endCall();
+  if (s.kind === "voicemail" && prev.kind !== "voicemail") startLeaving(s.offer);
+  if (prev.kind === "voicemail" && s.kind !== "voicemail") leaveFlow?.finish(); // hang up to send
   if (s.kind === "incall" && s.connected && callStartedAt === undefined) {
     callStartedAt = Date.now();
     callTicker = setInterval(renderDisplay, 1000);
@@ -453,6 +484,66 @@ function endCall(): void {
   if (call) iceByCall.delete(call.callId);
   call = undefined;
   audioEl.srcObject = null;
+}
+
+// --- voicemail: leaving a message, recording the greeting ---------------------------------
+
+/** Unanswered: their greeting, the tone, then record until the handset goes down. */
+function startLeaving(offer: Extract<DeviceState, { kind: "voicemail" }>["offer"]): void {
+  leaveFlow?.cancel();
+  clearTimeout(leaveClear);
+  const flow = new LeaveMessage({
+    offer,
+    voice,
+    onState: (state) => {
+      if (leaveFlow !== flow) return;
+      leave = state;
+      log("•", `voicemail: ${state.stage}`);
+      clearInterval(leaveTicker);
+      if (state.stage === "recording") leaveTicker = setInterval(renderDisplay, 1000);
+      if (state.stage === "sent" || state.stage === "failed" || state.stage === "cancelled") {
+        leaveClear = setTimeout(() => {
+          if (leaveFlow !== flow) return;
+          leave = undefined;
+          leaveFlow = undefined;
+          render();
+        }, 4000);
+      }
+      render();
+    },
+  });
+  leaveFlow = flow;
+  void flow.start();
+}
+
+/** The server agreed (`greeting.ticket`): prompt, tone, record until a key or the limit, save. */
+async function recordGreeting(kind: "name" | "custom", ticket: string, maxMs: number) {
+  if (menu?.screen !== "greeting" || greetingRec?.kind !== kind) return;
+  await voice.say(PROMPT_TEXT[kind === "name" ? "greet.say_name" : "greet.say_greeting"]);
+  await voice.tone();
+  if (greetingRec?.kind !== kind || menu?.screen !== "greeting") return;
+  const recorder = new VoicemailRecorder(
+    {
+      onTick: () => {},
+      onDone: (rec) =>
+        void uploadGreeting(ticket, rec).then((r) => {
+          log("•", `greeting ${r.ok ? "saved" : `not saved: ${r.message}`}`);
+          greetingRec = undefined;
+          if (menu?.screen === "greeting") {
+            applyMenu({ type: "greeting-done", ok: r.ok, now: Date.now() });
+          }
+        }),
+      onError: (message) => {
+        log("•", `greeting: ${message}`);
+        greetingRec = undefined;
+        if (menu?.screen === "greeting")
+          applyMenu({ type: "greeting-done", ok: false, now: Date.now() });
+      },
+    },
+    maxMs,
+  );
+  greetingRec = { kind, stage: "recording", recorder };
+  await recorder.start();
 }
 
 // --- physical controls -----------------------------------------------------------
@@ -514,6 +605,7 @@ function menuContext() {
     missedCount: config?.missed?.length ?? 0,
     fw: FW,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
+    ...(config?.greeting && variant !== "lounge" ? { greeting: config.greeting } : {}),
   };
 }
 
@@ -524,8 +616,25 @@ function applyMenu(event: MenuEvent): void {
   if (r.settings !== settings) applySettings(r.settings);
   if (r.action?.type === "chat") send({ t: "lounge.chat", open: r.action.open });
   if (r.action?.type === "logout") send({ t: "lounge.leave" });
+  if (r.action?.type === "greeting") {
+    greetingRec = { kind: r.action.kind, stage: "asking" };
+    send({ t: "greeting.begin", kind: r.action.kind });
+  }
+  if (r.action?.type === "greeting-stop") {
+    // Recording: stop and save. Still waiting for the server: forget it.
+    if (greetingRec?.recorder?.recording) greetingRec.recorder.stop();
+    else greetingRec = undefined;
+  }
+  if (r.action?.type === "greeting-cancel") {
+    greetingRec?.recorder?.cancel();
+    greetingRec = undefined;
+    voice.stop();
+  }
+  if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
   // Phones without a display speak the menu; the others can show it.
-  if (r.say && displayMode === "none") speak(r.say);
+  // Greeting results are always spoken; its recording prompt is spoken when recording starts.
+  const spoken = displayMode === "none" || event.type === "greeting-done";
+  if (r.say && spoken && r.action?.type !== "greeting") speak(r.say);
   if (was && !menu && displayMode === "none" && event.type !== "exit") speak("Menu closed.");
   if (menu && !menuTicker) {
     menuTicker = setInterval(() => applyMenu({ type: "tick", now: Date.now() }), 1000);
@@ -780,6 +889,15 @@ function render(): void {
   } · brightness ${settings.brightness}/5`;
 }
 
+/** The voicemail flow as the display shows it. */
+function leaveView() {
+  if (!leave || leave.stage === "cancelled") return undefined;
+  if (leave.stage === "recording") {
+    return { stage: "recording" as const, remainingMs: leave.maxMs - leave.elapsed };
+  }
+  return { stage: leave.stage };
+}
+
 function renderDisplay(): void {
   const view = menu ? menuView(menu, settings, menuContext()) : undefined;
   const loungeLive = variant === "lounge" && authed && !pairingCode && connection === "online";
@@ -802,6 +920,7 @@ function renderDisplay(): void {
           ...(config ? { config } : {}),
           ...(activeLabel ? { activeLabel } : {}),
           ...(callStartedAt !== undefined ? { callStartedAt } : {}),
+          ...(leaveView() ? { leave: leaveView() } : {}),
           battery,
           power: powerStatus(variant, powerSource),
           now: Date.now(),

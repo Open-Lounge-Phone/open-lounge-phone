@@ -1,162 +1,79 @@
+import { browserVoice, LeaveMessage, type LeaveState } from "@openloungephone/client";
+import type { VoicemailOffer } from "@openloungephone/protocol";
 import { useEffect, useRef, useState } from "react";
-import { type Api, ApiError } from "./api.ts";
-import { MAX_RECORDING_MS, type Recording, VoicemailRecorder } from "./recording.ts";
 import { formatDuration } from "./text.ts";
 
-type Stage =
-  | { name: "offer" }
-  | { name: "recording"; elapsed: number }
-  | { name: "review"; recording: Recording; url: string }
-  | { name: "sending"; recording: Recording; url: string }
-  | { name: "sent" }
-  | { name: "error"; message: string; recording?: Recording; url?: string };
-
 interface Props {
-  api: Api;
-  deviceId: string;
+  offer: VoicemailOffer;
   label: string;
-  /** The phone is in another household or on another server: through this connection. */
-  via?: string | undefined;
   onClose(): void;
 }
 
-/** Shown after a call is refused for quiet hours: record up to a minute and send it. */
-export function LeaveVoicemail({ api, deviceId, label, via, onClose }: Props) {
-  const [stage, setStage] = useState<Stage>({ name: "offer" });
-  const recorder = useRef<VoicemailRecorder>(undefined);
-  const urlRef = useRef<string>(undefined);
-
-  useEffect(
-    () => () => {
-      recorder.current?.cancel();
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    },
-    [],
-  );
+/**
+ * After an unanswered call: their greeting plays, then the tone, then you talk. Hang up to send
+ * (up to two minutes). Works the same for a person, a kids' phone, or someone on another server.
+ */
+export function LeaveVoicemail({ offer, label, onClose }: Props) {
+  const [state, setState] = useState<LeaveState>({ stage: "greeting" });
+  const flow = useRef<LeaveMessage>(undefined);
 
   useEffect(() => {
-    if (stage.name !== "sent") return;
-    const t = setTimeout(onClose, 2000);
+    const f = new LeaveMessage({ offer, voice: browserVoice(), onState: setState });
+    flow.current = f;
+    void f.start();
+    return () => f.cancel();
+  }, [offer]);
+
+  useEffect(() => {
+    if (state.stage !== "sent" && state.stage !== "cancelled") return;
+    const t = setTimeout(onClose, state.stage === "sent" ? 2000 : 0);
     return () => clearTimeout(t);
-  }, [stage.name, onClose]);
-
-  const record = async () => {
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = undefined;
-    setStage({ name: "recording", elapsed: 0 });
-    const r = new VoicemailRecorder({
-      onTick: (elapsed) => setStage({ name: "recording", elapsed }),
-      onDone: (recording) => {
-        const url = URL.createObjectURL(recording.blob);
-        urlRef.current = url;
-        setStage({ name: "review", recording, url });
-      },
-      onError: (message) => setStage({ name: "error", message }),
-    });
-    recorder.current = r;
-    await r.start();
-  };
-
-  const send = async (recording: Recording, url: string) => {
-    setStage({ name: "sending", recording, url });
-    try {
-      if (via) {
-        await api.leaveConnectionVoicemail(via, deviceId, recording.blob, recording.durationMs);
-      } else await api.leaveVoicemail(deviceId, recording.blob, recording.durationMs);
-      setStage({ name: "sent" });
-    } catch (e) {
-      const message =
-        e instanceof ApiError && e.status === 403
-          ? "You're not on this phone's allow-list."
-          : `Couldn't send: ${(e as Error).message}`;
-      setStage({ name: "error", message, recording, url });
-    }
-  };
+  }, [state.stage, onClose]);
 
   return (
     <div className="voicemail-panel stack">
-      {stage.name === "offer" && (
+      {state.stage === "greeting" && (
         <>
-          <p>
-            It's quiet hours for <strong>{label}</strong>. Leave a message? They'll get it when
-            quiet hours end.
+          <p aria-live="polite">
+            <strong>{label}</strong> can't take your call — listen for the tone to leave a message.
           </p>
           <div className="overlay-actions">
-            <button type="button" className="round" onClick={onClose}>
+            <button type="button" className="round" onClick={() => flow.current?.cancel()}>
               Not now
-            </button>
-            <button type="button" className="round accept" onClick={() => void record()}>
-              Record
             </button>
           </div>
         </>
       )}
-      {stage.name === "recording" && (
+      {state.stage === "recording" && (
         <>
           <p className="recording" aria-live="polite">
             <span className="rec-dot" aria-hidden /> Recording ·{" "}
-            {formatDuration(MAX_RECORDING_MS - stage.elapsed)} left
+            {formatDuration(state.maxMs - state.elapsed)} left
           </p>
-          <progress max={MAX_RECORDING_MS} value={stage.elapsed} />
+          <progress max={state.maxMs} value={state.elapsed} />
           <div className="overlay-actions">
-            <button
-              type="button"
-              className="round decline"
-              onClick={() => recorder.current?.stop()}
-            >
-              Stop
+            <button type="button" className="round" onClick={() => flow.current?.cancel()}>
+              Discard
+            </button>
+            <button type="button" className="round decline" onClick={() => flow.current?.finish()}>
+              Hang up & send
             </button>
           </div>
         </>
       )}
-      {(stage.name === "review" || stage.name === "sending") && (
-        <>
-          <p>Your message ({formatDuration(stage.recording.durationMs)})</p>
-          {/* biome-ignore lint/a11y/useMediaCaption: the caller's own recording */}
-          <audio controls src={stage.url} />
-          <div className="overlay-actions">
-            <button
-              type="button"
-              className="round"
-              disabled={stage.name === "sending"}
-              onClick={() => void record()}
-            >
-              Re-record
-            </button>
-            <button
-              type="button"
-              className="round accept"
-              disabled={stage.name === "sending"}
-              onClick={() => void send(stage.recording, stage.url)}
-            >
-              {stage.name === "sending" ? "Sending…" : "Send"}
-            </button>
-          </div>
-          <button type="button" className="link" onClick={onClose}>
-            Discard
-          </button>
-        </>
-      )}
-      {stage.name === "sent" && <p className="ok">Message sent to {label}.</p>}
-      {stage.name === "error" && (
+      {state.stage === "sending" && <p aria-live="polite">Sending…</p>}
+      {state.stage === "sent" && <p className="ok">Message sent to {label}.</p>}
+      {state.stage === "failed" && (
         <>
           <p className="error" role="alert">
-            {stage.message}
+            Your message wasn't sent: {state.message}
           </p>
           <div className="overlay-actions">
             <button type="button" className="round" onClick={onClose}>
               Close
             </button>
-            {stage.recording && stage.url ? (
-              <button
-                type="button"
-                className="round accept"
-                onClick={() => void send(stage.recording as Recording, stage.url as string)}
-              >
-                Try again
-              </button>
-            ) : (
-              <button type="button" className="round accept" onClick={() => void record()}>
+            {state.canRetry && (
+              <button type="button" className="round accept" onClick={() => flow.current?.retry()}>
                 Try again
               </button>
             )}

@@ -42,6 +42,7 @@ and it forgets you when you leave.
 | Accounts and addresses (`name@server`), households, teams and organizations | done |
 | Connections across servers ("knock, then talk"), calls, voicemail, presence, Lounge guests | done |
 | The free public hub (fair use, operator tools, export and account deletion) | code done; opening soon |
+| Voicemail for every unanswered call, greetings (standard, your name, your own), ring time | done (software) |
 | Per-buddy call timeline; rooms and 3-way calls; interop tests; professional features | planned |
 | One-command deploy (done), desktop app | desktop app next |
 | Circuit board (one ESP32-S3 board, one BOM) | in design: parts placed, routing next |

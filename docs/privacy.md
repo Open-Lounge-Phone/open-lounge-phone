@@ -14,7 +14,8 @@ own infrastructure.
 | Connections (buddies): their address, name, state (knocked, connected, declined, blocked), the note on a knock | knock-then-talk, blocking | until either side disconnects; declines are kept 30 days, blocks until you remove them |
 | Presence you chose to share | showing your connections if you're available | the latest value only |
 | Call log: who called whom, when, how long, how it ended — **never the audio** | your call history (and a per-buddy timeline later) | kept with your account; per-connection expiry is planned |
-| Voicemail audio and its transcript | voicemail | until a guardian deletes it |
+| Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until a guardian (a phone's) or you (yours) delete it; per-connection expiry is planned |
+| Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
 | Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | kept with the space |
 | Usage counters per month (call minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
 | Rate-limit counters (with IP addresses **hashed**) | stopping abuse | counted per minute, hour or day; stale counters are pruned after about a month |
@@ -31,7 +32,7 @@ There are no ads, no trackers, no text chat, and no connection to the phone netw
 - Your connections see your name and address, and your availability only if you turn on "Share
   my availability".
 - Other servers learn only what's needed for a knock, a call or a voicemail between their people
-  and yours. Nobody can search for you: there is no directory.
+  and yours; your greeting is only given to servers asking for someone you're connected with. Nobody can search for you: there is no directory.
 - The server's operator can see account records to fight abuse (for example to suspend an
   account), but not call audio.
 

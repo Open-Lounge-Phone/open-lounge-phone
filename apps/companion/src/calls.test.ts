@@ -98,29 +98,62 @@ describe("local actions", () => {
   });
 });
 
-describe("voicemail after a quiet-hours refusal", () => {
-  const ended = (reason: "voicemail" | "busy", deviceId?: string) => {
-    let view = callStep(
-      { phase: "idle" },
-      { type: "dial", label: "Kid", ...(deviceId ? { deviceId } : {}) },
-    ).view;
+describe("voicemail after an unanswered call", () => {
+  const offer = {
+    ticket: "t".repeat(43),
+    name: "Kid",
+    maxMs: 120_000,
+    prompts: [
+      "name" as const,
+      "vm.cant_take" as const,
+      "vm.leave_message" as const,
+      "vm.tone" as const,
+    ],
+  };
+  const ended = (reason: "voicemail" | "timeout" | "denied", withOffer: boolean) => {
+    let view = callStep({ phase: "idle" }, { type: "dial", label: "Kid", person: true }).view;
     view = callStep(view, {
       type: "server",
-      msg: { t: "call.state", callId: "c1", state: "ended", reason },
+      msg: {
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason,
+        ...(withOffer ? { voicemail: offer } : {}),
+      },
       now: 0,
     }).view;
     return view;
   };
 
-  it("remembers the dialled phone so a message can be left", () => {
-    const view = ended("voicemail", "dev_1");
-    expect(view).toEqual({ phase: "ended", label: "Kid", reason: "voicemail", deviceId: "dev_1" });
+  it("keeps the server's offer so a message can be left, for any callee", () => {
+    const view = ended("timeout", true);
+    expect(view).toMatchObject({ phase: "ended", reason: "timeout", voicemail: offer });
     expect(canLeaveVoicemail(view)).toBe(true);
+    expect(canLeaveVoicemail(ended("voicemail", true))).toBe(true);
   });
 
-  it("does not offer voicemail for other reasons or unknown phones", () => {
-    expect(canLeaveVoicemail(ended("busy", "dev_1"))).toBe(false);
-    expect(canLeaveVoicemail(ended("voicemail"))).toBe(false);
+  it("offers nothing without the server's offer", () => {
+    expect(canLeaveVoicemail(ended("voicemail", false))).toBe(false);
+    expect(canLeaveVoicemail(ended("denied", false))).toBe(false);
+  });
+
+  it("an incoming call that ends never offers voicemail to the callee", () => {
+    let view = callStep(
+      { phase: "idle" },
+      {
+        type: "server",
+        msg: { t: "call.ringing", callId: "c2", from: { label: "Mom" } },
+        now: 0,
+      },
+    ).view;
+    view = callStep(view, { type: "answer" }).view;
+    view = callStep(view, {
+      type: "server",
+      msg: { t: "call.state", callId: "c2", state: "ended", reason: "hangup", voicemail: offer },
+      now: 0,
+    }).view;
+    expect(canLeaveVoicemail(view)).toBe(false);
   });
 });
 
@@ -135,7 +168,7 @@ describe("calls through connections", () => {
       },
     ]);
     expect(view).toMatchObject({ phase: "ended", deviceId: "dev_1", via: "con_1" });
-    expect(canLeaveVoicemail(view)).toBe(true);
+    expect(canLeaveVoicemail(view)).toBe(false); // no offer from the server: nothing to leave
     const refused = run([
       { type: "dial", label: "Bob", person: true, via: "con_2" },
       {

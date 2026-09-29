@@ -137,6 +137,8 @@ change). The endpoints:
 | `POST /fed/v1/calls` | `{callId, from, to: {kind: "person", handle} \| {kind: "phone", deviceId}, viaPhone?, guestOf?}` | `{state: "ringing"}` or `{state: "ended", reason}` |
 | `GET /fed/v1/stream?from=<host>` | WebSocket: the server-pair stream (below) | `101` |
 | `POST /fed/v1/voicemail?to=<deviceId>&from=&fromId=&name=&durationMs=` | raw `audio/*`, ≤ 2 MB | `201`, or `403` if not on the phone's allow-list |
+| `POST /fed/v1/voicemail?kind=person&to=<handle>&from=&fromId=&name=&durationMs=&via=` | raw `audio/*`, ≤ 2 MB — for a person (`via`: the kid's phone that called, through its guardian) | `201`, or `403` without an active connection |
+| `POST /fed/v1/greeting` | `{from, to: {kind: "person", handle} \| {kind: "phone", deviceId}}` — the greeting before a message | the audio with `olp-greeting: name\|custom`, `204` for the spoken default, or `403` without an active connection (a phone: `from` on its allow-list) |
 | `POST /fed/v1/phones` | `{from, to: handle, phones: [{id, label}]}` — the phones `to` may call | `202` |
 | `POST /fed/v1/presence` | `{from, to: [handles], online, available}` — batched, opt-in | `202` |
 | `POST /fed/v1/lounge/claim` | `{from, deviceId, nonce, directory}` — the sender vouches for `from` | `{step: "press_key", expiresAt}` or `{step: "failed", reason}` |
@@ -152,7 +154,8 @@ Budgets per sending server (defaults): 300 requests a minute, 500 knocks a day.
 {sharePresence}`, off by default). While on, each change of the person's online/available state
 in their first (personal) space goes to their active connections: directly for people on the same
 server, and as one signed `POST /fed/v1/presence` per other server (batched), at most 5 a person
-per 10 s. Receivers keep it on the connection row (`presence_*`, migration 0009) and show it as a
+per 10 s; a change over that limit is coalesced (latest state only) and sent when the window
+opens. Receivers keep it on the connection row (`presence_*`, migration 0009) and show it as a
 dot; anything older than an hour shows as unknown. Turning it off sends "offline" once.
 
 ## Calls (F2, implemented)
@@ -192,11 +195,16 @@ dot; anything older than an hour shows as unknown. Turning it off sends "offline
 - **Media.** WebRTC peer-to-peer between the two clients. Each side's server hands its own client
   its own ICE servers (its own TURN). Audio never flows through either server. Clients enable
   **Opus DTX** (`usedtx=1`), so silence costs almost nothing on a relay.
-- **Voicemail.** When the answer is `voicemail` (a kid's phone in quiet hours), the caller's app
-  records and uploads to its own server (`POST /api/connections/:id/voicemail?deviceId=`), which
-  forwards the audio with a signed `POST /fed/v1/voicemail`. The phone's server checks the
-  allow-list again, stores and transcribes it, and tells the phone's guardians — exactly like a
-  local voicemail.
+- **Voicemail.** Any unanswered call goes to voicemail — no answer (the callee's server decides
+  when, from their ring time), declined, busy, quiet hours (`voicemail`), unavailable or
+  unreachable. The caller's own server hands its caller a single-use ticket with the ended
+  `call.state` (never forwarded to the other server). With it, the caller's app or phone fetches
+  the greeting (`GET /api/vm/greeting?ticket=` → the caller's server asks the callee's with a
+  signed `POST /fed/v1/greeting`) and uploads the message (`POST /api/vm/message?ticket=` → a
+  signed `POST /fed/v1/voicemail`, `kind=person` for a person). The callee's server checks the
+  connection (and a phone's allow-list) again, stores and transcribes it, and puts it in the
+  person's own inbox or tells the phone's guardians — exactly like a local voicemail. (The older
+  `POST /api/connections/:id/voicemail?deviceId=` still works for a shared phone.)
 - **Between households on one server** the same code runs with host `''`: the two hubs relay to
   each other directly (on Cloudflare, household Durable Object to household Durable Object).
 

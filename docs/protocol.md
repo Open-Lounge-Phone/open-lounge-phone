@@ -308,7 +308,7 @@ Call progress update.
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
-| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
+| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 
 ### `rtc.config`
 
@@ -588,7 +588,7 @@ Call progress update.
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
-| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
+| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 
 ### `rtc.config`
 

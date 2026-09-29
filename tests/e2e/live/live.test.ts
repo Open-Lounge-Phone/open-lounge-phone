@@ -123,6 +123,49 @@ function assert(cond: unknown, what: string): asserts cond {
 const json = (p: Person, path: string, init?: { method?: string; body?: unknown }) =>
   api(p, path, init);
 
+/**
+ * Records "just your name" as the greeting in the companion (the fake microphone speaks) and
+ * sets a short ring time, so a no-answer test doesn't wait 25 s.
+ */
+async function recordName(c: Companion, ringSeconds: number): Promise<void> {
+  await c.tab("Voicemail");
+  const editor = c.page.locator("details.greeting-editor");
+  if (!(await editor.getAttribute("open"))) await editor.locator("summary").click();
+  await editor.getByRole("button", { name: /Record just your name/ }).click();
+  await editor.getByRole("button", { name: "Save" }).click({ timeout: 15_000 }); // stops at 3 s
+  await until("name greeting saved", async () => {
+    const s = await api(c.person, "/voicemail/settings");
+    return s.json?.greeting?.kind === "name";
+  });
+  const r = await api(c.person, "/voicemail/settings", {
+    method: "PATCH",
+    body: { ringSeconds },
+  });
+  assert(r.status === 204, `ring time ${r.status}`);
+}
+
+/** Back to the standard greeting and ring time, and removes test messages from `fromLabel`. */
+async function resetVoicemail(p: Person, fromLabel: string): Promise<void> {
+  await api(p, "/voicemail/greeting", { method: "DELETE" });
+  await api(p, "/voicemail/settings", { method: "PATCH", body: { ringSeconds: 25 } });
+  const list = ((await api(p, "/voicemails")).json ?? []) as { id: string; fromLabel: string }[];
+  for (const v of list.filter((x) => x.fromLabel === fromLabel)) {
+    await api(p, `/voicemails/${v.id}`, { method: "DELETE" });
+  }
+}
+
+/** Watches a page for the greeting it fetches with a voicemail ticket. */
+function greetingSeen(page: Page): () => { status: number; kind: string | undefined } | undefined {
+  let seen: { status: number; kind: string | undefined } | undefined;
+  type Res = { url(): string; status(): number; headers(): Record<string, string> };
+  page.on("response", (r: Res) => {
+    if (r.url().includes("/api/vm/greeting")) {
+      seen = { status: r.status(), kind: r.headers()["olp-greeting"] };
+    }
+  });
+  return () => seen;
+}
+
 /** A person's app socket pinned to a household (the one they act in), to observe or refuse. */
 async function socketIn(p: Person, householdId: string) {
   return appSocket({ ...p, householdId });
@@ -215,7 +258,7 @@ it.skipIf(!LIVE)(
     let bUserId: string | undefined;
     let bInA = false;
 
-    const needA = selected(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    const needA = selected(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22);
     if (needA && ONLY && !ONLY.has(1)) await ensure(b0, "a", a, "olptest-a");
     await check(1, "sign up with a passkey; /api/me shows handle@host", async () => {
       focus = a.page;
@@ -320,6 +363,49 @@ it.skipIf(!LIVE)(
       },
     );
 
+    await check(
+      22,
+      "phone → grown-up, no answer: a's name greeting plays, the message lands in a's inbox",
+      async () => {
+        need(kidId, "no paired phone");
+        focus = a.page;
+        await recordName(a, 10);
+        const greeting = greetingSeen(kid.page);
+        await kid.hook();
+        await kid.press("1");
+        await a.page.locator(".overlay-incoming").waitFor({ timeout: 20_000 }); // not answered
+        await kid.waitKind("voicemail", 30_000);
+        focus = kid.page;
+        await until(
+          "phone records",
+          async () => (await kid.facts()).display.includes("RECORDING"),
+          40_000,
+        );
+        const g = greeting();
+        assert(g?.status === 200 && g.kind === "name", `greeting ${JSON.stringify(g)}`);
+        await kid.page.waitForTimeout(4_000);
+        await kid.hook(); // hang up to send
+        await until("MESSAGE SENT", async () =>
+          (await kid.facts()).display.includes("MESSAGE SENT"),
+        );
+        type Vm = {
+          fromLabel: string;
+          toUser: string | null;
+          deviceId: string | null;
+          durationMs: number;
+        };
+        const vm = await until("message in a's inbox", async () => {
+          const list = (await json(a.person, "/voicemails")).json as Vm[];
+          return list.find((v) => v.fromLabel === "Kid phone" && v.toUser);
+        });
+        assert(vm.deviceId === null && vm.durationMs >= 2_000, `voicemail ${JSON.stringify(vm)}`);
+        focus = a.page;
+        await a.page.locator("li.voicemail", { hasText: "Kid phone" }).first().waitFor();
+        await resetVoicemail(a.person, "Kid phone");
+        return `greeting ${g.kind}; message ${vm.durationMs} ms`;
+      },
+    );
+
     // olptest-b: own account, then joins a's household by invite (needed for 6, 7, 8, 10).
     const joinB = async () => {
       need(aOk, "no account");
@@ -410,10 +496,13 @@ it.skipIf(!LIVE)(
           .getByRole("button", { name: "Call" });
         await until("Call enabled for b", async () => !(await call.isDisabled()));
         await call.click();
-        await b.page.getByRole("button", { name: "Record" }).click({ timeout: 20_000 });
+        // The phone's greeting plays, then the tone, then it records; hang up to send.
+        await b
+          .overlay()
+          .getByText(/Recording ·/)
+          .waitFor({ timeout: 30_000 });
         await b.page.waitForTimeout(5_500);
-        await b.page.getByRole("button", { name: "Stop" }).click();
-        await b.page.getByRole("button", { name: "Send" }).click();
+        await b.overlay().getByRole("button", { name: "Hang up & send" }).click();
         await b.page.getByText(/Message sent to/).waitFor({ timeout: 20_000 });
         assert((await kid.kind()) === "idle", "phone rang during quiet hours");
         type Vm = {
@@ -706,7 +795,7 @@ it.skipIf(!LIVE)(
       dToC = dc.id;
       return C === D ? "t1↔t1 (two accounts on one server)" : "";
     };
-    if (selected(14, 15, 16, 17, 18, 19, 20, 21)) {
+    if (selected(14, 15, 16, 17, 18, 19, 20, 21, 23)) {
       if (ONLY && !ONLY.has(14)) await connectCD().catch((e) => console.log(`connect c,d: ${e}`));
       else await check(14, "c knocks d → shows for d → accept → both active", connectCD);
     }
@@ -755,6 +844,44 @@ it.skipIf(!LIVE)(
       turnC = JSON.stringify(pc.iceServers);
       await connectedCall(d, c, c.person.address, c);
     });
+
+    await check(
+      23,
+      "connection call c→d, no answer: d's name greeting (fetched across servers), message in d's inbox",
+      async () => {
+        need(cToD, "no connection");
+        focus = d.page;
+        await recordName(d, 10);
+        await c.page.reload();
+        await c.ready();
+        const greeting = greetingSeen(c.page);
+        await c.tab("Connect");
+        await c.page
+          .locator("li.card", { hasText: d.person.address })
+          .getByRole("button", { name: "Call", exact: true })
+          .first()
+          .click();
+        await d.page.locator(".overlay-incoming").waitFor({ timeout: 20_000 }); // not answered
+        focus = c.page;
+        await c
+          .overlay()
+          .getByText(/Recording ·/)
+          .waitFor({ timeout: 40_000 });
+        const g = greeting();
+        assert(g?.status === 200 && g.kind === "name", `greeting ${JSON.stringify(g)}`);
+        await c.page.waitForTimeout(4_000);
+        await c.overlay().getByRole("button", { name: "Hang up & send" }).click();
+        await c.page.getByText(/Message sent to/).waitFor({ timeout: 20_000 });
+        const cName = "olptest-c";
+        type Vm = { fromLabel: string; toUser: string | null };
+        await until("message in d's inbox", async () => {
+          const list = (await json(d.person, "/voicemails")).json as Vm[];
+          return list.find((v) => v.toUser && v.fromLabel.startsWith(cName));
+        });
+        await resetVoicemail(d.person, cName);
+        return `greeting ${g.kind} via ${hostOf(C)} → ${hostOf(D)}`;
+      },
+    );
 
     await check(20, "rtc.config has TURN servers with credentials", async () => {
       need(turnC, "no call media from 15");
