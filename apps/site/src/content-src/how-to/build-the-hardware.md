@@ -12,7 +12,8 @@ and an optional battery. It's powered by USB-C. Hardware is licensed under CERN-
 
 :::caution[Status]
 The hardware is a **pre-production design**: the schematic is captured as code and checked, the
-PCB layout is in progress, and no boards have been built yet. Expect changes.
+board's parts are placed and routing comes next, and no boards have been built yet. There is one
+board with one parts list (no variants). Expect changes.
 :::
 
 Read in this order:

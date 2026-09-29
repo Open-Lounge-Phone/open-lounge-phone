@@ -144,6 +144,16 @@ custom footprints are not done yet.
 - **Guardian auth (interim):** first run prints a one-time setup link (`/#setup=<token>`) that
   creates the household + first guardian and returns a bearer session token. Passkeys come in M4.
 
+- **Owner, 2026-09-28:** connections are also called **buddies** in docs/UI copy (code name stays
+  `connections`); there is **no text chat**; the public hub is **free and donation-funded**
+  (GitHub Sponsors via `SPONSOR_URL`, hidden while unset; never a placeholder link) with a
+  fair-use allowance; credit line "Proudly supported by unsubscribe.llc"
+  (https://www.unsubscribe.llc/) on the site footer and the companion's About/Account.
+- **Docs are part of every change (standing rule, owner 2026-09-28):** update README (status
+  table), `docs/*.md`, the site sources (`apps/site/src/content-src/**`) and the hardware docs in
+  the same commit or phase as the feature; rebuild the site (`npm run build` in `apps/site`, link
+  check must pass). Never deploy without the owner.
+
 ## Conventions
 - **Docs stay current (owner rule, 2026-09-28):** every feature or phase updates README.md, `docs/`,
   the site (`apps/site/src/content-src/`) and hardware docs in the same change; superseded claims

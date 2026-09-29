@@ -2,18 +2,19 @@
 
 ```
  ┌──────────────┐   WebSocket (protocol v1)   ┌───────────────────────────────┐
- │ Phone        │◀──────────────────────────▶│ Backend (pick one)            │
- │  web emulator│                              │  • Cloudflare: Worker + DOs,  │
- │  desktop app │   WebRTC audio (Opus)        │    D1, R2, Realtime SFU       │
- │  ESP32-S3    │◀──────── p2p or SFU ───────▶│  • Self-host: Node + SQLite + │
- └──────────────┘                              │    coturn (Docker)            │
-        ▲                                      └───────────────────────────────┘
-        │ WebRTC audio                                   ▲ WebSocket + HTTP
-        ▼                                                │
- ┌──────────────┐────────────────────────────────────────┘
- │ Companion app│  guardians: allow-list, buttons, quiet hours, voicemail, battery
- │ (PWA)        │
- └──────────────┘
+ │ Phone        │◀──────────────────────────▶│ Your server (pick one)        │
+ │  /device/ app│                              │  • Cloudflare: Worker + DOs,  │
+ │  ESP32-S3    │   WebRTC audio (Opus, DTX)   │    D1, R2, TURN               │
+ │  (later)     │◀─────── peer to peer ──────▶│  • Self-host: Node + SQLite + │
+ └──────────────┘   (TURN relay if needed)     │    coturn (Docker)            │
+        ▲                                      └───────────────┬───────────────┘
+        │ WebRTC audio                    WebSocket + HTTP ▲   │ signed /fed/v1 HTTP +
+        ▼                                                  │   │ server-pair stream
+ ┌──────────────┐──────────────────────────────────────────┘   ▼
+ │ Companion app│  households, phones, allow-lists,  ┌───────────────────────────┐
+ │ (PWA)        │  connections, calls, voicemail     │ Other Open Lounge Phone   │
+ └──────────────┘                                    │ servers (and the hub)     │
+                                                     └───────────────────────────┘
 ```
 
 ## Layers
@@ -22,15 +23,16 @@
 |---|---|---|
 | Wire protocol | `packages/protocol` | everywhere |
 | Domain logic (ACL, quiet hours, call/room/device state machines) | `packages/core` | everywhere; mirrored in firmware |
-| Storage schema (Drizzle, shared by D1 and SQLite) | `packages/db` *(M2)* | servers |
-| HTTP/WS app written against backend interfaces | `packages/server-app` *(M2)* | servers |
-| Media providers: `p2p` (STUN/TURN) and `cloudflare-realtime` (SFU) | `packages/media` *(M2–M3)* | servers + clients |
+| Storage: plain SQL migrations shared by D1 and SQLite, typed store | `packages/db` | servers |
+| HTTP/WS app written against backend interfaces | `packages/server-app` | servers |
+| Server-to-server federation (signatures, keys, `/fed/v1` schemas) | `packages/federation` | servers |
+| Call media: WebRTC peer-to-peer with STUN/TURN (an SFU provider is planned for rooms) | `packages/client` | clients |
 | Entry points | `apps/server-selfhost`, `apps/server-cloudflare` | Node / Workers |
-| Clients | `apps/device-web`, `apps/companion`, `apps/device-desktop` | browser / Tauri |
+| Clients | `apps/device-web`, `apps/companion` (a Tauri desktop app is planned) | browser |
 
-The backend is pluggable: only the entry point and the implementations of `Storage`, `Hub`
-(WebSocket fan-out), `MediaProvider`, `BlobStore`, and `Transcriber` differ between Cloudflare
-and self-host.
+The backend is pluggable: only the entry point and the implementations of storage (`Sql`), the
+live coordinator (sockets and household hubs), the blob store, the transcriber, and the
+server-pair streams differ between Cloudflare and self-host.
 
 ## Key flows
 
@@ -126,12 +128,19 @@ keeps only a `lounge_sessions` row (who, where, when) for guardians. "Open to ch
 The phone has **no main screen**: keycapped keys with per-key LEDs, a small e-ink status strip,
 handset audio, a ringer speaker, and radios and sensors. Hardware details and part choices live in [hardware/DESIGN.md](../hardware/DESIGN.md).
 
-1. **Lounge variant hardware** — the software flow above works today with the on-screen QR
-   code; hardware adds a printed QR/NFC tag on the base, NFC tap and mmWave presence as further
-   proximity proofs, "open to chat" on key LEDs, and a presence-based dead-man logout.
-2. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
-   audio codec, handset earpiece/mic, and MX-style key switches with per-key LEDs, implementing
+1. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
+   audio codec, a USB-C (UAC) handset, and MX-style key switches with per-key LEDs, implementing
    the same protocol and the `deviceStep` state machine from `packages/core`.
-3. **Custom PCB** — a single base board in a Trimline-style corded phone: bare, passive handset;
-   USB-C power; hot-swap keyboard switches with keycaps; mmWave presence, hall-effect hook
-   sensing, light sensor, BLE/NFC for provisioning and lounge proximity.
+2. **Custom PCB** — one board, one BOM (owner, 2026-09-28) in a compact 3D-printed base: an
+   off-the-shelf G-style USB-C handset on a raised hook rest, USB-C power with an optional
+   battery, 12 hot-swap keys with per-key LEDs, the e-ink strip, a hall-effect hook sensor, a light
+   sensor, and NFC for provisioning and Lounge takeover. Schematic done; board placed, routing
+   next.
+3. **Lounge hardware** — the Lounge software works today with the on-screen QR code; the board
+   adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
+   board.
+
+Planned software phases (see the plan in CLAUDE.md): a per-buddy call timeline (P2b), rooms —
+party lines, 3-way calls, dialable room addresses — on an SFU (P3.5), interop tests in CI and a
+versioned federation spec (P5), and professional features such as a directory, hunt groups and
+business hours (P6). There is no text chat and no phone-network bridge.

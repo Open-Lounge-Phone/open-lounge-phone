@@ -58,7 +58,7 @@ export const DeviceHello = z
     display: z
       .enum(["eink", "seg14", "oled", "none"])
       .describe(
-        "Status display fitted: `eink` strip (standard), `seg14`/`oled` I2C modules (cheaper option), `none` (Kids Lite: printed key labels, LEDs and voice).",
+        "Status display fitted: `eink` = the e-ink strip (standard on the board); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
       ),
   })
   .describe("First message on every connection.");

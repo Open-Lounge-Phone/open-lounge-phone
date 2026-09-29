@@ -19,10 +19,13 @@ and it forgets you when you leave.
 ## Principles
 
 - **Default deny.** A phone only talks to people explicitly allowed on it, in both directions.
-- **No hosted dependency.** You run it — on your own free Cloudflare account or on your own
-  hardware with Docker. There is no central service, and this project never sees your calls.
+- **No hosted dependency.** You run it — on your own Cloudflare account or on your own hardware
+  with Docker — or use the free public hub, which is just one more server. Servers federate as
+  equals; there is no central directory, and nobody sees your call audio.
+- **No phone network, no text chat.** A closed, spam-free network of people who accepted each
+  other.
 - **Screen-light by design.** Keys, lights and voice first; a small status strip at most.
-- **Repairable.** Hot-swap keys, a plug-in display, a standard coiled handset cord.
+- **Repairable.** Hot-swap keys, a drop-in display, a standard USB-C handset cable.
 - **Open.** Software under **AGPL-3.0-or-later**, hardware under **CERN-OHL-S-2.0**. If you run a
   modified server for others, you share your changes.
 
@@ -31,14 +34,18 @@ and it forgets you when you leave.
 | Part | State |
 |---|---|
 | Wire protocol, access control, quiet hours | done |
-| Self-hosted server, browser phone emulator, companion app | done |
+| Self-hosted server, browser phone (any device, `/device/`), companion app | done |
 | Cloudflare backend (Workers, Durable Objects, D1, TURN) | done |
 | Invites, passkeys, voicemail with transcripts | done |
 | Grown-up calls between companion apps, availability | done |
-| One-command deploy, desktop app | next |
-| Lounge features | planned |
-| Circuit board (one ESP32-S3 board) | in design: parts placed, routing next |
-| 3D-printable base | prototype designed |
+| Lounge phones: QR takeover with a key proof, open to chat | done (software) |
+| Accounts and addresses (`name@server`), households, teams and organizations | done |
+| Connections across servers ("knock, then talk"), calls, voicemail, presence, Lounge guests | done |
+| The free public hub (fair use, operator tools, export and account deletion) | code done; opening soon |
+| Per-buddy call timeline; rooms and 3-way calls; interop tests; professional features | planned |
+| One-command deploy (done), desktop app | desktop app next |
+| Circuit board (one ESP32-S3 board, one BOM) | in design: parts placed, routing next |
+| 3D-printable base | prototype box designed; enclosure being updated for the single board |
 | ESP32-S3 firmware | after the board |
 
 See the [introduction](/intro/) for the full picture and [contributing](/project/contributing/)

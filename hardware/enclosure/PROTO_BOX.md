@@ -26,7 +26,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | Stack (z from the table) | floor top 2.0 → board bottom 9.0 (7 mm under-board space) → board top 10.6 → lid top 15.6 = board top + 5.0 (MX plate height) |
 | Lid = switch plate | 2.0 mm; 12 × 14.0 mm cutouts with a 15.2 × 0.5 mm underside pocket (1.5 mm at the clips); e-ink panel pocket (79.2 × 36.9 × 1.0) with a 68 × 30 window (0.5 chamfer); light holes Ø3.2/Ø2/Ø2; Ø1.6 pinholes for RESET, BOOT and the base mic; 1.2 × 1.5 locating lip |
 | Under the lid | 3.0 mm above the board top. Taller top-side parts get a lid pocket automatically (max 1.0 deep: parts ≤ 3.8 mm) |
-| Under the board | 7.0 mm: hot-swap sockets, JST-PH connectors, supercap, side controls go on the **bottom** |
+| Under the board | 7.0 mm: hot-swap sockets, JST-PH connectors and side controls go on the **bottom** |
 | Rear wall | two USB-C openings 12.8 × 7.2 (R3.4) + 1 mm outside recess at J7 (x 24) and J1 (x 159), centred on the receptacles (board top + 1.63). They are open to the lid top: a plug overmold on a top-mount receptacle reaches 0.1 mm below the plate top |
 | Right wall | Ø4 holes VOL− / VOL+, 9 × 4 slot MUTE, at board bottom − 1.8 (controls on the bottom side) |
 | Speaker | 40 × 20 × ≤ 5 mm, under the board centre (board x 80.5, y 43.8, below the e-ink panel), in a 1.2 × 3 mm rim on the floor, firing down through a Ø2 / 3.5 mm hex grille; the feet lift it off the table |
@@ -79,11 +79,11 @@ sockets vs the lid cutouts. Part heights come from a table in `proto_box.py` (da
 values where known, otherwise conservative estimates).
 
 Layout rules this box sets for the single board: top-side parts ≤ 3.0 mm except where a lid
-pocket fits (≤ 3.8 mm); JST-PH J2/J4, the supercap C7 and the side controls SW3–SW5 on the
+pocket fits (≤ 3.8 mm); JST-PH J2/J4 and the side controls SW3–SW5 on the
 bottom side at the right edge; nothing on the bottom inside the speaker area
 (board x 59–102, y 32.5–55) taller than 1.0 mm; Ø6 around every mounting hole on both sides.
 Light holes: status LED (128, 50) Ø3.2, privacy LED (141.5, 53.4) and ALS (141.5, 57.8) Ø2.
 Checked against the routed board on 2026-09-28: all checks pass.
 
-**Not covered:** the Lounge radar (LD2410C on its right-angle socket J5) stands ~20 mm tall
-and does not fit under this lid; leave it unplugged in the proto box or add a lid cut-out.
+(The Lounge radar that used to need a lid cut-out is no longer on the board: one board, one BOM
+since 2026-09-28.)

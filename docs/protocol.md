@@ -31,7 +31,7 @@ First message on every connection.
 | `model` | `"web-emulator"` \| `"desktop"` \| `"esp32s3"` | yes |  |
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
-| `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` strip (standard), `seg14`/`oled` I2C modules (cheaper option), `none` (Kids Lite: printed key labels, LEDs and voice). |
+| `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = the e-ink strip (standard on the board); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
 
 ### `pair.begin`
 

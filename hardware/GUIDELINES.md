@@ -22,17 +22,17 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 |---|---|---|
 | Respect strapping pins | **adapted** | The advice lists GPIO 0/2/5/12/15. Those are the *original ESP32's* straps. The ESP32-S3's are **GPIO0, GPIO3, GPIO45, GPIO46**; each has the required pull in `pin_table.yaml`, checked by `check_pin_table`. |
 | Octal PSRAM pins | adopted | GPIO35–37 left unconnected (N16R8), enforced by the pin table. |
-| Antenna ≥ 15 mm from metal, keep-out on all layers | **adapted** | In the compact base no main-board edge is ≥ 15 mm from the metal hook tubes, deck standoffs and brass inserts, so the module is the **ESP32-S3-WROOM-1U** (U.FL) and a small adhesive FPC antenna sits on the inside of the shell wall, ≥ 15 mm from metal and outside the key deck (placement in ENCLOSURE.md / LAYOUT.md). The module itself sits under the deck. Reverting to the PCB-antenna WROOM-1 needs a board edge with that clearance. |
-| Pin allocation via expander when GPIOs run out | adopted | AW9523B (16 I/O, I2C) on the deck board handles keys, side switches and LED power; the ESP32 keeps the timing-critical signals (I2S, SPI, RMT, UART). |
+| Antenna ≥ 15 mm from metal, keep-out on all layers | **adapted** | In the compact base no board edge is ≥ 15 mm from the metal hook tubes and brass inserts, so the module is the **ESP32-S3-WROOM-1U** (U.FL) and a small adhesive FPC antenna sits on the inside of the shell wall, ≥ 15 mm from metal (placement in ENCLOSURE.md / LAYOUT.md). Reverting to the PCB-antenna WROOM-1 needs a board edge with that clearance. |
+| Pin allocation via expander when GPIOs run out | adopted | AW9523B (16 I/O, I2C) handles keys, side switches and LED power; the ESP32 keeps the timing-critical signals (I2S, SPI, RMT, UART). |
 
 ## 3. Power, sensors, grounding
 
 | Rule | Status | How it's met |
 |---|---|---|
 | Decoupling: 100 nF at every supply pin + bulk (≥ 10 µF) per rail/IC group | adopted | Present in the schematic. Layout rule: **the 100 nF goes between the pin and the via to GND**, ≤ 2 mm from the pin, via-in-pad or a short direct via. |
-| Power-gate sensors that draw real current | adopted where it matters | LD2410C radar (~79 mA) via `LD_PWR_EN`, LED chain via `LED_PWR_EN`. The other sensors draw µA and have their own sleep modes; adding switches for them would only add parts (KISS). |
+| Power-gate sensors that draw real current | adopted where it matters | The LED chain via `LED_PWR_EN` (the LD2410C radar and its switch were removed 2026-09-28). The other sensors draw µA and have their own sleep modes; adding switches for them would only add parts (KISS). |
 | Low-noise supply for analog | adopted | LP5907 3.0 V (6.5 µVrms) feeds the codecs and mic bias only. |
-| I2C pull-ups sized for the bus | adopted | One pair on the main board (2.2 kΩ for ~400 pF / 400 kHz across the FFC). Check total bus capacitance after layout; don't add pull-ups on the deck board. |
+| I2C pull-ups sized for the bus | adopted | One shared pair on the board (4.7 kΩ, SCHEMATIC.md). Check total bus capacitance after layout; don't add more pull-ups. |
 | "Single-point grounding" | **rejected in favour of a solid ground plane** | On a 4-layer board, splitting ground or star-grounding creates slots that return currents detour around, which *increases* noise and emissions. Current best practice (and Espressif's and TI's layout guides) is **one unbroken GND plane (L2)**, with *placement* doing the isolation: keep the class-D amp, buck and LEDs away from the codecs, mic inputs and handset lines, and never route across a plane gap. |
 
 ## 4. Mechanical and assembly
@@ -45,8 +45,8 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 | E-ink strip: drop-in, not soldered | adopted | FPC into a 24-pin 0.5 mm ZIF connector; replaceable without tools. |
 | Mounting holes | **adapted** | The advice says M3/M4. Board space under the handset trough is tight, so **M2.5 plated holes with generous copper keep-out** (5.5 mm) and **plastite screws into bosses**, one within 10 mm of every connector and switch cluster so impact loads go into the case, not solder joints. The key plate, not the PCB, takes keystroke force. |
 | Through-hole where force is applied | adopted | USB-C receptacles (power and handset) with through-hole shell tabs, right-angle through-hole MUTE slide, ZIF/FFC connectors with hold-down tabs. Plain SMD pads are not used for anything a user pulls on. |
-| Clear silkscreen for maintenance | adopted | Label connectors, test points, variant/DNP options, key numbers, board name/revision, and "CERN-OHL-S-2.0 · openloungephone" on both boards. |
-| Stackup | adopted | 4-layer JLCPCB standard (1.6 mm): L1 signal + parts, L2 **solid GND**, L3 power pours (VSYS, 3V3) + slow signals, L4 signal. Both boards. |
+| Clear silkscreen for maintenance | adopted | Label connectors, test points, variant/DNP options, key numbers, board name/revision, the owner's signature logo and "Open Lounge Phone", and "CERN-OHL-S-2.0" on the board. |
+| Stackup | adopted | 4-layer JLCPCB standard (1.6 mm): L1 signal + parts, L2 **solid GND**, L3 power pours (3V3, VSYS, 3V0, VLED) + slow signals, L4 signal. |
 
 ## 5. Layout rules (JLCPCB 4-layer standard capability, with margin)
 

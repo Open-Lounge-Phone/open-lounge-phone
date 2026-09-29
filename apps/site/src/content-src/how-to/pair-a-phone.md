@@ -22,8 +22,9 @@ You're added automatically as the phone's first contact, on speed-dial key **1**
 always ring through quiet hours.
 
 :::note
-Giving a phone to another household? Pair it again there: pairing a phone's key to a new household
-replaces its old registration. (Removing a phone from the app isn't built yet.)
+Giving a phone to another household? Remove it on its **Manage** page (it shows a new pairing
+code) and pair it there. Kids' phones belong in a household; in a team or organization you pair
+your own phone or a Lounge phone.
 :::
 
 Next: [add family and quiet hours](/how-to/family-and-quiet-hours/).

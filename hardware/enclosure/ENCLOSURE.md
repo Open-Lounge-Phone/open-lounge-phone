@@ -1,5 +1,12 @@
 # Open Lounge Phone enclosure (r0.1, form factor "A — Compact")
 
+> **Status (2026-09-28):** the board is now **one 180 × 88 mm board with one BOM** — no key-deck
+> board on standoffs, no FFC, no LD2410C radar and no "Lite" variant (owner decisions
+> 2026-09-27/28). Parts of this page (the deck stack, radar radome, Lite top shell) still describe
+> the r0.1 CAD from before those decisions; the CAD is being brought in line with the single board
+> and `ID_SPEC.md`. The functional prototype box ([PROTO_BOX.md](PROTO_BOX.md)) already fits the
+> single board.
+
 Code-CAD (build123d, Python) for the 3D-printable base and hook rest, plus reference models of the
 handset. Everything comes from `params.yaml`; board geometry is synced from the KiCad files.
 

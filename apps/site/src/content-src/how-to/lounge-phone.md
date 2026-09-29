@@ -1,13 +1,14 @@
 ---
 title: Lounge phone
-description: A shared phone anyone in the household can use as themselves — scan its code, press the key it flashes, and it forgets you when you're done.
+description: A shared phone anyone in the space can use as themselves — scan its code, press the key it flashes, and it forgets you when you're done. Guests from other servers too.
 sidebar:
   order: 5
 ---
 
-A **Lounge phone** is a shared phone — in the living room, a kitchen, a shared house. It has no
-contacts of its own. Anyone in the household picks it up and uses it **as themselves**: it calls
-and is called with exactly their permissions, and forgets them when they're done.
+A **Lounge phone** is a shared phone — in the living room, a kitchen, a shared house, a studio or
+a venue (a **team** or **organization** space works too). It has no contacts of its own. Anyone
+in the space picks it up and uses it **as themselves**: it calls and is called with exactly their
+permissions, and forgets them when they're done.
 
 ## Set one up
 
@@ -29,6 +30,16 @@ of minutes; the phone fetches a new one by itself.
 3. The phone says **Hi &lt;your name&gt;** and puts your speed-dial on its keys: the household
    phones you're allowed to call, then the other grown-ups (or your own phone's keys, if you have
    one). Calls to you ring the Lounge phone too.
+
+## Guests from other servers
+
+A guardian can let people who have an account on **another** Open Lounge Phone server use the
+space's Lounge phones: **Lounge settings → Let people from other servers use these phones** (off
+by default). A guest scans the code, enters their own address on the page that opens, and
+continues on their own server, which vouches for them. They still press the flashing key. The
+phone greets them and its keys dial *their* connections, placed by their own server. Calls to
+them keep ringing their own app. The session ends the same ways (and at once if the phone goes
+offline), and guardians see the guest's address in the history.
 
 ## Open to chat
 

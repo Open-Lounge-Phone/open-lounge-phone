@@ -132,8 +132,8 @@ at (158.5, 12.5) / (158.5, 20.8); mic MK1 at (19.5, 25.0); status LED (127, 62.8
 (110, 64.2), ALS (105, 64.2) under the plate's light holes.
 
 Height rules from the prototype box (enclosure/proto_box.py checks them against the placed
-board): top parts ≤ 3.0 mm (≤ 3.8 mm where the lid gets a pocket: USB-C, WROOM-1U, Qwiic);
-bottom parts ≤ 6 mm (JST-PH J2/J4, supercap C7, side controls SW3-SW5 are on the bottom);
+board): top parts ≤ 3.0 mm (≤ 3.8 mm where the lid gets a pocket: USB-C, WROOM-1U);
+bottom parts ≤ 6 mm (JST-PH J2/J4 and side controls SW3-SW5 are on the bottom);
 nothing taller than 1 mm on the bottom under the speaker (x 59-102, y 32.5-55).
 
 ## 3. Stackup and impedance
@@ -208,7 +208,7 @@ rules for auto-named nets) and written into the board and the `.kicad_pro`.
 **Planes, not wires.** L2 = solid GND. L3 = pours: 3V3 (middle band), VSYS (right end), 3V0
 (codec cluster), VLED (two strips under the key rows). Every pin on those nets gets a via to its
 plane next to the pad (via-in-pad or ≤ 1 mm stub); no power wires are drawn. Real wide traces
-only where current flows: VBUS (J1 → F1 → BQ24074, radar switch, handset diode), VSYS neck to
+only where current flows: VBUS (J1 → F1 → BQ24074, handset diode), VSYS neck to
 the pour, speaker outputs (0.5 mm).
 L1 = short links and fan-out, mostly left-right; L4 = mostly front-back (key lines, LED hops).
 

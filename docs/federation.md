@@ -229,8 +229,8 @@ address. Calls *to* the guest don't ring the Lounge phone yet (they ring the gue
 | **F0** ✔ | Accounts and handles, several households per server, one account in several households, open sign-up behind `OPEN_SIGNUP`, clear "Add a kid's phone" / "Invite a co-guardian" / "Add a household" flows | Local only; the foundation for everything else. Done (plan phase P1) |
 | **F1** ✔ | Knocks and connections (locally, then across servers), server keys, `.well-known`, signed requests, disconnect, block | Done (plan phase P2); two-server e2e in `tests/e2e/twoServers.test.ts` |
 | **F2** ✔ | Federated **calls** (person ↔ person, person ↔ allowed phone, phone → connection), signaling over the on-demand server-pair stream, cross-server voicemail, opt-in presence, Lounge guests | Done (plan phase P3). Cloudflare: `FederationObject` per remote host |
-| **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians; shared presence | Needs phone-to-phone calling locally first |
-| **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Needed before anyone else runs a server in production |
+| **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians | Planned; needs phone-to-phone calling locally first |
+| **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Planned (plan phase P5); the two-server test already runs in `npm test`. Needed before anyone else runs a server in production |
 
 ## Open questions
 

@@ -24,9 +24,17 @@ Open a phone's **Manage** page. Under **Allowed people**, add someone and set:
 
 ## Speed-dial keys
 
-Still on **Manage**, assign people to keys **1–9** and **0**. On phones with a display the
-names appear on the status strip; on **Kids Lite** (no display) use **Print key labels** to print
-names for the clear keycaps.
+Still on **Manage**, assign people to keys **1–9** and **0**. The names appear on the phone's
+status strip; **Print key labels** also prints them for relegendable keycaps.
+
+## People from other households or servers
+
+Grandparents with their own household, or friends on another server, can be on a kid's phone
+too — through **your** connections (buddies). First connect with them under **Connections**
+(knock on their address, or accept their knock). Then, on the phone's **Manage** page, choose them
+under **Add someone you're connected with** and set the same three switches. They then see the
+phone in their own app and can call it; if you disconnect, they're off the list. A kid's phone
+itself never has an address, so nobody can knock on it.
 
 ## Quiet hours
 
