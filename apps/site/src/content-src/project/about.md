@@ -16,6 +16,11 @@ guardian approves, and it goes quiet at bedtime.
 hardware becomes a shared phone: take it over with your own contacts, see who's around to chat,
 and it forgets you when you leave.
 
+**Inspired by the Tin Can phone.** The idea of a simple, kid-safe landline that only calls
+approved people comes from the [Tin Can](https://tincan.kids/) phone. Open Lounge Phone is an
+independent, open-source take on that idea (open hardware, your own server, federation). It is not
+affiliated with or endorsed by Tin Can, and "Tin Can" is their trademark.
+
 ## Principles
 
 - **Default deny.** A phone only talks to people explicitly allowed on it, in both directions.

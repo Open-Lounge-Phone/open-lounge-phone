@@ -78,7 +78,8 @@ low part count; customizable by shell colour, post finish and keycaps.
 `openloungephone`, `@openloungephone/*`). It was briefly named after tin cans, but "Tin Can" is a
 registered trademark of another phone. The owner has confirmed "Open Lounge Phone" is clear
 and unregistered — never use "tin can", "TinCan", "opentincan" or "ORT" in
-code, UI, docs, silkscreen or new commits. (The working-directory folder name `opentincan/` on
+code, UI, docs, silkscreen or new commits. **Exception (owner, 2026-09-29):** the About page's "Why" section may say the
+project is *inspired by the Tin Can phone*: nominative credit only, with a not-affiliated/trademark note, never as our name. (The working-directory folder name `opentincan/` on
 the owner's machine is incidental.) Self-host auto-renames a legacy `opentincan.sqlite`.
 **Board marking (owner):** every board carries the owner's signature logo (`hardware/art/signature.jpg`,
 traced to a silkscreen footprint with strokes thickened to ≥0.2 mm) and the text
