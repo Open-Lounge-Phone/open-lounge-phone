@@ -61,6 +61,8 @@ export interface Snapshot {
 type Rtc = Extract<ServerToApp, { t: "rtc.sdp" | "rtc.ice" }>;
 
 const ENDED_DISPLAY_MS = 3000;
+/** How long an action waits for the connection when the app has only just opened. */
+const CONNECT_WAIT_MS = 8000;
 const UNAUTHORIZED = 4401;
 const BAD_HANDSHAKE = 4400;
 
@@ -84,6 +86,9 @@ export class Connection {
   private media?: CallMedia;
   private mic?: MediaStream;
   private dismissTimer?: ReturnType<typeof setTimeout>;
+  /** Signed in on the current socket (`app.ready` seen since it opened). */
+  private ready = false;
+  private readonly readyWaiters = new Set<(ok: boolean) => void>();
 
   constructor(token: string, householdId: string, onUnauthorized: () => void) {
     this.socket = new ProtocolSocket<ServerToApp, AppToServer>({
@@ -93,6 +98,7 @@ export class Connection {
         send({ t: "app.hello", proto: PROTOCOL_VERSION, token, household: householdId }),
       onMessage: (msg) => this.onMessage(msg),
       onStatus: (status, detail) => {
+        if (status !== "open") this.ready = false;
         this.set({ status });
         if (detail?.code === UNAUTHORIZED) onUnauthorized();
       },
@@ -183,8 +189,29 @@ export class Connection {
     return this.socket.send({ t: "presence.set", available });
   }
 
-  /** Take over a Lounge phone (from its QR code); the phone then asks for the key proof. */
-  claimLounge(deviceId: string, nonce: string): boolean {
+  /**
+   * Resolves true once the socket is open and signed in (`app.ready`), or false after
+   * `timeoutMs`. For actions taken right after the app opens, e.g. from a scanned QR code.
+   */
+  whenReady(timeoutMs = CONNECT_WAIT_MS): Promise<boolean> {
+    if (this.ready) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const done = (ok: boolean) => {
+        clearTimeout(timer);
+        this.readyWaiters.delete(done);
+        resolve(ok);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      this.readyWaiters.add(done);
+    });
+  }
+
+  /**
+   * Take over a Lounge phone (from its QR code); the phone then asks for the key proof. Waits
+   * briefly for the connection when the app has only just opened.
+   */
+  async claimLounge(deviceId: string, nonce: string): Promise<boolean> {
+    if (!(await this.whenReady())) return false;
     const ok = this.socket.send({ t: "lounge.claim", deviceId, nonce });
     if (ok) this.set({ lounge: { deviceId, step: "sending" } });
     return ok;
@@ -267,6 +294,9 @@ export class Connection {
   private onMessage(msg: ServerToApp): void {
     switch (msg.t) {
       case "app.ready":
+        this.ready = true;
+        for (const w of [...this.readyWaiters]) w(true);
+        return;
       case "pong":
         return;
       case "connections.changed":

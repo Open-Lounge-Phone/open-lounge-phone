@@ -17,6 +17,7 @@ import {
   Gateway,
   LinkRegistry,
   type LinkSocket,
+  presenceFlusher,
   presenceHook,
   type ServerEnv,
   type ServerLink,
@@ -114,6 +115,7 @@ export async function start(config: Config) {
   const links = new LinkRegistry(env, gateway, dialStream);
   env.calls = new FedCalls(env, gateway, links);
   env.onPresence = presenceHook(env, gateway);
+  env.flushPresence = presenceFlusher(env, gateway);
   const app = new Hono();
   app.route("/api", createApi(env, gateway));
   // Server-to-server: /.well-known/openloungephone and the signed /fed/v1 endpoints.

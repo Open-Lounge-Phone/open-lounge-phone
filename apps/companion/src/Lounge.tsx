@@ -52,11 +52,15 @@ export function LoungeScan({
       );
       return;
     }
-    if (!conn?.claimLounge(link.deviceId, link.nonce)) {
-      setError("Not connected to the server — try again in a moment.");
-      return;
-    }
+    // Straight from a scanned code the app may still be connecting: wait for it briefly.
     setAsked(true);
+    setRemote({ step: "sending" });
+    void (conn?.claimLounge(link.deviceId, link.nonce) ?? Promise.resolve(false)).then((ok) => {
+      if (ok) return;
+      setAsked(false);
+      setRemote(undefined);
+      setError("Couldn't reach the server — check your connection and try again.");
+    });
   };
 
   return (

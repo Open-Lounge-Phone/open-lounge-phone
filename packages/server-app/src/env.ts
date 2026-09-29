@@ -87,8 +87,19 @@ export interface ServerEnv {
   saveRooms?(householdId: string, rooms: RoomSnapshot[]): void;
   /** Calls with other households and servers; without it such calls are unreachable. */
   calls?: CallLinks;
-  /** A member's presence changed (for sharing with connections that opted in). */
-  onPresence?(householdId: string, userId: string, online: boolean, available: boolean): void;
+  /**
+   * A member's presence changed (for sharing with connections that opted in). Resolves to a time
+   * when the change was rate-limited and waits to be sent: the hub then wakes at that time and
+   * calls `flushPresence`.
+   */
+  onPresence?(
+    householdId: string,
+    userId: string,
+    online: boolean,
+    available: boolean,
+  ): Promise<number | undefined> | undefined;
+  /** Sends the presence states that waited out their rate limit (see `onPresence`). */
+  flushPresence?(householdId: string): Promise<void>;
 }
 
 /** Someone from another server at one of our Lounge phones; their home server vouched for them. */

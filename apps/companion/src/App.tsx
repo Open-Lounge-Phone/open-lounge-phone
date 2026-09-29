@@ -28,7 +28,7 @@ import { QuietHours } from "./QuietHours.tsx";
 import { quietStatus } from "./quietStatus.ts";
 import { Setup } from "./Setup.tsx";
 import { Start } from "./Start.tsx";
-import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
+import { loadToken, readHashLinks, readInviteToken, readSetupToken, saveToken } from "./session.ts";
 import { kidSafe } from "./spaces.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
 import { Welcome } from "./Welcome.tsx";
@@ -66,6 +66,18 @@ export function App() {
   const [loungeLink, setLoungeLink] = useState(() =>
     parseLoungeLink(location.pathname, location.hash),
   );
+  // Links opened while the app is already open (a pasted invite, a scanned Lounge code) only
+  // change the hash: read them again on every change, not just on first load.
+  useEffect(() => {
+    const onHash = () => {
+      const links = readHashLinks(location.pathname, location.hash);
+      if (links.setup) setSetupToken(links.setup);
+      if (links.invite) setInviteToken(links.invite);
+      if (links.lounge) setLoungeLink(links.lounge);
+    };
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, []);
   const doneLounge = useCallback(() => {
     history.replaceState(null, "", "/");
     setLoungeLink(undefined);

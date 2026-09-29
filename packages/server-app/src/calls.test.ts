@@ -390,6 +390,39 @@ describe("calls across servers", () => {
     expect(presencePosts.length).toBeGreaterThan(0);
     expect(presencePosts.every((r) => r.url.startsWith("https://a.test/"))).toBe(true);
   });
+
+  it("coalesces a burst of presence changes and still delivers the final state", async () => {
+    const seen = async () =>
+      (await a.http("/connections", { token: jesse.token })).json.connections[0].presence;
+    const settle = async () => {
+      for (let i = 0; i < 5; i++) await Promise.all(b.background);
+    };
+    const bApp = await b.connectApp(bob.token);
+    await b.http("/account", { method: "PATCH", token: bob.token, body: { sharePresence: true } });
+    // Well over the per-window limit, ending on "available".
+    for (const available of [false, true, false, true, false, true, false]) {
+      bApp.write({ t: "presence.set", available });
+      await vi.waitFor(async () => {
+        await settle();
+        expect(
+          (await b.store.availability(bob.household.id)).get(bob.user.id),
+          "applied locally",
+        ).toBe(available);
+      });
+    }
+    await settle();
+    // The last change landed in a full window: it waits instead of being dropped.
+    expect(await seen()).toMatchObject({ available: true });
+    const posts = () => net.requests.filter((r) => r.url.endsWith("/fed/v1/presence")).length;
+    const before = posts();
+    net.timers.advance(10_000); // the window opens; the hub's wake-up sends the latest state
+    await vi.waitFor(async () => {
+      await settle();
+      expect(await seen()).toMatchObject({ online: true, available: false });
+    });
+    expect(posts()).toBe(before + 1); // one trailing send, not one per change
+    expect(await b.store.connections.nextPresenceDue(bob.household.id)).toBeUndefined();
+  });
 });
 
 describe("calls between households on one server", () => {

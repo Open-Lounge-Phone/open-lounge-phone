@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   inviteLink,
   loadToken,
+  readHashLinks,
   readInviteToken,
   readSetupToken,
   saveToken,
@@ -50,5 +51,14 @@ describe("session", () => {
     expect(readInviteToken(url.hash)).toBe("Ab_c-9");
     expect(readInviteToken("#setup=x")).toBeUndefined();
     expect(readSetupToken("#invite=x")).toBeUndefined();
+  });
+
+  it("reads every kind of hash link (first load and hashchange alike)", () => {
+    expect(readHashLinks("/", "#invite=abc")).toEqual({ invite: "abc" });
+    expect(readHashLinks("/", "#setup=xyz")).toEqual({ setup: "xyz" });
+    expect(readHashLinks("/lounge", "#dev_1.0123456789abcdef")).toEqual({
+      lounge: { deviceId: "dev_1", nonce: "0123456789abcdef" },
+    });
+    expect(readHashLinks("/", "")).toEqual({});
   });
 });

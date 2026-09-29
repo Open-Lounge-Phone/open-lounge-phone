@@ -380,13 +380,35 @@ export class Connections {
 
   /**
    * An account's availability changed: tell its connections, if it shares availability. Batched
-   * per server (one request each), and rate-limited per account.
+   * per server (one request each), and rate-limited per account. Over the limit, the latest state
+   * waits (coalesced) until the window opens; `householdId`'s hub then sends it (see
+   * `flushPresence`). Returns when that is, if it had to wait.
    */
-  async publishPresence(accountId: string, online: boolean, available: boolean): Promise<void> {
+  async publishPresence(
+    accountId: string,
+    online: boolean,
+    available: boolean,
+    householdId?: string,
+  ): Promise<number | undefined> {
     const account = await this.store.getAccount(accountId);
-    if (!account?.sharePresence) return;
+    if (!account?.sharePresence) return undefined;
     const now = this.env.now();
-    if (!(await this.store.connections.hit(`presence:${accountId}`, 10_000, 5, now))) return;
+    const bucket = `presence:${accountId}`;
+    if (!(await this.store.connections.hit(bucket, PRESENCE_WINDOW_MS, PRESENCE_LIMIT, now))) {
+      const home = householdId ?? (await primaryHousehold(this.env, accountId))?.household.id;
+      if (!home) return undefined;
+      const dueAt = await this.store.connections.windowEnd(bucket, PRESENCE_WINDOW_MS, now);
+      await this.store.connections.deferPresence({
+        accountId,
+        householdId: home,
+        online,
+        available,
+        dueAt,
+      });
+      return dueAt;
+    }
+    // This is the newest state: anything still waiting is superseded.
+    await this.store.connections.clearPendingPresence(accountId);
     const byHost = new Map<string, string[]>();
     for (const c of await this.store.connections.list(accountId)) {
       if (c.state !== "active" || !c.peerAccount) continue;
@@ -406,6 +428,7 @@ export class Connections {
         this.env.log("warn", "connections: presence not delivered", { host, error: String(e) });
       }
     }
+    return undefined;
   }
 
   async receivePresence(
@@ -425,6 +448,10 @@ export class Connections {
     }
   }
 }
+
+/** Presence updates per account per window before they're coalesced. */
+const PRESENCE_WINDOW_MS = 10_000;
+const PRESENCE_LIMIT = 5;
 
 const KnockRequest = z.object({ to: z.string().trim().min(3).max(300), note: Note.optional() });
 const BlockServerRequest = z.object({ host: z.string().trim().toLowerCase().min(1).max(260) });
@@ -799,14 +826,35 @@ export function presenceHook(
 ): NonNullable<ServerEnv["onPresence"]> {
   const service = new Connections(env, live);
   return (householdId, userId, online, available) => {
-    env.defer(
-      (async () => {
-        const user = await env.store.getUser(userId);
-        if (!user) return;
-        const home = await primaryHousehold(env, user.accountId);
-        if (home?.household.id !== householdId) return;
-        await service.publishPresence(user.accountId, online, available);
-      })().catch((e) => env.log("warn", "presence publish failed", { error: String(e) })),
-    );
+    const work = (async () => {
+      const user = await env.store.getUser(userId);
+      if (!user) return undefined;
+      const home = await primaryHousehold(env, user.accountId);
+      if (home?.household.id !== householdId) return undefined;
+      return service.publishPresence(user.accountId, online, available, householdId);
+    })().catch((e) => {
+      env.log("warn", "presence publish failed", { error: String(e) });
+      return undefined;
+    });
+    env.defer(work);
+    return work;
+  };
+}
+
+/**
+ * The `ServerEnv.flushPresence` hook: a hub woke up (its alarm) and sends the presence states
+ * that waited out their rate-limit window, newest state only. No timers of its own.
+ */
+export function presenceFlusher(
+  env: ServerEnv,
+  live: Coordinator,
+): NonNullable<ServerEnv["flushPresence"]> {
+  const service = new Connections(env, live);
+  return async (householdId) => {
+    for (const p of await env.store.connections.takeDuePresence(householdId, env.now())) {
+      await service
+        .publishPresence(p.accountId, p.online, p.available, householdId)
+        .catch((e) => env.log("warn", "presence flush failed", { error: String(e) }));
+    }
   };
 }

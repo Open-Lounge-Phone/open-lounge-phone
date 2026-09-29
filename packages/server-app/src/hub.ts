@@ -567,6 +567,7 @@ export class HouseholdHub {
     return this.run(async () => {
       for (const d of this.devices.values()) await this.sendConfig(d, false);
       await this.expireOfflineLounges();
+      await this.env.flushPresence?.(this.householdId);
       await this.scheduleWake();
     });
   }
@@ -818,7 +819,10 @@ export class HouseholdHub {
   /** Presence of one member, to every other connected member. */
   private broadcastMember(userId: string, available: boolean): void {
     const msg = this.memberMessage(userId, available);
-    this.env.onPresence?.(this.householdId, userId, msg.online, available);
+    // Rate-limited for connections: it's sent later, when this hub wakes (no timer of its own).
+    void this.env
+      .onPresence?.(this.householdId, userId, msg.online, available)
+      ?.then((due) => (due === undefined ? undefined : this.run(() => this.scheduleWake())));
     for (const [id, set] of this.apps) {
       if (id === userId) continue;
       for (const app of set) app.conn.send(msg);
@@ -1056,8 +1060,9 @@ export class HouseholdHub {
   }
 
   /**
-   * The hub's one alarm: the next quiet-hours change (while phones are connected) or the end of
-   * a disconnected Lounge phone's reconnect grace, whichever is first. Sleeping until then
+   * The hub's one alarm: the next quiet-hours change (while phones are connected), the end of
+   * a disconnected Lounge phone's reconnect grace, or a rate-limited presence update that is now
+   * allowed, whichever is first. Sleeping until then
    * instead of polling lets a Durable Object host hibernate in between.
    */
   private async scheduleWake(): Promise<void> {
@@ -1074,6 +1079,11 @@ export class HouseholdHub {
       const graceEnd = firstOffline.offlineAt + LOUNGE_RECONNECT_GRACE_MS;
       at = at === undefined ? graceEnd : Math.min(at, graceEnd);
     }
+    // Presence for connections that waited out its rate limit (the latest state only).
+    const presenceDue = this.env.flushPresence
+      ? await store.connections.nextPresenceDue(this.householdId)
+      : undefined;
+    if (presenceDue !== undefined) at = at === undefined ? presenceDue : Math.min(at, presenceDue);
     this.cancelWakeTimer?.();
     this.cancelWakeTimer = undefined;
     if (at === undefined) {

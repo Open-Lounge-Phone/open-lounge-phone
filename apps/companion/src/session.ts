@@ -1,4 +1,5 @@
 /** Session token persistence and first-run setup link parsing. */
+import { type LoungeLink, parseLoungeLink } from "./loungeLink.ts";
 
 export const TOKEN_KEY = "openloungephone.token";
 
@@ -41,4 +42,26 @@ export function defaultTimeZone(): string {
   } catch {
     return "UTC";
   }
+}
+
+/** Everything a link can carry in the page's hash: setup, invite and Lounge-phone links. */
+export interface HashLinks {
+  setup?: string;
+  invite?: string;
+  lounge?: LoungeLink;
+}
+
+/**
+ * Reads the hash links. Used on first load and again on every `hashchange`, so opening a second
+ * link in an already-open app (pasting `#invite=…`, scanning a Lounge code) still works.
+ */
+export function readHashLinks(pathname: string, hash: string): HashLinks {
+  const setup = readSetupToken(hash);
+  const invite = readInviteToken(hash);
+  const lounge = parseLoungeLink(pathname, hash);
+  return {
+    ...(setup ? { setup } : {}),
+    ...(invite ? { invite } : {}),
+    ...(lounge ? { lounge } : {}),
+  };
 }

@@ -12,7 +12,7 @@ import {
 } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { expect, vi } from "vitest";
-import { federationApp, presenceHook } from "./connections.ts";
+import { federationApp, presenceFlusher, presenceHook } from "./connections.ts";
 import type { Conn, ConnMemo, RoomSnapshot, ServerEnv } from "./env.ts";
 import { FedCalls } from "./fedCalls.ts";
 import { type Dialer, LinkRegistry } from "./fedLinks.ts";
@@ -153,6 +153,7 @@ export class TestServer {
     this.links = new LinkRegistry(this.env, this.gateway, opts.dialer ?? noNetwork);
     this.env.calls = new FedCalls(this.env, this.gateway, this.links);
     this.env.onPresence = presenceHook(this.env, this.gateway);
+    this.env.flushPresence = presenceFlusher(this.env, this.gateway);
     this.root = new Hono();
     this.root.route("/api", this.api);
     this.root.route("/", federationApp(this.env, this.gateway));

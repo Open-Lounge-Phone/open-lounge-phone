@@ -19,6 +19,7 @@ import {
   hubInfoFromVars,
   type LinkSocket,
   type LoungeGuest,
+  presenceFlusher,
   presenceHook,
   type RelayDial,
   type RemoteRing,
@@ -191,6 +192,7 @@ function serverEnv(
     signal: (host, msg) => env.FEDERATION.getByName(host).signal(msg),
   });
   server.onPresence = presenceHook(server, coordinator(env));
+  server.flushPresence = presenceFlusher(server, coordinator(env));
   return server;
 }
 

@@ -325,6 +325,70 @@ export class ConnectionStore {
     return r && r.window_start > now - windowMs ? r.count : 0;
   }
 
+  /** When the bucket's current window ends (a new one starts), or `now` if none is open. */
+  async windowEnd(bucket: string, windowMs: number, now: number): Promise<number> {
+    const r = await this.sql.first<{ window_start: number }>(
+      "SELECT window_start FROM rate_limits WHERE bucket = ?",
+      bucket,
+    );
+    return r ? Math.max(now, r.window_start + windowMs) : now;
+  }
+
+  // --- presence waiting for its rate-limit window ------------------------------------------
+
+  /** Keeps only the latest state per account; sent at `dueAt` by `householdId`'s hub. */
+  async deferPresence(p: {
+    accountId: string;
+    householdId: string;
+    online: boolean;
+    available: boolean;
+    dueAt: number;
+  }): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO presence_pending (account_id, household_id, online, available, due_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(account_id) DO UPDATE SET household_id = excluded.household_id,
+         online = excluded.online, available = excluded.available, due_at = excluded.due_at`,
+      p.accountId,
+      p.householdId,
+      p.online ? 1 : 0,
+      p.available ? 1 : 0,
+      p.dueAt,
+    );
+  }
+
+  /** A newer state went out: nothing is waiting any more. */
+  async clearPendingPresence(accountId: string): Promise<void> {
+    await this.sql.run("DELETE FROM presence_pending WHERE account_id = ?", accountId);
+  }
+
+  /** Removes and returns the states due by `now` for one household's hub. */
+  async takeDuePresence(
+    householdId: string,
+    now: number,
+  ): Promise<{ accountId: string; online: boolean; available: boolean }[]> {
+    const rows = await this.sql.all<{ account_id: string; online: number; available: number }>(
+      `DELETE FROM presence_pending WHERE household_id = ? AND due_at <= ?
+       RETURNING account_id, online, available`,
+      householdId,
+      now,
+    );
+    return rows.map((r) => ({
+      accountId: r.account_id,
+      online: r.online === 1,
+      available: r.available === 1,
+    }));
+  }
+
+  /** The earliest time a waiting presence state is due for one household's hub. */
+  async nextPresenceDue(householdId: string): Promise<number | undefined> {
+    const r = await this.sql.first<{ due: number | null }>(
+      "SELECT MIN(due_at) AS due FROM presence_pending WHERE household_id = ?",
+      householdId,
+    );
+    return r?.due ?? undefined;
+  }
+
   // --- server keys, nonces, blocks ----------------------------------------------------
 
   async pinnedKey(host: string): Promise<string | undefined> {
