@@ -291,6 +291,14 @@ Keep this section current when finishing a milestone.
   started, funding page + home card (computed), hub/privacy/export/federation pages, footer
   credit (+ Sponsor when `SPONSOR_URL` is set at build). Docs: `docs/hub.md` (costs, allowance),
   `docs/privacy.md`, `docs/export.md`. Tests: `hub.test.ts` (mutation-checked), `funding.test.ts`.
+- **Step 1 fixes (2026-09-28):** a call to a person rings everywhere they are (their other spaces:
+  apps, own phones, Lounge phone; and a Lounge phone on another server where they're a guest,
+  via `/fed/v1/calls` target `guest`) as proxy "branches" of the call owned by their first space
+  (`HouseholdHub.branchesFor/ringAll/dropBranch`, `CallLinks.ringLocal`); first answer wins, a
+  decline ends it. Knock notice: "If <address> exists, they'll get your request." Cloudflare
+  verified locally: `tests/e2e/cloudflare.test.ts` (opt-in, `OLP_E2E_CLOUDFLARE=1`) runs the
+  two-server scenario on two `wrangler dev` instances incl. the FederationObject idle close;
+  `DEV_LOOPBACK=1` is the dev-only `*.localhost` switch.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
   (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub ✔ (code; not deployed) → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.

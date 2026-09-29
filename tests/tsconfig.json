@@ -1,6 +1,17 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist-types", "rootDir": ".", "types": ["node"] },
+  "compilerOptions": {
+    "outDir": "dist-types",
+    "rootDir": ".",
+    "types": ["node"]
+  },
   "include": ["e2e"],
-  "references": [{ "path": "../packages/protocol" }]
+  "references": [
+    {
+      "path": "../packages/protocol"
+    },
+    {
+      "path": "../packages/federation"
+    }
+  ]
 }

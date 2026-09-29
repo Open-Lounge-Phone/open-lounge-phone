@@ -76,6 +76,18 @@ Run the shared end-to-end scenario against it (fresh local state required):
 OLP_E2E_URL=http://localhost:8787 OLP_E2E_SETUP_TOKEN=dev-token npx vitest run tests/e2e
 ```
 
+Two local instances federating with each other (the interop scenario on Workers: knock, accept,
+cross-server call, voicemail, block, and the server-pair stream closing after a minute idle):
+
+```sh
+npm run build
+OLP_E2E_CLOUDFLARE=1 npx vitest run tests/e2e/cloudflare.test.ts   # about 90 s
+```
+
+It starts two `wrangler dev` instances (local D1, R2 and Durable Objects, no AI) as
+`a.localhost` and `b.localhost` with `DEV_LOOPBACK=1`, a development-only switch that sends
+`*.localhost` requests to 127.0.0.1.
+
 ## How it maps onto the shared server
 
 The Worker, the Durable Objects, and the self-hosted Node server all run the same

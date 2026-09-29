@@ -72,6 +72,19 @@ export interface Env {
   BASE_COST_USD_PER_MONTH?: string;
   COST_PER_ACTIVE_USER_USD_PER_MONTH?: string;
   SPONSOR_URL?: string;
+  /**
+   * Local development only (`wrangler dev --var DEV_LOOPBACK:1`): requests to `*.localhost`
+   * hosts go to 127.0.0.1, so two local instances can federate (tests/e2e/cloudflare.test.ts).
+   */
+  DEV_LOOPBACK?: string;
+}
+
+/** `*.localhost` → 127.0.0.1 when DEV_LOOPBACK is on (RFC 6761: they're loopback anyway). */
+function loopback(env: Env, url: string): string {
+  if (env.DEV_LOOPBACK !== "1") return url;
+  const u = new URL(url);
+  if (u.hostname.endsWith(".localhost")) u.hostname = "127.0.0.1";
+  return u.toString();
 }
 
 const PAIRING_OBJECT = "pairing";
@@ -192,6 +205,9 @@ function baseEnv(
     ...(env.AI ? { transcriber: workersAiTranscriber(env.AI) } : {}),
     defer: waitUntil,
     openSignup: env.OPEN_SIGNUP === "1",
+    ...(env.DEV_LOOPBACK === "1"
+      ? { fetch: (req: Request) => fetch(new Request(loopback(env, req.url), req)) }
+      : {}),
     ...(env.PUBLIC_URL ? { publicUrl: env.PUBLIC_URL } : {}),
     ...(env.FED_PRIVATE_KEY ? { federationKey: env.FED_PRIVATE_KEY } : {}),
     now: () => Date.now(),
@@ -390,7 +406,9 @@ export class FederationObject extends DurableObject<Env> {
     const server = serverEnv(env, (p) => ctx.waitUntil(p));
     this.link = new ServerLink(server, host, {
       dial: async (url, link) => {
-        const res = await fetch(url.replace(/^ws/, "http"), { headers: { upgrade: "websocket" } });
+        const res = await fetch(loopback(env, url.replace(/^ws/, "http")), {
+          headers: { upgrade: "websocket" },
+        });
         const ws = res.webSocket;
         if (!ws) throw new Error(`stream refused: HTTP ${res.status}`);
         ws.accept();

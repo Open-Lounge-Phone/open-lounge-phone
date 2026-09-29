@@ -306,6 +306,7 @@ export class ServerLink {
         if (state.role !== "dialer") continue;
         this.sockets.delete(socket);
         socket.close(1000, "idle");
+        this.env.log("info", "stream: closed after idle", { host: this.host });
       }
     }
     this.scheduleIdle();
