@@ -58,7 +58,6 @@ apps/server-selfhost Node server (+ Dockerfile, compose.yaml with coturn)
 apps/server-cloudflare Worker + Durable Objects + D1 + R2, and the deploy script
 apps/device-web      the phone in a browser (keys, LEDs, status strip, handset)
 apps/companion       companion PWA for guardians, grown-ups and operators
-apps/site            the project website (openloungephone.app)
 firmware/            ESP32-S3 firmware (later)
 hardware/            schematic, board layout and enclosure, all as code
 docs/                architecture, federation, hub, privacy, generated protocol reference
