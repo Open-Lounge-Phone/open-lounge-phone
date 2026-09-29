@@ -250,3 +250,38 @@ export async function noAnswerAcross(jesse: Person, bob: Person) {
   jApp.ws.close();
   bApp.ws.close();
 }
+
+/**
+ * Both sides' buddy timelines after `callAcross` and `noAnswerAcross`: Jesse's server logged
+ * two outgoing calls; Bob's logged them incoming, with Jesse's message on the missed one.
+ */
+export async function timelineAcross(jesse: Person, bob: Person) {
+  const [jRow] = await connections(jesse);
+  const [bRow] = await connections(bob);
+  const mine = await api(jesse, `/connections/${jRow?.id}/timeline`);
+  expect(mine.status).toBe(200);
+  expect(mine.json.items).toMatchObject([
+    { kind: "call", direction: "out", answered: false, endReason: "timeout", voicemail: null },
+    { kind: "call", direction: "out", answered: true },
+  ]);
+  const theirs = await api(bob, `/connections/${bRow?.id}/timeline`);
+  expect(theirs.json.items).toMatchObject([
+    {
+      kind: "call",
+      direction: "in",
+      answered: false,
+      voicemail: { fromLabel: "Jesse", durationMs: 4000 },
+    },
+    { kind: "call", direction: "in", answered: true },
+  ]);
+  const set = await api(bob, `/connections/${bRow?.id}/retention`, {
+    method: "PUT",
+    body: { retention: "1y" },
+  });
+  expect(set.status).toBe(204);
+  expect((await api(bob, `/connections/${bRow?.id}/timeline`)).json.retention).toMatchObject({
+    setting: "1y",
+    effective: "1y",
+    from: "connection",
+  });
+}

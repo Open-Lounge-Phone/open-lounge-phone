@@ -14,6 +14,7 @@ import {
   noAnswerAcross,
   type ServerTarget,
   signUp,
+  timelineAcross,
   voicemailAcross,
 } from "./twoServers.ts";
 
@@ -78,12 +79,13 @@ afterAll(() => {
   }
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, block", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, block", async () => {
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
   await callAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
+  await timelineAcross(jesse, bob);
   await voicemailAcross(jesse, bob);
   await block(jesse, bob);
 }, 90_000);
