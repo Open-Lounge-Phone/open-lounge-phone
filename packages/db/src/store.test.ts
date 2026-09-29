@@ -229,7 +229,9 @@ describe("voicemail", () => {
     const base = {
       householdId: hh.id,
       deviceId: device.id,
+      toUser: null,
       fromUser: guardian.id,
+      fromAddress: null,
       durationMs: 1000,
       mime: "audio/webm",
       blobKey: "k",
@@ -252,6 +254,70 @@ describe("voicemail", () => {
       T0 + 5,
       T0,
     ]);
+  });
+
+  it("keeps a person's voicemail in their own inbox, not a phone's", async () => {
+    const { household: hh, guardian } = await household();
+    const vm = await store.createVoicemail({
+      householdId: hh.id,
+      deviceId: null,
+      toUser: guardian.id,
+      fromUser: null,
+      fromLabel: "Bob",
+      fromAddress: "bob@b.test",
+      createdAt: T0,
+      durationMs: 1000,
+      mime: "audio/webm",
+      blobKey: "k",
+      transcriptStatus: "pending",
+    });
+    expect(await store.listPersonalVoicemails(guardian.accountId)).toMatchObject([
+      { id: vm.id, toUser: guardian.id, deviceId: null, fromAddress: "bob@b.test" },
+    ]);
+    const other = await household();
+    expect(await store.listPersonalVoicemails(other.guardian.accountId)).toEqual([]);
+    // Exactly one of phone or person.
+    await expect(
+      store.createVoicemail({ ...vm, deviceId: null, toUser: null, heardAt: undefined } as never),
+    ).rejects.toThrow();
+  });
+
+  it("stores voicemail settings and greetings per person and per phone", async () => {
+    const { guardian } = await household();
+    const owner = { accountId: guardian.accountId };
+    expect(await store.voicemailPrefs(owner)).toEqual({
+      ringSeconds: 25,
+      childGreeting: true,
+      greeting: null,
+    });
+    await store.setVoicemailPrefs(owner, { ringSeconds: 40 }, T0);
+    const g = { kind: "name" as const, mime: "audio/webm", blobKey: "g1", durationMs: 2000 };
+    expect(await store.setGreeting(owner, g, T0)).toBeUndefined();
+    expect(await store.setGreeting(owner, { ...g, blobKey: "g2" }, T0)).toBe("g1");
+    expect(await store.voicemailPrefs(owner)).toMatchObject({
+      ringSeconds: 40,
+      greeting: { kind: "name", blobKey: "g2" },
+    });
+    await store.setVoicemailPrefs(owner, { childGreeting: false }, T0);
+    expect(await store.setGreeting(owner, null, T0)).toBe("g2");
+    expect(await store.voicemailPrefs(owner)).toEqual({
+      ringSeconds: 40,
+      childGreeting: false,
+      greeting: null,
+    });
+  });
+
+  it("uses a voicemail ticket once, even under a race", async () => {
+    const token = await store.createVoicemailTicket("voicemail", { to: "x" }, T0);
+    expect(await store.peekVoicemailTicket(token, "greeting", T0)).toBeUndefined();
+    expect(await store.peekVoicemailTicket(token, "voicemail", T0)).toEqual({ to: "x" });
+    const takes = await Promise.all([
+      store.takeVoicemailTicket(token, "voicemail", T0),
+      store.takeVoicemailTicket(token, "voicemail", T0),
+    ]);
+    expect(takes.filter((t) => t !== undefined)).toHaveLength(1);
+    const late = await store.createVoicemailTicket("voicemail", {}, T0, 1000);
+    expect(await store.takeVoicemailTicket(late, "voicemail", T0 + 1000)).toBeUndefined();
   });
 
   it("remembers each device's key algorithm", async () => {
@@ -342,6 +408,43 @@ describe("0006_accounts backfill", () => {
     });
     const grandma = await s.getUser("usr_CCCCCCCCCCCCCCCC");
     expect((await s.getPasskey("cred1"))?.accountId).toBe(grandma?.accountId);
+    old.db.close();
+  });
+});
+
+describe("0012_voicemail_everywhere", () => {
+  it("keeps existing voicemail and its call-log link", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "olp-mig-"));
+    for (const f of readdirSync(MIGRATIONS_DIR).filter((f) => f < "0012")) {
+      copyFileSync(join(MIGRATIONS_DIR, f), join(dir, f));
+    }
+    const old = openSqlite(":memory:");
+    migrate(old.db, dir);
+    rmSync(dir, { recursive: true, force: true });
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const device = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    old.db.exec(`
+      INSERT INTO voicemails (id, household_id, device_id, from_user, from_label, created_at,
+        duration_ms, mime, blob_key, transcript_status)
+        VALUES ('vm_1', '${hh.id}', '${device?.id}', '${guardian.id}', 'Mom', 1, 1000, 'audio/webm', 'k', 'done');
+      INSERT INTO call_log (id, household_id, device_id, peer, peer_label, direction, started_at,
+        voicemail_id) VALUES ('cl_1', '${hh.id}', '${device?.id}', 'user:x', 'Mom', 'in', 1, 'vm_1');
+    `);
+    expect(migrate(old.db)).toContain("0012_voicemail_everywhere.sql");
+    expect(await s.getVoicemail("vm_1")).toMatchObject({
+      deviceId: device?.id,
+      toUser: null,
+      fromLabel: "Mom",
+      transcriptStatus: "done",
+    });
+    expect(old.db.prepare("SELECT voicemail_id FROM call_log WHERE id = 'cl_1'").get()).toEqual({
+      voicemail_id: "vm_1",
+    });
     old.db.close();
   });
 });

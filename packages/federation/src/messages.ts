@@ -164,6 +164,20 @@ export const StreamHello = z.object({
 });
 export type StreamHello = z.infer<typeof StreamHello>;
 
+/**
+ * `POST /fed/v1/greeting`: `from`'s call to `to` went to voicemail; fetch the greeting to play.
+ * Only with an active connection (a phone: `from` on its allow-list). Answered with the audio
+ * (header `olp-greeting: name|custom`) or 204 for the spoken default greeting.
+ */
+export const GreetingBody = z.object({
+  from: Party,
+  to: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("person"), handle: Handle }),
+    z.object({ kind: z.literal("phone"), deviceId: Id }),
+  ]),
+});
+export type GreetingBody = z.infer<typeof GreetingBody>;
+
 /** `POST /fed/v1/lounge/leave`: `from` leaves the receiving server's Lounge phone. */
 export const LoungeLeaveBody = z.object({ from: Party, deviceId: Id });
 

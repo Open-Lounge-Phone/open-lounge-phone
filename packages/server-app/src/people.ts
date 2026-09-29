@@ -13,6 +13,7 @@ import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, clientIp, guardianOnly, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
+import { dropVoicemailBlobs } from "./voicemail.ts";
 
 const Name = z.string().trim().min(1).max(24);
 
@@ -172,6 +173,7 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     if (!target || target.householdId !== me.householdId)
       return c.json({ error: "not found" }, 404);
     if (target.id === me.id) return c.json({ error: "you can't remove yourself" }, 400);
+    await dropVoicemailBlobs(env, { userId: target.id });
     await store.deleteUser(target.id, env.now());
     // A Lounge phone they were using forgets them now.
     for (const d of await store.listDevices(me.householdId)) {

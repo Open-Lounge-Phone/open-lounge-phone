@@ -41,6 +41,61 @@ export const RtcIce = z
 export const Ping = z.object({ t: z.literal("ping"), ...Ref }).describe("Keep-alive.");
 
 // ---------------------------------------------------------------------------
+// Voicemail: greetings and the offer that follows an unanswered call.
+// ---------------------------------------------------------------------------
+
+export const GreetingKind = z
+  .enum(["default", "name", "custom"])
+  .describe(
+    "`default` = the spoken \"<Name> can't take your call. Leave a message after the tone.\"; `name` = the same sentence with the person's own recording of their name (≤ 3 s); `custom` = their own whole greeting (≤ 30 s).",
+  );
+export type GreetingKind = z.infer<typeof GreetingKind>;
+
+export const VoicemailPrompt = z
+  .enum([
+    "name",
+    "greeting",
+    "vm.person",
+    "vm.cant_take",
+    "vm.leave_message",
+    "vm.tone",
+    "vm.sent",
+    "vm.not_sent",
+    "greet.say_name",
+    "greet.say_greeting",
+    "greet.saved",
+    "greet.default",
+    "greet.not_allowed",
+  ])
+  .describe(
+    'Audio prompt ids, pre-recorded on hardware (the browser phone speaks them). Slots: `name` = the recorded name when the greeting is `name`, else `name` spoken (hardware without speech plays `vm.person`, "The person you called"); `greeting` = the recorded custom greeting. Fixed: `vm.cant_take` "can\'t take your call.", `vm.leave_message` "Leave a message after the tone.", `vm.tone` the beep, `vm.sent` "Message sent.", `vm.not_sent` "Your message wasn\'t sent.", `greet.say_name` "Say your name after the tone, then press BACK.", `greet.say_greeting` "Record your greeting after the tone, then press BACK.", `greet.saved` "Greeting saved.", `greet.default` "Callers will hear the standard greeting.", `greet.not_allowed` "Ask a grown-up to change the greeting."',
+  );
+export type VoicemailPrompt = z.infer<typeof VoicemailPrompt>;
+
+export const VoicemailOffer = z
+  .object({
+    ticket: z
+      .string()
+      .min(16)
+      .max(128)
+      .describe(
+        "Single use, expires in 10 minutes. `GET /api/vm/greeting?ticket=` returns the greeting audio (`olp-greeting: name|custom`) or 204 for the default; `POST /api/vm/message?ticket=&durationMs=` with a raw `audio/*` body leaves the message.",
+      ),
+    name: z.string().min(1).max(24).describe("Who was called, for the spoken default greeting."),
+    maxMs: z.number().int().positive().describe("Longest message accepted (2 minutes)."),
+    prompts: z
+      .array(VoicemailPrompt)
+      .max(8)
+      .describe(
+        'What to play before recording, in order, for the `default` and `name` greetings: `["name","vm.cant_take","vm.leave_message","vm.tone"]`. For a `custom` greeting play `greeting`, then `vm.tone`.',
+      ),
+  })
+  .describe(
+    "The call wasn't answered (no answer, declined, busy, quiet hours, unavailable, offline): the caller may leave a message. Play the greeting, the tone, record until hang-up, then upload.",
+  );
+export type VoicemailOffer = z.infer<typeof VoicemailOffer>;
+
+// ---------------------------------------------------------------------------
 // Device -> server
 // ---------------------------------------------------------------------------
 
@@ -158,6 +213,16 @@ export const LoungeChat = z
   .object({ t: z.literal("lounge.chat"), ...Ref, open: z.boolean() })
   .describe('Lounge phone: the person here toggles "open to chat" (ends with the session).');
 
+export const GreetingBegin = z
+  .object({ t: z.literal("greeting.begin"), ...Ref, kind: z.enum(["name", "custom"]) })
+  .describe(
+    "MENU → Voicemail → Record: the phone wants to record its greeting (a kids' phone: its own; a person's own phone: theirs). Answered with `greeting.ticket`, or `greeting.done` `not_allowed`.",
+  );
+
+export const GreetingReset = z
+  .object({ t: z.literal("greeting.reset"), ...Ref })
+  .describe("MENU → Voicemail → Default: back to the spoken default greeting.");
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   PairBegin,
@@ -169,6 +234,8 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   LoungeRefresh,
   LoungeLeave,
   LoungeChat,
+  GreetingBegin,
+  GreetingReset,
   CallAnswer,
   CallHangup,
   RtcSdp,
@@ -219,6 +286,17 @@ export const Config = z
       .max(8)
       .optional()
       .describe("Unheard voicemails, newest first, for the status display."),
+    greeting: z
+      .object({
+        kind: GreetingKind,
+        canRecord: z
+          .boolean()
+          .describe(
+            "Whether MENU → Voicemail may change it (a kids' phone: the guardians' \"let the child record the greeting\").",
+          ),
+      })
+      .optional()
+      .describe("The phone's voicemail greeting (absent on Lounge phones)."),
   })
   .describe("Sent after authentication and whenever guardians change settings.");
 
@@ -245,6 +323,9 @@ export const CallStateMsg = z
       .describe(
         "With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached).",
       ),
+    voicemail: VoicemailOffer.optional().describe(
+      "With `ended`, to the caller only: the call went unanswered and a message may be left.",
+    ),
   })
   .describe("Call progress update.");
 
@@ -309,6 +390,29 @@ export const LoungeEnded = z
     "Lounge phone: the session is over. Forget everything about the person (names, speed-dial, call history) and show the takeover code again.",
   );
 
+export const GreetingTicket = z
+  .object({
+    t: z.literal("greeting.ticket"),
+    ...Ref,
+    kind: z.enum(["name", "custom"]),
+    ticket: z.string().min(16).max(128),
+    maxMs: z.number().int().positive(),
+  })
+  .describe(
+    "Go ahead: record up to `maxMs` (name 3 s, greeting 30 s) and `POST /api/vm/greeting?ticket=&durationMs=` with a raw `audio/*` body. Single use, expires in 10 minutes.",
+  );
+
+export const GreetingDone = z
+  .object({
+    t: z.literal("greeting.done"),
+    ...Ref,
+    result: z.enum(["reset", "not_allowed"]),
+    kind: GreetingKind.describe("The greeting callers hear now."),
+  })
+  .describe(
+    "The phone asked to record (`greeting.begin`) and may not, or its greeting was reset (`greeting.reset`). A recorded greeting is confirmed by the upload's HTTP 201.",
+  );
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -318,6 +422,8 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   LoungeChallenge,
   LoungeSession,
   LoungeEnded,
+  GreetingTicket,
+  GreetingDone,
   CallRinging,
   CallStateMsg,
   RtcConfig,
@@ -432,6 +538,15 @@ export const VoicemailNew = z
   })
   .describe("A voicemail was left for a phone in the guardian's household.");
 
+export const VoicemailInbox = z
+  .object({
+    t: z.literal("voicemail.inbox"),
+    ...Ref,
+    id: Id,
+    from: z.string().min(1).max(24),
+  })
+  .describe("A voicemail was left for you (your own inbox: `GET /api/voicemails`).");
+
 export const MemberStatus = z
   .object({
     t: z.literal("member.status"),
@@ -478,6 +593,7 @@ export const ServerToApp = z.discriminatedUnion("t", [
   MemberStatus,
   DeviceStatus,
   VoicemailNew,
+  VoicemailInbox,
   CallRinging,
   CallStateMsg,
   RtcConfig,

@@ -270,6 +270,7 @@ describe("pairing and device auth", () => {
       t: "config",
       buttons: [{ index: 0, label: "Mom" }],
       quiet: false,
+      greeting: { kind: "default", canRecord: true },
     });
   });
 
@@ -760,7 +761,8 @@ describe("voicemail", () => {
     expect((await upload(strangerToken, new Uint8Array(10))).status).toBe(403);
     expect((await upload(grandmaToken, new Uint8Array(10), "text/plain")).status).toBe(415);
     expect((await upload(grandmaToken, new Uint8Array(3 * 1024 * 1024))).status).toBe(413);
-    expect((await http("/voicemails", { token: grandmaToken })).status).toBe(403);
+    // Not a guardian: only her own inbox, never the phone's voicemail.
+    expect((await http("/voicemails", { token: grandmaToken })).json).toEqual([]);
     expect((await http("/voicemails", { token })).json).toEqual([]);
   });
 

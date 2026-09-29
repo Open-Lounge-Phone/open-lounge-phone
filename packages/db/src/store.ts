@@ -218,6 +218,43 @@ export interface Device {
   lastSeen: number | null;
 }
 
+/** Whose voicemail settings: a person (their account) or a household phone. */
+export type VoicemailOwner = { accountId: string } | { deviceId: string };
+export type GreetingKind = "name" | "custom";
+export type TicketPurpose = "voicemail" | "greeting";
+
+export interface VoicemailPrefs {
+  /** How long calls ring before they go to voicemail. */
+  ringSeconds: number;
+  /** Kids' phones: the child may record the phone's greeting (MENU → Voicemail). */
+  childGreeting: boolean;
+  /** null = the spoken default greeting. */
+  greeting: {
+    kind: GreetingKind;
+    mime: string;
+    blobKey: string;
+    durationMs: number;
+    updatedAt: number;
+  } | null;
+}
+
+type VoicemailPrefsRow = {
+  ring_seconds: number | null;
+  child_greeting: number;
+  greeting_kind: GreetingKind | null;
+  greeting_mime: string | null;
+  greeting_blob: string | null;
+  greeting_ms: number | null;
+  updated_at: number;
+};
+
+const ownerColumn = (o: VoicemailOwner): ["account_id" | "device_id", string] =>
+  "accountId" in o ? ["account_id", o.accountId] : ["device_id", o.deviceId];
+
+export const DEFAULT_RING_SECONDS = 25;
+/** Long enough to hear a 30 s greeting and record two minutes, with slack. */
+export const VOICEMAIL_TICKET_TTL_MS = 10 * 60 * 1000;
+
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -248,9 +285,14 @@ export type TranscriptStatus = "pending" | "done" | "failed" | "unavailable";
 export interface Voicemail {
   id: string;
   householdId: string;
-  deviceId: string;
+  /** For a household phone (its guardians' inbox)… */
+  deviceId: string | null;
+  /** …or for a person (their own inbox). Exactly one of the two is set. */
+  toUser: string | null;
   fromUser: string | null;
   fromLabel: string;
+  /** Who left it, for the timeline: `handle@host`, `user:<id>` or `device:<id>`. */
+  fromAddress: string | null;
   createdAt: number;
   durationMs: number;
   mime: string;
@@ -263,9 +305,11 @@ export interface Voicemail {
 type VoicemailRow = {
   id: string;
   household_id: string;
-  device_id: string;
+  device_id: string | null;
+  to_user: string | null;
   from_user: string | null;
   from_label: string;
+  from_address: string | null;
   created_at: number;
   duration_ms: number;
   mime: string;
@@ -278,8 +322,10 @@ const toVoicemail = (r: VoicemailRow): Voicemail => ({
   id: r.id,
   householdId: r.household_id,
   deviceId: r.device_id,
+  toUser: r.to_user,
   fromUser: r.from_user,
   fromLabel: r.from_label,
+  fromAddress: r.from_address,
   createdAt: r.created_at,
   durationMs: r.duration_ms,
   mime: r.mime,
@@ -1651,14 +1697,16 @@ export class Store {
   async createVoicemail(v: Omit<Voicemail, "id" | "transcript" | "heardAt">): Promise<Voicemail> {
     const vm: Voicemail = { ...v, id: newId("vm"), transcript: null, heardAt: null };
     await this.sql.run(
-      `INSERT INTO voicemails (id, household_id, device_id, from_user, from_label, created_at,
-         duration_ms, mime, blob_key, transcript_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO voicemails (id, household_id, device_id, to_user, from_user, from_label,
+         from_address, created_at, duration_ms, mime, blob_key, transcript_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       vm.id,
       vm.householdId,
       vm.deviceId,
+      vm.toUser,
       vm.fromUser,
       vm.fromLabel,
+      vm.fromAddress,
       vm.createdAt,
       vm.durationMs,
       vm.mime,
@@ -1682,16 +1730,219 @@ export class Store {
     return rows.map(toVoicemail);
   }
 
-  /** Callers with unheard voicemail for a device, newest first, one entry per caller. */
-  async unheardFrom(deviceId: string, limit = 8): Promise<string[]> {
+  /**
+   * Callers with unheard voicemail for a device, newest first, one entry per caller. A person's
+   * own phone (`ownerUserId`) also shows their personal voicemail.
+   */
+  async unheardFrom(deviceId: string, limit = 8, ownerUserId?: string | null): Promise<string[]> {
     const rows = await this.sql.all<{ from_label: string }>(
       `SELECT from_label, MAX(created_at) AS latest FROM voicemails
-       WHERE device_id = ? AND heard_at IS NULL
+       WHERE (device_id = ? OR to_user = ?) AND heard_at IS NULL
        GROUP BY from_label ORDER BY latest DESC LIMIT ?`,
       deviceId,
+      ownerUserId ?? null,
       limit,
     );
     return rows.map((r) => r.from_label);
+  }
+
+  /** A person's own voicemail, across all their memberships (the account's inbox). */
+  async listPersonalVoicemails(accountId: string, limit = 100): Promise<Voicemail[]> {
+    const rows = await this.sql.all<VoicemailRow>(
+      `SELECT v.* FROM voicemails v JOIN users u ON u.id = v.to_user
+       WHERE u.account_id = ? ORDER BY v.created_at DESC LIMIT ?`,
+      accountId,
+      limit,
+    );
+    return rows.map(toVoicemail);
+  }
+
+  /** Links a voicemail to the callee's call-log row for that missed call (the timeline). */
+  async linkVoicemail(
+    v: { accountId: string | null; deviceId: string | null; peer: string; voicemailId: string },
+    since: number,
+  ): Promise<void> {
+    await this.sql.run(
+      `UPDATE call_log SET voicemail_id = ? WHERE id = (
+         SELECT id FROM call_log
+         WHERE direction = 'in' AND voicemail_id IS NULL AND peer = ? AND started_at >= ?
+           AND ((? IS NOT NULL AND account_id = ?) OR (? IS NOT NULL AND device_id = ?))
+         ORDER BY started_at DESC LIMIT 1)`,
+      v.voicemailId,
+      v.peer,
+      since,
+      v.accountId,
+      v.accountId,
+      v.deviceId,
+      v.deviceId,
+    );
+  }
+
+  /**
+   * Blob keys of the voicemail and greetings that go when a person (membership), a phone, a
+   * space or an account is deleted (their rows cascade; the audio doesn't).
+   */
+  async voicemailBlobs(
+    scope:
+      | { userId: string }
+      | { deviceId: string }
+      | { householdId: string }
+      | { accountId: string },
+  ): Promise<string[]> {
+    let rows: { k: string | null }[];
+    if ("userId" in scope) {
+      rows = await this.sql.all(
+        "SELECT blob_key AS k FROM voicemails WHERE to_user = ?",
+        scope.userId,
+      );
+    } else if ("deviceId" in scope) {
+      rows = await this.sql.all(
+        `SELECT blob_key AS k FROM voicemails WHERE device_id = ?
+         UNION ALL SELECT greeting_blob AS k FROM voicemail_prefs WHERE device_id = ?`,
+        scope.deviceId,
+        scope.deviceId,
+      );
+    } else if ("householdId" in scope) {
+      rows = await this.sql.all(
+        `SELECT blob_key AS k FROM voicemails WHERE household_id = ?
+         UNION ALL SELECT p.greeting_blob AS k FROM voicemail_prefs p
+           JOIN devices d ON d.id = p.device_id WHERE d.household_id = ?`,
+        scope.householdId,
+        scope.householdId,
+      );
+    } else {
+      rows = await this.sql.all(
+        "SELECT greeting_blob AS k FROM voicemail_prefs WHERE account_id = ?",
+        scope.accountId,
+      );
+    }
+    return rows.map((r) => r.k).filter((k): k is string => !!k);
+  }
+
+  // --- voicemail settings, greetings and tickets --------------------------------------
+
+  async voicemailPrefs(owner: VoicemailOwner): Promise<VoicemailPrefs> {
+    const [col, id] = ownerColumn(owner);
+    const r = await this.sql.first<VoicemailPrefsRow>(
+      `SELECT * FROM voicemail_prefs WHERE ${col} = ?`,
+      id,
+    );
+    return {
+      ringSeconds: r?.ring_seconds ?? DEFAULT_RING_SECONDS,
+      childGreeting: r ? r.child_greeting === 1 : true,
+      greeting:
+        r?.greeting_kind && r.greeting_blob && r.greeting_mime
+          ? {
+              kind: r.greeting_kind,
+              mime: r.greeting_mime,
+              blobKey: r.greeting_blob,
+              durationMs: r.greeting_ms ?? 0,
+              updatedAt: r.updated_at,
+            }
+          : null,
+    };
+  }
+
+  async setVoicemailPrefs(
+    owner: VoicemailOwner,
+    patch: { ringSeconds?: number; childGreeting?: boolean },
+    now: number,
+  ): Promise<void> {
+    const [col, id] = ownerColumn(owner);
+    await this.sql.run(
+      `INSERT INTO voicemail_prefs (${col}, ring_seconds, child_greeting, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(${col}) DO UPDATE SET
+         ring_seconds = COALESCE(?, ring_seconds),
+         child_greeting = COALESCE(?, child_greeting),
+         updated_at = excluded.updated_at`,
+      id,
+      patch.ringSeconds ?? null,
+      patch.childGreeting === undefined ? 1 : patch.childGreeting ? 1 : 0,
+      now,
+      patch.ringSeconds ?? null,
+      patch.childGreeting === undefined ? null : patch.childGreeting ? 1 : 0,
+    );
+  }
+
+  /**
+   * Sets (or with null, resets to the default) a greeting. Returns the blob key of the one it
+   * replaced, for the caller to delete.
+   */
+  async setGreeting(
+    owner: VoicemailOwner,
+    greeting: { kind: GreetingKind; mime: string; blobKey: string; durationMs: number } | null,
+    now: number,
+  ): Promise<string | undefined> {
+    const before = (await this.voicemailPrefs(owner)).greeting?.blobKey;
+    const [col, id] = ownerColumn(owner);
+    await this.sql.run(
+      `INSERT INTO voicemail_prefs (${col}, greeting_kind, greeting_mime, greeting_blob,
+         greeting_ms, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(${col}) DO UPDATE SET greeting_kind = excluded.greeting_kind,
+         greeting_mime = excluded.greeting_mime, greeting_blob = excluded.greeting_blob,
+         greeting_ms = excluded.greeting_ms, updated_at = excluded.updated_at`,
+      id,
+      greeting?.kind ?? null,
+      greeting?.mime ?? null,
+      greeting?.blobKey ?? null,
+      greeting?.durationMs ?? null,
+      now,
+    );
+    return before && before !== greeting?.blobKey ? before : undefined;
+  }
+
+  /** A single-use ticket (see `voicemail_tickets`). Returns the bearer token. */
+  async createVoicemailTicket(
+    purpose: TicketPurpose,
+    data: unknown,
+    now: number,
+    ttlMs = VOICEMAIL_TICKET_TTL_MS,
+  ): Promise<string> {
+    if (Math.random() < 0.05) {
+      await this.sql.run("DELETE FROM voicemail_tickets WHERE expires_at < ?", now);
+    }
+    const token = newToken();
+    await this.sql.run(
+      "INSERT INTO voicemail_tickets (token_hash, purpose, data, expires_at) VALUES (?, ?, ?, ?)",
+      await sha256(token),
+      purpose,
+      JSON.stringify(data),
+      now + ttlMs,
+    );
+    return token;
+  }
+
+  /** A live ticket's data, without using it up. */
+  async peekVoicemailTicket(
+    token: string,
+    purpose: TicketPurpose,
+    now: number,
+  ): Promise<unknown | undefined> {
+    const r = await this.sql.first<{ data: string }>(
+      "SELECT data FROM voicemail_tickets WHERE token_hash = ? AND purpose = ? AND expires_at > ?",
+      await sha256(token),
+      purpose,
+      now,
+    );
+    return r ? JSON.parse(r.data) : undefined;
+  }
+
+  /** Uses a ticket up. Only one of several concurrent takers gets its data. */
+  async takeVoicemailTicket(
+    token: string,
+    purpose: TicketPurpose,
+    now: number,
+  ): Promise<unknown | undefined> {
+    const data = await this.peekVoicemailTicket(token, purpose, now);
+    if (data === undefined) return undefined;
+    const { changes } = await this.sql.run(
+      "DELETE FROM voicemail_tickets WHERE token_hash = ? AND purpose = ?",
+      await sha256(token),
+      purpose,
+    );
+    return changes === 1 ? data : undefined;
   }
 
   async setTranscript(id: string, status: TranscriptStatus, text: string | null): Promise<void> {

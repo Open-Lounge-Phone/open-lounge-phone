@@ -7,6 +7,7 @@ import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
+import { dropVoicemailBlobs } from "./voicemail.ts";
 
 export const EXPORT_FORMAT = "openloungephone-export";
 export const EXPORT_VERSION = 1;
@@ -106,16 +107,16 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
     for (const { user, household } of await store.listMemberships(account.id)) {
       const alone = user.role === "guardian" && (await store.guardianCount(household.id)) === 1;
       if (!alone) {
+        await dropVoicemailBlobs(env, { userId: user.id });
         await store.deleteUser(user.id, now);
         continue;
       }
-      for (const vm of await store.listVoicemails(household.id, 10_000)) {
-        await env.blobs.delete(vm.blobKey);
-      }
+      await dropVoicemailBlobs(env, { householdId: household.id });
       const devices = await store.listDevices(household.id);
       await store.deleteHousehold(household.id);
       for (const d of devices) await live.forgetDevice(household.id, d.id);
     }
+    await dropVoicemailBlobs(env, { accountId: account.id });
     await store.deleteAccount(account.id, now);
     return c.body(null, 204);
   });

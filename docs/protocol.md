@@ -117,6 +117,23 @@ Lounge phone: the person here toggles "open to chat" (ends with the session).
 | `id` | string (len ≤64) |  |  |
 | `open` | boolean | yes |  |
 
+### `greeting.begin`
+
+MENU → Voicemail → Record: the phone wants to record its greeting (a kids' phone: its own; a person's own phone: theirs). Answered with `greeting.ticket`, or `greeting.done` `not_allowed`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `kind` | `"name"` \| `"custom"` | yes |  |
+
+### `greeting.reset`
+
+MENU → Voicemail → Default: back to the spoken default greeting.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
 ### `call.answer`
 
 Accept an incoming call.
@@ -208,6 +225,7 @@ Sent after authentication and whenever guardians change settings.
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
+| `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 
 ### `lounge.idle`
 
@@ -248,6 +266,27 @@ Lounge phone: the session is over. Forget everything about the person (names, sp
 | `id` | string (len ≤64) |  |  |
 | `reason` | `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` | yes | `logout` = MENU → Log out on the phone; `left` = Leave in the app; `idle` = idle timeout; `replaced` = a new takeover; `removed` = the person was removed; `offline` = the phone disconnected. |
 
+### `greeting.ticket`
+
+Go ahead: record up to `maxMs` (name 3 s, greeting 30 s) and `POST /api/vm/greeting?ticket=&durationMs=` with a raw `audio/*` body. Single use, expires in 10 minutes.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `kind` | `"name"` \| `"custom"` | yes |  |
+| `ticket` | string (len ≥16, len ≤128) | yes |  |
+| `maxMs` | integer | yes |  |
+
+### `greeting.done`
+
+The phone asked to record (`greeting.begin`) and may not, or its greeting was reset (`greeting.reset`). A recorded greeting is confirmed by the upload's HTTP 201.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `result` | `"reset"` \| `"not_allowed"` | yes |  |
+| `kind` | `"default"` \| `"name"` \| `"custom"` | yes | The greeting callers hear now. |
+
 ### `call.ringing`
 
 Incoming call; device rings until answered, hung up, or ended.
@@ -269,6 +308,7 @@ Call progress update.
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
+| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 
 ### `rtc.config`
 
@@ -518,6 +558,15 @@ A voicemail was left for a phone in the guardian's household.
 | `deviceId` | string (len ≤64) | yes |  |
 | `from` | string (len ≤24) | yes |  |
 
+### `voicemail.inbox`
+
+A voicemail was left for you (your own inbox: `GET /api/voicemails`).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+| `from` | string (len ≤24) | yes |  |
+
 ### `call.ringing`
 
 Incoming call; device rings until answered, hung up, or ended.
@@ -539,6 +588,7 @@ Call progress update.
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
 | `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
+| `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 
 ### `rtc.config`
 

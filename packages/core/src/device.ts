@@ -1,4 +1,9 @@
-import type { DeviceToServer, EndReason, ServerToDevice } from "@openloungephone/protocol";
+import type {
+  DeviceToServer,
+  EndReason,
+  ServerToDevice,
+  VoicemailOffer,
+} from "@openloungephone/protocol";
 
 /**
  * Handset behaviour shared by every Open Lounge Phone device. The web emulator runs this directly and
@@ -12,7 +17,13 @@ export type DeviceState =
   | { kind: "offhook"; lastEnd?: EndReason } // handset up, waiting for a button
   | { kind: "dialing"; button: number; callId?: string } // outbound, not yet answered
   | { kind: "incoming"; callId: string; from: string } // ringing, handset down
-  | { kind: "incall"; callId: string; connected: boolean };
+  | { kind: "incall"; callId: string; connected: boolean }
+  /**
+   * Our call wasn't answered and the server offered voicemail: play the greeting and the tone,
+   * record, and send the message when the handset goes down (the shell does the audio and the
+   * upload; hanging up here only returns to idle).
+   */
+  | { kind: "voicemail"; offer: VoicemailOffer };
 
 export type DeviceInput =
   | { type: "hook"; state: "up" | "down" }
@@ -74,6 +85,9 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
   switch (s.kind) {
     case "dialing":
       if (s.callId !== undefined && s.callId !== msg.callId) return stay(s);
+      if (msg.state === "ended" && msg.voicemail) {
+        return stay({ kind: "voicemail", offer: msg.voicemail });
+      }
       if (msg.state === "ended") return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup" });
       if (msg.state === "active")
         return stay({ kind: "incall", callId: msg.callId, connected: true });
@@ -98,6 +112,7 @@ export function soundFor(s: DeviceState): Sound {
   switch (s.kind) {
     case "idle":
     case "incall":
+    case "voicemail": // the greeting, the tone and the recording are the shell's
       return "none";
     case "incoming":
       return "ring";

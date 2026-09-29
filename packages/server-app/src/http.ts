@@ -21,7 +21,8 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
-import { voicemailRoutes } from "./voicemail.ts";
+import { publicVoicemailRoutes } from "./vmTickets.ts";
+import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
@@ -156,6 +157,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   signupRoutes(api, env);
   publicPeopleRoutes(api, env);
   publicHubRoutes(api, env);
+  publicVoicemailRoutes(api, env, live);
 
   // --- authenticated --------------------------------------------------------
 
@@ -406,10 +408,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const user = c.get("user");
     const device = await manageable(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    // Voicemail rows cascade with the phone; their audio lives in the blob store.
-    for (const vm of await store.listVoicemails(user.householdId, 10_000)) {
-      if (vm.deviceId === device.id) await env.blobs.delete(vm.blobKey);
-    }
+    // Voicemail and greeting rows cascade with the phone; their audio lives in the blob store.
+    await dropVoicemailBlobs(env, { deviceId: device.id });
     const shared = (await store.listRemoteContacts(device.id)).map((r) => r.connectionId);
     await store.deleteDevice(device.id);
     await live.forgetDevice(user.householdId, device.id);

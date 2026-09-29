@@ -10,11 +10,13 @@ import {
   DECLINE_COOLDOWN_MS,
   KNOCK_TTL_MS,
   LOCAL_HOST,
+  VOICEMAIL_TICKET_TTL_MS,
   WHOLE_SERVER,
 } from "@openloungephone/db";
 import {
   AcceptBody,
   CallBody,
+  GreetingBody,
   HOST_RE,
   KnockBody,
   LoungeClaimBody,
@@ -45,7 +47,15 @@ import {
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
-import { depositVoicemail, MAX_VOICEMAIL_BYTES, readRecording } from "./voicemail.ts";
+import {
+  depositVoicemail,
+  type Greeting,
+  greetingOf,
+  greetingResponse,
+  MAX_VOICEMAIL_BYTES,
+  type Recording,
+  readRecording,
+} from "./voicemail.ts";
 
 /** Someone, as seen by this server: `host` is '' for a local account. */
 export interface PeerRef extends Party {
@@ -769,7 +779,10 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     return c.json(await receiveGuestDial(env, live, r.host, r.body));
   });
 
-  /** A voicemail for a phone here, from someone on its allow-list (raw audio body). */
+  /**
+   * A voicemail (raw audio body) for a phone here from someone on its allow-list, or with
+   * `kind=person`, for the person `to` (a handle) from someone they're connected with.
+   */
   app.post("/fed/v1/voicemail", async (c) => {
     const v = await verifyFedRequest(env, c.req.raw.clone(), MAX_VOICEMAIL_BYTES);
     if (!v.ok) return v.response;
@@ -782,14 +795,22 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (!from.success) return c.json({ error: "invalid sender" }, 400);
     const rec = await readRecording(c.req.raw, q.get("durationMs") ?? undefined);
     if (rec instanceof Response) return rec;
-    const ok = await receiveVoicemail(
-      env,
-      live,
-      { ...from.data, host: v.host },
-      q.get("to") ?? "",
-      rec,
-    );
+    const sender = { ...from.data, host: v.host };
+    const ok =
+      q.get("kind") === "person"
+        ? await receivePersonVoicemail(env, live, sender, q.get("to") ?? "", rec, {
+            viaPhone: q.get("via") ?? undefined,
+          })
+        : await receiveVoicemail(env, live, sender, q.get("to") ?? "", rec);
     return ok ? c.json({ ok: true }, 201) : c.json({ error: "not allowed" }, 403);
+  });
+
+  /** The greeting of someone here, for a caller whose call went to voicemail. */
+  app.post("/fed/v1/greeting", async (c) => {
+    const r = await signed(c.req.raw, GreetingBody);
+    if (r instanceof Response) return r;
+    const g = await greetingForPeer(env, { ...r.body.from, host: r.host }, r.body.to);
+    return g ? greetingResponse(g) : c.json({ error: "not allowed" }, 403);
   });
 
   return app;
@@ -812,8 +833,76 @@ export async function receiveVoicemail(
     (r) => r.connection.peerHost === from.host && r.connection.peerAccount === from.id,
   );
   if (!entry?.canCallDevice) return false;
-  await depositVoicemail(env, live, { device, fromUser: null, fromLabel: entry.label, ...rec });
-  return true;
+  const vm = await depositVoicemail(env, live, {
+    to: { deviceId: device.id },
+    fromUser: null,
+    fromLabel: entry.label,
+    fromAddress: `${from.handle}@${from.host || ownHost(env)}`,
+    since: env.now() - VOICEMAIL_TICKET_TTL_MS,
+    ...rec,
+  });
+  return !!vm;
+}
+
+/**
+ * The person `handle` here, as someone elsewhere (`from`) may reach them: an active connection
+ * that isn't blocked. Their primary membership is where federated calls ring and voicemail lands.
+ */
+async function connectedPerson(env: ServerEnv, from: PeerRef, handle: string) {
+  const { store } = env;
+  const account = await store.accountByHandle(handle);
+  if (!account || account.suspendedAt !== null) return undefined;
+  if (from.host === LOCAL_HOST && account.id === from.id) return undefined;
+  const conn = await store.connections.findPeer(account.id, from.host, from);
+  if (conn?.state !== "active" || conn.peerAccount !== from.id) return undefined;
+  if (await store.connections.blocked(account.id, from.host, from)) return undefined;
+  return { account, conn };
+}
+
+/** Stores a voicemail from someone elsewhere for a person here they're connected with. */
+export async function receivePersonVoicemail(
+  env: ServerEnv,
+  live: Coordinator,
+  from: PeerRef,
+  handle: string,
+  rec: Recording,
+  opts: { viaPhone?: string | undefined } = {},
+): Promise<boolean> {
+  const found = await connectedPerson(env, from, handle);
+  const home = found && (await primaryHousehold(env, found.account.id));
+  if (!found || !home) return false;
+  const who = found.conn.peerName || from.name;
+  const label = opts.viaPhone ? `${opts.viaPhone.slice(0, 24)} (${who})` : who;
+  const vm = await depositVoicemail(env, live, {
+    to: { userId: home.user.id },
+    fromUser: null,
+    fromLabel: label,
+    fromAddress: `${from.handle}@${from.host || ownHost(env)}`,
+    since: env.now() - VOICEMAIL_TICKET_TTL_MS,
+    ...rec,
+  });
+  return !!vm;
+}
+
+/**
+ * The greeting someone elsewhere hears when their call to a person or a phone here goes to
+ * voicemail. Only with an active connection (for a phone: they're on its allow-list).
+ */
+export async function greetingForPeer(
+  env: ServerEnv,
+  from: PeerRef,
+  to: GreetingBody["to"],
+): Promise<Greeting | undefined> {
+  if (to.kind === "person") {
+    const found = await connectedPerson(env, from, to.handle);
+    return found ? greetingOf(env, { accountId: found.account.id }) : undefined;
+  }
+  const device = await env.store.getDevice(to.deviceId);
+  if (!device || device.ownerUserId || device.kind === "lounge") return undefined;
+  const entry = (await env.store.listRemoteContacts(device.id)).find(
+    (r) => r.connection.peerHost === from.host && r.connection.peerAccount === from.id,
+  );
+  return entry?.canCallDevice ? greetingOf(env, { deviceId: device.id }) : undefined;
 }
 
 /**

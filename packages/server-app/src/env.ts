@@ -184,6 +184,8 @@ export interface RoomSnapshot {
   /** For the call log. */
   startedAt?: number;
   answered?: boolean;
+  /** Voicemail if the call goes unanswered: for whom, and the caller as its sender. */
+  vm?: { target: import("./vmTickets.ts").VmTarget; from: import("./vmTickets.ts").VmCaller };
 }
 
 /** One WebSocket, as seen by the server. */
@@ -203,7 +205,8 @@ export const CloseCode = {
 } as const;
 
 export const HELLO_TIMEOUT_MS = 10_000;
-export const RING_TIMEOUT_MS = 30_000;
+/** Default ring time before voicemail (a person or phone can set their own, 10–60 s). */
+export const RING_TIMEOUT_MS = 25_000;
 export const CONNECT_TIMEOUT_MS = 20_000;
 /** A Lounge phone's QR nonce is valid this long (and single use); the phone asks for more. */
 export const LOUNGE_NONCE_TTL_MS = 120_000;
