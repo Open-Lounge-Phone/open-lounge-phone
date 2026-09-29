@@ -14,15 +14,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright-core";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import { api, connectLocally, type ServerTarget, signUp } from "../twoServers.ts";
-import { CHROMIUM_ARGS, Companion, until } from "./browser.ts";
+import { CHROMIUM_ARGS, Companion, Phone, until } from "./browser.ts";
 
 const APP = fileURLToPath(new URL("../../../apps/server-cloudflare/", import.meta.url));
 const enabled = process.env.OLP_SFU_CHECK === "1";
 let proc: ChildProcess | undefined;
 let dir: string | undefined;
 let browser: Browser | undefined;
+let server: ServerTarget;
+/** Shared by both tests: Amy, Ben and Cat, connected (Amy ↔ Ben, Amy ↔ Cat), in companions. */
+let people: { a: Companion; b: Companion; c: Companion; address: string } | undefined;
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -87,6 +90,18 @@ async function launch(): Promise<ServerTarget> {
   });
   return { base: origin, origin };
 }
+
+beforeAll(async () => {
+  if (!enabled) return;
+  server = await launch();
+  const pw = await import(process.env.PLAYWRIGHT_CORE ?? "playwright-core");
+  const chromium = pw.chromium ?? pw.default?.chromium;
+  browser = (await chromium.launch({
+    headless: process.env.OLP_LIVE_HEADED !== "1",
+    args: CHROMIUM_ARGS,
+    ...(process.env.CHROME ? { executablePath: process.env.CHROME } : {}),
+  })) as Browser;
+}, 180_000);
 
 afterAll(async () => {
   await browser?.close();
@@ -165,15 +180,7 @@ async function inRoom(c: Companion, people: number): Promise<void> {
 it.skipIf(!enabled)(
   "rooms through the real SFU: three people, audio both ways, leave and rejoin, then a 3-way merge",
   async () => {
-    const server = await launch();
-    const pw = await import(process.env.PLAYWRIGHT_CORE ?? "playwright-core");
-    const chromium = pw.chromium ?? pw.default?.chromium;
-    browser = (await chromium.launch({
-      headless: process.env.OLP_LIVE_HEADED !== "1",
-      args: CHROMIUM_ARGS,
-      ...(process.env.CHROME ? { executablePath: process.env.CHROME } : {}),
-    })) as Browser;
-
+    const b0 = browser as Browser;
     // Three people with their own spaces; Amy's phone room is open to her connections.
     const amy = await signUp(server, "amy", "Amy");
     const ben = await signUp(server, "ben", "Ben");
@@ -186,17 +193,19 @@ it.skipIf(!enabled)(
     expect(made.status, JSON.stringify(made.json)).toBe(201);
     const address = made.json.address as string;
 
-    const [a, b, c] = [
+    const actors = [
       new Companion(server.origin, "amy"),
       new Companion(server.origin, "ben"),
       new Companion(server.origin, "cat"),
-    ];
+    ] as const;
+    const [a, b, c] = actors;
+    people = { a, b, c, address };
     for (const [actor, person] of [
       [a, amy],
       [b, ben],
       [c, cat],
     ] as const) {
-      await actor.open(browser);
+      await actor.open(b0);
       await actor.resume(person.token);
       actor.person = person;
     }
@@ -285,4 +294,98 @@ it.skipIf(!enabled)(
     await a.page.locator(".overlay-room").waitFor({ state: "detached", timeout: 20_000 });
   },
   420_000,
+);
+
+it.skipIf(!enabled)(
+  "a phone adds a caller and merges from its MENU; its audio goes through the SFU",
+  async () => {
+    if (!people) throw new Error("run with the first test");
+    const { a, b, c } = people;
+    const amy = a.person;
+    // Amy's own desk phone (a browser phone), with Ben on key 1 and Cat on key 2.
+    const phone = new Phone(server.origin, "amydesk");
+    await phone.open(browser as Browser, "kids");
+    const code = (await phone.facts()).pairing;
+    const paired = await api(amy, "/devices/pair", {
+      body: { code, name: "Amy's desk", mode: "personal" },
+    });
+    expect(paired.status, JSON.stringify(paired.json)).toBe(201);
+    const deviceId = await phone.authed();
+    const conns = (await api(amy, "/connections")).json.connections as {
+      id: string;
+      address: string;
+    }[];
+    for (const [slot, who] of [
+      [0, b.person.address],
+      [1, c.person.address],
+    ] as const) {
+      const conn = conns.find((x) => x.address === who);
+      const put = await api(amy, `/devices/${deviceId}/remote-contacts/${conn?.id}`, {
+        method: "PUT",
+        body: {
+          label: slot === 0 ? "Ben" : "Cat",
+          canCallDevice: true,
+          deviceCanCall: true,
+          bypassQuietHours: false,
+        },
+      });
+      expect(put.status, JSON.stringify(put.json)).toBe(200);
+      const key = await api(amy, `/devices/${deviceId}/buttons/${slot}`, {
+        method: "PUT",
+        body: { userId: put.json.id },
+      });
+      expect(key.status).toBe(204);
+    }
+    // The server sends the phone its new keys.
+    await until(
+      "the phone's keys",
+      () => (phone.lastFrame("config")?.buttons as unknown[] | undefined)?.length === 2,
+      20_000,
+    );
+
+    // Lift, key 1 → Ben answers.
+    await phone.hook();
+    await phone.press("1");
+    await b.answer();
+    await until(
+      "phone in call",
+      async () => (await phone.facts()).state.includes('"connected":true'),
+      30_000,
+    );
+    // MENU → 1 Add caller → key 2 → Cat answers.
+    await phone.press("m");
+    await phone.press("1");
+    await until(
+      "phone holding",
+      async () => (await phone.facts()).state.includes('"held"'),
+      20_000,
+    );
+    await phone.press("2");
+    await c.answer();
+    await until(
+      "phone in the consult call",
+      async () => {
+        const st = (await phone.facts()).state;
+        return (
+          st.includes('"kind":"incall"') && st.includes('"held"') && st.includes('"connected":true')
+        );
+      },
+      30_000,
+    );
+    // MENU → 1 Merge.
+    await phone.press("m");
+    await phone.press("1");
+    await phone.waitKind("inroom", 30_000);
+    for (const x of [b, c]) await inRoom(x, 3);
+    expect((await phone.facts()).display).toMatch(/3-WAY CALL|3 IN ROOM/i);
+    await hearing("phone (3-way)", phone.page, 2);
+    for (const x of [b, c]) await hearing(`${x.handle} (with the phone)`, x.page, 2);
+    // Hanging up leaves the room; the other two carry on.
+    await phone.hook();
+    await phone.waitKind("idle");
+    for (const x of [b, c]) await inRoom(x, 2);
+    for (const x of [b, c])
+      await x.page.locator(".overlay-room").getByRole("button", { name: "Leave" }).click();
+  },
+  240_000,
 );
