@@ -58,11 +58,11 @@ The hub shows how far its donations go, computed from its configuration by
 configuration — `FUNDING_BALANCE_USD=150`, `BASE_COST_USD_PER_MONTH=5`,
 `COST_PER_ACTIVE_USER_USD_PER_MONTH=0.02` — that is: **$150 in funding**, **every $1/month
 covers about 50 people**, and **$150 keeps the hub running for ~375 people for a year (or ~1,000
-people for 6 months)**. The site's funding page, its home page card and the companion's funding
-card all use the same function.
+people for 6 months)**. The [website](https://github.com/Open-Lounge-Phone/website)'s funding
+page and home page card and the companion's funding card all use the same function.
 
 Donations go through **GitHub Sponsors**. The link is one setting, `SPONSOR_URL`, used by the
-site build and by the hub; while it's unset the Sponsor button is hidden (never a placeholder).
+website build and by the hub; while it's unset the Sponsor button is hidden (never a placeholder).
 The project is proudly supported by [unsubscribe.llc](https://www.unsubscribe.llc/).
 
 ## For full assurance, run your own

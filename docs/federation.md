@@ -6,8 +6,8 @@ phone) and F4 (CI interop, spec versioning) are planned.**
 Owner direction (2026-09-27): people should be able to send and accept connection invites
 regardless of which server they're on, and call each other through a fair, seamless
 server-to-server protocol. No central server, and the owner's public-good hub is just one more
-server. The buildable phases are in the plan (`~/.claude/plans/we-build-on-this-dapper-wand.md`:
-P1 = F0, P2 = F1 connections and knocks, P3 = F2 calls, P4 = the public hub, P5 = F4 interop).
+server. The buildable phases map to the README's status table: P1 = F0, P2 = F1 connections
+and knocks, P3 = F2 calls, P4 = the public hub, P5 = F4 interop.
 
 Owner decisions (2026-09-28):
 - **Knock, then talk.** Anyone may send one contact request (a *knock*) to `name@server`. It is

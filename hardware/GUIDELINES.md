@@ -22,7 +22,7 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 |---|---|---|
 | Respect strapping pins | **adapted** | The advice lists GPIO 0/2/5/12/15. Those are the *original ESP32's* straps. The ESP32-S3's are **GPIO0, GPIO3, GPIO45, GPIO46**; each has the required pull in `pin_table.yaml`, checked by `check_pin_table`. |
 | Octal PSRAM pins | adopted | GPIO35–37 left unconnected (N16R8), enforced by the pin table. |
-| Antenna ≥ 15 mm from metal, keep-out on all layers | **adapted** | In the compact base no board edge is ≥ 15 mm from the metal hook tubes and brass inserts, so the module is the **ESP32-S3-WROOM-1U** (U.FL) and a small adhesive FPC antenna sits on the inside of the shell wall, ≥ 15 mm from metal (placement in ENCLOSURE.md / LAYOUT.md). Reverting to the PCB-antenna WROOM-1 needs a board edge with that clearance. |
+| Antenna ≥ 15 mm from metal, keep-out on all layers | **adapted** | In the compact base no board edge is ≥ 15 mm from the metal hook tubes and brass inserts, so the module is the **ESP32-S3-WROOM-1U** (U.FL) and a small adhesive FPC antenna sits on the inside of the shell wall, ≥ 15 mm from metal (placement in LAYOUT.md and the enclosure). Reverting to the PCB-antenna WROOM-1 needs a board edge with that clearance. |
 | Pin allocation via expander when GPIOs run out | adopted | AW9523B (16 I/O, I2C) handles keys, side switches and LED power; the ESP32 keeps the timing-critical signals (I2S, SPI, RMT, UART). |
 
 ## 3. Power, sensors, grounding
@@ -43,9 +43,9 @@ Rules the schematic and layout follow. They combine the owner-supplied "toy hard
 | **Captive keycaps** (new) | adopted | A pulled-off keycap is a small part and gets lost. Keycaps sit under the enclosure skin with a retaining lip (keycap skirt wider than the 19.5 mm skin hole, inserted from inside), so they can't be pulled out without opening the case. Replacing a switch means removing the case screws. Record in the enclosure spec; the PCB impact is none. |
 | Hardware RC debounce on every key | **rejected** | These are metal-contact MX switches read through the AW9523B's interrupt; software debounce (5–10 ms) is reliable and standard for keyboards. RC filters would add 20 parts and slow the interrupt edge. Keep a 100 nF footprint (DNP) only on the hook/mute lines if field testing shows problems. |
 | E-ink strip: drop-in, not soldered | adopted | FPC into a 24-pin 0.5 mm ZIF connector; replaceable without tools. |
-| Mounting holes | **adapted** | The advice says M3/M4. Board space under the handset trough is tight, so **M2.5 plated holes with generous copper keep-out** (5.5 mm) and **plastite screws into bosses**, one within 10 mm of every connector and switch cluster so impact loads go into the case, not solder joints. The key plate, not the PCB, takes keystroke force. |
+| Mounting holes | **adapted** | The advice says M3/M4. Board space under the handset trough is tight, so **M2.5 plated holes with generous copper keep-out** (5.5 mm) and **plastite screws into bosses**, one within 10 mm of every connector and switch cluster so impact loads go into the case, not solder joints. The switch plate (the prototype box lid), not the PCB, takes keystroke force. |
 | Through-hole where force is applied | adopted | USB-C receptacles (power and handset) with through-hole shell tabs, right-angle through-hole MUTE slide, ZIF/FFC connectors with hold-down tabs. Plain SMD pads are not used for anything a user pulls on. |
-| Clear silkscreen for maintenance | adopted | Label connectors, test points, variant/DNP options, key numbers, board name/revision, the owner's signature logo and "Open Lounge Phone", and "CERN-OHL-S-2.0" on the board. |
+| Clear silkscreen for maintenance | adopted | Label connectors, test points, the DNP tuning cap, key numbers, board name/revision, the owner's signature logo and "Open Lounge Phone", and "CERN-OHL-S-2.0" on the board. |
 | Stackup | adopted | 4-layer JLCPCB standard (1.6 mm): L1 signal + parts, L2 **solid GND**, L3 power pours (3V3, VSYS, 3V0, VLED) + slow signals, L4 signal. |
 
 ## 5. Layout rules (JLCPCB 4-layer standard capability, with margin)

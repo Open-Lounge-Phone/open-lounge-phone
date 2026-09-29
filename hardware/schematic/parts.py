@@ -15,7 +15,7 @@ from lib import CAP_EXTRA, RES_EXTRA, SPECS, spec
 
 spec(
     # WROOM-1U (U.FL, external antenna), not WROOM-1 (PCB antenna): in the compact base no
-    # board edge is >= 15 mm from the metal hook tubes, standoffs and inserts (ENCLOSURE.md s8),
+    # board edge is >= 15 mm from the metal hook tubes, standoffs and inserts (GUIDELINES.md §2),
     # so the antenna goes on a cable to the shell wall. Same pinout; the module then sits under
     # the key deck. Owner can revert to C2913202 / RF_Module:ESP32-S3-WROOM-1 (LAYOUT.md).
     "ESP32-S3-WROOM-1", ref="U", mpn="ESP32-S3-WROOM-1U-N16R8", manufacturer="Espressif",

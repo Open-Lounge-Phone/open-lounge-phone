@@ -87,7 +87,7 @@ are deferred to a future board.
 
 ## What is captured
 
-**The board: 286 parts (12 keys), all blocks from DESIGN.md §3–§5, §6–§9 and §11.3.**
+**The board: 241 parts (12 keys), all blocks from DESIGN.md §3–§5, §6–§9 and §11.3.**
 
 - **Power:**
   - USB-C sink with separate 5.1 k Rd on CC1/CC2.
@@ -248,10 +248,10 @@ are deferred to a future board.
 
 ## What's left
 
-Layout is done as code in `hardware/layout/` (see [LAYOUT.md](LAYOUT.md)). The project
+Layout is code too, in `hardware/layout/` (see [LAYOUT.md](LAYOUT.md)); the board is placed, not routed yet. The project
 footprints (hot-swap socket, electret, NFC coil, e-ink FPC connector) live in
-`layout/footprints/openloungephone.pretty`. Passives are 0603 by default (hand-solderable; see LAYOUT.md "Hand assembly").
+`layout/footprints/openloungephone.pretty`. Passives are 0603 by default (hand-solderable; see [ASSEMBLY.md](ASSEMBLY.md)).
 
-1. **Mechanical integration:** enclosure (the prototype box is `enclosure/proto_box.py`),
-   and the hook-rest parts (not electrical).
+1. **Mechanical integration:** the product enclosure and hook rest (not designed yet; the
+   prototype box is `enclosure/proto_box.py`).
 2. **Before layout freeze:** close the unverified items above.

@@ -40,7 +40,7 @@ The software works end to end today; the hardware is being designed in the open.
 | M5 | One-command deploy CLI and desktop app | deploy script done; the rest not started |
 | P2b, P3.5, P5, P6 | Per-buddy call timeline; rooms (party lines, 3-way calls); interop tests in CI and a versioned federation spec; professional features (directory, hunt groups, business hours) | planned |
 | Firmware | ESP32-S3 firmware, starting on dev boards | not started |
-| Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, USB-C handset port) in a 3D-printable base | schematic done; board placed, routing next; enclosure in progress |
+| Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, USB-C handset port) in a 3D-printable base | schematic done; board placed, routing next; printable prototype box; product enclosure not designed yet |
 
 More: [architecture](docs/architecture.md), [federation](docs/federation.md),
 [the public hub](docs/hub.md), [privacy](docs/privacy.md), [hardware](hardware/README.md).
@@ -59,9 +59,17 @@ apps/server-cloudflare Worker + Durable Objects + D1 + R2, and the deploy script
 apps/device-web      the phone in a browser (keys, LEDs, status strip, handset)
 apps/companion       companion PWA for guardians, grown-ups and operators
 firmware/            ESP32-S3 firmware (later)
-hardware/            schematic, board layout and enclosure, all as code
+hardware/            schematic, board layout and prototype box, all as code
 docs/                architecture, federation, hub, privacy, generated protocol reference
 ```
+
+## Repositories
+
+| Repository | What |
+|---|---|
+| [open-lounge-phone](https://github.com/Open-Lounge-Phone/open-lounge-phone) (this one) | the product: software, firmware, hardware sources, docs and tests |
+| [website](https://github.com/Open-Lounge-Phone/website) | the project site, [openloungephone.app](https://openloungephone.app), built from this repository's docs |
+| [.github](https://github.com/Open-Lounge-Phone/.github) | the GitHub organization profile |
 
 ## Try it
 

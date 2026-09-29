@@ -55,7 +55,7 @@ Kept: 0 Ω USB series R5/R6 and the NFC tuning cap (value set in EVT; the only D
 ```sh
 cd hardware
 make build     # schematic: ERC, checks, netlists, BOMs, cost roll-up (one board, one BOM)
-make layout    # footprints -> place + route (cached) -> key plate -> checks -> fab outputs
+make layout    # footprints -> place + route (cached) -> checks -> fab outputs
 make all       # both
 make layout FORCE=1   # re-place and re-route even if the inputs did not change
 ```
@@ -73,7 +73,6 @@ plateaued at 50-120 unrouted connections.
 | Logo (owner signature) | `art/make_logo.py` (run with `.venv/bin/python`) | `openloungephone_logo_F/B.kicad_mod`, `art/logo-preview.png` |
 | Place | `layout/build_board.py <board> --stage place` | `kicad/<board>/<board>.kicad_pcb` (+ `.kicad_pro`, `.kicad_dru`, `fp-lib-table`) |
 | Route + pours + stitching | `layout/build_board.py <board> --stage route` | same file, `kicad/<board>/unrouted.txt` |
-| Key plate | `layout/build_board.py plate` | `kicad/plate/plate.kicad_pcb` |
 | Checks | `layout/checks.py <board>` | `build/<board>/layout/checks.txt`, `drc.json`, `drc.rpt` |
 | Fab outputs | `layout/export.py <board>` | `build/<board>/layout/` (below) |
 | Everything, cached | `layout/run_layout.py` | all of the above |
@@ -94,6 +93,8 @@ there are overwritten on the next run.
 
 ### Fab outputs (`build/<board>/layout/`)
 
+Generated, not committed; they will ship as GitHub Release assets when the board is final.
+
 | File | Contents |
 |---|---|
 | `<board>-gerbers.zip` | Gerber X2 (all copper, mask, paste, silk, Edge.Cuts) + Excellon (PTH and NPTH separate) + README |
@@ -104,8 +105,6 @@ there are overwritten on the next run.
 | `<board>.step` | 3D model (DNP parts omitted) |
 | `render-top.png`, `render-bottom.png`, `render-iso.png` | ray-traced renders |
 | `drc.json`, `drc.rpt`, `checks.txt` | DRC + layout-check results |
-
-Key plate: `build/plate/` (Gerbers + drill zip, `plate.dxf` for laser/water-jet, render).
 
 JLCPCB is the reference fab (cheapest; LCSC codes, basic-part choices and the JLC04161H-7628
 stackup), and every board also has the fab-agnostic set above. See [ASSEMBLY.md](ASSEMBLY.md) for
@@ -120,16 +119,17 @@ The former deck board (keys, LEDs, e-ink, NFC, ALS) is merged into the main boar
 | Board | Size | Layers | Parts on | Notes |
 |---|---|---|---|---|
 | main | 180 × 88 mm, R8.5 corners, 9 × M2.5 holes | 4 | both | 12 MX hot-swap sockets + 13 SK6812MINI-E on the bottom (keys on top); rear edge: handset USB-C (x 153.8); right edge: power USB-C (y 40); right edge: VOL−/VOL+/MUTE (bottom side) |
-| plate | 117 × 84 mm, 1.6 mm FR4 | 2 (no copper) | none | 12 × 14.0 mm switch cut-outs, e-ink window, light holes; screws to the holes at (34.7, 5) (145.3, 5) (34.7, 82.6) (145.3, 82.6). The prototype box's lid is the plate instead (enclosure/PROTO_BOX.md). |
+
+The MX switch plate is the prototype box's printed lid ([enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md)).
 
 Geometry (board coordinates, x right, y down from the rear edge): outline 180 × 88 R8.5;
-mounting holes (34.7, 5.0) (145.3, 5.0) (34.7, 82.6) (145.3, 82.6) (145.1, 29.4) (supports /
-plate screws) and the shell bolts (5.0, 29.8) (26.0, 29.8) (154.0, 29.8) (176.0, 29.8); keys at
+mounting holes (34.7, 5.0) (145.3, 5.0) (34.7, 82.6) (145.3, 82.6) (145.1, 29.4) (supports)
+and the shell bolts (5.0, 29.8) (26.0, 29.8) (154.0, 29.8) (176.0, 29.8); keys at
 x 42.4 + 19.05 i, rows y 14.8 (1 2 3 4 5 MENU) and 72.8 (6 7 8 9 0 BACK), the 13.5 mm switch
 bodies are top-side part keep-outs; e-ink panel outline (at plate level, parts ≤ 2.8 mm may sit
 under it) x 41-120, y 25.45-62.15; hall U10 at (171.0, 18.8) under the right plunger; RESET/BOOT
 at (158.5, 12.5) / (158.5, 20.8); mic MK1 at (19.5, 25.0); status LED (127, 62.8), privacy LED
-(110, 64.2), ALS (105, 64.2) under the plate's light holes.
+(110, 64.2), ALS (105, 64.2) under the switch plate's light holes.
 
 Height rules from the prototype box (enclosure/proto_box.py checks them against the placed
 board): top parts ≤ 3.0 mm (≤ 3.8 mm where the lid gets a pocket: USB-C, WROOM-1U);
@@ -141,14 +141,14 @@ nothing taller than 1 mm on the bottom under the speaker (x 59-102, y 32.5-55).
 Generic 1.6 mm 4-layer, 7628 prepreg (JLC04161H-7628 / PCBWay standard), ENIG:
 
 | Layer | Use |
-|---|---|---|
-| L1 F.Cu 35 µm | parts, signals, GND fill | e-ink boost, sensors, GND fill, signals |
-| prepreg 0.21 mm εr 4.4 | | |
-| L2 In1.Cu | **solid GND** (no routing) | **solid GND** |
-| core 1.065 mm | | |
-| L3 In2.Cu | 3V3 and VSYS pours + slow signals, GND fill | slow signals + GND fill |
-| prepreg 0.21 mm | | |
-| L4 B.Cu 35 µm | signals, test pads, GND fill | sockets, LEDs, expander, NFC, ZIFs, GND fill |
+|---|---|
+| L1 F.Cu 35 µm | parts, signals, GND fill |
+| prepreg 0.21 mm εr 4.4 | |
+| L2 In1.Cu | **solid GND** (no routing) |
+| core 1.065 mm | |
+| L3 In2.Cu | 3V3, VSYS, 3V0 and VLED pours + slow signals, GND fill |
+| prepreg 0.21 mm | |
+| L4 B.Cu 35 µm | signals, hot-swap sockets, key LEDs, test pads, GND fill |
 
 USB D+/D− (both pairs): 0.27 mm tracks, 0.15 mm gap on L1 over the L2 plane. With 0.21 mm to the
 plane and εr 4.4 this is ≈ 90 Ω differential by the IPC-2141 edge-coupled estimate (JLC's
@@ -283,7 +283,7 @@ From `make build` (`schematic/cost.py`, `cost_model.yaml`; LCSC/JLC price ladder
 
 | Board | 1k units | 10k units | one-off, JLC PCBA (5 PCBs, 2 assembled) | one-off, OSH Park bare boards + hand assembly |
 |---|---|---|---|---|
-| main (one BOM, 2026-09-28) | 39.99 | 38.12 | 208.49 | 409.27 |
+| main (one BOM, 2026-09-28) | 39.63 | 37.88 | 204.49 | 333.10 |
 
 (Single board since 2026-09-27: one PCB/PCBA setup instead of two and no FFC; the one-off
 builds are ≈ $23 and ≈ $85 cheaper per phone than with the stacked pair.)
@@ -299,6 +299,6 @@ JLC extended-library parts (≈ $3 setup each on small orders): 35
 BLM18 (basic), 220 pF X7R to basic. Candidate flagged, not applied (it changes a value):
 R38 4.3 kΩ → 4.7 kΩ (AEC-reference divider, tuned in EVT anyway). Not a candidate: R7 1.1 kΩ
 sets the BQ24074 ILIM and 1.1 kΩ is the datasheet minimum.
-OSH Park formula: $10/in² for 4-layer (3 copies), $5/in² for the 2-layer plate.
+OSH Park formula: $10/in² for 4-layer (3 copies).
 
 <!-- GAPS -->

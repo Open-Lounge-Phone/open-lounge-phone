@@ -1,18 +1,20 @@
 # Prototype box (proto_box.py)
 
 A plain, functional box for bring-up and desk testing of the **single 180 × 88 mm board**
-(owner decision 2026-09-27: one board, keys on it). It is not the product enclosure (`olp/`,
-ID_SPEC.md); it only has to hold the board, act as the MX switch plate, and give a cradle for
-the handset something to mount to, plus an on/off-hook switch for prototyping.
+(one board, keys on it). It is not the product enclosure (not designed yet); it only has to
+hold the board, act as the MX switch plate, and give a cradle for the handset something to
+mount to, plus an on/off-hook switch for prototyping.
 
 ```sh
-cd hardware/layout && <KiCad python> dump_parts.py main ../enclosure/build/proto/board_parts.json
-cd ../enclosure && .venv/bin/python proto_box.py [--render]
+cd hardware/enclosure
+make parts     # optional: build/proto/board_parts.json from the placed board (KiCad 10)
+make proto     # STL + STEP + fit checks (make render also writes proto.png)
 ```
 
-Outputs in `build/proto/`: `tray`, `lid`, `plunger`, `sleeve` as STL + STEP (git-ignored),
-`checks.txt` (fit checks against the board's parts; exit 1 on FAIL) and `proto.png`.
-`make` does not build it; run it by hand as above.
+Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `plunger`, `sleeve` as
+STL + STEP, `checks.txt` (fit checks against the board's parts; exit 1 on FAIL) and, with
+`make render`, `proto.png`. Without `board_parts.json` the checks against the board's parts are
+skipped. `make proto` in `hardware/` runs the same.
 
 **Designed for industrial printing (MJF/SLS/SLA class)**, to nominal dimensions with 0.1 mm
 clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the key cutouts

@@ -174,7 +174,7 @@ handset audio, a ringer speaker, and radios and sensors. Hardware details and pa
    adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
    board.
 
-Planned software phases (see the plan in CLAUDE.md): a per-buddy call timeline (P2b), rooms —
+Planned software phases (see the status table in the [README](../README.md)): a per-buddy call timeline (P2b), rooms —
 party lines, 3-way calls, dialable room addresses — on an SFU (P3.5), interop tests in CI and a
 versioned federation spec (P5), and professional features such as a directory, hunt groups and
 business hours (P6). There is no text chat and no phone-network bridge.

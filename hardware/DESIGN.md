@@ -1,7 +1,7 @@
 # Open Lounge Phone Hardware Design — "Trimline" r0.1
 
 Status: **proposal / pre-EVT**. Owner: hardware. License: CERN-OHL-S-2.0 (this document and all
-derived KiCad/enclosure files).
+derived KiCad and enclosure files).
 
 This document picks the parts, board partitioning, envelope, pin map, power, BOM and staging for the
 first custom Open Lounge Phone: a **Trimline-style corded phone** (slim base + handset on a coiled
@@ -56,8 +56,12 @@ Product-owner constraints incorporated (revision of 2026-09-27):
 > - **ESP32 module: WROOM-1U (U.FL + external FPC antenna on the shell wall)** instead of the
 >   PCB-antenna WROOM-1 (layout, 2026-09-27): in base A no main-board edge is ≥ 15 mm from the
 >   hook tubes, standoffs and inserts. Same pinout and firmware; +≈$0.45 at scale for the antenna.
-> - Main-board geometry follows `enclosure/params.yaml → main_intent` (180 × 88, R8.5, 9 M2.5
->   holes, hall U10 at (171.0, 18.8), handset USB-C at x = 24, power USB-C at x = 159).
+> - Board geometry lives in `layout/boards.yaml` (180 × 88, R8.5, 9 M2.5 holes, hall U10 at
+>   (171.0, 18.8), handset USB-C on the rear edge at x 153.8, power USB-C on the right edge at
+>   y 40; LAYOUT.md §2).
+> - **No FR4 key plate (2026-09-29):** the MX switch plate is the printed lid/top of the base
+>   (the prototype box's lid today, `enclosure/PROTO_BOX.md`); the separate FR4 plate in the
+>   older sections below is dropped. The product enclosure is not designed yet.
 > - Layout, fab outputs, costs: [LAYOUT.md](LAYOUT.md), [ASSEMBLY.md](ASSEMBLY.md).
 
 Anything marked **[UNVERIFIED]** is an estimate or a datasheet detail I could not confirm online;
@@ -73,7 +77,7 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 | 2 | **Handset: an off-the-shelf USB-C (UAC 1.0) handset** (G-style, Native Union POP class, or any USB-C headset) on a standard **USB-C to USB-C cable**; the ESP32-S3's native USB is the host (owner, 2026-09-27; *supersedes the passive 4P4C/RJ9 handset*). The hook magnet is in the base's plunger, not the handset. | No custom handset to build; any C-to-C cable (coiled or not) works; the digital link has no analog cord to pick up Wi-Fi buzz. |
 | 3 | **MCU: ESP32-S3-WROOM-1-N16R8** (pre-certified module, 16 MB flash, 8 MB octal PSRAM). | Espressif's AFE/AEC (ESP-SR) and esp-webrtc both target the S3. The C5 lacks AFE support and the P4 costs too much. |
 | 4 | **Audio: ES8311 (DAC/earpiece driver) + ES7210 (4-ch ADC) + NS4150B (3 W class-D)**, the same chipset as ESP32-S3-Korvo-2 / S3-BOX-3. ES7210 ch3 records the **analog AEC reference**. | This is Espressif's known-good AEC topology, so the dev kit matches the product. INMP441/MAX98357A can't serve a passive handset and give no hardware reference. |
-| 5 | **Keys: 12 × MX-compatible switches** (owner decision 2026-09-27) in **Kailh CPG151101S11 hot-swap sockets**, on a **1.6 mm FR4 plate**, DSA/relegendable 1u keycaps, two rows of six: `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`. No SPEAKER/END keys: hang up = handset on hook, speakerphone is a menu item. | This follows the owner's direction. Relegendable caps let kids' phones carry photos, and hot-swap means a parent can fix a key in 30 s. |
+| 5 | **Keys: 12 × MX-compatible switches** (owner decision 2026-09-27) in **Kailh CPG151101S11 hot-swap sockets**, on a **switch plate (the printed lid)**, DSA/relegendable 1u keycaps, two rows of six: `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`. No SPEAKER/END keys: hang up = handset on hook, speakerphone is a menu item. | This follows the owner's direction. Relegendable caps let kids' phones carry photos, and hot-swap means a parent can fix a key in 30 s. |
 | 6 | **Per-key LEDs: 13 × SK6812MINI-E** (12 keys + 1 status), reverse-mounted, on one RMT GPIO. A **hardwired red privacy LED** lights whenever mic bias is present. | With no screen, the keys are the status surface. The privacy LED can't be overridden by firmware. |
 | 7 | **E-ink strip: Good Display GDEY029T94** (2.9", 296 × 128, SSD1680, active 66.9 × 29.1 mm), placed **between the two key rows** so every contact key has its label directly above or below it. I compared 7/14-segment LED arrays (HT16K33), dot-matrix, a single 0.91" SSD1306 OLED and per-key OLEDs (§7.2). | 4 key columns at 19.05 mm = 76.2 mm, which matches the 79 mm panel. It's the only option with per-key labels, zero light emission at night and no burn-in. It renders a QR at 22 mm, which is only enough at ~20–25 cm (§7.1). *The e-ink strip is now standard on the one board; the "Lite" and Qwiic-display options are superseded (2026-09-28).* |
 | 8 | **Lounge takeover = QR (strip, or printed) / NFC tap + press-the-flashing-key proof.** Implemented in software today (single-use QR nonce + key proof, also for guests from other servers). *mmWave presence is deferred with the radar (2026-09-28).* | A photographed code is useless without someone physically at the phone. |
@@ -81,8 +85,8 @@ see §17 for the full list. Prices are 1k-qty estimates in USD unless an LCSC li
 | 10 | **Power: USB-C sink (5.1 kΩ Rd, no PD) → BQ24074 power-path** (always fitted: OVP, input current limit, optional battery) **→ 3.3 V buck + 3.0 V low-noise analog LDO.** The 1S battery charger and fuel gauge are always fitted; the pack itself is optional. *The supercap hold-up is removed (2026-09-28).* A Lounge phone needs a ≥ 1.5 A USB-C source for full features (§9.2a). | Mains-powered desk device; a USB power bank *is* the UPS. |
 | 11 | **NFC: ST25DV04K dynamic tag** with a PCB coil, on every board. *Radar (HLK-LD2410C) removed (2026-09-28): Lounge presence is deferred to a possible future board.* | NFC tap covers setup, pairing and lounge takeover. |
 | 12 | **Security:** Secure Boot v2 + flash encryption (release) + HMAC-protected NVS encryption. The **Ed25519 seed is derived at boot by the eFuse-keyed HMAC peripheral and never stored in flash.** Protocol should add **alg negotiation (ed25519 \| p256)** now. | The S3's DS peripheral is RSA-only and ATECC608B is P-256-only. P-256 opens the door to ESP32-C5/P4 on-chip ECDSA keys later. |
-| 13 | **PCBs: one board** (owner, 2026-09-27): 4-layer 180 × 88 mm with keys, LEDs, e-ink, NFC and all electronics; plus the key plate (FR4 or the printed top). Supersedes the 3-board main + deck + plate set and its 24-pin FFC. | One fab/assembly setup, no FFC, connectors or standoffs; cheapest one-off. |
-| 14 | **Cost (current build roll-up, `build/main/cost.txt`):** board parts ≈ $16.5 at 1k; with PCB, assembly and off-board parts (switches, caps, speaker, e-ink panel, USB-C handset, antenna, battery) ≈ **$40 per phone at 1k, ≈ $38 at 10k**. A one-off build through JLCPCB is ≈ $208 per phone (setup and extended-part fees dominate). | Inside the owner's revised $28–40 goal at scale (§12). |
+| 13 | **PCBs: one board** (owner, 2026-09-27): 4-layer 180 × 88 mm with keys, LEDs, e-ink, NFC and all electronics; the switch plate is the printed lid. Supersedes the 3-board main + deck + plate set and its 24-pin FFC. | One fab/assembly setup, no FFC, connectors or standoffs; cheapest one-off. |
+| 14 | **Cost (current build roll-up, `build/main/cost.txt`):** board parts ≈ $16.5 at 1k; with PCB, assembly and off-board parts (switches, caps, speaker, e-ink panel, USB-C handset, antenna, battery) ≈ **$40 per phone at 1k, ≈ $38 at 10k**. A one-off build through JLCPCB is ≈ $204 per phone (setup and extended-part fees dominate). | Inside the owner's revised $28–40 goal at scale (§12). |
 
 **Top risks:** (1) speakerphone AEC and USB host audio (UAC) on the ESP32-S3 with arbitrary
 handsets; (2) the MX key stack height in a compact base; (3) **cost and compliance**: FCC 15B/CE
@@ -350,7 +354,7 @@ keep-out around the antenna on all layers** (Espressif PCB layout guideline). Di
 USB-C/cable ≈ 60 mm, speaker magnet ≈ 100 mm, B-option LiPo ≥ 80 mm, radar ≈ 80 mm (disable
 its BLE). The docked handset sits ~20 mm above the antenna, with its magnet 40 mm and receiver
 ~35 mm away laterally. That's acceptable because the handset is lifted during calls. **No metallic
-paint, plating or foil** anywhere on the base; the key plate is FR4, not steel.
+paint, plating or foil** anywhere on the base; the switch plate is printed plastic, not steel.
 
 ---
 
@@ -869,7 +873,6 @@ needs a live camera feed to abuse, and we still require the key press.
 | Board | Size (mm) | Layers | Key contents |
 |---|---|---|---|
 | **Board** (single, owner 2026-09-27; one BOM 2026-09-28) | 180 × 88, R8.5, 9 × M2.5 | 4 | ESP32-S3-WROOM-1U (U.FL), ES8311, ES7210, NS4150B, BQ24074 + MAX17048 (battery optional), buck + LDO, power USB-C (sink) + CH340C, handset USB-C (host, SY6280 VBUS switch), DRV5032 under the hook post, VOL−/VOL+/MUTE (right edge), base mic, LIS2DH12; 12 hot-swap sockets (bottom), 13 SK6812MINI-E (bottom, reverse-mount), AW9523B, LTR-303, ST25DV04K + PCB coil in a free end region, e-ink 24-pin FPC (FPC-05F-24PH20) + SSD1680 boost, privacy/status LEDs. No radar, supercap, ATECC or Qwiic port. Replaces the main + deck pair and their FFC. |
-| **Key plate** | 117 × 84 × 1.5–1.6 FR4, 14.0 mm cutouts, strip window | 0 (bare FR4) | Panelized with the others |
 
 ### 11.2 Stackup
 
@@ -925,7 +928,7 @@ LCSC prices are list prices seen during research (quantity breaks vary). Everyth
 > **Superseded by the single board (2026-09-27/28):** the per-board tables below are the r0.1
 > estimate for the old main + deck pair. Current costs come from `make build`
 > (`schematic/cost.py`, one board, one BOM; see SCHEMATIC.md and `build/main/cost.txt`): about
-> $40 per phone at 1k and $38 at 10k, ≈ $208 for a one-off JLCPCB build.
+> $40 per phone at 1k and $38 at 10k, ≈ $204 for a one-off JLCPCB build (LAYOUT.md §12).
 
 ### 12.1 Main board (both SKUs)
 
