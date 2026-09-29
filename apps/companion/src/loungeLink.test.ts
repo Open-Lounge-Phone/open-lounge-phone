@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loungeReasonText, parseLoungeLink } from "./loungeLink.ts";
+import { guestLoungeUrl, loungeReasonText, parseLoungeLink } from "./loungeLink.ts";
 
 describe("parseLoungeLink", () => {
   const nonce = "AbCdEfGhIjKlMnOpQrStUv";
@@ -23,5 +23,30 @@ describe("parseLoungeLink", () => {
     expect(loungeReasonText("wrong_key")).toMatch(/flashing key/);
     expect(loungeReasonText("idle")).toMatch(/unused/);
     expect(loungeReasonText(undefined)).toMatch(/went wrong/);
+  });
+});
+
+describe("guests from other servers", () => {
+  const nonce = "AbCdEfGhIjKlMnOpQrStUv";
+  it("parses the phone's server after @", () => {
+    expect(parseLoungeLink("/lounge", `#dev_abc.${nonce}@lounge.example:8443`)).toEqual({
+      deviceId: "dev_abc",
+      nonce,
+      host: "lounge.example:8443",
+    });
+    expect(parseLoungeLink("/lounge", `#dev_abc.${nonce}@bad host`)).toBeUndefined();
+  });
+
+  it("sends a guest on to their own server, from an address, host or URL", () => {
+    const link = { deviceId: "dev_abc", nonce };
+    const want = `https://hub.example/lounge#dev_abc.${nonce}@bar.example`;
+    expect(guestLoungeUrl("jesse@hub.example", link, "bar.example")).toBe(want);
+    expect(guestLoungeUrl("https://hub.example/", link, "bar.example")).toBe(want);
+    expect(guestLoungeUrl(" HUB.example ", link, "bar.example")).toBe(want);
+    expect(guestLoungeUrl("a.localhost:8787", link, "b.localhost:8788")).toBe(
+      `http://a.localhost:8787/lounge#dev_abc.${nonce}@b.localhost:8788`,
+    );
+    expect(guestLoungeUrl("bar.example", link, "bar.example")).toBeUndefined();
+    expect(guestLoungeUrl("not a server", link, "bar.example")).toBeUndefined();
   });
 });

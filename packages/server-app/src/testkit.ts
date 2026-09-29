@@ -12,8 +12,11 @@ import {
 } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { expect, vi } from "vitest";
-import { federationApp } from "./connections.ts";
+import { federationApp, presenceHook } from "./connections.ts";
 import type { Conn, ConnMemo, RoomSnapshot, ServerEnv } from "./env.ts";
+import { FedCalls } from "./fedCalls.ts";
+import { type Dialer, LinkRegistry } from "./fedLinks.ts";
+import type { LinkSocket } from "./fedStream.ts";
 import { type ConnectionHandler, Gateway } from "./gateway.ts";
 import { createApi } from "./http.ts";
 
@@ -109,8 +112,17 @@ export class TestServer {
   readonly background: Promise<unknown>[] = [];
   readonly savedRooms = new Map<string, RoomSnapshot[]>();
   readonly timers: ManualTimers;
+  /** Server-pair streams (federated calls). */
+  readonly links: LinkRegistry;
 
-  constructor(opts: { timers?: ManualTimers; publicUrl?: string; env?: Partial<ServerEnv> } = {}) {
+  constructor(
+    opts: {
+      timers?: ManualTimers;
+      publicUrl?: string;
+      env?: Partial<ServerEnv>;
+      dialer?: Dialer;
+    } = {},
+  ) {
     const { sql, db } = openSqlite(":memory:");
     migrate(db);
     this.store = new Store(sql);
@@ -135,6 +147,12 @@ export class TestServer {
     };
     this.gateway = new Gateway(this.env);
     this.api = createApi(this.env, this.gateway);
+    const noNetwork: Dialer = async () => {
+      throw new Error("no network in this test");
+    };
+    this.links = new LinkRegistry(this.env, this.gateway, opts.dialer ?? noNetwork);
+    this.env.calls = new FedCalls(this.env, this.gateway, this.links);
+    this.env.onPresence = presenceHook(this.env, this.gateway);
     this.root = new Hono();
     this.root.route("/api", this.api);
     this.root.route("/", federationApp(this.env, this.gateway));
@@ -246,9 +264,50 @@ export class Network {
       timers: this.timers,
       publicUrl: `https://${host}`,
       env: { federationKey: key, fetch: (req) => this.fetch(req), ...opts.env },
+      dialer: (url, link) => this.dial(url, link),
     });
     this.servers.set(host, server);
     return server;
+  }
+
+  /** Open server-pair sockets (dialer side), for idle-close checks. */
+  readonly streams: { from: string; to: string; closed: boolean }[] = [];
+
+  /** An in-memory WebSocket between two servers; frames arrive in order, asynchronously. */
+  async dial(url: string, link: import("./fedStream.ts").ServerLink): Promise<LinkSocket> {
+    const u = new URL(url);
+    const target = this.servers.get(u.host);
+    const from = u.searchParams.get("from") ?? "";
+    if (!target || this.down.has(u.host)) throw new TypeError(`connect failed: ${u.host}`);
+    const record = { from, to: u.host, closed: false };
+    let acceptor: import("./fedStream.ts").ServerLink | undefined;
+    const later = (fn: () => void) => void Promise.resolve().then(fn);
+    const client: LinkSocket = {
+      send: (text) => {
+        if (!record.closed) later(() => void acceptor?.receive(server, text));
+      },
+      close: () => {
+        if (record.closed) return;
+        record.closed = true;
+        link.closed(client);
+        later(() => acceptor?.closed(server));
+      },
+    };
+    const server: LinkSocket = {
+      send: (text) => {
+        if (!record.closed) later(() => void link.receive(client, text));
+      },
+      close: () => {
+        if (record.closed) return;
+        record.closed = true;
+        acceptor?.closed(server);
+        later(() => link.closed(client));
+      },
+    };
+    acceptor = target.links.accept(from, server);
+    if (!acceptor) throw new TypeError("refused");
+    this.streams.push(record);
+    return client;
   }
 
   async fetch(req: Request): Promise<Response> {

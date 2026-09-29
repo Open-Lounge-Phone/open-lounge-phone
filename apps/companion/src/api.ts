@@ -73,6 +73,8 @@ export interface DeviceSummary {
 
 export interface LoungeInfo {
   idleMinutes: number;
+  /** People from other servers may use these Lounge phones (their server vouches). */
+  guests?: boolean;
   phones: {
     id: string;
     name: string;
@@ -137,6 +139,10 @@ export interface ConnectionView {
   note: string | null;
   createdAt: number;
   expiresAt: number | null;
+  /** Their availability, if they share it with connections (null = not shared / unknown). */
+  presence?: { online: boolean; available: boolean; at: number } | null;
+  /** Household phones on their side that you may call. */
+  phones?: { deviceId: string; label: string }[];
 }
 
 export interface ConnectionsInfo {
@@ -146,6 +152,8 @@ export interface ConnectionsInfo {
   federates: boolean;
   connections: ConnectionView[];
   blockedServers: { id: string; host: string }[];
+  /** Whether you share your availability with your connections. */
+  sharePresence?: boolean;
 }
 
 /** A connection on a phone's allow-list (its `rc_…` id is also in `contacts`). */
@@ -276,7 +284,7 @@ export function createApi(opts: ApiOptions) {
       request<{ household: Household; user: User }>("POST", "/households", input),
     switchHousehold: (householdId: string) =>
       request<void>("PUT", "/me/household", { householdId }),
-    updateAccount: (changes: { handle?: string; name?: string }) =>
+    updateAccount: (changes: { handle?: string; name?: string; sharePresence?: boolean }) =>
       request<AccountInfo>("PATCH", "/account", changes),
     logout: () => request<void>("POST", "/logout"),
     users: () => request<User[]>("GET", "/users"),
@@ -289,8 +297,18 @@ export function createApi(opts: ApiOptions) {
         ...(kind ? { kind } : {}),
       }),
     lounge: () => request<LoungeInfo>("GET", "/lounge"),
+    /** Use a Lounge phone on another server; this server vouches for you there. */
+    remoteLounge: (input: { host: string; deviceId: string; nonce: string }) =>
+      request<{ step: "press_key" | "failed"; reason?: string; expiresAt?: number }>(
+        "POST",
+        "/lounge/remote",
+        input,
+      ),
+    remoteLoungeLeave: (input: { host: string; deviceId: string }) =>
+      request<void>("POST", "/lounge/remote/leave", input),
     setLoungeIdle: (idleMinutes: number) =>
       request<void>("PUT", "/lounge/settings", { idleMinutes }),
+    setLoungeGuests: (guests: boolean) => request<void>("PUT", "/lounge/settings", { guests }),
     updateDevice: (deviceId: string, changes: { name?: string; owner?: "me" | "household" }) =>
       request<void>("PATCH", `/devices/${enc(deviceId)}`, changes),
     removeDevice: (deviceId: string) => request<void>("DELETE", `/devices/${enc(deviceId)}`),
@@ -324,6 +342,20 @@ export function createApi(opts: ApiOptions) {
     blockConnection: (id: string) => request<void>("POST", `/connections/${enc(id)}/block`),
     removeConnection: (id: string) => request<void>("DELETE", `/connections/${enc(id)}`),
     blockServer: (host: string) => request<void>("POST", "/connections/block-server", { host }),
+    /** Voicemail for a phone a connection shared (its server checks the allow-list). */
+    leaveConnectionVoicemail: async (
+      connectionId: string,
+      deviceId: string,
+      audio: Blob,
+      durationMs: number,
+    ) =>
+      (
+        await send(
+          "POST",
+          `/connections/${enc(connectionId)}/voicemail?deviceId=${enc(deviceId)}&durationMs=${Math.round(durationMs)}`,
+          { body: audio },
+        )
+      ).json() as Promise<{ ok: true }>,
     putContact: (deviceId: string, contact: ContactEntry) => {
       const { id, ...rest } = contact;
       return request<void>("PUT", `/devices/${enc(deviceId)}/contacts/${enc(id)}`, rest);

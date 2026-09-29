@@ -140,6 +140,44 @@ export class Connection {
     }
   }
 
+  /** Calls someone you're connected with (another household or another server). */
+  async callConnection(connectionId: string, label: string): Promise<void> {
+    await this.dialWith(
+      { type: "dial", label, person: true, via: connectionId },
+      {
+        t: "call.connection",
+        connectionId,
+      },
+    );
+  }
+
+  /** Calls a phone a connection shared (you're on its allow-list). */
+  async callSharedPhone(connectionId: string, deviceId: string, label: string): Promise<void> {
+    await this.dialWith(
+      { type: "dial", label, deviceId, via: connectionId },
+      {
+        t: "call.phone",
+        connectionId,
+        deviceId,
+      },
+    );
+  }
+
+  private async dialWith(
+    event: Extract<CallEvent, { type: "dial" }>,
+    msg: Extract<AppToServer, { t: "call.connection" | "call.phone" }>,
+  ): Promise<void> {
+    const phase = this.snap.call.phase;
+    if (phase !== "idle" && phase !== "ended") return;
+    this.tones.unlock();
+    if (!(await this.acquireMic())) return;
+    this.apply(event);
+    if (!this.socket.send(msg)) {
+      this.apply({ type: "hangup" });
+      this.set({ error: "Not connected to the server" });
+    }
+  }
+
   /** Whether you're taking app-to-app calls; the server remembers it. */
   setAvailable(available: boolean): boolean {
     return this.socket.send({ t: "presence.set", available });

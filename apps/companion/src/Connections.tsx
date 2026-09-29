@@ -10,8 +10,12 @@ interface Props {
   onBack(): void;
   /** Tells the header how many knocks are waiting. */
   onRequests(n: number): void;
-  /** Call someone you're connected with (when calling across servers is available). */
+  /** Call someone you're connected with (any server). */
   onCall?: ((c: ConnectionView) => void) | undefined;
+  /** Call a household phone they shared with you. */
+  onCallPhone?:
+    | ((c: ConnectionView, phone: { deviceId: string; label: string }) => void)
+    | undefined;
 }
 
 /**
@@ -19,7 +23,7 @@ interface Props {
  * knocks, and block people or whole servers. Kids' phones are never knockable; a guardian can
  * put a connection on a phone's allow-list from the phone's page.
  */
-export function Connections({ api, refreshKey, onBack, onRequests, onCall }: Props) {
+export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCallPhone }: Props) {
   const [info, setInfo] = useState<ConnectionsInfo>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -97,6 +101,19 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall }: Pro
           {!info.federates && (
             <span className="hint">This server only connects people on this server.</span>
           )}
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={info.sharePresence ?? false}
+              onChange={(e) =>
+                void run(() => api.updateAccount({ sharePresence: e.target.checked }))
+              }
+            />
+            <span>
+              Share my availability with my connections
+              <span className="hint"> — they see whether you're online and taking calls.</span>
+            </span>
+          </label>
         </div>
       )}
       {error && (
@@ -166,30 +183,51 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall }: Pro
       ) : (
         <ul className="stack">
           {groups.connected.map((c) => (
-            <li key={c.id} className="card person">
-              <Who c={c} />
-              <div className="row">
-                {onCall && (
-                  <button type="button" className="primary" onClick={() => onCall(c)}>
-                    Call
-                  </button>
-                )}
-                <details className="more">
-                  <summary>More</summary>
-                  <button type="button" onClick={() => void run(() => api.removeConnection(c.id))}>
-                    Disconnect
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() =>
-                      void run(() => api.blockConnection(c.id), `Blocked ${c.address}.`)
-                    }
-                  >
-                    Block
-                  </button>
-                </details>
+            <li key={c.id} className="card stack">
+              <div className="person">
+                <Who c={c} />
+                <div className="row">
+                  {onCall && (
+                    <button type="button" className="primary" onClick={() => onCall(c)}>
+                      Call
+                    </button>
+                  )}
+                  <details className="more">
+                    <summary>More</summary>
+                    <button
+                      type="button"
+                      onClick={() => void run(() => api.removeConnection(c.id))}
+                    >
+                      Disconnect
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() =>
+                        void run(() => api.blockConnection(c.id), `Blocked ${c.address}.`)
+                      }
+                    >
+                      Block
+                    </button>
+                  </details>
+                </div>
               </div>
+              {(c.phones ?? []).length > 0 && (
+                <ul className="shared-phones">
+                  {(c.phones ?? []).map((p) => (
+                    <li key={p.deviceId} className="row">
+                      <span>
+                        {p.label} <span className="muted small">— their household phone</span>
+                      </span>
+                      {onCallPhone && (
+                        <button type="button" onClick={() => onCallPhone(c, p)}>
+                          Call
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -231,9 +269,20 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall }: Pro
 
 function Who({ c }: { c: ConnectionView }) {
   const badge = hostBadge(c);
+  const p = c.presence;
+  const dot = !p ? undefined : !p.online ? "offline" : p.available ? "online" : "busy";
   return (
     <div>
       <div className="device-name">
+        {dot && (
+          <span
+            className={`dot ${dot === "online" ? "on" : dot === "busy" ? "away" : "off"}`}
+            role="img"
+            aria-label={
+              dot === "online" ? "Available" : dot === "busy" ? "Not taking calls" : "Offline"
+            }
+          />
+        )}
         {c.name}
         {badge && (
           <span className="badge" title="On another server">

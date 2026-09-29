@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, DeviceSummary, LoungeInfo, User } from "./api.ts";
 import type { Connection, DeviceLive, MemberLive, Snapshot } from "./connection.ts";
-import { type LoungeLink, loungeReasonText } from "./loungeLink.ts";
+import { guestLoungeUrl, type LoungeLink, loungeReasonText } from "./loungeLink.ts";
 import { presenceOf } from "./presence.ts";
 
 /** The page a Lounge phone's QR code opens: "Use this phone", then press the flashing key. */
@@ -9,10 +9,12 @@ export function LoungeScan({
   link,
   snap,
   conn,
+  api,
   devices,
   onDone,
 }: {
   link: LoungeLink;
+  api: Api;
   snap: Snapshot;
   conn: Connection | undefined;
   devices: DeviceSummary[];
@@ -21,18 +23,35 @@ export function LoungeScan({
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
   const phone = devices.find((d) => d.id === link.deviceId);
-  const claim = snap.lounge?.deviceId === link.deviceId ? snap.lounge : undefined;
+  const live = snap.lounge?.deviceId === link.deviceId ? snap.lounge : undefined;
   const [asked, setAsked] = useState(false);
+  /** A phone on another server answers over HTTP first; progress then comes over the socket. */
+  const [remote, setRemote] = useState<{ step: string; reason?: string; expiresAt?: number }>();
+  const claim = live ?? remote;
   const step = asked ? claim?.step : undefined;
   useEffect(() => {
     if (step !== "press_key") return;
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
   }, [step]);
-  const name = phone?.name ?? "this Lounge phone";
+  const name =
+    phone?.name ?? (link.host ? `the Lounge phone at ${link.host}` : "this Lounge phone");
 
   const use = () => {
     setError(undefined);
+    const host = link.host;
+    if (host) {
+      setAsked(true);
+      setRemote({ step: "sending" });
+      api.remoteLounge({ host, deviceId: link.deviceId, nonce: link.nonce }).then(
+        (r) => setRemote(r),
+        (e: Error) => {
+          setAsked(false);
+          setError(e.message);
+        },
+      );
+      return;
+    }
     if (!conn?.claimLounge(link.deviceId, link.nonce)) {
       setError("Not connected to the server — try again in a moment.");
       return;
@@ -72,10 +91,22 @@ export function LoungeScan({
       {step === "started" && (
         <div className="card stack" role="status">
           <p>
-            You're on <strong>{name}</strong>. Calls to you ring there too.
+            You're on <strong>{name}</strong>.{" "}
+            {link.host
+              ? "Its keys dial your connections, through your own server."
+              : "Calls to you ring there too."}
           </p>
           <div className="device-actions">
-            <button type="button" onClick={() => conn?.leaveLounge(link.deviceId)}>
+            <button
+              type="button"
+              onClick={() =>
+                link.host
+                  ? void api
+                      .remoteLoungeLeave({ host: link.host, deviceId: link.deviceId })
+                      .then(onDone)
+                  : conn?.leaveLounge(link.deviceId)
+              }
+            >
               Leave
             </button>
             <button type="button" className="primary" onClick={onDone}>
@@ -240,6 +271,24 @@ function LoungeSettings({
         Save
       </button>
       {note && <span className="hint"> {note}</span>}
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={info.guests ?? false}
+          onChange={(e) =>
+            void api
+              .setLoungeGuests(e.target.checked)
+              .then(onSaved, (err: Error) => setNote(err.message))
+          }
+        />
+        <span>
+          Let people from other servers use these phones
+          <span className="hint">
+            {" "}
+            — their own server vouches for them, and they still press the flashing key.
+          </span>
+        </span>
+      </label>
       <h4>Recent sessions</h4>
       {history.length === 0 ? (
         <p className="muted small">None yet.</p>
@@ -257,5 +306,52 @@ function LoungeSettings({
       )}
       <p className="hint">Only who used which phone and when is kept — never calls or contacts.</p>
     </details>
+  );
+}
+
+/**
+ * A Lounge phone's code, opened by someone without an account here: they can use it with their
+ * account on another server, which vouches for them.
+ */
+export function GuestLounge({ link }: { link: LoungeLink }) {
+  const [server, setServer] = useState("");
+  const [error, setError] = useState<string>();
+  const go = (e: FormEvent) => {
+    e.preventDefault();
+    const url = guestLoungeUrl(server, link, location.host);
+    if (!url) {
+      setError("Enter your address (name@server) or your server's name.");
+      return;
+    }
+    location.assign(url);
+  };
+  return (
+    <form className="card stack guest-lounge" onSubmit={go}>
+      <h2>Use this Lounge phone</h2>
+      <p className="muted">
+        Have an Open Lounge Phone account on another server? Continue there: your server vouches for
+        you, then you press the flashing key on the phone.
+      </p>
+      <label>
+        Your address or server
+        <input
+          value={server}
+          onChange={(e) => setServer(e.target.value)}
+          placeholder="you@your-server"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+      </label>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="submit" className="primary">
+        Continue on my server
+      </button>
+      <p className="hint">Or sign in or create an account here, below.</p>
+    </form>
   );
 }

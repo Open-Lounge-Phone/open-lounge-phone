@@ -26,10 +26,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "HOUSEHOLD", "class_name": "HouseholdObject" },
-      { "name": "PAIRING", "class_name": "PairingObject" }
+      { "name": "PAIRING", "class_name": "PairingObject" },
+      { "name": "FEDERATION", "class_name": "FederationObject" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdObject", "PairingObject"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["HouseholdObject", "PairingObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["FederationObject"] }
+  ],
   "observability": { "enabled": true },
   // OPEN_SIGNUP "1" lets anyone create an account; `scripts/deploy.ts --open-signup` sets it.
   "vars": { "OPEN_SIGNUP": "0" }

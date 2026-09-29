@@ -1,7 +1,8 @@
 # Federation: connecting across Open Lounge Phone servers
 
-Status: **F0 (accounts, spaces) and F1 (knocks, connections, signed server-to-server requests)
-are implemented; F2–F4 are design.**
+Status: **F0 (accounts, spaces), F1 (knocks, connections, signed server-to-server requests) and
+F2 (federated calls, voicemail, opt-in presence, Lounge guests) are implemented; F3 (phone ↔
+phone) and F4 (CI interop, spec versioning) are planned.**
 Owner direction (2026-09-27): people should be able to send and accept connection invites
 regardless of which server they're on, and call each other through a fair, seamless
 server-to-server protocol. No central server, and the owner's public-good hub is just one more
@@ -129,54 +130,82 @@ change). The endpoints:
 | `POST /fed/v1/knock` | `{from, to: handle, note?}` | always `202` |
 | `POST /fed/v1/connections/accept` | `{from, to: handle}` — `from` accepts `to`'s knock | `202` (ignored unless `to` knocked `from`) |
 | `POST /fed/v1/connections/remove` | `{from, to: handle}` — disconnect / cancel / block | `202` |
+| `POST /fed/v1/calls` | `{callId, from, to: {kind: "person", handle} \| {kind: "phone", deviceId}, viaPhone?, guestOf?}` | `{state: "ringing"}` or `{state: "ended", reason}` |
+| `GET /fed/v1/stream?from=<host>` | WebSocket: the server-pair stream (below) | `101` |
+| `POST /fed/v1/voicemail?to=<deviceId>&from=&fromId=&name=&durationMs=` | raw `audio/*`, ≤ 2 MB | `201`, or `403` if not on the phone's allow-list |
+| `POST /fed/v1/phones` | `{from, to: handle, phones: [{id, label}]}` — the phones `to` may call | `202` |
+| `POST /fed/v1/presence` | `{from, to: [handles], online, available}` — batched, opt-in | `202` |
+| `POST /fed/v1/lounge/claim` | `{from, deviceId, nonce, directory}` — the sender vouches for `from` | `{step: "press_key", expiresAt}` or `{step: "failed", reason}` |
+| `POST /fed/v1/lounge/progress` | `{to: handle, deviceId, step, reason?, expiresAt?}` | `202` |
+| `POST /fed/v1/lounge/dial` | `{callId, for: handle, deviceId, deviceLabel, to: address}` | like `/calls` |
+| `POST /fed/v1/lounge/leave` | `{from, deviceId}` | `202` |
 
 Budgets per sending server (defaults): 300 requests a minute, 500 knocks a day.
 
-## Connections (cross-server contacts)
+## Presence (opt-in, implemented)
 
-1. Alice, on `l1`, taps **Connect with someone** and gets a **connection link**:
-   `https://l1.openloungephone.app/connect#<token>`. The token is single-use, expires in 7 days,
-   and names Alice.
-2. Bob opens it. The page on `l1` asks **"Which server is your Open Lounge Phone account on?"**
-   (with a remembered choice), or Bob pastes the link into his own app on `home.example`.
-3. Bob's app asks his server to accept. **Bob's server → `l1`**: a signed
-   `POST /fed/v1/connections/accept {token, from: "bob@home.example", display_name}`.
-4. `l1` checks the token (single use, not expired, not revoked). Both servers then store a
-   **Connection** (`local user ↔ remote address`, display name, state `active`) and each app
-   shows the other person under **Connections**.
-5. Either side can **disconnect** at any time. Their server notifies the other (signed), and both
-   drop the connection. **Blocking** a person or a whole server stops all further requests.
+"Share my availability with my connections" (Connections screen; `PATCH /api/account
+{sharePresence}`, off by default). While on, each change of the person's online/available state
+in their first (personal) space goes to their active connections: directly for people on the same
+server, and as one signed `POST /fed/v1/presence` per other server (batched), at most 5 a person
+per 10 s. Receivers keep it on the connection row (`presence_*`, migration 0009) and show it as a
+dot; anything older than an hour shows as unknown. Turning it off sends "offline" once.
 
-The same flow covers two households on the same server (the local fast path skips HTTP). One
-account can also **belong to several households**: accepting a household invite while signed
-in adds a membership to the existing account instead of creating a new person.
+## Calls (F2, implemented)
 
-## Presence (optional)
+- **Placing a call.** The companion sends `call.connection {connectionId}` (a person) or
+  `call.phone {connectionId, deviceId}` (a household phone the connection shared); a kid's phone
+  dials a connection on its allow-list with a speed-dial key. The caller's hub opens a room whose
+  far end is a proxy peer, then its server sends a signed `POST /fed/v1/calls` (or, for another
+  household on the same server, calls the other hub directly). `callId` names the call on both
+  servers.
+- **The callee's server authorizes it locally** (`FedCalls.receive`, `HouseholdHub.remoteRing`):
+  an active connection with that exact account (by stable id), no block of the person or their
+  server; for a phone, an allow-list entry through an active connection with `canCallDevice`,
+  then quiet hours (→ `voicemail`), online and hook state; for a person, reachability,
+  availability and busy. It either rings or answers with a reason (`denied`, `unavailable`,
+  `busy`, `unreachable`, `voicemail`). Federated calls to a person ring their first (personal)
+  space.
+- **Shared phones.** When a guardian puts a connection on a phone's allow-list with "can call",
+  their server tells the other side with `POST /fed/v1/phones`; the person then sees that phone
+  under the connection and can call it (and it disappears when the entry does).
+- **Signaling: the server-pair stream.** `call.state`, `rtc.sdp` and `rtc.ice` travel over one
+  WebSocket per server pair, `GET /fed/v1/stream?from=<host>`, routed by `callId` to the
+  household that owns the call. It is **opened on demand** by whichever side needs to send first
+  and **authenticated in-band**: the dialer's first frame is `{t:"hello", from, to, created,
+  nonce, sig}` (Ed25519 over `olp-stream-v1\n<from>\n<to>\n<created>\n<nonce>`, ±5 min,
+  single-use nonce); the acceptor answers `hello.ok` echoing the nonce, signed by itself. Then
+  frames are `{t:"signal", msg}`. The **dialer closes it after 60 s with no call and no
+  signaling** (an alarm/timer, re-armed only on activity), so an idle pair holds nothing open. On
+  Cloudflare the `FederationObject` (one Durable Object per remote host) accepts streams with
+  `acceptWebSocket` (hibernatable) and keeps call routes in storage; a stream it dialed can't
+  hibernate, which is exactly why it closes when idle. There are no keepalive timers.
+- **Media.** WebRTC peer-to-peer between the two clients. Each side's server hands its own client
+  its own ICE servers (its own TURN). Audio never flows through either server. Clients enable
+  **Opus DTX** (`usedtx=1`), so silence costs almost nothing on a relay.
+- **Voicemail.** When the answer is `voicemail` (a kid's phone in quiet hours), the caller's app
+  records and uploads to its own server (`POST /api/connections/:id/voicemail?deviceId=`), which
+  forwards the audio with a signed `POST /fed/v1/voicemail`. The phone's server checks the
+  allow-list again, stores and transcribes it, and tells the phone's guardians — exactly like a
+  local voicemail.
+- **Between households on one server** the same code runs with host `''`: the two hubs relay to
+  each other directly (on Cloudflare, household Durable Object to household Durable Object).
 
-Connected people may share presence (online / available). A server sends signed
-`presence` updates only to the servers of people you're connected to, rate-limited and batched.
-Turning off "Share my availability with connections" stops them.
+## Lounge phones across servers (F2, implemented)
 
-## Calls
-
-- **Placing a call.** The caller's server sends a signed
-  `POST /fed/v1/calls {call_id, from, to, kind: "person" | "phone"}` to the callee's server.
-- **The callee's server authorizes it locally.** It needs an active connection. For a phone, the
-  remote person must be on that phone's allow-list. Quiet hours (household phones only), the
-  callee's availability and busy state also apply. The server then either rings its targets
-  (app sessions, the person's own phones, or the allowed household phone) or answers with a
-  reason (`denied`, `unavailable`, `busy`, `unreachable`, `voicemail`).
-- **Signaling.** `call.state`, `rtc.sdp` and `rtc.ice` are relayed between the two servers over
-  one **persistent, authenticated WebSocket per server pair**
-  (`wss://<host>/fed/v1/stream`, opened by whichever side needs it first, with signed hello and
-  heartbeats). Every message carries the `call_id`, and each server only forwards to the
-  participant it owns. Clients see exactly the messages they see for local calls.
-- **Media.** WebRTC peer-to-peer between the two clients. Each client uses its own server's TURN
-  when a direct path fails. Audio never flows through either server.
-- **Voicemail.** When the callee's server answers `voicemail`, the caller's app records, and the
-  caller's server delivers the audio with a signed
-  `POST /fed/v1/voicemail {call_id, mime, duration}` (bounded size). The callee's server stores
-  and transcribes it like any local voicemail.
+A space's guardians can let people from other servers use its Lounge phones (Lounge settings →
+"Let people from other servers use these phones"; off by default). Someone without an account
+on the phone's server scans its code, enters their own address, and continues on their own
+server (`/lounge#<device>.<nonce>@<phone's host>`). Their server **vouches** for them with a
+signed `POST /fed/v1/lounge/claim` carrying their speed-dial (their connections, ≤ 10) and
+records that it vouched (`lounge_away`, migration 0009). The phone then asks for the same key
+press as for a member. While the session lasts, the phone greets them and its keys dial their
+directory: the phone's server sends `POST /fed/v1/lounge/dial` and the **guest's server places
+the call as them** — its own rules and connections — relaying between the two legs (the call has
+its own id on each). The guest's server refuses dial requests unless it has a live vouched session
+at that phone. Sessions end as usual (log out, leave from the guest's app, idle, a new takeover)
+and immediately if the phone disconnects; guardians see "who, where, when" with the guest's
+address. Calls *to* the guest don't ring the Lounge phone yet (they ring the guest's own apps).
 
 ## Fairness and abuse controls
 
@@ -196,15 +225,18 @@ Turning off "Share my availability with connections" stops them.
 |---|---|---|
 | **F0** ✔ | Accounts and handles, several households per server, one account in several households, open sign-up behind `OPEN_SIGNUP`, clear "Add a kid's phone" / "Invite a co-guardian" / "Add a household" flows | Local only; the foundation for everything else. Done (plan phase P1) |
 | **F1** ✔ | Knocks and connections (locally, then across servers), server keys, `.well-known`, signed requests, disconnect, block | Done (plan phase P2); two-server e2e in `tests/e2e/twoServers.test.ts` |
-| **F2** | Federated **calls** (person ↔ person, person ↔ allowed phone), signaling over the server-pair stream, cross-server voicemail | Cloudflare: the household Durable Object owns federated calls; the Worker routes `/fed/v1` |
+| **F2** ✔ | Federated **calls** (person ↔ person, person ↔ allowed phone, phone → connection), signaling over the on-demand server-pair stream, cross-server voicemail, opt-in presence, Lounge guests | Done (plan phase P3). Cloudflare: `FederationObject` per remote host |
 | **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians; shared presence | Needs phone-to-phone calling locally first |
 | **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Needed before anyone else runs a server in production |
 
 ## Open questions
 
+- Incoming calls for a guest at a Lounge phone on another server (today they ring the guest's own
+  apps only).
+- Federated calls to a person ring their first (personal) space; whether to ring every space
+  they're in.
+
 - Whether a household can have its own shared address.
-- Whether the connection link should also work as a QR code for the Lounge phone takeover
-  (likely yes).
 - Whether to reuse an existing federation standard (ActivityPub, Matrix) for identity/transport.
   Current lean is **no**: our needs are narrow (connections + call signaling), and a small signed
   JSON protocol is easier to audit and to implement on a microcontroller-adjacent stack.

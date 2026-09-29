@@ -1,5 +1,6 @@
 import type { RoomState } from "@openloungephone/core";
 import type { Store } from "@openloungephone/db";
+import type { CallBody, CallResult, FedSignal } from "@openloungephone/federation";
 import type {
   DeviceToServer,
   IceServer,
@@ -17,6 +18,20 @@ export interface BlobStore {
 /** Speech-to-text for voicemail (Workers AI Whisper, or an OpenAI-compatible endpoint). */
 export interface Transcriber {
   transcribe(audio: ArrayBuffer, contentType: string): Promise<string>;
+}
+
+/** Outcome of asking the far end of a federated call to ring. */
+export type RingResult = CallResult;
+
+/**
+ * Calls whose far end is in another household here (host '') or on another server: placement,
+ * the callee side's authorization, and signaling routes (see `FedCalls`).
+ */
+export interface CallLinks {
+  receive(host: string, body: CallBody, peerHousehold?: string): Promise<RingResult>;
+  place(host: string, body: CallBody, callerHousehold: string): Promise<RingResult>;
+  register(host: string, callId: string, householdId: string): Promise<void>;
+  signal(to: { host: string; householdId?: string }, msg: FedSignal): Promise<void>;
 }
 
 /** Everything the server needs from its host platform. Node and Workers each provide one. */
@@ -58,6 +73,21 @@ export interface ServerEnv {
   wakeAt?(at: number | null): void;
   /** Hosts that can be evicted persist live call rooms so they survive a restart. */
   saveRooms?(householdId: string, rooms: RoomSnapshot[]): void;
+  /** Calls with other households and servers; without it such calls are unreachable. */
+  calls?: CallLinks;
+  /** A member's presence changed (for sharing with connections that opted in). */
+  onPresence?(householdId: string, userId: string, online: boolean, available: boolean): void;
+}
+
+/** Someone from another server at one of our Lounge phones; their home server vouched for them. */
+export interface LoungeGuest {
+  host: string;
+  handle: string;
+  /** Their stable account id on their server. */
+  id: string;
+  name: string;
+  /** Their speed-dial here (from their server), dialed through their server. */
+  directory: { address: string; name: string }[];
 }
 
 /** Live state of a Lounge phone (kept with its socket so it survives the host sleeping). */
@@ -66,9 +96,23 @@ export interface LoungeInfo {
   nonce: string;
   nonceExpiresAt: number;
   /** Someone scanned the code and must now press the flashing key. */
-  challenge?: { userId: string; name: string; index: number; expiresAt: number; app: string };
+  challenge?: {
+    userId: string;
+    name: string;
+    index: number;
+    expiresAt: number;
+    app: string;
+    guest?: LoungeGuest;
+  };
   /** Who is using the phone. Ephemeral: nothing of it stays on the phone afterwards. */
-  session?: { id: string; userId: string; name: string; since: number; openToChat: boolean };
+  session?: {
+    id: string;
+    userId: string;
+    name: string;
+    since: number;
+    openToChat: boolean;
+    guest?: LoungeGuest;
+  };
 }
 
 /** Everything needed to rebuild an authenticated connection's peer after the host slept. */
@@ -76,7 +120,8 @@ export interface PeerInfo {
   /** Unique per connection; rooms refer to peers by it. */
   session: string;
   householdId: string;
-  kind: "device" | "user";
+  /** `remote` = the far end of a call with another household or server (no socket here). */
+  kind: "device" | "user" | "remote";
   id: string;
   label: string;
   guardian: boolean;
@@ -87,6 +132,12 @@ export interface PeerInfo {
   lounge?: LoungeInfo;
   status?: Extract<DeviceToServer, { t: "status" }>;
   lastQuiet?: boolean;
+  /** Remote peers: the other server ('' = another household here). */
+  host?: string;
+  /** Remote peers in another household here: that household. */
+  peerHousehold?: string;
+  /** Remote peers: the call's id on their server, when it differs from the room's. */
+  leg?: string;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */
@@ -98,6 +149,8 @@ export interface RoomSnapshot {
   /** Sessions of the caller and, once known, the callee. */
   caller: string;
   callee?: string;
+  /** Far ends in another household or on another server (they have no socket to restore). */
+  remotes?: PeerInfo[];
 }
 
 /** One WebSocket, as seen by the server. */

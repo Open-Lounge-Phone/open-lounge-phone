@@ -352,6 +352,25 @@ Companion app calls another member of the same server, app to app. Refused unles
 | `id` | string (len ≤64) |  |  |
 | `userId` | string (len ≤64) | yes |  |
 
+### `call.connection`
+
+Call someone you're connected with (another household or another server). Their server decides: an active connection, their availability and busy state apply.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `connectionId` | string (len ≤64) | yes |  |
+
+### `call.phone`
+
+Call a household phone that a connection's guardian put you on the allow-list of (`GET /api/connections` lists them as `phones`). Its own allow-list and quiet hours decide.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `connectionId` | string (len ≤64) | yes |  |
+| `deviceId` | string (len ≤64) | yes |  |
+
 ### `presence.set`
 
 Whether this person is taking app-to-app calls (persisted).
@@ -459,6 +478,7 @@ Progress of your takeover of a Lounge phone, and the end of your session there.
 | `step` | `"press_key"` \| `"started"` \| `"failed"` \| `"ended"` | yes |  |
 | `reason` | `"expired"` \| `"wrong_key"` \| `"timeout"` \| `"busy"` \| `"not_found"` \| `"logout"` \| `"left"` \| `"idle"` \| `"replaced"` \| `"removed"` \| `"offline"` |  | Why a claim `failed` or a session `ended`. |
 | `expiresAt` | integer (≥0) |  | With `press_key`: when the key proof runs out. |
+| `host` | string (len ≤260) |  | Set when the Lounge phone is on another server (you're a guest there). |
 
 ### `member.status`
 

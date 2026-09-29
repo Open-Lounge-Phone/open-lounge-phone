@@ -13,7 +13,9 @@ import { Id, toBase64Url } from "@openloungephone/protocol";
 import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
+import { Connections } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
+import type { Coordinator } from "./gateway.ts";
 import { body, HOUSEHOLD_HEADER, relyingParty, type Vars } from "./httpUtil.ts";
 
 /** Households one account may be a guardian of (a cheap guard until P4's quotas). */
@@ -48,8 +50,15 @@ const HouseholdBody = z.object({
 });
 const SwitchBody = z.object({ householdId: Id });
 const AccountPatch = z
-  .object({ handle: Handle.optional(), name: Name.optional() })
-  .refine((b) => b.handle !== undefined || b.name !== undefined, { message: "nothing to change" });
+  .object({
+    handle: Handle.optional(),
+    name: Name.optional(),
+    /** Share your availability with your connections. */
+    sharePresence: z.boolean().optional(),
+  })
+  .refine((b) => b.handle !== undefined || b.name !== undefined || b.sharePresence !== undefined, {
+    message: "nothing to change",
+  });
 
 /** The host people put after `handle@`. */
 export function serverHost(env: ServerEnv, requestUrl: string): string {
@@ -194,7 +203,7 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
 }
 
 /** Routes for a signed-in account, whether or not it has a household yet. */
-export function accountRoutes(api: Hono<Vars>, env: ServerEnv): void {
+export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): void {
   const { store } = env;
 
   api.get("/me", async (c) => {
@@ -295,8 +304,23 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv): void {
       }
     }
     if (b.name !== undefined) await store.setAccountName(account.id, b.name);
+    if (b.sharePresence !== undefined && b.sharePresence !== account.sharePresence) {
+      const presence = new Connections(env, live);
+      const available = c.get("member")
+        ? ((await store.availability(c.get("member")?.householdId as string)).get(
+            c.get("member")?.id as string,
+          ) ?? true)
+        : true;
+      // Turning it off says "offline" once; turning it on shares where you are now (online).
+      if (!b.sharePresence) await presence.publishPresence(account.id, false, false);
+      await store.setSharePresence(account.id, b.sharePresence);
+      if (b.sharePresence) await presence.publishPresence(account.id, true, available);
+    }
     const updated = (await store.getAccount(account.id)) as Account;
-    return c.json(accountView(updated, serverHost(env, c.req.url)));
+    return c.json({
+      ...accountView(updated, serverHost(env, c.req.url)),
+      sharePresence: updated.sharePresence,
+    });
   });
 }
 

@@ -60,7 +60,14 @@ and Lounge phones. A released handle stays reserved for its last owner for 90 da
 `active` connection. The same code handles a person on this server or on another one; another
 server is reached with signed `/fed/v1` requests (RFC 9421, Ed25519 server keys published at
 `/.well-known/openloungephone`, pinned on first use, see [federation.md](federation.md)). A
-guardian may put an active connection on a kid's phone's allow-list. `packages/federation` holds
+guardian may put an active connection on a kid's phone's allow-list.
+
+**Calls between households and servers.** A call to a connection opens a room in the caller's
+household hub whose far end is a *proxy peer*; the callee's server authorizes on its own terms
+and opens the matching room. Signaling flows between the two rooms: hub to hub on one server, or
+over the on-demand, signed **server-pair stream** (`/fed/v1/stream`; a `FederationObject`
+Durable Object per remote host on Cloudflare) between servers. Media stays peer-to-peer; each
+side uses its own TURN; clients use Opus DTX. `packages/federation` holds
 the web-standard crypto and message schemas; `packages/server-app/src/connections.ts` and
 `federation.ts` the server side.
 

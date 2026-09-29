@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { type Device, Store } from "@openloungephone/db";
 import { d1Sql } from "@openloungephone/db/d1";
+import { type FedSignal, HOST_RE } from "@openloungephone/federation";
 import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
 import {
   type BlobStore,
@@ -9,11 +10,21 @@ import {
   type ConnMemo,
   type Coordinator,
   createApi,
+  FedCalls,
   federationApp,
   Gateway,
   type GatewayOptions,
+  type GuestClaimResult,
+  type LinkSocket,
+  type LoungeGuest,
+  presenceHook,
+  type RelayDial,
+  type RemoteRing,
+  type RingResult,
   type RoomSnapshot,
   type ServerEnv,
+  ServerLink,
+  type SocketState,
   seedSetupToken,
   type Transcriber,
 } from "@openloungephone/server-app";
@@ -27,6 +38,8 @@ export interface Env {
   AI?: Ai;
   HOUSEHOLD: DurableObjectNamespace<HouseholdObject>;
   PAIRING: DurableObjectNamespace<PairingObject>;
+  /** One per other server: the server-pair stream for federated calls. */
+  FEDERATION: DurableObjectNamespace<FederationObject>;
   ASSETS: Fetcher;
   SETUP_TOKEN?: string;
   /** "1" = open sign-up (wrangler var; `scripts/deploy.ts --open-signup`). Off by default. */
@@ -123,6 +136,22 @@ function serverEnv(
   env: Env,
   waitUntil: (p: Promise<unknown>) => void,
   extra: Partial<ServerEnv> = {},
+): ServerEnv {
+  const server = baseEnv(env, waitUntil, extra);
+  // Federated calls: placement over signed HTTP, signaling through the FederationObject for the
+  // other server, and household-to-household calls here through the household objects.
+  server.calls = new FedCalls(server, coordinator(env), {
+    register: (host, callId, hh) => env.FEDERATION.getByName(host).register(callId, hh),
+    signal: (host, msg) => env.FEDERATION.getByName(host).signal(msg),
+  });
+  server.onPresence = presenceHook(server, coordinator(env));
+  return server;
+}
+
+function baseEnv(
+  env: Env,
+  waitUntil: (p: Promise<unknown>) => void,
+  extra: Partial<ServerEnv>,
 ): ServerEnv {
   return {
     store: new Store(d1Sql(env.DB)),
@@ -288,6 +317,137 @@ export class HouseholdObject extends GatewayObject {
   notifyUser(userId: string, msg: ServerToApp): Promise<void> {
     return this.gateway.hub(this.householdId).sendToUser(userId, msg);
   }
+
+  ringRemote(req: RemoteRing): Promise<RingResult> {
+    return this.gateway.ringRemote(this.householdId, req);
+  }
+
+  remoteSignal(host: string, msg: FedSignal): Promise<void> {
+    return this.gateway.remoteSignal(this.householdId, host, msg);
+  }
+
+  relayDial(req: RelayDial): Promise<RingResult> {
+    return this.gateway.relayDial(this.householdId, req);
+  }
+
+  guestClaim(deviceId: string, nonce: string, guest: LoungeGuest): Promise<GuestClaimResult> {
+    return this.gateway.guestClaim(this.householdId, deviceId, nonce, guest);
+  }
+
+  guestLeave(deviceId: string, host: string, guestId: string): Promise<void> {
+    return this.gateway.guestLeave(this.householdId, deviceId, host, guestId);
+  }
+}
+
+/**
+ * One per other server (named by its host): the server-pair stream for federated call
+ * signaling. A stream the other server opened is accepted with `acceptWebSocket`, so this object
+ * hibernates while it's quiet. A stream this side dialed can't hibernate, so `ServerLink` closes
+ * it after a minute without calls or signaling (an alarm, not a timer). Call routes live in
+ * storage so they survive hibernation.
+ */
+export class FederationObject extends DurableObject<Env> {
+  private readonly link: ServerLink;
+  private readonly sockets = new WeakMap<WebSocket, LinkSocket>();
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    const host = ctx.id.name;
+    if (!host) throw new Error("FederationObject must be addressed by host");
+    const server = serverEnv(env, (p) => ctx.waitUntil(p));
+    this.link = new ServerLink(server, host, {
+      dial: async (url, link) => {
+        const res = await fetch(url.replace(/^ws/, "http"), { headers: { upgrade: "websocket" } });
+        const ws = res.webSocket;
+        if (!ws) throw new Error(`stream refused: HTTP ${res.status}`);
+        ws.accept();
+        const sock = this.wrap(ws);
+        ws.addEventListener("message", (e) => void link.receive(sock, String(e.data)));
+        ws.addEventListener("close", () => link.closed(sock));
+        ws.addEventListener("error", () => link.closed(sock));
+        return sock;
+      },
+      deliver: (hh, msg) => env.HOUSEHOLD.getByName(hh).remoteSignal(host, msg),
+      routes: {
+        get: (id) => ctx.storage.get<string>(`route:${id}`),
+        set: (id, hh) => ctx.storage.put(`route:${id}`, hh),
+        delete: async (id) => {
+          await ctx.storage.delete(`route:${id}`);
+        },
+      },
+      wakeAt: (at) => {
+        void (at === null ? ctx.storage.deleteAlarm() : ctx.storage.setAlarm(at));
+      },
+      remember: (sock, state) => {
+        for (const ws of ctx.getWebSockets()) {
+          if (this.sockets.get(ws) === sock) ws.serializeAttachment(state);
+        }
+      },
+    });
+    // Back from hibernation: the accepted streams are still there, with their handshake state.
+    for (const ws of ctx.getWebSockets()) {
+      const state = ws.deserializeAttachment() as SocketState | null;
+      this.link.adopt(this.wrap(ws), state ?? { role: "acceptor", authed: false });
+    }
+  }
+
+  private wrap(ws: WebSocket): LinkSocket {
+    let sock = this.sockets.get(ws);
+    if (!sock) {
+      sock = {
+        send: (text) => {
+          try {
+            ws.send(text);
+          } catch {
+            // Closed meanwhile; the close event cleans up.
+          }
+        },
+        close: (code, reason) => {
+          try {
+            ws.close(code, reason);
+          } catch {}
+        },
+      };
+      this.sockets.set(ws, sock);
+    }
+    return sock;
+  }
+
+  /** `GET /fed/v1/stream?from=<host>`: the other server opens the stream. */
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("expected a WebSocket", { status: 426 });
+    }
+    const { 0: client, 1: server } = new WebSocketPair();
+    this.ctx.acceptWebSocket(server);
+    this.link.accept(this.wrap(server));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (typeof message !== "string") return ws.close(1003, "text frames only");
+    await this.link.receive(this.wrap(ws), message);
+  }
+
+  async webSocketClose(ws: WebSocket): Promise<void> {
+    this.link.closed(this.wrap(ws));
+  }
+
+  async webSocketError(ws: WebSocket): Promise<void> {
+    this.link.closed(this.wrap(ws));
+  }
+
+  async alarm(): Promise<void> {
+    this.link.idle();
+  }
+
+  register(callId: string, householdId: string): Promise<void> {
+    return this.link.register(callId, householdId);
+  }
+
+  signal(msg: FedSignal): Promise<void> {
+    return this.link.send(msg);
+  }
 }
 
 /** Holds unpaired phones while they show a pairing code. */
@@ -311,6 +471,13 @@ function coordinator(env: Env): Coordinator {
       env.PAIRING.getByName(PAIRING_OBJECT).notifyPaired(code, device),
     announce: (hh, msg) => env.HOUSEHOLD.getByName(hh).announce(msg),
     forgetDevice: (hh, deviceId) => env.HOUSEHOLD.getByName(hh).forgetDevice(deviceId),
+    ringRemote: (hh, req) => env.HOUSEHOLD.getByName(hh).ringRemote(req),
+    remoteSignal: (hh, host, msg) => env.HOUSEHOLD.getByName(hh).remoteSignal(host, msg),
+    relayDial: (hh, req) => env.HOUSEHOLD.getByName(hh).relayDial(req),
+    guestClaim: (hh, deviceId, nonce, guest) =>
+      env.HOUSEHOLD.getByName(hh).guestClaim(deviceId, nonce, guest),
+    guestLeave: (hh, deviceId, host, guestId) =>
+      env.HOUSEHOLD.getByName(hh).guestLeave(deviceId, host, guestId),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));
       for (const m of await store.listMemberships(accountId)) {
@@ -340,6 +507,13 @@ const federation = (c: Context<{ Bindings: Env }>) =>
     coordinator(c.env),
   ).fetch(c.req.raw);
 app.get("/.well-known/openloungephone", (c) => federation(c));
+// The server-pair stream: routed to the FederationObject for the host that opens it (which
+// then proves it is that host with a signed hello).
+app.get("/fed/v1/stream", async (c) => {
+  const from = c.req.query("from") ?? "";
+  if (!HOST_RE.test(from)) return c.text("bad host", 400);
+  return c.env.FEDERATION.getByName(from).fetch(c.req.raw);
+});
 app.all("/fed/v1/*", (c) => federation(c));
 
 app.all("/api/*", (c) => {

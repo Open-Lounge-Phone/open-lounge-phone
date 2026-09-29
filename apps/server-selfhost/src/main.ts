@@ -12,9 +12,15 @@ import {
   type ConnectionHandler,
   createApi,
   ensureSetupToken,
+  FedCalls,
   federationApp,
   Gateway,
+  LinkRegistry,
+  type LinkSocket,
+  presenceHook,
   type ServerEnv,
+  type ServerLink,
+  STREAM_PATH,
 } from "@openloungephone/server-app";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
@@ -36,6 +42,38 @@ function adoptLegacyDatabase(dataDir: string, dbPath: string): void {
   for (const suffix of ["", "-wal", "-shm"]) {
     if (existsSync(legacy + suffix)) renameSync(legacy + suffix, dbPath + suffix);
   }
+}
+
+/** A `ws` socket as a server-pair stream socket. */
+function streamSocket(ws: WebSocket): LinkSocket {
+  return {
+    send: (text) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(text);
+    },
+    close: (code, reason) => ws.close(code, reason),
+  };
+}
+
+function wireStream(ws: WebSocket, sock: LinkSocket, link: ServerLink): void {
+  ws.on("message", (data, isBinary) => {
+    if (!isBinary) void link.receive(sock, data.toString());
+  });
+  ws.on("close", () => link.closed(sock));
+  ws.on("error", () => link.closed(sock));
+}
+
+/** Dials another server's stream; `*.localhost` goes to loopback (see `loopbackFetch`). */
+async function dialStream(url: string, link: ServerLink): Promise<LinkSocket> {
+  const target = new URL(url);
+  if (target.hostname.endsWith(".localhost")) target.hostname = "127.0.0.1";
+  const ws = new WebSocket(target, { maxPayload: MAX_MESSAGE_BYTES });
+  await new Promise<void>((resolve, reject) => {
+    ws.once("open", () => resolve());
+    ws.once("error", reject);
+  });
+  const sock = streamSocket(ws);
+  wireStream(ws, sock, link);
+  return sock;
 }
 
 export async function start(config: Config) {
@@ -67,6 +105,10 @@ export async function start(config: Config) {
   if (applied.length) env.log("info", "applied migrations", { applied });
 
   const gateway = new Gateway(env);
+  // Federated calls: server-pair streams (dialed with `ws`), placement and presence sharing.
+  const links = new LinkRegistry(env, gateway, dialStream);
+  env.calls = new FedCalls(env, gateway, links);
+  env.onPresence = presenceHook(env, gateway);
   const app = new Hono();
   app.route("/api", createApi(env, gateway));
   // Server-to-server: /.well-known/openloungephone and the signed /fed/v1 endpoints.
@@ -85,6 +127,8 @@ export async function start(config: Config) {
   staticSite("/", config.companionDir);
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
+  // Server-pair streams: separate from client sockets (no keepalive; the dialer closes when idle).
+  const streamServer = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   const alive = new WeakMap<WebSocket, boolean>();
 
   const attach = (ws: WebSocket, open: (conn: Conn) => ConnectionHandler) => {
@@ -119,6 +163,16 @@ export async function start(config: Config) {
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host });
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const path = new URL(req.url ?? "/", "http://x").pathname;
+    if (path === STREAM_PATH) {
+      const from = new URL(req.url ?? "/", "http://x").searchParams.get("from") ?? "";
+      streamServer.handleUpgrade(req, socket, head, (ws) => {
+        const sock = streamSocket(ws);
+        const link = links.accept(from, sock);
+        if (!link) return ws.close(4400, "bad host");
+        wireStream(ws, sock, link);
+      });
+      return;
+    }
     const open =
       path === "/ws/device"
         ? (c: Conn) => gateway.openDevice(c)
@@ -150,7 +204,9 @@ export async function start(config: Config) {
     setupToken,
     close: async () => {
       clearInterval(keepalive);
+      links.close();
       for (const ws of wss.clients) ws.terminate();
+      for (const ws of streamServer.clients) ws.terminate();
       await new Promise<void>((r) => server.close(() => r()));
       db.close();
     },

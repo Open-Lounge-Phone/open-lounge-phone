@@ -1,20 +1,48 @@
-/** The link in a Lounge phone's QR code: `<server>/lounge#<deviceId>.<nonce>`. Pure. */
+/**
+ * The link in a Lounge phone's QR code: `<server>/lounge#<deviceId>.<nonce>`. A guest from
+ * another server is sent on to their own server as `<their server>/lounge#<deviceId>.<nonce>@<the
+ * phone's server>`. Pure.
+ */
 export interface LoungeLink {
   deviceId: string;
   nonce: string;
+  /** The phone's server, when it isn't this one (you're a guest there). */
+  host?: string;
 }
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
+const HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/;
 
 export function parseLoungeLink(pathname: string, hash: string): LoungeLink | undefined {
   if (pathname.replace(/\/+$/, "") !== "/lounge") return undefined;
-  const raw = hash.replace(/^#/, "");
+  let raw = hash.replace(/^#/, "");
+  let host: string | undefined;
+  const at = raw.lastIndexOf("@");
+  if (at >= 0) {
+    host = raw.slice(at + 1).toLowerCase();
+    raw = raw.slice(0, at);
+    if (!HOST.test(host)) return undefined;
+  }
   const dot = raw.lastIndexOf(".");
   if (dot <= 0) return undefined;
   const deviceId = raw.slice(0, dot);
   const nonce = raw.slice(dot + 1);
   if (!ID.test(deviceId) || !/^[A-Za-z0-9_-]{16,64}$/.test(nonce)) return undefined;
-  return { deviceId, nonce };
+  return host ? { deviceId, nonce, host } : { deviceId, nonce };
+}
+
+/**
+ * Where a guest continues: the same phone code, opened on their own server (which vouches for
+ * them). `server` is what they typed: a host, a URL, or their address `name@host`.
+ */
+export function guestLoungeUrl(server: string, link: LoungeLink, phoneHost: string) {
+  const t = server.trim().toLowerCase();
+  const host = (t.includes("@") ? t.slice(t.lastIndexOf("@") + 1) : t)
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+  if (!HOST.test(host) || host === phoneHost) return undefined;
+  const local = /(^|\.)localhost(:\d+)?$/.test(host);
+  return `${local ? "http" : "https"}://${host}/lounge#${link.deviceId}.${link.nonce}@${phoneHost}`;
 }
 
 /** Why a takeover didn't work, or why a session ended, in plain words. */

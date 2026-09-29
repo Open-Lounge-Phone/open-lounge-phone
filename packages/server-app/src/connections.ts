@@ -14,10 +14,17 @@ import {
 } from "@openloungephone/db";
 import {
   AcceptBody,
+  CallBody,
   HOST_RE,
   KnockBody,
+  LoungeClaimBody,
+  LoungeDialBody,
+  LoungeLeaveBody,
+  LoungeProgressBody,
   Note,
-  type Party,
+  Party,
+  PhonesBody,
+  PresenceBody,
   parseAddress,
   RemoveBody,
   WELL_KNOWN_PATH,
@@ -25,6 +32,7 @@ import {
 import { Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
+import { primaryHousehold, receiveGuestDial } from "./fedCalls.ts";
 import {
   DAY_MS,
   FederationError,
@@ -36,6 +44,7 @@ import {
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
+import { depositVoicemail, MAX_VOICEMAIL_BYTES, readRecording } from "./voicemail.ts";
 
 /** Someone, as seen by this server: `host` is '' for a local account. */
 export interface PeerRef extends Party {
@@ -45,7 +54,7 @@ export interface PeerRef extends Party {
 const partyOf = (a: Account): Party => ({ handle: a.handle, id: a.id, name: a.name });
 
 /** What the companion sees. */
-export function connectionView(c: Connection, host: string) {
+export function connectionView(c: Connection, host: string, now: number) {
   return {
     id: c.id,
     address: `${c.peerHandle}@${c.peerHost || host}`,
@@ -57,8 +66,13 @@ export function connectionView(c: Connection, host: string) {
     note: c.note,
     createdAt: c.createdAt,
     expiresAt: c.expiresAt,
+    // Shared only by people who opted in; older than an hour means "don't know".
+    presence: c.presence && c.presence.at > now - PRESENCE_FRESH_MS ? c.presence : null,
   };
 }
+
+/** Presence older than this is shown as unknown. */
+export const PRESENCE_FRESH_MS = 60 * 60 * 1000;
 
 /** Receiving and sending halves, bound to one server. */
 export class Connections {
@@ -319,6 +333,93 @@ export class Connections {
       now,
     );
   }
+
+  // --- phones shared with a connection ----------------------------------------------------
+
+  /**
+   * Tells a connection's person which of our phones they may call (a guardian here put them on
+   * those phones' allow-lists). Sent whenever that list may have changed.
+   */
+  async sharePhones(connectionId: string): Promise<void> {
+    const c = await this.store.connections.get(connectionId);
+    if (c?.state !== "active") return;
+    const me = await this.store.getAccount(c.accountId);
+    if (!me) return;
+    const phones = await this.store.sharedPhones(c.id);
+    try {
+      if (c.peerHost === LOCAL_HOST) {
+        await this.receivePhones({ ...partyOf(me), host: LOCAL_HOST }, c.peerHandle, phones);
+      } else {
+        await fedFetch(this.env, c.peerHost, "/phones", {
+          json: { from: partyOf(me), to: c.peerHandle, phones },
+        });
+      }
+    } catch (e) {
+      this.env.log("warn", "connections: phones not shared", { error: String(e) });
+    }
+  }
+
+  async receivePhones(
+    from: PeerRef,
+    toHandle: string,
+    phones: { id: string; label: string }[],
+  ): Promise<void> {
+    const account = await this.store.accountByHandle(toHandle);
+    if (!account) return;
+    const row = await this.store.connections.findPeer(account.id, from.host, from);
+    if (row?.state !== "active" || row.peerAccount !== from.id) return;
+    await this.store.connections.setPhones(row.id, phones);
+    await this.changed(account.id);
+  }
+
+  // --- presence (opt-in) ------------------------------------------------------------------------
+
+  /**
+   * An account's availability changed: tell its connections, if it shares availability. Batched
+   * per server (one request each), and rate-limited per account.
+   */
+  async publishPresence(accountId: string, online: boolean, available: boolean): Promise<void> {
+    const account = await this.store.getAccount(accountId);
+    if (!account?.sharePresence) return;
+    const now = this.env.now();
+    if (!(await this.store.connections.hit(`presence:${accountId}`, 10_000, 5, now))) return;
+    const byHost = new Map<string, string[]>();
+    for (const c of await this.store.connections.list(accountId)) {
+      if (c.state !== "active" || !c.peerAccount) continue;
+      byHost.set(c.peerHost, [...(byHost.get(c.peerHost) ?? []), c.peerHandle]);
+    }
+    const from = partyOf(account);
+    for (const [host, handles] of byHost) {
+      try {
+        if (host === LOCAL_HOST) {
+          await this.receivePresence({ ...from, host }, handles, online, available);
+        } else {
+          await fedFetch(this.env, host, "/presence", {
+            json: { from, to: handles.slice(0, 200), online, available },
+          });
+        }
+      } catch (e) {
+        this.env.log("warn", "connections: presence not delivered", { host, error: String(e) });
+      }
+    }
+  }
+
+  async receivePresence(
+    from: PeerRef,
+    toHandles: string[],
+    online: boolean,
+    available: boolean,
+  ): Promise<void> {
+    const now = this.env.now();
+    for (const handle of toHandles) {
+      const account = await this.store.accountByHandle(handle);
+      if (!account) continue;
+      const row = await this.store.connections.findPeer(account.id, from.host, from);
+      if (row?.state !== "active" || row.peerAccount !== from.id) continue;
+      await this.store.connections.setPresence(row.id, { online, available }, now);
+      await this.changed(account.id);
+    }
+  }
 }
 
 const KnockRequest = z.object({ to: z.string().trim().min(3).max(300), note: Note.optional() });
@@ -352,9 +453,16 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
     return c.json({
       address: `${account.handle}@${host}`,
       federates: !!env.federationKey && !!env.publicUrl,
-      connections: rows
-        .filter((r) => r.peerHandle !== WHOLE_SERVER)
-        .map((r) => connectionView(r, host)),
+      connections: await Promise.all(
+        rows
+          .filter((r) => r.peerHandle !== WHOLE_SERVER)
+          .map(async (r) => ({
+            ...connectionView(r, host, now),
+            // Their household phones you may call.
+            phones: r.state === "active" ? await store.connections.phones(r.id) : [],
+          })),
+      ),
+      sharePresence: account.sharePresence,
       blockedServers: rows
         .filter((r) => r.peerHandle === WHOLE_SERVER)
         .map((r) => ({ id: r.id, host: r.peerHost })),
@@ -368,7 +476,10 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
       const r = await service.knock(c.get("account"), b.to, b.note, c.req.url);
       // "sent" looks the same whether or not the handle exists (no enumeration).
       return c.json(
-        { status: r.status, connection: connectionView(r.connection, ownHost(env, c.req.url)) },
+        {
+          status: r.status,
+          connection: connectionView(r.connection, ownHost(env, c.req.url), env.now()),
+        },
         r.status === "sent" ? 202 : 200,
       );
     } catch (e) {
@@ -384,7 +495,7 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
       try {
         if (name === "accept") {
           const done = await service.accept(account, row);
-          return c.json(connectionView(done, ownHost(env, c.req.url)));
+          return c.json(connectionView(done, ownHost(env, c.req.url), env.now()));
         }
         if (name === "decline") await service.decline(row);
         else await service.block(account, row);
@@ -403,6 +514,43 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
     if (!row) return c.json({ error: "not found" }, 404);
     await service.remove(account, row);
     return c.body(null, 204);
+  });
+
+  /**
+   * Leave a voicemail on a phone a connection shared (when the call went to voicemail, e.g.
+   * during its quiet hours). Delivered to that phone's server, which checks its allow-list.
+   */
+  api.post("/connections/:id/voicemail", async (c) => {
+    const account = c.get("account");
+    const row = await own(account.id, c.req.param("id"));
+    const deviceId = c.req.query("deviceId") ?? "";
+    const phones = row?.state === "active" ? await store.connections.phones(row.id) : [];
+    if (!row || !phones.some((p) => p.deviceId === deviceId)) {
+      return c.json({ error: "not found" }, 404);
+    }
+    const rec = await readRecording(c.req.raw, c.req.query("durationMs"));
+    if (rec instanceof Response) return rec;
+    const from = partyOf(account);
+    if (row.peerHost === LOCAL_HOST) {
+      const ok = await receiveVoicemail(env, live, { ...from, host: LOCAL_HOST }, deviceId, rec);
+      return ok ? c.json({ ok: true }, 201) : c.json({ error: "not allowed" }, 403);
+    }
+    const q = new URLSearchParams({
+      to: deviceId,
+      from: from.handle,
+      fromId: from.id,
+      name: from.name,
+      durationMs: String(rec.durationMs),
+    });
+    try {
+      await fedFetch(env, row.peerHost, `/voicemail?${q}`, {
+        body: new Uint8Array(rec.audio),
+        contentType: rec.mime,
+      });
+      return c.json({ ok: true }, 201);
+    } catch (e) {
+      return fail(e);
+    }
   });
 
   api.post("/connections/block-server", async (c) => {
@@ -478,5 +626,172 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     return accepted();
   });
 
+  /** A call for someone here. The answer is ringing, or a reason (decided here alone). */
+  app.post("/fed/v1/calls", async (c) => {
+    const r = await signed(c.req.raw, CallBody);
+    if (r instanceof Response) return r;
+    if (!env.calls) return c.json({ state: "ended", reason: "unreachable" });
+    const result = await env.calls.receive(r.host, r.body);
+    return c.json(result.state === "ringing" ? { state: "ringing" } : result);
+  });
+
+  app.post("/fed/v1/phones", async (c) => {
+    const r = await signed(c.req.raw, PhonesBody);
+    if (r instanceof Response) return r;
+    await service.receivePhones({ ...r.body.from, host: r.host }, r.body.to, r.body.phones);
+    return accepted();
+  });
+
+  app.post("/fed/v1/presence", async (c) => {
+    const r = await signed(c.req.raw, PresenceBody);
+    if (r instanceof Response) return r;
+    const { from, to, online, available } = r.body;
+    await service.receivePresence({ ...from, host: r.host }, to, online, available);
+    return accepted();
+  });
+
+  // --- Lounge guests (see HouseholdHub.guestClaim) ----------------------------------------
+
+  /** Another server vouches for its account at one of our Lounge phones (a signed request). */
+  app.post("/fed/v1/lounge/claim", async (c) => {
+    const r = await signed(c.req.raw, LoungeClaimBody);
+    if (r instanceof Response) return r;
+    const device = await env.store.getDevice(r.body.deviceId);
+    if (device?.kind !== "lounge") return c.json({ step: "failed", reason: "not_found" });
+    const { from, directory } = r.body;
+    const result = await live.guestClaim(device.householdId, device.id, r.body.nonce, {
+      host: r.host,
+      handle: from.handle,
+      id: from.id,
+      name: from.name,
+      directory,
+    });
+    return c.json(result);
+  });
+
+  app.post("/fed/v1/lounge/leave", async (c) => {
+    const r = await signed(c.req.raw, LoungeLeaveBody);
+    if (r instanceof Response) return r;
+    const device = await env.store.getDevice(r.body.deviceId);
+    if (device?.kind === "lounge") {
+      await live.guestLeave(device.householdId, device.id, r.host, r.body.from.id);
+    }
+    return accepted();
+  });
+
+  /** Our account's takeover of the sending server's Lounge phone moved on. */
+  app.post("/fed/v1/lounge/progress", async (c) => {
+    const r = await signed(c.req.raw, LoungeProgressBody);
+    if (r instanceof Response) return r;
+    const { to, deviceId, step, reason, expiresAt } = r.body;
+    const account = await env.store.accountByHandle(to);
+    const state = account && (await env.store.loungeAwayState(account.id, r.host, deviceId));
+    if (!account || !state || state === "ended") return accepted();
+    if (step === "started" || step === "failed" || step === "ended") {
+      await env.store.setLoungeAway(
+        account.id,
+        r.host,
+        deviceId,
+        step === "started" ? "active" : "ended",
+        env.now(),
+      );
+    }
+    const known = [
+      "expired",
+      "wrong_key",
+      "timeout",
+      "busy",
+      "not_found",
+      "logout",
+      "left",
+      "idle",
+      "replaced",
+      "removed",
+      "offline",
+    ];
+    await live.notifyAccount(account.id, {
+      t: "lounge.progress",
+      deviceId,
+      step,
+      host: r.host,
+      ...(reason && known.includes(reason) ? { reason: reason as "expired" } : {}),
+      ...(expiresAt ? { expiresAt } : {}),
+    });
+    return accepted();
+  });
+
+  /** A guest of the sending server's Lounge phone (our account) pressed a key there. */
+  app.post("/fed/v1/lounge/dial", async (c) => {
+    const r = await signed(c.req.raw, LoungeDialBody);
+    if (r instanceof Response) return r;
+    return c.json(await receiveGuestDial(env, live, r.host, r.body));
+  });
+
+  /** A voicemail for a phone here, from someone on its allow-list (raw audio body). */
+  app.post("/fed/v1/voicemail", async (c) => {
+    const v = await verifyFedRequest(env, c.req.raw.clone(), MAX_VOICEMAIL_BYTES);
+    if (!v.ok) return v.response;
+    const q = new URL(c.req.url).searchParams;
+    const from = Party.safeParse({
+      handle: q.get("from"),
+      id: q.get("fromId"),
+      name: q.get("name"),
+    });
+    if (!from.success) return c.json({ error: "invalid sender" }, 400);
+    const rec = await readRecording(c.req.raw, q.get("durationMs") ?? undefined);
+    if (rec instanceof Response) return rec;
+    const ok = await receiveVoicemail(
+      env,
+      live,
+      { ...from.data, host: v.host },
+      q.get("to") ?? "",
+      rec,
+    );
+    return ok ? c.json({ ok: true }, 201) : c.json({ error: "not allowed" }, 403);
+  });
+
   return app;
+}
+
+/**
+ * Stores a voicemail from someone elsewhere for a phone here, if its allow-list lets them call it
+ * (through an active connection).
+ */
+export async function receiveVoicemail(
+  env: ServerEnv,
+  live: Coordinator,
+  from: PeerRef,
+  deviceId: string,
+  rec: { mime: string; audio: ArrayBuffer; durationMs: number },
+): Promise<boolean> {
+  const device = await env.store.getDevice(deviceId);
+  if (!device) return false;
+  const entry = (await env.store.listRemoteContacts(device.id)).find(
+    (r) => r.connection.peerHost === from.host && r.connection.peerAccount === from.id,
+  );
+  if (!entry?.canCallDevice) return false;
+  await depositVoicemail(env, live, { device, fromUser: null, fromLabel: entry.label, ...rec });
+  return true;
+}
+
+/**
+ * The `ServerEnv.onPresence` hook: a member's presence changed in a household hub. Presence is
+ * shared from the account's first (personal) space, where federated calls ring.
+ */
+export function presenceHook(
+  env: ServerEnv,
+  live: Coordinator,
+): NonNullable<ServerEnv["onPresence"]> {
+  const service = new Connections(env, live);
+  return (householdId, userId, online, available) => {
+    env.defer(
+      (async () => {
+        const user = await env.store.getUser(userId);
+        if (!user) return;
+        const home = await primaryHousehold(env, user.accountId);
+        if (home?.household.id !== householdId) return;
+        await service.publishPresence(user.accountId, online, available);
+      })().catch((e) => env.log("warn", "presence publish failed", { error: String(e) })),
+    );
+  };
 }

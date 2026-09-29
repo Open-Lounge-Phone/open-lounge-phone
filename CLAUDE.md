@@ -254,8 +254,24 @@ Keep this section current when finishing a milestone.
   Connections tab (address + copy + QR, Add by address, knocks inbox, waiting, blocked), allow-list
   picker with `@host` badges. Tests: `connections.test.ts` (mutation-checked),
   `federation/signature.test.ts`, `tests/e2e/twoServers.test.ts` (two real self-host processes).
+- **P3 federated calls, voicemail, presence, Lounge guests (2026-09-28, F2):** migration
+  `0009_federated_calls.sql` (additive columns `accounts.share_presence`,
+  `connections.presence_*`, `households.lounge_guests`; new `connection_phones`, `lounge_away`;
+  `lounge_sessions` rebuilt with nullable `user_id` + `guest_address/guest_name`, rows copied).
+  Hub: proxy `remote` peers (`FedConn`, call legs), `connectionDial` / `connectionPhoneDial` /
+  `remoteContactDial` / `dialRemote` (placement outside the queue), `remoteRing`, `remoteSignal`,
+  guests (`guestClaim`, `startGuestSession`, `guestDial`, `relayDial`). `fedCalls.ts` (callee-side
+  authorization, placement, loopback between households), `fedStream.ts` (`ServerLink`: signed
+  in-band hello, ordered sends, on-demand dial, 60 s idle close via alarm, hibernation `adopt`),
+  `fedLinks.ts` (in-process registry). Cloudflare `FederationObject` (DO per remote host,
+  migration tag v2) + `/fed/v1/stream` route. Protocol (additive): `call.connection`,
+  `call.phone`, `lounge.progress.host`. Client: Opus DTX (`withOpusDtx`). Companion: Call on
+  connections and their shared phones, presence dots + "Share my availability", remote
+  voicemail, guest Lounge flow, guardian "guests" toggle. Browser-verified: cross-server call
+  (a.localhost ↔ b.localhost) reaches WebRTC `connected` with DTX. Tests: `calls.test.ts`
+  (mutation-checked), e2e extended with call + voicemail.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
-  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls → P4 public hub → P5 interop).
+  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections ✔ → P3 federated calls ✔ → P4 public hub → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
   The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across

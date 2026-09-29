@@ -7,7 +7,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, it } from "vitest";
-import { block, knockAndAccept, type ServerTarget, signUp } from "./twoServers.ts";
+import {
+  block,
+  callAcross,
+  knockAndAccept,
+  type ServerTarget,
+  signUp,
+  voicemailAcross,
+} from "./twoServers.ts";
 
 const MAIN = fileURLToPath(new URL("../../apps/server-selfhost/src/main.ts", import.meta.url));
 const running: { proc: ChildProcess; dir: string }[] = [];
@@ -70,9 +77,11 @@ afterAll(() => {
   }
 });
 
-it("two servers: sign up on each, knock, accept, block", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, block", async () => {
   const jesse = await signUp(a, "jesse", "Jesse");
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
+  await callAcross(jesse, bob);
+  await voicemailAcross(jesse, bob);
   await block(jesse, bob);
 }, 60_000);

@@ -42,6 +42,7 @@ export function CallOverlay({ snap, conn, api }: { snap: Snapshot; conn: Connect
               <LeaveVoicemail
                 api={api}
                 deviceId={call.deviceId}
+                via={call.via}
                 label={call.label}
                 onClose={() => conn.dismiss()}
               />

@@ -12,6 +12,8 @@ export type CallView =
       deviceId?: string;
       /** A grown-up, app-to-app call to another person (no voicemail). */
       person?: boolean;
+      /** Dialled through a connection (another household or server): its id. */
+      via?: string;
     }
   | { phase: "incoming"; callId: string; label: string }
   | {
@@ -28,10 +30,11 @@ export type CallView =
       /** The phone this app dialled, so a voicemail can be left for it. */
       deviceId?: string;
       person?: boolean;
+      via?: string;
     };
 
 export type CallEvent =
-  | { type: "dial"; label: string; deviceId?: string; person?: boolean }
+  | { type: "dial"; label: string; deviceId?: string; person?: boolean; via?: string }
   | { type: "answer" }
   | { type: "hangup" }
   | { type: "dismiss" }
@@ -66,6 +69,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           ringing: false,
           ...(e.deviceId ? { deviceId: e.deviceId } : {}),
           ...(e.person ? { person: true } : {}),
+          ...(e.via ? { via: e.via } : {}),
         },
       };
     case "answer":
@@ -124,6 +128,7 @@ function stateFor(
           reason: msg.reason,
           ...(view.phase === "outgoing" && view.deviceId ? { deviceId: view.deviceId } : {}),
           ...(view.phase === "outgoing" && view.person ? { person: true } : {}),
+          ...(view.phase === "outgoing" && view.via ? { via: view.via } : {}),
         },
       };
     case "requesting":

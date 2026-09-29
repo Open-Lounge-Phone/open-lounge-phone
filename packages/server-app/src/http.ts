@@ -1,5 +1,5 @@
 import { type QuietHoursRule, validateSchedule, type Weekday } from "@openloungephone/core";
-import { newToken, sha256, type User } from "@openloungephone/db";
+import { isRemoteContactId, newToken, sha256, type User } from "@openloungephone/db";
 import { Id } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -11,9 +11,9 @@ import {
   serverHost,
   signupRoutes,
 } from "./accounts.ts";
-import { connectionRoutes } from "./connections.ts";
+import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
-import { ownHost } from "./federation.ts";
+import { FederationError, fedFetch, ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
@@ -38,7 +38,23 @@ const PairBody = z.object({
   /** Overrides what the phone was set up as. A Lounge phone is shared, never someone's own. */
   kind: z.enum(["kids", "lounge"]).optional(),
 });
-const LoungeSettingsBody = z.object({ idleMinutes: z.number().int().min(1).max(240) });
+const LoungeSettingsBody = z
+  .object({
+    idleMinutes: z.number().int().min(1).max(240).optional(),
+    /** Let people from other servers use this space's Lounge phones (their server vouches). */
+    guests: z.boolean().optional(),
+  })
+  .refine((b) => b.idleMinutes !== undefined || b.guests !== undefined, {
+    message: "nothing to change",
+  });
+const RemoteLoungeBody = z.object({
+  host: z.string().trim().toLowerCase().min(1).max(260),
+  deviceId: Id,
+  nonce: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{16,64}$/)
+    .optional(),
+});
 const DevicePatch = z
   .object({ name: Name.optional(), owner: z.enum(["me", "household"]).optional() })
   .refine((b) => b.name !== undefined || b.owner !== undefined, { message: "nothing to change" });
@@ -150,7 +166,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     await next();
   });
 
-  accountRoutes(api, env);
+  accountRoutes(api, env, live);
   connectionRoutes(api, env, live);
 
   // Everything below acts inside the active household.
@@ -296,6 +312,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     const id = await store.upsertRemoteContact(device.id, connection.id, b);
     await live.refreshDevice(user.householdId, device.id);
+    // They see (or stop seeing) this phone among the ones they may call.
+    await new Connections(env, live).sharePhones(connection.id);
     return c.json({ id });
   });
 
@@ -317,8 +335,13 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const user = c.get("user");
     const device = await manageable(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    await store.removeContact(device.id, c.req.param("userId"));
+    const id = c.req.param("userId");
+    const via = isRemoteContactId(id)
+      ? (await store.listRemoteContacts(device.id)).find((r) => r.id === id)?.connectionId
+      : undefined;
+    await store.removeContact(device.id, id);
     await live.refreshDevice(user.householdId, device.id);
+    if (via) await new Connections(env, live).sharePhones(via);
     return c.body(null, 204);
   });
 
@@ -359,8 +382,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     for (const vm of await store.listVoicemails(user.householdId, 10_000)) {
       if (vm.deviceId === device.id) await env.blobs.delete(vm.blobKey);
     }
+    const shared = (await store.listRemoteContacts(device.id)).map((r) => r.connectionId);
     await store.deleteDevice(device.id);
     await live.forgetDevice(user.householdId, device.id);
+    for (const id of shared) await new Connections(env, live).sharePhones(id);
     return c.body(null, 204);
   });
 
@@ -428,7 +453,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
             name: d.name,
             online: await live.isOnline(hh, d.id),
             session: open
-              ? { userId: open.userId, name: nameOf.get(open.userId) ?? "", since: open.startedAt }
+              ? {
+                  userId: open.userId,
+                  name: open.guest?.name ?? nameOf.get(open.userId ?? "") ?? "",
+                  since: open.startedAt,
+                  ...(open.guest ? { guest: open.guest.address } : {}),
+                }
               : null,
           };
         }),
@@ -436,6 +466,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const guardian = user.role === "guardian";
     return c.json({
       idleMinutes,
+      guests: await store.loungeGuests(hh),
       phones,
       // Only that a session happened: who, where, when. Nothing about calls.
       ...(guardian
@@ -443,7 +474,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
             history: sessions.map((s) => ({
               deviceId: s.deviceId,
               userId: s.userId,
-              userName: nameOf.get(s.userId) ?? "",
+              userName: s.guest?.name ?? nameOf.get(s.userId ?? "") ?? "",
+              ...(s.guest ? { guest: s.guest.address } : {}),
               startedAt: s.startedAt,
               endedAt: s.endedAt,
               endReason: s.endReason,
@@ -456,7 +488,66 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.put("/lounge/settings", guardianOnly, async (c) => {
     const b = await body(c.req.raw, LoungeSettingsBody);
     if (b instanceof Response) return b;
-    await store.setLoungeIdleMinutes(c.get("user").householdId, b.idleMinutes);
+    const hh = c.get("user").householdId;
+    if (b.idleMinutes !== undefined) await store.setLoungeIdleMinutes(hh, b.idleMinutes);
+    if (b.guests !== undefined) await store.setLoungeGuests(hh, b.guests);
+    return c.body(null, 204);
+  });
+
+  /**
+   * Use a Lounge phone on another server as yourself: this server vouches for you there (a
+   * signed request) and hands over your speed-dial (your connections). The phone then asks for
+   * the key press, exactly as for its own members.
+   */
+  api.post("/lounge/remote", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, RemoteLoungeBody);
+    if (b instanceof Response) return b;
+    if (!b.nonce) return c.json({ error: "scan the phone's code again" }, 400);
+    const now = env.now();
+    const host = ownHost(env, c.req.url);
+    const directory = (await store.connections.list(account.id))
+      .filter((x) => x.state === "active" && x.peerAccount)
+      .slice(0, 10)
+      .map((x) => ({
+        address: `${x.peerHandle}@${x.peerHost || host}`,
+        name: (x.peerName || x.peerHandle).slice(0, 64),
+      }));
+    await store.startLoungeAway(account.id, b.host, b.deviceId, now);
+    try {
+      const res = await fedFetch(env, b.host, "/lounge/claim", {
+        json: {
+          from: { handle: account.handle, id: account.id, name: account.name },
+          deviceId: b.deviceId,
+          nonce: b.nonce,
+          directory,
+        },
+      });
+      // A refused claim leaves the record pending: only the phone's "started" makes it active.
+      const result = (await res.json()) as { step: string; reason?: string; expiresAt?: number };
+      return c.json({ ...result, deviceId: b.deviceId, host: b.host });
+    } catch (e) {
+      if (e instanceof FederationError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
+    }
+  });
+
+  /** Leave another server's Lounge phone. */
+  api.post("/lounge/remote/leave", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, RemoteLoungeBody);
+    if (b instanceof Response) return b;
+    await store.setLoungeAway(account.id, b.host, b.deviceId, "ended", env.now());
+    try {
+      await fedFetch(env, b.host, "/lounge/leave", {
+        json: {
+          from: { handle: account.handle, id: account.id, name: account.name },
+          deviceId: b.deviceId,
+        },
+      });
+    } catch (e) {
+      env.log("warn", "lounge: leave not delivered", { error: String(e) });
+    }
     return c.body(null, 204);
   });
 

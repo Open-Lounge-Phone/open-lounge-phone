@@ -1,4 +1,5 @@
 import type { Device } from "@openloungephone/db";
+import type { FedSignal } from "@openloungephone/federation";
 import {
   type AppToServer,
   type DeviceToServer,
@@ -14,9 +15,12 @@ import {
   type Conn,
   type ConnMemo,
   HELLO_TIMEOUT_MS,
+  type LoungeGuest,
+  type RingResult,
   type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
+import type { RelayDial, RemoteRing } from "./fedCalls.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
 
 /** What a transport (Node `ws`, Workers WebSocket) drives for each socket. */
@@ -39,7 +43,25 @@ export interface Coordinator {
   forgetDevice(householdId: string, deviceId: string): Promise<void>;
   /** Sends a message to every open companion session of an account, in all its households. */
   notifyAccount(accountId: string, msg: ServerToApp): Promise<void>;
+  /** Rings someone in a household for a caller elsewhere (see `HouseholdHub.remoteRing`). */
+  ringRemote(householdId: string, req: RemoteRing): Promise<RingResult>;
+  /** Signaling for a household's call with another household or server. */
+  remoteSignal(householdId: string, host: string, msg: FedSignal): Promise<void>;
+  /** A guest at another server's Lounge phone dials; this household places it as them. */
+  relayDial(householdId: string, req: RelayDial): Promise<RingResult>;
+  /** Another server vouches for its account at one of this household's Lounge phones. */
+  guestClaim(
+    householdId: string,
+    deviceId: string,
+    nonce: string,
+    guest: LoungeGuest,
+  ): Promise<GuestClaimResult>;
+  guestLeave(householdId: string, deviceId: string, host: string, guestId: string): Promise<void>;
 }
+
+export type GuestClaimResult =
+  | { step: "press_key"; expiresAt: number }
+  | { step: "failed"; reason: "expired" | "wrong_key" | "timeout" | "busy" | "not_found" };
 
 type DevicePhase =
   | { kind: "hello" }
@@ -118,6 +140,34 @@ export class Gateway implements Coordinator {
     for (const m of await this.env.store.listMemberships(accountId)) {
       await this.hubs.get(m.household.id)?.sendToUser(m.user.id, msg);
     }
+  }
+
+  ringRemote(householdId: string, req: RemoteRing): Promise<RingResult> {
+    if (!this.allowed(householdId)) return Promise.resolve({ state: "ended", reason: "error" });
+    return this.hub(householdId).remoteRing(req);
+  }
+
+  async remoteSignal(householdId: string, host: string, msg: FedSignal): Promise<void> {
+    await this.hubs.get(householdId)?.remoteSignal(host, msg);
+  }
+
+  relayDial(householdId: string, req: RelayDial): Promise<RingResult> {
+    if (!this.allowed(householdId)) return Promise.resolve({ state: "ended", reason: "error" });
+    return this.hub(householdId).relayDial(req);
+  }
+
+  async guestClaim(
+    householdId: string,
+    deviceId: string,
+    nonce: string,
+    guest: LoungeGuest,
+  ): Promise<GuestClaimResult> {
+    const hub = this.allowed(householdId) ? this.hubs.get(householdId) : undefined;
+    return hub ? hub.guestClaim(deviceId, nonce, guest) : { step: "failed", reason: "not_found" };
+  }
+
+  async guestLeave(householdId: string, deviceId: string, host: string, guestId: string) {
+    await this.hubs.get(householdId)?.guestLeave(deviceId, host, guestId);
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */

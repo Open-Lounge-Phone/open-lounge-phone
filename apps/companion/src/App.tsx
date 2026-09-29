@@ -16,7 +16,7 @@ import { groupConnections } from "./connectionGroups.ts";
 import { Home } from "./Home.tsx";
 import { AddHousehold, GetStarted, HouseholdSwitcher } from "./Households.tsx";
 import { Invite } from "./Invite.tsx";
-import { LoungePhones, LoungeScan } from "./Lounge.tsx";
+import { GuestLounge, LoungePhones, LoungeScan } from "./Lounge.tsx";
 import { type LoungeLink, parseLoungeLink } from "./loungeLink.ts";
 import { ManageDevice } from "./ManageDevice.tsx";
 import { Pair } from "./Pair.tsx";
@@ -125,13 +125,16 @@ export function App() {
   }
   if (!token) {
     return (
-      <Start
-        onToken={(t, fresh) => {
-          if (fresh) markWelcomePending(localStorage);
-          signIn(t);
-        }}
-        onInvite={setInviteToken}
-      />
+      <>
+        {loungeLink && !loungeLink.host && <GuestLounge link={loungeLink} />}
+        <Start
+          onToken={(t, fresh) => {
+            if (fresh) markWelcomePending(localStorage);
+            signIn(t);
+          }}
+          onInvite={setInviteToken}
+        />
+      </>
     );
   }
   return (
@@ -464,6 +467,7 @@ function SignedIn({
             link={loungeLink}
             snap={snap}
             conn={conn}
+            api={api}
             devices={devices}
             onDone={onLoungeDone}
           />
@@ -595,6 +599,8 @@ function SignedIn({
             refreshKey={connSeq}
             onRequests={setKnocks}
             onBack={() => setRoute({ name: "home" })}
+            onCall={(c) => void conn?.callConnection(c.id, c.name)}
+            onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
           />
         )}
         {me && route.name === "voicemail" && (

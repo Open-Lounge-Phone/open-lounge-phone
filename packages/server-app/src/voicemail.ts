@@ -24,6 +24,67 @@ async function transcribe(env: ServerEnv, vm: Voicemail, audio: ArrayBuffer): Pr
   }
 }
 
+/** Stores a voicemail for a phone, starts its transcript, and tells the household. */
+export async function depositVoicemail(
+  env: ServerEnv,
+  live: Coordinator,
+  input: {
+    device: { id: string; householdId: string };
+    fromUser: string | null;
+    fromLabel: string;
+    mime: string;
+    audio: ArrayBuffer;
+    durationMs: number;
+  },
+): Promise<Voicemail> {
+  const { device } = input;
+  const blobKey = `voicemail/${device.householdId}/${newId("vmb")}`;
+  await env.blobs.put(blobKey, input.audio, input.mime);
+  const vm = await env.store.createVoicemail({
+    householdId: device.householdId,
+    deviceId: device.id,
+    fromUser: input.fromUser,
+    fromLabel: input.fromLabel,
+    createdAt: env.now(),
+    durationMs: input.durationMs,
+    mime: input.mime.split(";")[0] ?? input.mime,
+    blobKey,
+    transcriptStatus: env.transcriber ? "pending" : "unavailable",
+  });
+  env.defer(transcribe(env, vm, input.audio));
+  await live.refreshDevice(device.householdId, device.id);
+  await live.announce(device.householdId, {
+    t: "voicemail.new",
+    id: vm.id,
+    deviceId: device.id,
+    from: input.fromLabel,
+  });
+  return vm;
+}
+
+/** Checks an uploaded recording: an audio type, not empty, not too big. */
+export async function readRecording(
+  req: Request,
+  durationParam: string | undefined,
+): Promise<{ mime: string; audio: ArrayBuffer; durationMs: number } | Response> {
+  const mime = req.headers.get("content-type") ?? "";
+  if (!AUDIO_TYPE.test(mime))
+    return Response.json({ error: "expected an audio/* body" }, { status: 415 });
+  const declared = Number(req.headers.get("content-length") ?? 0);
+  if (declared > MAX_VOICEMAIL_BYTES)
+    return Response.json({ error: "voicemail too long" }, { status: 413 });
+  const audio = await req.arrayBuffer();
+  if (audio.byteLength === 0) return Response.json({ error: "empty recording" }, { status: 400 });
+  if (audio.byteLength > MAX_VOICEMAIL_BYTES) {
+    return Response.json({ error: "voicemail too long" }, { status: 413 });
+  }
+  const durationMs = Math.min(
+    MAX_VOICEMAIL_MS,
+    Math.max(0, Math.round(Number(durationParam ?? 0)) || 0),
+  );
+  return { mime, audio, durationMs };
+}
+
 export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): void {
   const { store } = env;
 
@@ -40,38 +101,13 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     const contact = await store.getContact(device.id, user.id);
     if (!contact?.canCallDevice) return c.json({ error: "not allowed" }, 403);
 
-    const mime = c.req.header("content-type") ?? "";
-    if (!AUDIO_TYPE.test(mime)) return c.json({ error: "expected an audio/* body" }, 415);
-    const declared = Number(c.req.header("content-length") ?? 0);
-    if (declared > MAX_VOICEMAIL_BYTES) return c.json({ error: "voicemail too long" }, 413);
-    const audio = await c.req.arrayBuffer();
-    if (audio.byteLength === 0) return c.json({ error: "empty recording" }, 400);
-    if (audio.byteLength > MAX_VOICEMAIL_BYTES) return c.json({ error: "voicemail too long" }, 413);
-    const durationMs = Math.min(
-      MAX_VOICEMAIL_MS,
-      Math.max(0, Math.round(Number(c.req.query("durationMs") ?? 0)) || 0),
-    );
-
-    const blobKey = `voicemail/${device.householdId}/${newId("vmb")}`;
-    await env.blobs.put(blobKey, audio, mime);
-    const vm = await store.createVoicemail({
-      householdId: device.householdId,
-      deviceId: device.id,
+    const rec = await readRecording(c.req.raw, c.req.query("durationMs"));
+    if (rec instanceof Response) return rec;
+    const vm = await depositVoicemail(env, live, {
+      device,
       fromUser: user.id,
       fromLabel: contact.label,
-      createdAt: env.now(),
-      durationMs,
-      mime: mime.split(";")[0] ?? mime,
-      blobKey,
-      transcriptStatus: env.transcriber ? "pending" : "unavailable",
-    });
-    env.defer(transcribe(env, vm, audio));
-    await live.refreshDevice(device.householdId, device.id);
-    await live.announce(device.householdId, {
-      t: "voicemail.new",
-      id: vm.id,
-      deviceId: device.id,
-      from: contact.label,
+      ...rec,
     });
     return c.json({ id: vm.id }, 201);
   });

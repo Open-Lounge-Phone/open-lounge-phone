@@ -26,6 +26,8 @@ export interface Connection {
   updatedAt: number;
   /** Pending knocks expire; a decline blocks re-knocks until then. */
   expiresAt: number | null;
+  /** Last presence they shared (only if they opted in); null = never. */
+  presence: { online: boolean; available: boolean; at: number } | null;
 }
 
 type Row = {
@@ -41,6 +43,9 @@ type Row = {
   created_at: number;
   updated_at: number;
   expires_at: number | null;
+  presence_online?: number | null;
+  presence_available?: number | null;
+  presence_at?: number | null;
 };
 const toConnection = (r: Row): Connection => ({
   id: r.id,
@@ -55,6 +60,14 @@ const toConnection = (r: Row): Connection => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   expiresAt: r.expires_at,
+  presence:
+    r.presence_at != null
+      ? {
+          online: r.presence_online === 1,
+          available: r.presence_available === 1,
+          at: r.presence_at,
+        }
+      : null,
 });
 
 export const KNOCK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -122,7 +135,7 @@ export class ConnectionStore {
 
   /** Creates or replaces the account's row about `peerHost`/`peerHandle`. */
   async put(
-    c: Omit<Connection, "id" | "createdAt" | "updatedAt">,
+    c: Omit<Connection, "id" | "createdAt" | "updatedAt" | "presence">,
     now: number,
   ): Promise<Connection> {
     const id = newId("con");
@@ -185,7 +198,10 @@ export class ConnectionStore {
       id,
     );
     if (state !== "active") {
-      await this.sql.run("DELETE FROM remote_contacts WHERE connection_id = ?", id);
+      await this.sql.batch([
+        { query: "DELETE FROM remote_contacts WHERE connection_id = ?", params: [id] },
+        { query: "DELETE FROM connection_phones WHERE connection_id = ?", params: [id] },
+      ]);
     }
   }
 
@@ -237,6 +253,41 @@ export class ConnectionStore {
       peer.handle,
     );
     return rows.map(toConnection);
+  }
+
+  /** Phones on the other side that this connection lets its owner call. */
+  async phones(connectionId: string): Promise<{ deviceId: string; label: string }[]> {
+    const rows = await this.sql.all<{ device_id: string; label: string }>(
+      "SELECT device_id, label FROM connection_phones WHERE connection_id = ? ORDER BY label",
+      connectionId,
+    );
+    return rows.map((r) => ({ deviceId: r.device_id, label: r.label }));
+  }
+
+  /** Replaces the phones a connection shares with us. */
+  async setPhones(connectionId: string, phones: { id: string; label: string }[]): Promise<void> {
+    await this.sql.batch([
+      { query: "DELETE FROM connection_phones WHERE connection_id = ?", params: [connectionId] },
+      ...phones.map((p) => ({
+        query:
+          "INSERT OR REPLACE INTO connection_phones (connection_id, device_id, label) VALUES (?, ?, ?)",
+        params: [connectionId, p.id, p.label],
+      })),
+    ]);
+  }
+
+  async setPresence(
+    connectionId: string,
+    presence: { online: boolean; available: boolean },
+    now: number,
+  ): Promise<void> {
+    await this.sql.run(
+      "UPDATE connections SET presence_online = ?, presence_available = ?, presence_at = ? WHERE id = ?",
+      presence.online ? 1 : 0,
+      presence.available ? 1 : 0,
+      now,
+      connectionId,
+    );
   }
 
   // --- rate limits ------------------------------------------------------------------

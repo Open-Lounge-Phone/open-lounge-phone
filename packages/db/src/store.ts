@@ -61,6 +61,8 @@ export interface Account {
   name: string;
   createdAt: number;
   handleChangedAt: number | null;
+  /** Shares availability with connections ("Share my availability"). */
+  sharePresence: boolean;
 }
 
 /** One of an account's households, with its role there. */
@@ -125,7 +127,10 @@ export type PhoneKind = "kids" | "lounge";
 export interface LoungeSessionRecord {
   id: string;
   deviceId: string;
-  userId: string;
+  /** The member using the phone; null for a guest from another server. */
+  userId: string | null;
+  /** A guest from another server: `handle@host` and name. */
+  guest: { address: string; name: string } | null;
   startedAt: number;
   endedAt: number | null;
   endReason: string | null;
@@ -137,7 +142,9 @@ export interface LoungeSessionRecord {
 type LoungeSessionRow = {
   id: string;
   device_id: string;
-  user_id: string;
+  user_id: string | null;
+  guest_address?: string | null;
+  guest_name?: string | null;
   started_at: number;
   ended_at: number | null;
   end_reason: string | null;
@@ -148,6 +155,7 @@ const toLoungeSession = (r: LoungeSessionRow): LoungeSessionRecord => ({
   id: r.id,
   deviceId: r.device_id,
   userId: r.user_id,
+  guest: r.guest_address ? { address: r.guest_address, name: r.guest_name ?? "" } : null,
   startedAt: r.started_at,
   endedAt: r.ended_at,
   endReason: r.end_reason,
@@ -287,6 +295,7 @@ type AccountRow = {
   name: string;
   created_at: number;
   handle_changed_at: number | null;
+  share_presence?: number;
 };
 const toAccount = (r: AccountRow): Account => ({
   id: r.id,
@@ -294,6 +303,7 @@ const toAccount = (r: AccountRow): Account => ({
   name: r.name,
   createdAt: r.created_at,
   handleChangedAt: r.handle_changed_at,
+  sharePresence: r.share_presence === 1,
 });
 type ContactRow = {
   user_id: string;
@@ -400,7 +410,14 @@ export class Store {
         now - HANDLE_RESERVE_MS,
       );
       if (changes === 1) {
-        return { id, handle, name: input.name, createdAt: now, handleChangedAt: null };
+        return {
+          id,
+          handle,
+          name: input.name,
+          createdAt: now,
+          handleChangedAt: null,
+          sharePresence: false,
+        };
       }
     }
     return undefined;
@@ -484,6 +501,14 @@ export class Store {
       },
     ]);
     return true;
+  }
+
+  async setSharePresence(accountId: string, share: boolean): Promise<void> {
+    await this.sql.run(
+      "UPDATE accounts SET share_presence = ? WHERE id = ?",
+      share ? 1 : 0,
+      accountId,
+    );
   }
 
   async setAccountName(accountId: string, name: string): Promise<void> {
@@ -978,6 +1003,21 @@ export class Store {
     return (r as { id: string }).id;
   }
 
+  /** This side's phones whose allow-list lets this connection's person call them. */
+  async sharedPhones(connectionId: string): Promise<{ id: string; label: string }[]> {
+    const rows = await this.sql.all<{ id: string; name: string }>(
+      `SELECT d.id, d.name FROM remote_contacts r JOIN devices d ON d.id = r.device_id
+       WHERE r.connection_id = ? AND r.can_call_device = 1 ORDER BY d.name`,
+      connectionId,
+    );
+    return rows.map((r) => ({ id: r.id, label: r.name.slice(0, 24) }));
+  }
+
+  /** Phones on the other side that a connection shares with its owner. */
+  connectionPhones(connectionId: string) {
+    return this.connections.phones(connectionId);
+  }
+
   /** Phones (with their allow-list entry) that list this connection. */
   async phonesForConnection(connectionId: string): Promise<{ deviceId: string; id: string }[]> {
     const rows = await this.sql.all<{ device_id: string; id: string }>(
@@ -1076,20 +1116,96 @@ export class Store {
   }
 
   /** Records that a session started (who, where, when) and returns its id. */
+  /** Records that a session started (a member, or a guest from another server). */
   async startLoungeSession(
-    input: { householdId: string; deviceId: string; userId: string },
+    input: {
+      householdId: string;
+      deviceId: string;
+      userId?: string;
+      guest?: { address: string; name: string };
+    },
     now: number,
   ): Promise<string> {
     const id = newId("ls");
     await this.sql.run(
-      "INSERT INTO lounge_sessions (id, household_id, device_id, user_id, started_at) VALUES (?, ?, ?, ?, ?)",
+      `INSERT INTO lounge_sessions (id, household_id, device_id, user_id, guest_address,
+         guest_name, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.householdId,
       input.deviceId,
-      input.userId,
+      input.userId ?? null,
+      input.guest?.address ?? null,
+      input.guest?.name ?? null,
       now,
     );
     return id;
+  }
+
+  /** Whether people from other servers may use this space's Lounge phones. */
+  async loungeGuests(householdId: string): Promise<boolean> {
+    const r = await this.sql.first<{ g: number }>(
+      "SELECT lounge_guests AS g FROM households WHERE id = ?",
+      householdId,
+    );
+    return r?.g === 1;
+  }
+
+  async setLoungeGuests(householdId: string, allowed: boolean): Promise<void> {
+    await this.sql.run(
+      "UPDATE households SET lounge_guests = ? WHERE id = ?",
+      allowed ? 1 : 0,
+      householdId,
+    );
+  }
+
+  // --- this server's accounts as guests elsewhere ----------------------------------------
+
+  /** Records a claim of another server's Lounge phone (pending until the key press). */
+  async startLoungeAway(accountId: string, host: string, deviceId: string, now: number) {
+    await this.sql.run(
+      `INSERT INTO lounge_away (id, account_id, host, device_id, state, created_at)
+       VALUES (?, ?, ?, ?, 'pending', ?)
+       ON CONFLICT(account_id, host, device_id) DO UPDATE SET state = 'pending',
+         created_at = excluded.created_at, ended_at = NULL`,
+      newId("la"),
+      accountId,
+      host,
+      deviceId,
+      now,
+    );
+  }
+
+  async setLoungeAway(
+    accountId: string,
+    host: string,
+    deviceId: string,
+    state: "active" | "ended",
+    now: number,
+  ): Promise<void> {
+    await this.sql.run(
+      `UPDATE lounge_away SET state = ?, ended_at = CASE WHEN ? = 'ended' THEN ? ELSE NULL END
+       WHERE account_id = ? AND host = ? AND device_id = ? AND state != 'ended'`,
+      state,
+      state,
+      now,
+      accountId,
+      host,
+      deviceId,
+    );
+  }
+
+  async loungeAwayState(
+    accountId: string,
+    host: string,
+    deviceId: string,
+  ): Promise<"pending" | "active" | "ended" | undefined> {
+    const r = await this.sql.first<{ state: "pending" | "active" | "ended" }>(
+      "SELECT state FROM lounge_away WHERE account_id = ? AND host = ? AND device_id = ?",
+      accountId,
+      host,
+      deviceId,
+    );
+    return r?.state;
   }
 
   async endLoungeSession(id: string, reason: string, now: number): Promise<void> {

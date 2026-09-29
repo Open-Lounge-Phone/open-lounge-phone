@@ -1130,3 +1130,12 @@ fieldset.ownership legend {
   cursor: pointer;
   font-weight: 600;
 }
+.connections .shared-phones {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid var(--line, #0002);
+}
+.connections .shared-phones .row {
+  justify-content: space-between;
+}

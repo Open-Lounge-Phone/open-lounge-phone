@@ -68,3 +68,12 @@ describe("roomStep", () => {
     }
   });
 });
+
+it("ends with the reason another server gave", () => {
+  const r = roomStep(newRoom("a", "b"), { type: "end", reason: "unavailable" });
+  expect(r).toMatchObject({
+    ok: true,
+    changed: true,
+    state: { phase: "ended", reason: "unavailable" },
+  });
+});

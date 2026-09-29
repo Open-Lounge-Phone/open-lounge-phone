@@ -21,6 +21,36 @@ export interface CallMediaOptions {
   onState?(state: RTCPeerConnectionState): void;
 }
 
+/**
+ * Turns on Opus DTX (`usedtx=1`): during silence the sender stops sending audio frames, so a
+ * relayed (TURN) call costs almost nothing while nobody speaks. Each side marks its own
+ * description, so both directions use it.
+ */
+export function withOpusDtx(sdp: string): string {
+  const eol = sdp.includes("\r\n") ? "\r\n" : "\n";
+  const lines = sdp.split(eol);
+  const opus = new Set(
+    lines
+      .map((l) => /^a=rtpmap:(\d+) opus\/48000/i.exec(l)?.[1])
+      .filter((pt): pt is string => pt !== undefined),
+  );
+  const withFmtp = new Set<string>();
+  const out = lines.map((l) => {
+    const m = /^a=fmtp:(\d+) (.*)$/.exec(l);
+    if (!m || !opus.has(m[1] as string)) return l;
+    withFmtp.add(m[1] as string);
+    if (/(^|;)\s*usedtx=/.test(m[2] as string)) return l.replace(/usedtx=\d/, "usedtx=1");
+    return `${l};usedtx=1`;
+  });
+  // Opus without any fmtp line: add one right after its rtpmap.
+  return out
+    .flatMap((l) => {
+      const pt = /^a=rtpmap:(\d+) opus\/48000/i.exec(l)?.[1];
+      return pt && !withFmtp.has(pt) ? [l, `a=fmtp:${pt} usedtx=1`] : [l];
+    })
+    .join(eol);
+}
+
 /** Audio-only peer connection for one call, driven by relayed `rtc.*` messages. */
 export class CallMedia {
   readonly pc: RTCPeerConnection;
@@ -46,9 +76,10 @@ export class CallMedia {
   /** Call once both sides have `rtc.config`; the offerer starts negotiation. */
   async start(): Promise<void> {
     if (!this.opts.offerer) return;
-    const offer = await this.pc.createOffer();
+    const created = await this.pc.createOffer();
+    const offer = { type: created.type, sdp: withOpusDtx(created.sdp ?? "") };
     await this.pc.setLocalDescription(offer);
-    this.opts.send({ t: "rtc.sdp", callId: this.opts.callId, type: "offer", sdp: offer.sdp ?? "" });
+    this.opts.send({ t: "rtc.sdp", callId: this.opts.callId, type: "offer", sdp: offer.sdp });
   }
 
   async handle(msg: Signal): Promise<void> {
@@ -56,14 +87,10 @@ export class CallMedia {
       await this.pc.setRemoteDescription({ type: msg.type, sdp: msg.sdp });
       for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c);
       if (msg.type === "offer") {
-        const answer = await this.pc.createAnswer();
+        const created = await this.pc.createAnswer();
+        const answer = { type: created.type, sdp: withOpusDtx(created.sdp ?? "") };
         await this.pc.setLocalDescription(answer);
-        this.opts.send({
-          t: "rtc.sdp",
-          callId: this.opts.callId,
-          type: "answer",
-          sdp: answer.sdp ?? "",
-        });
+        this.opts.send({ t: "rtc.sdp", callId: this.opts.callId, type: "answer", sdp: answer.sdp });
       }
       return;
     }

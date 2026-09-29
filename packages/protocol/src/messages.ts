@@ -346,6 +346,18 @@ export const CallUser = z
     "Companion app calls another member of the same server, app to app. Refused unless they're online and available.",
   );
 
+export const CallConnection = z
+  .object({ t: z.literal("call.connection"), ...Ref, connectionId: Id })
+  .describe(
+    "Call someone you're connected with (another household or another server). Their server decides: an active connection, their availability and busy state apply.",
+  );
+
+export const CallPhone = z
+  .object({ t: z.literal("call.phone"), ...Ref, connectionId: Id, deviceId: Id })
+  .describe(
+    "Call a household phone that a connection's guardian put you on the allow-list of (`GET /api/connections` lists them as `phones`). Its own allow-list and quiet hours decide.",
+  );
+
 export const PresenceSet = z
   .object({ t: z.literal("presence.set"), ...Ref, available: z.boolean() })
   .describe("Whether this person is taking app-to-app calls (persisted).");
@@ -369,6 +381,8 @@ export const AppToServer = z.discriminatedUnion("t", [
   AppHello,
   CallDial,
   CallUser,
+  CallConnection,
+  CallPhone,
   PresenceSet,
   LoungeClaim,
   LoungeAppLeave,
@@ -436,6 +450,11 @@ export const LoungeProgress = z
       .optional()
       .describe("Why a claim `failed` or a session `ended`."),
     expiresAt: EpochMs.optional().describe("With `press_key`: when the key proof runs out."),
+    host: z
+      .string()
+      .max(260)
+      .optional()
+      .describe("Set when the Lounge phone is on another server (you're a guest there)."),
   })
   .describe("Progress of your takeover of a Lounge phone, and the end of your session there.");
 

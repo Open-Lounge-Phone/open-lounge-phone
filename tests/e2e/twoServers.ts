@@ -1,5 +1,6 @@
 // Interop scenario between two independent servers (federation): sign-up on each, a knock across
 // servers, accept, and block. Runs against any two servers with open sign-up.
+import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { expect } from "vitest";
 import { fakeRegistration } from "./passkey.ts";
 import { socket } from "./scenario.ts";
@@ -87,4 +88,110 @@ export async function block(jesse: Person, bob: Person) {
   expect(await connections(jesse)).toEqual([]);
   expect((await api(jesse, "/connections", { body: { to: bob.address } })).status).toBe(202);
   expect((await connections(bob)).map((c) => c.state)).toEqual(["blocked"]);
+}
+
+/** Jesse calls Bob across servers: ring, answer, offer/answer relayed, both active, hang up. */
+export async function callAcross(jesse: Person, bob: Person) {
+  const [row] = await connections(jesse);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  jApp.send({ t: "call.connection", connectionId: row?.id as string });
+  const ring = await bApp.next("call.ringing");
+  const callId = ring.callId as string;
+  bApp.send({ t: "call.answer", callId });
+  expect(await jApp.next("rtc.config")).toHaveProperty("iceServers");
+  expect(await bApp.next("rtc.config")).toHaveProperty("iceServers");
+  jApp.send({ t: "rtc.sdp", callId, type: "offer", sdp: "v=0 offer" });
+  expect(await bApp.next("rtc.sdp")).toMatchObject({ type: "offer" });
+  bApp.send({ t: "rtc.sdp", callId, type: "answer", sdp: "v=0 answer" });
+  expect(await jApp.next("rtc.sdp")).toMatchObject({ type: "answer" });
+  for (const app of [jApp, bApp]) {
+    for (;;) if ((await app.next("call.state")).state === "active") break;
+  }
+  jApp.send({ t: "call.hangup", callId });
+  for (;;) {
+    const m = await bApp.next("call.state");
+    if (m.state === "ended") break;
+  }
+  jApp.ws.close();
+  bApp.ws.close();
+}
+
+/**
+ * Bob's kid's phone (on B) lists Jesse (on A); during its quiet hours her call goes to voicemail,
+ * which she leaves from her own server.
+ */
+export async function voicemailAcross(jesse: Person, bob: Person) {
+  const ws = bob.server.base.replace(/^http/, "ws");
+  const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicKey = toBase64Url(
+    new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey)),
+  );
+  const hello = {
+    t: "hello",
+    proto: 1,
+    model: "web-emulator",
+    fw: "e2e",
+    buttons: 4,
+    display: "eink",
+  };
+  const pairing = await socket(`${ws}/ws/device`);
+  pairing.send(hello);
+  pairing.send({ t: "pair.begin", publicKey });
+  const { code } = await pairing.next("pair.code");
+  expect((await api(bob, "/devices/pair", { body: { code, name: "Kid phone" } })).status).toBe(201);
+  const { deviceId } = await pairing.next("pair.done");
+  pairing.ws.close();
+  const phone = await socket(`${ws}/ws/device?device=${deviceId}`);
+  phone.send({ ...hello, deviceId: deviceId as string });
+  const { nonce } = await phone.next("auth.challenge");
+  const sig = await crypto.subtle.sign("Ed25519", keys.privateKey, fromBase64Url(nonce as string));
+  phone.send({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+  await phone.next("config");
+
+  const [bobsRow] = await connections(bob);
+  const put = await api(bob, `/devices/${deviceId}/remote-contacts/${bobsRow?.id}`, {
+    method: "PUT",
+    body: { label: "Jesse", canCallDevice: true, deviceCanCall: true, bypassQuietHours: false },
+  });
+  expect(put.status).toBe(200);
+  const allDay = [{ days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "23:59" }];
+  await api(bob, "/quiet-hours", { method: "PUT", body: { rules: allDay } });
+
+  const [row] = (await api(jesse, "/connections")).json.connections as (Conn & {
+    phones: { deviceId: string }[];
+  })[];
+  expect(row?.phones).toEqual([{ deviceId, label: "Kid phone" }]);
+  const jApp = await appSocket(jesse);
+  jApp.send({ t: "call.phone", connectionId: row?.id as string, deviceId: deviceId as string });
+  for (;;) {
+    const m = await jApp.next("call.state");
+    if (m.state === "ended") {
+      expect(m.reason).toBe("voicemail");
+      break;
+    }
+  }
+  const bApp = await appSocket(bob);
+  const recording = new Uint8Array(2048).map((_, i) => i % 199);
+  const vm = await fetch(
+    `${jesse.server.base}/api/connections/${row?.id}/voicemail?deviceId=${deviceId}&durationMs=1500`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${jesse.token}`, "content-type": "audio/webm" },
+      body: recording,
+    },
+  );
+  expect(vm.status).toBe(201);
+  expect(await bApp.next("voicemail.new")).toMatchObject({ deviceId, from: "Jesse" });
+  const list = (await api(bob, "/voicemails")).json as { id: string }[];
+  const audio = await fetch(`${bob.server.base}/api/voicemails/${list[0]?.id}/audio`, {
+    headers: { authorization: `Bearer ${bob.token}` },
+  });
+  expect(new Uint8Array(await audio.arrayBuffer())).toEqual(recording);
+  phone.ws.close();
+  jApp.ws.close();
+  bApp.ws.close();
 }

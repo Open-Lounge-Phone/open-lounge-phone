@@ -18,7 +18,9 @@ export type RoomEvent =
   | { type: "connected" }
   | { type: "hangup"; by: string }
   | { type: "timeout" }
-  | { type: "fail" };
+  | { type: "fail" }
+  /** The other server ended or refused the call, with its reason (federated calls). */
+  | { type: "end"; reason: EndReason };
 
 export type RoomTransition =
   | { ok: true; state: RoomState; changed: boolean }
@@ -45,6 +47,8 @@ export function roomStep(s: RoomState, e: RoomEvent): RoomTransition {
   switch (e.type) {
     case "fail":
       return end(s, "error");
+    case "end":
+      return end(s, e.reason);
     case "hangup":
       if (s.phase === "ringing") return end(s, e.by === s.callee ? "declined" : "hangup");
       return end(s, "hangup");

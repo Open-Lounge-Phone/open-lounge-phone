@@ -15,11 +15,13 @@ interface Props {
   api: Api;
   deviceId: string;
   label: string;
+  /** The phone is in another household or on another server: through this connection. */
+  via?: string | undefined;
   onClose(): void;
 }
 
 /** Shown after a call is refused for quiet hours: record up to a minute and send it. */
-export function LeaveVoicemail({ api, deviceId, label, onClose }: Props) {
+export function LeaveVoicemail({ api, deviceId, label, via, onClose }: Props) {
   const [stage, setStage] = useState<Stage>({ name: "offer" });
   const recorder = useRef<VoicemailRecorder>(undefined);
   const urlRef = useRef<string>(undefined);
@@ -58,7 +60,9 @@ export function LeaveVoicemail({ api, deviceId, label, onClose }: Props) {
   const send = async (recording: Recording, url: string) => {
     setStage({ name: "sending", recording, url });
     try {
-      await api.leaveVoicemail(deviceId, recording.blob, recording.durationMs);
+      if (via) {
+        await api.leaveConnectionVoicemail(via, deviceId, recording.blob, recording.durationMs);
+      } else await api.leaveVoicemail(deviceId, recording.blob, recording.durationMs);
       setStage({ name: "sent" });
     } catch (e) {
       const message =
