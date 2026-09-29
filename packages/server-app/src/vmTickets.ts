@@ -51,8 +51,9 @@ export type VmTarget =
       name: string;
     }
   /**
-   * A guest at our Lounge phone called through their own server (`host`), which offered
-   * voicemail with its own ticket: greeting and message are forwarded there.
+   * Another server (`host`; '' = another household here) offered voicemail with its own ticket:
+   * a guest at our Lounge phone called through their own server, or a team/org space there
+   * transferred our person's call and nobody answered. Greeting and message are forwarded there.
    */
   | { kind: "relay"; host: string; ticket: string; name: string };
 
@@ -131,6 +132,15 @@ async function targetGreeting(env: ServerEnv, t: VmTarget): Promise<Response> {
   // A ring group has the spoken default greeting, with its name.
   if (t.kind === "group") return greetingResponse({ kind: "default" });
   if (t.kind === "relay") {
+    if (t.host === LOCAL_HOST) {
+      // Another household here (a transfer between spaces on this server): its own ticket.
+      const inner = (await store.peekVoicemailTicket(t.ticket, "voicemail", env.now())) as
+        | VoicemailTicket
+        | undefined;
+      return inner && inner.target.kind !== "relay"
+        ? targetGreeting(env, inner.target)
+        : greetingResponse({ kind: "default" });
+    }
     try {
       const res = await outbound(env)(
         new Request(`${baseUrlFor(t.host)}/api/vm/greeting?ticket=${encodeURIComponent(t.ticket)}`),
@@ -195,7 +205,14 @@ async function deliver(
     if (!entry?.[from.check.field]) return 403;
   }
   if (target.kind === "relay") {
-    // The guest's server checks its own ticket, and delivers as them.
+    if (target.host === LOCAL_HOST) {
+      // Another household here offered it: use its ticket up and deliver as it says.
+      const inner = (await store.takeVoicemailTicket(target.ticket, "voicemail", env.now())) as
+        | VoicemailTicket
+        | undefined;
+      return inner && inner.target.kind !== "relay" ? deliver(env, live, inner, rec) : 404;
+    }
+    // The other server checks its own ticket, and delivers as its ticket says.
     if (await store.connections.serverBlocked(target.host)) return 403;
     try {
       const res = await outbound(env)(

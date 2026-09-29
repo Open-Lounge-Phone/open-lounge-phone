@@ -208,9 +208,11 @@ dot; anything older than an hour shows as unknown. Turning it off sends "offline
   person's own inbox or tells the phone's guardians — exactly like a local voicemail. (The older
   `POST /api/connections/:id/voicemail?deviceId=` still works for a shared phone.) A guest at
   another server's Lounge phone gets voicemail too: their own server issues the offer (in the
-  `/fed/v1/lounge/dial` answer or the ended `call.state` on the stream — the only offers that
-  cross servers), and the Lounge phone's server forwards the greeting and the message to
-  `/api/vm/*` on the guest's server, which delivers it as them.
+  `/fed/v1/lounge/dial` answer or the ended `call.state` on the stream), and the Lounge phone's
+  server forwards the greeting and the message to `/api/vm/*` on the guest's server, which
+  delivers it as them. The only other offer that crosses servers is a **transferred call that
+  nobody answers**: the team/org space's server offers its own box (ring group or member) in the
+  ended `call.state`, and the caller's server relays it the same way.
 - **Between households on one server** the same code runs with host `''`: the two hubs relay to
   each other directly (on Cloudflare, household Durable Object to household Durable Object).
 
@@ -239,7 +241,9 @@ the new call's id on the sender's side, which the receiver uses as its leg. The 
 checks its own side — a kids' phone never follows; it just ends the call — opens its own
 successor call for its person (or relays the notice on, e.g. from their home hub to the space
 they answered in) and tells its client the same way. `ringing: true` means the receiver's person
-places the new call (sends the offer); `ringing: false` connects at once (attended). The old route
+places the new call (sends the offer); `ringing: false` connects at once (attended). If the new
+call goes unanswered, the sender's `call.state ended` carries its voicemail offer (for the ring
+group's box or the member) and the receiver relays it to its person. The old route
 stays open until the other side answers or ends it (`transfer` doesn't end a route); if the other
 server ends the old call instead of following, the sender ends the new one.
 

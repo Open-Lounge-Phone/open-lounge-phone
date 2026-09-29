@@ -167,7 +167,8 @@ class FedConn implements Conn {
     if (msg.t !== "call.state" && msg.t !== "rtc.sdp" && msg.t !== "rtc.ice") return;
     if (msg.t === "call.state" && msg.state === "ringing") return;
     // A voicemail offer never crosses to the other server, except to a Lounge phone there where
-    // one of our accounts is a guest (it relays the offer to the phone; see `remoteSignal`).
+    // one of our accounts is a guest, and to someone whose call our team/org space transferred
+    // (their server relays it to them; see `relayOffer`).
     if (msg.t === "call.state" && msg.voicemail && !this.offers) {
       const { voicemail: _vm, ...rest } = msg;
       msg = rest;
@@ -2245,6 +2246,7 @@ export class HouseholdHub {
     leg?: string;
     address?: string;
     loungeRelay?: boolean;
+    transferred?: boolean;
     kidsPhone?: boolean;
   }): Peer {
     return this.remoteFromInfo({
@@ -2259,6 +2261,7 @@ export class HouseholdHub {
       ...(info.leg ? { leg: info.leg } : {}),
       ...(info.address ? { address: info.address } : {}),
       ...(info.loungeRelay ? { loungeRelay: true } : {}),
+      ...(info.transferred ? { transferred: true } : {}),
       ...(info.kidsPhone ? { kidsPhone: true } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
@@ -2275,7 +2278,7 @@ export class HouseholdHub {
         this.env,
         { host, ...(info.peerHousehold ? { householdId: info.peerHousehold } : {}) },
         info.leg,
-        info.loungeRelay === true,
+        info.loungeRelay === true || info.transferred === true,
       ),
     };
   }
@@ -2609,7 +2612,7 @@ export class HouseholdHub {
         }
         if (msg.state === "ended") {
           if (msg.note) room.endNote = msg.note;
-          if (msg.voicemail && party === "callee") this.relayOffer(room, host, msg.voicemail);
+          if (msg.voicemail && party === "callee") await this.relayOffer(room, host, msg.voicemail);
           return this.apply(room, { type: "end", reason: msg.reason ?? "hangup" });
         }
         if (msg.state === "connecting" && party === "callee") {
@@ -2762,8 +2765,8 @@ export class HouseholdHub {
     };
     void placeGuestDial(this.env, guest.host, body).then((r) =>
       r.state === "ended"
-        ? this.run(() => {
-            if (r.voicemail) this.relayOffer(room, guest.host, r.voicemail);
+        ? this.run(async () => {
+            if (r.voicemail) await this.relayOffer(room, guest.host, r.voicemail);
             return this.apply(room, { type: "end", reason: r.reason });
           })
         : undefined,
@@ -2771,17 +2774,26 @@ export class HouseholdHub {
   }
 
   /**
-   * A guest's call from our Lounge phone went unanswered and their server offered voicemail:
-   * the phone gets an offer of ours that forwards to theirs (their server delivers it as them).
+   * The other server offered voicemail for a call it answers for: a guest's call from our Lounge
+   * phone (their own server offers, as them), or our person's call that a team/org space there
+   * transferred and nobody picked up (its box, as for a caller of its own). The caller gets an
+   * offer of ours that forwards greeting and message to theirs (`relay`). Only then: any other
+   * call's voicemail is ours to offer, through the connection.
    */
-  private relayOffer(room: Room, host: string, offer: VoicemailOffer): void {
-    const phone = room.caller;
-    const guest = phone.kind === "device" ? phone.lounge?.session?.guest : undefined;
-    if (!guest || guest.host !== host || room.calleePeer?.host !== host) return;
-    room.vm = {
-      target: { kind: "relay", host, ticket: offer.ticket, name: offer.name },
-      from: { label: guest.name.slice(0, 24), address: `device:${phone.id}` },
-    };
+  private async relayOffer(room: Room, host: string, offer: VoicemailOffer): Promise<void> {
+    const caller = room.caller;
+    const far = room.calleePeer;
+    if (far?.host !== host) return;
+    const guest = caller.kind === "device" ? caller.lounge?.session?.guest : undefined;
+    let from: VmCaller | undefined;
+    if (guest) {
+      if (guest.host !== host) return;
+      from = { label: guest.name.slice(0, 24), address: `device:${caller.id}` };
+    } else if (far.transferred && !room.vm && caller.kind !== "remote") {
+      from = await this.vmCaller(caller, caller.label);
+    }
+    if (!from) return;
+    room.vm = { target: { kind: "relay", host, ticket: offer.ticket, name: offer.name }, from };
     this.roomsDirty = true;
   }
 
@@ -3571,7 +3583,7 @@ export class HouseholdHub {
   }
 
   /** A fresh proxy for the same far end, for a call that goes on under a new id here. */
-  private successor(far: Peer, leg?: string): Peer {
+  private successor(far: Peer, leg?: string, transferred = false): Peer {
     const next = this.remotePeer({
       host: far.host ?? LOCAL_HOST,
       key: far.key,
@@ -3579,6 +3591,7 @@ export class HouseholdHub {
       peerHousehold: far.peerHousehold,
       ...(leg ? { leg } : {}),
       ...(far.address ? { address: far.address } : {}),
+      ...(transferred ? { transferred: true } : {}),
     });
     (next.conn as FedConn).shareLine(far.conn as FedConn);
     return next;
@@ -3605,7 +3618,8 @@ export class HouseholdHub {
       return this.refuseControl(peer, REMOTE_TARGET);
     }
     const id = newId("call");
-    const far = this.successor(other);
+    // If the target doesn't answer, they get our voicemail offer (as a caller from here would).
+    const far = this.successor(other, undefined, true);
     // Step the call aside while the target is tried (busy checks use the far end's key).
     this.rooms.delete(room.id);
     const opened =
@@ -3622,6 +3636,19 @@ export class HouseholdHub {
       return this.refuseControl(peer, `transfer refused: ${opened.note ?? opened.reason}`);
     }
     opened.payer = room.payer;
+    // Unanswered, it goes to the target's voicemail here (a ring group's box, or the person),
+    // exactly like a local caller's transfer; their server relays the offer (`relayOffer`).
+    const vmTarget = await this.vmTargetOf(opened);
+    if (vmTarget) {
+      opened.vm = {
+        target: vmTarget,
+        from: {
+          label: other.label,
+          address: other.address ?? `remote:${other.host ?? LOCAL_HOST}`,
+          ...(room.payer ? { payer: room.payer } : {}),
+        },
+      };
+    }
     await calls.register(far.host ?? LOCAL_HOST, id, this.householdId);
     this.handoffs.set(`${other.host ?? LOCAL_HOST}|${other.leg ?? room.id}`, id);
     room.cancelTimer?.();
@@ -3662,7 +3689,8 @@ export class HouseholdHub {
     this.roomsDirty = true;
     await this.closeBooks(room, "hangup");
     const id = newId("call");
-    const far = this.successor(remote, t.callId);
+    // Transferred by their space: if nobody answers there, their voicemail offer is relayed.
+    const far = this.successor(remote, t.callId, true);
     await calls.register(far.host ?? LOCAL_HOST, t.callId, this.householdId);
     // Relaying for another household or server: its side follows under our new id.
     const ours = near.kind === "remote" ? this.successor(near) : near;

@@ -193,9 +193,15 @@ export interface PeerInfo {
   address?: string;
   /**
    * Remote peers: another server's Lounge phone where one of our accounts is a guest, calling
-   * through us (`relayDial`). The only remote party a voicemail offer is sent to.
+   * through us (`relayDial`). A voicemail offer is sent to it (and to `transferred` peers).
    */
   loungeRelay?: boolean;
+  /**
+   * Remote peers: the far end of a call a team/org space transferred. On the space's side (the
+   * person transferred) they get its voicemail offer if the target doesn't answer, like a
+   * caller from here would; on their side (the space) that offer is relayed to our caller.
+   */
+  transferred?: boolean;
   /**
    * The far end is a kids' phone (it called through a guardian's connection, or we called one):
    * a call with it is never recorded.

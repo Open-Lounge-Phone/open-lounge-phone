@@ -96,7 +96,10 @@ party is a member or phone of the space). The call rings the target under a new 
 side's server is told with `call.state ended` + `transfer {callId, ringing, offerer}` (the new
 id on the sender's side) and carries its person over to it — through any relays (e.g. their
 home hub when they answered in another space). If their server doesn't follow, the new call
-ends.
+ends. If nobody answers the new call, the transferred person gets the **same voicemail offer a
+caller from this space would** (the ring group's shared box, or the member's inbox): the space's
+server sends its offer with the ended `call.state`, and their own server hands them an offer of
+its own that forwards the greeting and the message to it.
 
 Everything else is still refused, because in those cases nobody could vouch for the new pair:
 

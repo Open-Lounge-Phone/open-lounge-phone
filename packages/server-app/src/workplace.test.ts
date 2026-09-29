@@ -488,6 +488,80 @@ describe("transfer across servers (team/org spaces only)", () => {
     await cy.nextState("ended");
   });
 
+  it("blind, unanswered: Bob gets the ring group's voicemail offer, as a caller from here would", async () => {
+    await group(a, t.ada.token, {
+      name: "Support",
+      extension: "300",
+      ringSeconds: 10,
+      members: [t.cy.user.id],
+    });
+    const cy = await a.connectApp(t.cy.token);
+    const { bApp, olga, aCall } = await bobCallsOlga();
+    olga.write({ t: "call.transfer", callId: aCall, to: { extension: "300" } });
+    const next = (await bApp.nextState("ended")).transfer?.callId as string;
+    await cy.next("call.ringing");
+    // Nobody in the group answers.
+    a.timers.advance(10_000);
+    await cy.nextState("ended");
+    const ended = await bApp.nextState("ended");
+    expect(ended).toMatchObject({ callId: next, reason: "timeout" });
+    expect(ended.voicemail?.name).toBe("Support");
+    // Bob's own server issued the ticket; greeting and message go through it to the team's box.
+    const greeting = await b.http(`/vm/greeting?ticket=${ended.voicemail?.ticket}`);
+    expect(greeting.status).toBe(204);
+    const res = await b.http(`/vm/message?ticket=${ended.voicemail?.ticket}&durationMs=4000`, {
+      raw: new Uint8Array([1, 2, 3]),
+      type: "audio/webm",
+    });
+    expectStatus(res, 201);
+    expect(await cy.next("voicemail.inbox")).toMatchObject({ box: "Support", from: "Bob" });
+    const inbox = (await a.http("/voicemails", { token: t.cy.token })).json;
+    expect(inbox).toMatchObject([{ box: "Support", fromLabel: "Bob" }]);
+    // The ticket is single-use on both servers.
+    const again = await b.http(`/vm/message?ticket=${ended.voicemail?.ticket}&durationMs=4000`, {
+      raw: new Uint8Array([1]),
+      type: "audio/webm",
+    });
+    expectStatus(again, 404);
+  });
+
+  it("unanswered transfer from another household on the same server: the same offer", async () => {
+    await group(a, t.ada.token, {
+      name: "Support",
+      extension: "300",
+      ringSeconds: 10,
+      members: [t.cy.user.id],
+    });
+    const hal = await a.person("hal", "Hal");
+    expectStatus(
+      await a.http("/connections", { token: hal.token, body: { to: t.olga.address } }),
+      202,
+    );
+    const knock = (await a.http("/connections", { token: t.olga.token })).json.connections.find(
+      (c: { address: string }) => c.address === hal.address,
+    );
+    await a.http(`/connections/${knock.id}/accept`, { method: "POST", token: t.olga.token });
+    const toOlga = (await a.http("/connections", { token: hal.token })).json.connections[0].id;
+    const hApp = await a.connectApp(hal.token);
+    const olga = await a.connectApp(t.olga.token);
+    const cy = await a.connectApp(t.cy.token);
+    hApp.write({ t: "call.connection", connectionId: toOlga });
+    const ring = await olga.next("call.ringing");
+    await talk(hApp, olga, ring.callId).catch(() => {});
+    olga.write({ t: "call.transfer", callId: ring.callId, to: { extension: "300" } });
+    expect((await hApp.nextState("ended")).transfer).toMatchObject({ ringing: true });
+    await cy.next("call.ringing");
+    a.timers.advance(10_000);
+    const ended = await hApp.nextState("ended");
+    expect(ended.voicemail?.name).toBe("Support");
+    const res = await a.http(`/vm/message?ticket=${ended.voicemail?.ticket}&durationMs=4000`, {
+      raw: new Uint8Array([1, 2, 3]),
+      type: "audio/webm",
+    });
+    expectStatus(res, 201);
+    expect(await cy.next("voicemail.inbox")).toMatchObject({ box: "Support", from: "Hal" });
+  });
+
   it("attended: Olga holds Bob, calls Ben, and connects them", async () => {
     const ben = await a.connectApp(t.ben.token);
     const { bApp, olga, aCall } = await bobCallsOlga();
