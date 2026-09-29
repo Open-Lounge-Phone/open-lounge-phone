@@ -34,6 +34,28 @@ and self-host.
 
 ## Key flows
 
+**Accounts, households and memberships.** A person has one **account** per server, with a
+unique, changeable **handle**; their address is `handle@host` (e.g. `jesse@l1.openloungephone.app`).
+A **household** holds phones, quiet hours and an allow-list per phone. A **membership** (a
+`users` row with `account_id`) is the account's role in one household (guardian or contact), and
+one account can belong to several households (co-parents, grandparents). Passkeys and sessions
+belong to the account; a session remembers its **active household**, and a client can pin a
+request to another of its own households with the `x-household` header (the companion does, per
+tab) or name it in `app.hello.household`. Every existing route acts inside the active household,
+and asking for a household the account isn't in is refused (403). Ways in:
+- the first-run setup link creates the first household (unchanged);
+- **open sign-up** (`OPEN_SIGNUP=1`, off by default): pick a handle, create a passkey → account
+  plus a personal household (`POST /api/signup/options`, `POST /api/signup`);
+- an **invite link**: signed out it creates a new person; signed in it adds a membership to your
+  account;
+- **Add a household** (`POST /api/households`): any account on an open server, or a guardian on
+  an invite-only one.
+
+Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decide every call, and
+calls stay inside one household until federated connections (see
+[federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted
+"knock". There is no bridge to the phone network (PSTN), ever.
+
 **Pairing.** An unpaired phone generates an Ed25519 keypair, sends `pair.begin`, shows the
 returned 6-digit code on its e-ink status strip, and reads it aloud when the handset is lifted. A guardian enters it in the companion app; the server binds the public key
 to the household and sends `pair.done`. Every later connection is a signed `auth.challenge`, so

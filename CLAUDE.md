@@ -215,15 +215,19 @@ Keep this section current when finishing a milestone.
   phone, "open to chat" presence (MENU → 5), and a companion `/lounge` scan page plus a Lounge phones
   section. The server keeps only who, where and when.
 - M5 CLI + Tauri — deploy script done (seed of the CLI); rest not started.
-- **Roadmap (owner vision, 2026-09-27):**
-  - **M6 multi-server companion:** one companion app (web/PWA, later native) can hold
-    memberships on many independent Open Lounge Phone servers at once (e.g. l1, l2, a friend's
-    self-hosted domain), like an email client with several accounts: per-server session, socket
-    and household; unified incoming-call/voicemail view; server switcher. Servers stay
-    independent (no federation needed — each allow-list is local). Needs: CORS allowlist for
-    API/WebSocket, tokens obtained via invite/sign-in links or a redirect "connect this server"
-    flow (passkeys are per-domain, so authentication happens on the server's own origin and a
-    scoped token is handed back).
+- **P1 accounts + several households (2026-09-28, F0):** migration `0006_accounts.sql`
+  (accounts with unique handles `handle@host`, `users` = memberships with `account_id`, sessions
+  and passkeys on the account; backfill derives de-duplicated handles from names). Active
+  household per session, `x-household` header / `app.hello.household` to pin one (must be your
+  own). `POST /api/signup[/options]` behind `OPEN_SIGNUP=1` (self-host env; Cloudflare var via
+  `deploy.ts --open-signup`; default off), `POST /api/households`, `PUT /api/me/household`,
+  `PATCH /api/account` (handle once a day), invite accept while signed in adds a membership.
+  Companion: sign-up/invite/sign-in chooser, handle picker, household switcher, "Add a kid's
+  phone / Invite a co-guardian / Add a household". Not yet deployed to l1.
+- **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
+  (P1 accounts ✔ → P2 knocks/connections → P3 federated calls → P4 public hub → P5 interop).
+  Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
+  The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across
     servers with single-use connection links (`name@host` addresses, server Ed25519 keys at
     `/.well-known/openloungephone`, RFC 9421 signed requests), default-deny everywhere (each

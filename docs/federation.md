@@ -1,9 +1,22 @@
 # Federation: connecting across Open Lounge Phone servers
 
-Status: **design, not implemented.** Owner direction (2026-09-27): people should be able to
-send and accept connection invites regardless of which server they're on, and call each other
-through a fair, seamless server-to-server protocol. No central server, and the owner's
-public-good hub is just one more server.
+Status: **F0 (accounts and several households per server) is implemented; F1–F4 are design.**
+Owner direction (2026-09-27): people should be able to send and accept connection invites
+regardless of which server they're on, and call each other through a fair, seamless
+server-to-server protocol. No central server, and the owner's public-good hub is just one more
+server. The buildable phases are in the plan (`~/.claude/plans/we-build-on-this-dapper-wand.md`:
+P1 = F0, P2 = F1 connections and knocks, P3 = F2 calls, P4 = the public hub, P5 = F4 interop).
+
+Owner decisions (2026-09-28):
+- **Knock, then talk.** Anyone may send one contact request (a *knock*) to `name@server`. It is
+  rate-limited and blockable, and calling works only after it's accepted. Kids' phones are never
+  knockable.
+- **No regular phone network, ever.** No PSTN or phone-number bridge: a closed, spam-free
+  network.
+- **Onboarding = a public hub plus people's own servers.** `hub.openloungephone.app` has open
+  sign-up; anyone can still run their own server. Both federate as equals.
+- **One account on one home server reaches everyone**, so the earlier "multi-server companion"
+  idea (M6) is dropped: a companion talks only to its own home server.
 
 ## Principles
 
@@ -13,13 +26,39 @@ public-good hub is just one more server.
 2. **Your server is your authority.** Each server authorizes everything that touches its own
    users and phones: allow-lists, quiet hours, availability, busy. It never trusts another
    server's claim about those.
-3. **No central directory, no open calling.** You can't look people up or call strangers. You
-   connect through an invite that one person shares with another out of band, like a phone
-   number written on paper.
+3. **No central directory, no open calling.** You can't search for people or call strangers.
+   You reach someone by knowing their address (shared out of band, like a phone number written
+   on paper) and knocking; they decide whether to accept. Connection links (below) are the
+   no-knock shortcut when you're already in touch.
 4. **Fair.** Every server gets the same rate limits. Any server can block another. Payloads are
    small and bounded. The owner's hub gets no special treatment.
 5. **Private by default.** A server shares presence and names only with people you're connected
    to. Call audio travels peer-to-peer or through TURN, never through the other server.
+6. **No phone network.** No PSTN, SMS or phone-number bridge, now or later.
+
+## Accounts and memberships (F0, implemented)
+
+- An **account** is one person on one server: a unique handle (`[a-z0-9._-]{2,30}`, changeable
+  at most once a day; a few names like `admin` are reserved), a display name, passkeys and
+  sessions. Its address is `handle@host`.
+- A **membership** is the account's role (guardian or contact) in one household; one account can
+  belong to several. Sessions carry the active household; clients may pin a request to another of
+  their own households (`x-household`, `app.hello.household`).
+- Signing up on an open server (`OPEN_SIGNUP=1`) creates the account and a personal household
+  for the person's own phones. Accepting a household invite while signed in adds a membership
+  instead of creating a new person.
+- Migration `0006_accounts.sql` gave every existing person an account, with a handle derived
+  from their name and de-duplicated (`mom`, `mom-2`, …).
+
+## Knocks (F1, design)
+
+A knock is a contact request `POST /api/connections {to: "bob@host", note ≤ 140}`, delivered
+locally or (for another server) as a signed `POST /fed/v1/knock`. The recipient accepts,
+declines silently, or blocks. Limits: one pending knock per pair, 10 knocks a day per account,
+knocks expire after 30 days, no re-knock for 30 days after a decline, block a person or a whole
+server. Unknown handles and blocked senders get the same answer, so handles can't be enumerated.
+Only accounts are knockable; household phones (kids' phones) never are, and a guardian may add an
+**active** connection to a phone's allow-list.
 
 ## Identities and discovery
 
@@ -99,16 +138,17 @@ Turning off "Share my availability with connections" stops them.
 
 | Phase | What | Notes |
 |---|---|---|
-| **F0** | Separate households on one server ("Invite a new household"), one account in several households, clear "Add a kid's phone" / "Invite a co-guardian" flows | Local only; the foundation for everything else |
-| **F1** | Server keys, `.well-known`, signed requests, **connections** across servers (invite, accept, disconnect, block) | No calls yet; testable with l1 plus a second instance |
+| **F0** ✔ | Accounts and handles, several households per server, one account in several households, open sign-up behind `OPEN_SIGNUP`, clear "Add a kid's phone" / "Invite a co-guardian" / "Add a household" flows | Local only; the foundation for everything else. Done (plan phase P1) |
+| **F1** | Knocks and connections (locally, then across servers), server keys, `.well-known`, signed requests, disconnect, block | No calls yet; testable with l1 plus a second instance |
 | **F2** | Federated **calls** (person ↔ person, person ↔ allowed phone), signaling over the server-pair stream, cross-server voicemail | Cloudflare: the household Durable Object owns federated calls; the Worker routes `/fed/v1` |
 | **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians; shared presence | Needs phone-to-phone calling locally first |
 | **F4** | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Needed before anyone else runs a server in production |
 
 ## Open questions
 
-- The handle format (`jesse` vs. `jesse.garcia`), and whether a household can have its own
-  shared address.
+- Whether a household can have its own shared address.
+- Whether a released handle should be held back for a while before someone else can take it
+  (today it's free immediately), since remote servers will have it pinned in connections.
 - Whether the connection link should also work as a QR code for the Lounge phone takeover
   (likely yes).
 - Whether to reuse an existing federation standard (ActivityPub, Matrix) for identity/transport.
