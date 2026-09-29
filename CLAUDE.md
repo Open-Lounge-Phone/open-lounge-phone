@@ -224,8 +224,16 @@ Keep this section current when finishing a milestone.
   `PATCH /api/account` (handle once a day), invite accept while signed in adds a membership.
   Companion: sign-up/invite/sign-in chooser, handle picker, household switcher, "Add a kid's
   phone / Invite a co-guardian / Add a household". Not yet deployed to l1.
+- **P1b spaces + handle reservation (2026-09-28):** migration `0007_spaces.sql` (additive:
+  `households.type` home|team|org default home; `released_handles`). A household is a **space**
+  (table name unchanged; `Space = Household` in the store); `POST /api/spaces {name,type}` (and
+  `/households` with `type`); `/me` memberships carry `spaceType`. Kid-safety only in homes:
+  kids' (unowned) phones refused elsewhere, `/quiet-hours` PUT refused and `getSchedule` returns no
+  rules outside homes. Released handles (rename or leaving the last space) stay reserved 90 days
+  for their last owner (`handleAvailable`, conditional inserts). UI says "household" for homes,
+  "team"/"organization" otherwise. Tests: `spaces.test.ts`; shared harness `testkit.ts`.
 - **Roadmap:** follow the approved plan `~/.claude/plans/we-build-on-this-dapper-wand.md`
-  (P1 accounts ✔ → P2 knocks/connections → P3 federated calls → P4 public hub → P5 interop).
+  (P1 accounts ✔ → P1b spaces ✔ → P2 knocks/connections → P3 federated calls → P4 public hub → P5 interop).
   Owner decisions 2026-09-28: knock-then-talk, no PSTN ever, public hub + own servers as equals.
   The M6 multi-server companion is **dropped**: one home account reaches everyone via federation.
   - **Federation (owner, 2026-09-27) — design in `docs/federation.md`:** people connect across

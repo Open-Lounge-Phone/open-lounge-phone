@@ -10,12 +10,38 @@ import type { Sql } from "./sql.ts";
 
 export type Role = "guardian" | "contact";
 
+/**
+ * What kind of space a household is. `home` is a family: kids' phones and quiet hours live only
+ * there. `team` and `org` are for grown-ups (no kids' phones, no quiet hours).
+ */
+export type SpaceType = "home" | "team" | "org";
+export const SPACE_TYPES: readonly SpaceType[] = ["home", "team", "org"];
+
+/** A space (stored in the `households` table; "household" is the UI word for a home). */
 export interface Household {
   id: string;
   name: string;
   timeZone: string;
   createdAt: number;
+  type: SpaceType;
 }
+/** The general name for a household of any type. */
+export type Space = Household;
+
+type HouseholdRow = {
+  id: string;
+  name: string;
+  time_zone: string;
+  created_at: number;
+  type: SpaceType | null;
+};
+const toHousehold = (r: HouseholdRow): Household => ({
+  id: r.id,
+  name: r.name,
+  timeZone: r.time_zone,
+  createdAt: r.created_at,
+  type: r.type ?? "home",
+});
 
 /** A membership: one account's role (and name) in one household. */
 export interface User {
@@ -88,6 +114,8 @@ export function handleFromName(name: string): string {
 
 /** Minimum time between two handle changes. */
 export const HANDLE_CHANGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** A released handle stays reserved (for its last owner only) this long. */
+export const HANDLE_RESERVE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type KeyAlg = "ed25519" | "p256";
 export type PhoneKind = "kids" | "lounge";
@@ -342,12 +370,17 @@ export class Store {
     const id = newId("acc");
     const candidates = input.handle ? [input.handle] : this.handleCandidates(input.name);
     for (const handle of candidates) {
+      // Handles released in the last 90 days are reserved for whoever released them.
       const { changes } = await this.sql.run(
-        "INSERT OR IGNORE INTO accounts (id, handle, name, created_at) VALUES (?, ?, ?, ?)",
+        `INSERT OR IGNORE INTO accounts (id, handle, name, created_at)
+         SELECT ?, ?, ?, ? WHERE NOT EXISTS
+           (SELECT 1 FROM released_handles WHERE handle = ? AND released_at > ?)`,
         id,
         handle,
         input.name,
         now,
+        handle,
+        now - HANDLE_RESERVE_MS,
       );
       if (changes === 1) {
         return { id, handle, name: input.name, createdAt: now, handleChangedAt: null };
@@ -376,20 +409,59 @@ export class Store {
     return r && toAccount(r);
   }
 
-  /** Changes a handle. Validate with `handleProblem` first. False when it's taken. */
+  /**
+   * Whether `handle` can be taken now: nobody has it, and it isn't reserved for someone else
+   * (released in the last 90 days by another account).
+   */
+  async handleAvailable(handle: string, now: number, accountId?: string): Promise<boolean> {
+    const r = await this.sql.first<{ n: number }>(
+      `SELECT (SELECT COUNT(*) FROM accounts WHERE handle = ?) +
+              (SELECT COUNT(*) FROM released_handles
+               WHERE handle = ? AND released_at > ? AND account_id != ?) AS n`,
+      handle,
+      handle,
+      now - HANDLE_RESERVE_MS,
+      accountId ?? "",
+    );
+    return (r?.n ?? 0) === 0;
+  }
+
+  /**
+   * Changes a handle. Validate with `handleProblem` first. False when it's taken or reserved.
+   * The old handle is then reserved for this account for 90 days.
+   */
   async setHandle(accountId: string, handle: string, now: number): Promise<boolean> {
+    const before = await this.getAccount(accountId);
+    if (!before) return false;
     try {
       const { changes } = await this.sql.run(
-        "UPDATE accounts SET handle = ?, handle_changed_at = ? WHERE id = ?",
+        `UPDATE accounts SET handle = ?, handle_changed_at = ? WHERE id = ? AND NOT EXISTS
+           (SELECT 1 FROM released_handles
+            WHERE handle = ? AND released_at > ? AND account_id != ?)`,
         handle,
         now,
         accountId,
+        handle,
+        now - HANDLE_RESERVE_MS,
+        accountId,
       );
-      return changes === 1;
+      if (changes !== 1) return false;
     } catch (e) {
       if (/UNIQUE/i.test(String(e))) return false;
       throw e;
     }
+    await this.sql.batch([
+      {
+        query: "DELETE FROM released_handles WHERE handle = ? OR released_at <= ?",
+        params: [handle, now - HANDLE_RESERVE_MS],
+      },
+      {
+        query:
+          "INSERT OR REPLACE INTO released_handles (handle, account_id, released_at) VALUES (?, ?, ?)",
+        params: [before.handle, accountId, now],
+      },
+    ]);
+    return true;
   }
 
   async setAccountName(accountId: string, name: string): Promise<void> {
@@ -399,22 +471,24 @@ export class Store {
   /** Every household the account belongs to, oldest membership first. */
   async listMemberships(accountId: string): Promise<Membership[]> {
     const rows = await this.sql.all<
-      UserRow & { h_name: string; h_time_zone: string; h_created_at: number }
+      UserRow & { h_name: string; h_time_zone: string; h_created_at: number; h_type: SpaceType }
     >(
       `SELECT u.id, u.household_id, u.account_id, u.name, u.role,
-         h.name AS h_name, h.time_zone AS h_time_zone, h.created_at AS h_created_at
+         h.name AS h_name, h.time_zone AS h_time_zone, h.created_at AS h_created_at,
+         h.type AS h_type
        FROM users u JOIN households h ON h.id = u.household_id
        WHERE u.account_id = ? ORDER BY u.created_at, u.rowid`,
       accountId,
     );
     return rows.map((r) => ({
       user: toUser(r),
-      household: {
+      household: toHousehold({
         id: r.household_id,
         name: r.h_name,
-        timeZone: r.h_time_zone,
-        createdAt: r.h_created_at,
-      },
+        time_zone: r.h_time_zone,
+        created_at: r.h_created_at,
+        type: r.h_type,
+      }),
     }));
   }
 
@@ -449,7 +523,13 @@ export class Store {
    * new membership; otherwise a new account is created for them.
    */
   async createHousehold(
-    input: { name: string; timeZone: string; guardianName: string; accountId?: string },
+    input: {
+      name: string;
+      timeZone: string;
+      guardianName: string;
+      accountId?: string;
+      type?: SpaceType;
+    },
     now: number,
   ): Promise<{ household: Household; guardian: User }> {
     const accountId =
@@ -460,6 +540,7 @@ export class Store {
       name: input.name,
       timeZone: input.timeZone,
       createdAt: now,
+      type: input.type ?? "home",
     };
     const guardian: User = {
       id: newId("usr"),
@@ -470,8 +551,9 @@ export class Store {
     };
     await this.sql.batch([
       {
-        query: "INSERT INTO households (id, name, time_zone, created_at) VALUES (?, ?, ?, ?)",
-        params: [household.id, household.name, household.timeZone, now],
+        query:
+          "INSERT INTO households (id, name, time_zone, created_at, type) VALUES (?, ?, ?, ?, ?)",
+        params: [household.id, household.name, household.timeZone, now, household.type],
       },
       {
         query:
@@ -483,13 +565,8 @@ export class Store {
   }
 
   async getHousehold(id: string): Promise<Household | undefined> {
-    const r = await this.sql.first<{
-      id: string;
-      name: string;
-      time_zone: string;
-      created_at: number;
-    }>("SELECT * FROM households WHERE id = ?", id);
-    return r && { id: r.id, name: r.name, timeZone: r.time_zone, createdAt: r.created_at };
+    const r = await this.sql.first<HouseholdRow>("SELECT * FROM households WHERE id = ?", id);
+    return r && toHousehold(r);
   }
 
   /**
@@ -543,11 +620,18 @@ export class Store {
    * Removes a person from a household; their allow-list entries and keys there go with it. An
    * account left with no household at all is deleted with its sessions and passkeys.
    */
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string, now: number): Promise<void> {
     const user = await this.getUser(id);
     if (!user) return;
     await this.sql.batch([
       { query: "DELETE FROM users WHERE id = ?", params: [id] },
+      // A deleted account's handle stays reserved for 90 days.
+      {
+        query: `INSERT OR REPLACE INTO released_handles (handle, account_id, released_at)
+          SELECT handle, id, ? FROM accounts
+          WHERE id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE account_id = ?)`,
+        params: [now, user.accountId, user.accountId],
+      },
       {
         query:
           "DELETE FROM accounts WHERE id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE account_id = ?)",
@@ -844,7 +928,8 @@ export class Store {
     );
     return {
       timeZone: household.timeZone,
-      rules: rows.map((r) => ({
+      // Quiet hours are a kid-safety rule: only home spaces have them.
+      rules: (household.type === "home" ? rows : []).map((r) => ({
         days: JSON.parse(r.days) as Weekday[],
         start: r.start_time,
         end: r.end_time,

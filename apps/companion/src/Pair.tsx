@@ -5,9 +5,12 @@ export function Pair({
   api,
   guardian,
   defaultMine = false,
+  kidsAllowed = true,
   onDone,
   onCancel,
 }: {
+  /** False in a team or org space: household phones there are Lounge phones only. */
+  kidsAllowed?: boolean;
   api: Api;
   /** Non-guardians can only add their own phone. */
   guardian: boolean;
@@ -20,7 +23,7 @@ export function Pair({
   const [name, setName] = useState("");
   const [mine, setMine] = useState(!guardian || defaultMine);
   /** Empty = keep what the phone was set up as on its first-run screen. */
-  const [kind, setKind] = useState<"" | "kids" | "lounge">("");
+  const [kind, setKind] = useState<"" | "kids" | "lounge">(kidsAllowed ? "" : "lounge");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -93,7 +96,9 @@ export function Pair({
             This is my own phone
             <span className="hint">
               {guardian
-                ? "Leave unticked for a household phone, e.g. a kid's."
+                ? kidsAllowed
+                  ? "Leave unticked for a household phone, e.g. a kid's."
+                  : "Leave unticked for a shared Lounge phone."
                 : "You can add your own phone; a guardian adds household phones."}
             </span>
           </span>
@@ -102,8 +107,10 @@ export function Pair({
           <label>
             Kind of phone
             <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-              <option value="">As chosen on the phone</option>
-              <option value="kids">Kids phone — its own allow-list and speed-dial</option>
+              {kidsAllowed && <option value="">As chosen on the phone</option>}
+              {kidsAllowed && (
+                <option value="kids">Kids phone — its own allow-list and speed-dial</option>
+              )}
               <option value="lounge">
                 Lounge phone — shared; people scan it to use it as themselves
               </option>

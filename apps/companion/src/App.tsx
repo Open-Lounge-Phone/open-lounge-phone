@@ -26,6 +26,7 @@ import { quietStatus } from "./quietStatus.ts";
 import { Setup } from "./Setup.tsx";
 import { Start } from "./Start.tsx";
 import { loadToken, readInviteToken, readSetupToken, saveToken } from "./session.ts";
+import { kidSafe } from "./spaces.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
 import { Welcome } from "./Welcome.tsx";
 import { WhatsWhat } from "./WhatsWhat.tsx";
@@ -283,6 +284,8 @@ function SignedIn({
   };
 
   const guardian = me?.user.role === "guardian";
+  const spaceType = me?.household.type;
+  const home = kidSafe(spaceType);
 
   // Phone presence reaches guardians live via `device.status`; everyone also re-reads the phone
   // list periodically (own phones' online state), and quickly while a new virtual phone pairs.
@@ -389,7 +392,7 @@ function SignedIn({
               People
             </Tab>
           )}
-          {guardian && (
+          {guardian && home && (
             <Tab route={route} name="quiet" onGo={setRoute}>
               <span className="wide-only">Quiet hours</span>
               <span className="narrow-only">Quiet</span>
@@ -464,6 +467,7 @@ function SignedIn({
         )}
         {me && !loungeLink && !welcome && route.name === "home" && guardian && (
           <GetStarted
+            spaceType={spaceType}
             onAddKidPhone={() => setRoute({ name: "pair" })}
             onInviteGuardian={() => setRoute({ name: "people", role: "guardian" })}
             onAddHousehold={() => setRoute({ name: "add-household" })}
@@ -504,6 +508,7 @@ function SignedIn({
           <Pair
             api={api}
             guardian={guardian}
+            kidsAllowed={home}
             defaultMine={route.mine ?? false}
             onDone={() => {
               void refresh();

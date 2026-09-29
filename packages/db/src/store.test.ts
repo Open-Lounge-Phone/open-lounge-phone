@@ -409,9 +409,9 @@ describe("accounts and handles", () => {
       T0,
     );
     const token = await store.createSession(kidThere.id, T0);
-    await store.deleteUser(kidThere.id);
+    await store.deleteUser(kidThere.id, 0);
     expect((await store.userForToken(token, T0))?.householdId).toBe(home.id);
-    await store.deleteUser(kid.id);
+    await store.deleteUser(kid.id, 0);
     expect(await store.sessionForToken(token, T0)).toBeUndefined();
     expect(await store.getAccount(kid.accountId)).toBeUndefined();
     expect(await store.getAccount(guardian.accountId)).toBeDefined();

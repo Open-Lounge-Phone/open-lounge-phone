@@ -1,4 +1,5 @@
 /** Typed client for the Open Lounge Phone REST API (`/api/*`). */
+import type { SpaceType } from "./spaces.ts";
 
 export type Role = "guardian" | "contact";
 
@@ -19,11 +20,13 @@ export interface AccountInfo {
   address: string;
 }
 
-/** One of your households and your role there. */
+/** One of your households (spaces) and your role there. */
 export interface Membership {
   userId: string;
   householdId: string;
   householdName: string;
+  /** `home` = a household; `team` / `org` = grown-ups only. */
+  spaceType?: SpaceType;
   name: string;
   role: Role;
 }
@@ -43,6 +46,7 @@ export interface Household {
   name: string;
   timeZone: string;
   createdAt: number;
+  type?: SpaceType;
 }
 
 export interface ContactEntry {
@@ -234,7 +238,7 @@ export function createApi(opts: ApiOptions) {
     }) => request<CeremonyOptions & { address: string }>("POST", "/signup/options", input),
     signup: (challengeId: string, response: unknown, passkeyName: string) =>
       request<SignedInResult>("POST", "/signup", { challengeId, response, passkeyName }),
-    createHousehold: (input: { name: string; timeZone?: string }) =>
+    createHousehold: (input: { name: string; timeZone?: string; type?: SpaceType }) =>
       request<{ household: Household; user: User }>("POST", "/households", input),
     switchHousehold: (householdId: string) =>
       request<void>("PUT", "/me/household", { householdId }),

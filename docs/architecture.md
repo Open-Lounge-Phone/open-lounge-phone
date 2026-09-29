@@ -51,6 +51,10 @@ and asking for a household the account isn't in is refused (403). Ways in:
 - **Add a household** (`POST /api/households`): any account on an open server, or a guardian on
   an invite-only one.
 
+A household is one kind of **space** (`type`: `home`, `team` or `org`; `POST /api/spaces`).
+Kids' phones and quiet hours exist only in homes; team and org spaces hold grown-ups' own phones
+and Lounge phones. A released handle stays reserved for its last owner for 90 days.
+
 Calling rules don't change: `authorizeInbound` / `authorizeOutbound` still decide every call, and
 calls stay inside one household until federated connections (see
 [federation.md](federation.md)) add grown-up ↔ grown-up reachability through an accepted

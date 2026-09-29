@@ -4,12 +4,14 @@ import {
   HANDLE_CHANGE_INTERVAL_MS,
   handleProblem,
   newId,
+  SPACE_TYPES,
+  type SpaceType,
   type Store,
   type User,
 } from "@openloungephone/db";
 import { Id, toBase64Url } from "@openloungephone/protocol";
 import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
 import { body, HOUSEHOLD_HEADER, relyingParty, type Vars } from "./httpUtil.ts";
@@ -41,6 +43,8 @@ const SignupData = z.object({
 const HouseholdBody = z.object({
   name: HouseholdName,
   timeZone: z.string().min(1).max(64).optional(),
+  /** `home` (default) is a family; `team` and `org` are grown-ups only. */
+  type: z.enum(SPACE_TYPES as [SpaceType, ...SpaceType[]]).optional(),
 });
 const SwitchBody = z.object({ householdId: Id });
 const AccountPatch = z
@@ -102,7 +106,7 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
     if (b instanceof Response) return b;
     const problem = handleProblem(b.handle) ?? timeZoneProblem(b.timeZone);
     if (problem) return c.json({ error: problem }, 400);
-    if (await store.accountByHandle(b.handle)) {
+    if (!(await store.handleAvailable(b.handle, env.now()))) {
       return c.json({ error: "that handle is taken" }, 409);
     }
     const { rpID } = relyingParty(env, c.req.url);
@@ -211,6 +215,7 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv): void {
         userId: m.user.id,
         householdId: m.household.id,
         householdName: m.household.name,
+        spaceType: m.household.type,
         name: m.user.name,
         role: m.user.role,
       })),
@@ -233,8 +238,11 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv): void {
     return c.body(null, 204);
   });
 
-  /** "Add a household": the caller becomes its first guardian, and it becomes active. */
-  api.post("/households", async (c) => {
+  /**
+   * "Add a household" (or a team/org space, `/spaces`): the caller becomes its first guardian,
+   * and it becomes active.
+   */
+  const addSpace = async (c: Context<Vars>) => {
     const account = c.get("account");
     const b = await body(c.req.raw, HouseholdBody);
     if (b instanceof Response) return b;
@@ -257,12 +265,15 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv): void {
         timeZone,
         guardianName: member?.name ?? account.name.slice(0, 24),
         accountId: account.id,
+        type: b.type ?? "home",
       },
       env.now(),
     );
     await store.setSessionUser(c.get("token"), guardian.id);
     return c.json({ household, user: guardian }, 201);
-  });
+  };
+  api.post("/households", addSpace);
+  api.post("/spaces", addSpace);
 
   /** Change your handle (at most once a day) and/or display name. */
   api.patch("/account", async (c) => {

@@ -158,6 +158,11 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     await next();
   });
 
+  const kidsOnlyAtHome =
+    "kids' phones belong in a home space; pair it as your own or a Lounge phone";
+  const isHome = async (householdId: string) =>
+    (await store.getHousehold(householdId))?.type === "home";
+
   /** Loads a device and ensures it belongs to the caller's household. */
   const ownDevice = async (user: User, id: string) => {
     const device = await store.getDevice(id);
@@ -200,6 +205,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     }
     if (b.forMe && b.kind === "lounge") {
       return c.json({ error: "a Lounge phone is shared; pair it as a household phone" }, 400);
+    }
+    if (!b.forMe && b.kind !== "lounge" && !(await isHome(user.householdId))) {
+      // A household phone without an owner is a kid's phone; those belong in a home.
+      return c.json({ error: kidsOnlyAtHome }, 400);
     }
     const device = await store.claimPairing(
       {
@@ -285,6 +294,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b.owner === "me" && device.kind === "lounge") {
       return c.json({ error: "a Lounge phone can't be someone's own phone" }, 400);
     }
+    if (b.owner === "household" && device.kind !== "lounge" && !(await isHome(user.householdId))) {
+      return c.json({ error: kidsOnlyAtHome }, 400);
+    }
     if (b.owner !== undefined) {
       // You can claim a phone for yourself or release your own; guardians can also release any.
       const allowed =
@@ -339,6 +351,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const b = await body(c.req.raw, QuietBody);
     if (b instanceof Response) return b;
     const household = await store.getHousehold(user.householdId);
+    if (household?.type !== "home") {
+      return c.json({ error: "quiet hours are for kids' phones in a home space" }, 400);
+    }
     const rules: QuietHoursRule[] = b.rules.map((r) => ({ ...r, days: r.days as Weekday[] }));
     try {
       validateSchedule({ timeZone: household?.timeZone ?? "UTC", rules });

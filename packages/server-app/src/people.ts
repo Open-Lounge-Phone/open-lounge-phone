@@ -164,7 +164,7 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     if (!target || target.householdId !== me.householdId)
       return c.json({ error: "not found" }, 404);
     if (target.id === me.id) return c.json({ error: "you can't remove yourself" }, 400);
-    await store.deleteUser(target.id);
+    await store.deleteUser(target.id, env.now());
     // A Lounge phone they were using forgets them now.
     for (const d of await store.listDevices(me.householdId)) {
       if (d.kind === "lounge") await live.refreshDevice(me.householdId, d.id);

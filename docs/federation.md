@@ -49,6 +49,12 @@ Owner decisions (2026-09-28):
   instead of creating a new person.
 - Migration `0006_accounts.sql` gave every existing person an account, with a handle derived
   from their name and de-duplicated (`mom`, `mom-2`, …).
+- **Handle reservation (P1b):** a handle that is given up (renamed, or the account left its last
+  space) is reserved for 90 days; only the account that released it can take it back meanwhile,
+  because other servers may have it pinned in connections.
+- **Spaces (P1b):** a household is one kind of *space*: `home` (a family), `team` or `org`
+  (grown-ups). Kid-safety rules — kids' phones and quiet hours — exist only in homes. The UI
+  still says "household" for homes.
 
 ## Knocks (F1, design)
 
@@ -147,8 +153,6 @@ Turning off "Share my availability with connections" stops them.
 ## Open questions
 
 - Whether a household can have its own shared address.
-- Whether a released handle should be held back for a while before someone else can take it
-  (today it's free immediately), since remote servers will have it pinned in connections.
 - Whether the connection link should also work as a QR code for the Lounge phone takeover
   (likely yes).
 - Whether to reuse an existing federation standard (ActivityPub, Matrix) for identity/transport.
