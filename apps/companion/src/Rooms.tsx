@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import type { Api, RoomMediaKind, RoomSummary } from "./api.ts";
+import type { Api, RoomSummary } from "./api.ts";
 import type { Connection, Snapshot } from "./connection.ts";
-import { idleSecondsLeft, roomKindText, roomPrivacyText, whoIsIn } from "./roomText.ts";
+import { idleSecondsLeft, roomKindText, whoIsIn } from "./roomText.ts";
 
 interface Props {
   api: Api;
@@ -17,7 +17,6 @@ interface Props {
  */
 export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [media, setMedia] = useState<RoomMediaKind>("mesh");
   const [error, setError] = useState<string>();
   const [address, setAddress] = useState("");
   const [kind, setKind] = useState<"party" | "phone">(guardian ? "party" : "phone");
@@ -29,7 +28,6 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
     try {
       const r = await api.rooms();
       setRooms(r.rooms);
-      setMedia(r.media);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -76,7 +74,6 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
         </button>
         <h2>Rooms</h2>
       </div>
-      <p className="hint">{roomPrivacyText(media)}</p>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -243,7 +240,6 @@ export function RoomPanel({ snap, conn }: { snap: Snapshot; conn: Connection }) 
           {room.locked ? " · Locked" : ""}
           {room.connected ? "" : " · connecting…"}
         </div>
-        <p className="hint small">{roomPrivacyText(room.media)}</p>
         {room.recording && (
           <div className="recording-mark" role="status">
             <span className="rec-dot" aria-hidden /> Recording · this room is recorded by{" "}

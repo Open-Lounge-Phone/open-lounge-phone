@@ -1,16 +1,4 @@
-// Words for rooms in the app. Honest about who could hear a room.
-import type { RoomMediaKind } from "./api.ts";
-
-/**
- * Who could hear a room. A peer-to-peer mesh is end-to-end encrypted; a relayed room is
- * encrypted in transit but the relay could hear it, until end-to-end room encryption (SFrame).
- */
-export function roomPrivacyText(media: RoomMediaKind): string {
-  if (media === "mesh") {
-    return "Peer to peer: only the people in the room can hear it (end-to-end encrypted). Up to 4 people.";
-  }
-  return "Through this server's relay: encrypted in transit, but not end to end — the relay could hear it. End-to-end encryption for rooms (SFrame) is planned.";
-}
+// Words for rooms in the app.
 
 /** "Mom, Dad and 2 others" / "Nobody's in". */
 export function whoIsIn(people: readonly string[]): string {

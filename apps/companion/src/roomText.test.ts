@@ -1,16 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { idleSecondsLeft, roomKindText, roomPrivacyText, whoIsIn } from "./roomText.ts";
+import { idleSecondsLeft, roomKindText, whoIsIn } from "./roomText.ts";
 
 describe("room words", () => {
-  it("is honest about relayed rooms", () => {
-    expect(roomPrivacyText("mesh")).toMatch(/end-to-end encrypted/);
-    for (const media of ["sfu", "livekit"] as const) {
-      const text = roomPrivacyText(media);
-      expect(text).toMatch(/not end to end/);
-      expect(text).toMatch(/SFrame/);
-    }
-  });
-
   it("says who's in", () => {
     expect(whoIsIn([])).toBe("Nobody's in");
     expect(whoIsIn(["Mom"])).toBe("Mom is in");
