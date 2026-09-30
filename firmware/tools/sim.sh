@@ -10,13 +10,17 @@ set -euo pipefail
 FW="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$FW"
 if ! command -v idf.py >/dev/null; then
+  # ESP-IDF v5.5: $IDF_PATH, else ~/esp/esp-idf-v5.5.5, else ~/esp/esp-idf.
+  idf="${IDF_PATH:-}"
+  [ -n "$idf" ] || { [ -d "$HOME/esp/esp-idf-v5.5.5" ] && idf="$HOME/esp/esp-idf-v5.5.5"; }
   # shellcheck disable=SC1091
-  . "${IDF_PATH:-$HOME/esp/esp-idf}/export.sh" >/dev/null
+  . "${idf:-$HOME/esp/esp-idf}/export.sh" >/dev/null
 fi
 WOKWI="$(command -v wokwi-cli || echo "$HOME/.local/bin/wokwi-cli")"
 build() {
   # sdkconfig.defaults never override an existing sdkconfig: regenerate it when the server changes.
-  local defaults="sdkconfig.defaults;sdkconfig.sim" want="${OLP_SIM_SERVER:-default}"
+  local defaults="sdkconfig.defaults;sdkconfig.sim" want
+  want="${OLP_SIM_SERVER:-default}|$(cat sdkconfig.defaults sdkconfig.sim | shasum | cut -c1-12)"
   if [ -n "${OLP_SIM_SERVER:-}" ]; then
     printf 'CONFIG_OLP_SERVER_URL="%s"\n' "$OLP_SIM_SERVER" >build-sim/sdkconfig.server
     defaults="$defaults;build-sim/sdkconfig.server"

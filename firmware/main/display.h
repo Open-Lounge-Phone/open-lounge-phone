@@ -16,6 +16,7 @@ typedef struct {
 
 extern const display_driver_t display_epd_ssd1680;
 extern const display_driver_t display_ili9341_sim;  // the Wokwi stand-in
+extern const display_driver_t display_none;         // QEMU: framebuffer only
 
 /** Starts the display task (renders the latest text in the background). */
 void display_start(const display_driver_t *drv);

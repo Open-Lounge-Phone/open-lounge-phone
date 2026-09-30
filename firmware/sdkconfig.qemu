@@ -1,0 +1,12 @@
+# QEMU build (layered on sdkconfig.defaults): Espressif's esp32s3 machine with the OpenCores
+# Ethernet as the network (no Wi-Fi in QEMU), UART0 console, octal PSRAM like the board.
+# tools/qemu.sh builds and runs it; tests point it at their server with the `server` command.
+CONFIG_OLP_SIM=y
+CONFIG_OLP_QEMU=y
+CONFIG_ETH_USE_OPENETH=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG is not set
+CONFIG_OLP_SERVER_URL="wss://l1.openloungephone.app"
+# QEMU's OpenCores Ethernet drops RX frames when its few DMA buffers fill (RTP bursts)
+CONFIG_ETH_OPENETH_DMA_RX_BUFFER_NUM=16
+CONFIG_ETH_OPENETH_DMA_TX_BUFFER_NUM=8

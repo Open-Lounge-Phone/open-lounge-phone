@@ -1,9 +1,11 @@
 # Firmware test log
 
-Wokwi simulation (ESP32-S3 devkit, `wokwi/diagram.json`), driven by `wokwi/smoke.yaml` (against
-the owner's l1 since t1 was deleted) or by `tests/e2e/live/firmware.test.ts` (serial console + the
-companion in Chromium with a virtual passkey; runs r1-r4 used the disposable server
-`t1.openloungephone.app`, now any `OLP_E2E_SERVER`). Newest last.
+Simulations: Wokwi (ESP32-S3 devkit, `wokwi/diagram.json`, `wokwi/smoke.yaml`) and, from 0.2.0,
+Espressif's QEMU (esp32s3 machine, `tools/qemu.sh`, networked through QEMU's Ethernet). The live
+e2e `tests/e2e/live/firmware.test.ts` drives the phone over its serial console against a server,
+with the companion in Chromium (virtual passkey; a 440 Hz test-tone microphone from 0.2.0). Runs
+r1-r4 and a*/q* used the disposable server `t1.openloungephone.app`. Host unit tests:
+`make -C firmware/test/host`. Newest last.
 
 | Date | Run | Step | Result | Issue found | Fix |
 |---|---|---|---|---|---|
@@ -20,3 +22,15 @@ companion in Chromium with a virtual passkey; runs r1-r4 used the disposable ser
 | 2026-09-30 | e2e r3 | 1, 6 | FAIL (infra) | Wokwi stalled: simulation A stopped printing mid-reconnect for ~110 s; simulation B never got past the CLI banner. No firmware fault in the log | Re-run later |
 | 2026-09-30 | e2e r4 | 0-7 | PASS | all 8 steps (3.5 min), every framebuffer PNG readable (pairing, About words, idle, IN CALL, QUIET TIL 23:59 / MISSED MOM, new code after the wipe); test account deleted | — |
 | 2026-09-30 | smoke l1 | boot → code | PASS | t1 deleted; the sim build now targets the owner's `wss://l1.openloungephone.app`. l1 has the same chain (GTS WE1 → GTS Root R4, identical SHA-256), so the pinned intermediate is unchanged. TLS opened on the first attempt; `PAIRING CODE: 399091` (left unpaired, no accounts made on l1) | this commit |
+| 2026-09-30 | build 0.2 | ESP-IDF 5.4.2 + esp_peer | FAIL | Link: `undefined reference to esp_log` from `libpeer_default.a`: every `esp_peer` 1.5.x prebuilt is built against ESP-IDF ≥ 5.5 | Moved to ESP-IDF v5.5.5 (CI image too) with a version guard in `CMakeLists.txt`; GCC 14's stricter `-Wstringop-truncation` fixes in `phone.c`/`net.c`; `rtc_init` renamed (collided with ESP-IDF's) — call audio commit |
+| 2026-09-30 | smoke (Wokwi) | boot 0.2 | PASS, 1 issue | `task_wdt: CPU 1: audio`: the test device's pacing raced to catch up when the slow simulation fell behind, starving the idle task. Also 48 KB of RAM in one-second sample buffers | Re-sync instead of catching up and sleep when hung up; running meters (`dsp_meter_t`) instead of buffers — call audio commit |
+| 2026-09-30 | e2e a1 (Wokwi) | 2 pairing | FAIL | Test: the phone stayed off the hook: the console's terminal probe (`ESC[5n`) swallowed the `hook down` typed right after Wi-Fi came up | The test waits for the `olp>` prompt before typing — call audio commit |
+| 2026-09-30 | e2e a2 (Wokwi) | 1 boot | FAIL (infra) | `API Error: You have used up your Free plan monthly CI minute quota` | No Wokwi runs until the plan resets or is upgraded: added a QEMU build (`sdkconfig.qemu`, `tools/qemu.sh`) and made QEMU the e2e default |
+| 2026-09-30 | QEMU boot | boot | FAIL | Espressif's 2026-04 "x86_64" macOS QEMU is an arm64 binary (macOS 14); then `esp_mmu_map: no such vaddr range` / partition load failed: 32 MB of emulated PSRAM used up the address space | QEMU esp-develop-9.2.2-20250817 (a real x86_64 build; `brew install libgcrypt`); `-m 8M` like the board's N16R8 |
+| 2026-09-30 | QEMU boot | boot → pairing code | PASS | Full certificate-bundle TLS in 1.2 s (no WE1 pin needed in QEMU); `PAIRING CODE` from l1 in 4.5 s of boot (left unpaired, no account on l1) | — |
+| 2026-09-30 | e2e q1 (QEMU) | 0-4 | PASS | 3 phone → companion: TURN/UDP relay↔relay, PCMU, setup 5.3 s, phone tx 401 / rx 401 frames, heard 440 Hz at -19 dBFS; companion got 419 packets (1 lost), found 1001 Hz. 4 companion → phone: host↔prflx, setup 1.5 s, both tones found | — |
+| 2026-09-30 | e2e q3 (QEMU) | 4-7 | FAIL | Test: the answering phone's media connected (1.5 s) before the `IN CALL` line the check waited after, so it missed `RTC CONNECTED`; the call was left running and the next steps failed. Also QEMU's Ethernet dropped RX frames (`RX frame dropped`) with 4 DMA buffers, and the protocol log printed `rtc.config` with the TURN credentials | Look for media from the call's start; put the phone back on the hook between steps; 16 RX buffers in the QEMU build; `rtc.config` logged without credentials (old local logs scrubbed) — call audio commit |
+| 2026-09-30 | e2e q4 (QEMU) | 8 TURN over TLS | FAIL (**firmware bug**) | `AGENT: Skip TCP/TLS TURN server when TCP support is disabled` → no candidates → the phone hung up (busy tone, `CALL FAILED` shown: the failure path works). Every earlier call had silently dropped the `turns:` server | Tried `tcp_support = true` (next rows) |
+| 2026-09-30 | e2e q5, d1-d4 (QEMU) | 8/9 TURN over TCP / TLS | FAIL (**esp_peer 1.5.6**) | TLS: `TLS TURN failed to connect` ~10 ms after the non-blocking connect starts, before any handshake, also with certificate checks off (and no API to pass a CA). TCP: allocation, permission, channel bind and pairing succeed, then every DTLS read fails (`agent_recv error: -1`, `-0x7880`). With `tcp_support` on, a TCP/TLS server in the list stalls gathering for normal calls (d4 step 3 never offered) | UDP only by default; TCP/TLS opt-in (`CONFIG_OLP_ICE_TCP_RELAY`, `ice tcp|tls`), e2e steps 8/9 opt-in; documented in README "Call audio" (UDP-blocking networks can't carry calls yet) — call audio commit |
+| 2026-09-30 | e2e q6 (QEMU) | 0-7 (8, 9 opt-in) | PASS | 3: relay↔relay TURN/UDP, setup 4.9 s, phone tx 412 / rx 409, heard 440 Hz at -19.7 dBFS, companion 432 packets, 0 lost, jitter 4 ms, 1001 Hz found; mic off after hang-up. 4: host↔prflx, setup 1.3 s, 0 lost, both tones. 7 reconnect, 5 quiet hours → MISSED MOM, 6 remove → wipe → new key. No credentials in the logs. Test account deleted | — |
+| 2026-09-30 | host | `make -C test/host` | PASS | 16 tests (G.711 reference values and round trip, tone cadences, RMS/Goertzel/meter, ICE choice); mutations (µ-law bias, busy cadence, Goertzel scale, TLS port preference) each fail a test | — |

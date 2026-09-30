@@ -1,12 +1,9 @@
 #include "phone.h"
 
+#include <stdio.h>
 #include <string.h>
 
-static void cpy(char *dst, size_t n, const char *src) {
-  if (!src) src = "";
-  strncpy(dst, src, n - 1);
-  dst[n - 1] = '\0';
-}
+static void cpy(char *dst, size_t n, const char *src) { snprintf(dst, n, "%s", src ? src : ""); }
 #define CPY(dst, src) cpy((dst), sizeof(dst), (src))
 
 static cJSON *msg(const char *t) {
@@ -77,6 +74,13 @@ void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit) {
   if (s->kind == PH_INROOM && s->room_id[0]) emit_room_leave(emit, s->room_id);
   emit_hook(emit, false);
   to_idle(s);
+}
+
+void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit) {
+  if ((s->kind == PH_DIALING || s->kind == PH_INCALL) && s->call_id[0]) {
+    emit_call(emit, "call.hangup", s->call_id);
+    to_offhook(s, reason);
+  }
 }
 
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {

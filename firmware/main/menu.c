@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "app.h"
+#include "audio.h"
 #include "identity.h"
 #include "net.h"
 
@@ -12,7 +13,7 @@
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
-  static const char *names[] = {"closed", "root", "about", "wifi"};
+  static const char *names[] = {"closed", "root", "about", "wifi", "volume"};
   return names[s];
 }
 
@@ -33,7 +34,12 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
   } else if (m->screen == MENU_ROOT) {
     int d = digit_of(key);
     if (d == 0) m->screen = MENU_ABOUT;
+    else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 3) m->screen = MENU_WIFI;
+  } else if (m->screen == MENU_VOLUME) {
+    int d = digit_of(key);
+    if (d == 1) audio_set_volume(audio_volume() - 1);
+    else if (d == 2) audio_set_volume(audio_volume() + 1);
   }
   return true;
 }
@@ -51,11 +57,16 @@ int menu_lines(const menu_t *m, char out[4][25]) {
   switch (m->screen) {
     case MENU_ROOT:
       snprintf(out[0], 25, "MENU");
-      snprintf(out[1], 25, "3 WI-FI  0 ABOUT");
+      snprintf(out[1], 25, "1 VOLUME 3 WI-FI");
+      snprintf(out[2], 25, "0 ABOUT");
+      return 3;
+    case MENU_VOLUME:
+      snprintf(out[0], 25, "VOLUME %d/%d", audio_volume(), VOLUME_MAX);
+      snprintf(out[1], 25, "1 LOWER 2 LOUDER");
       return 2;
     case MENU_ABOUT: {
       const char *const *w = identity_fingerprint();
-      snprintf(out[0], 25, "FW %s", FW_VERSION);
+      snprintf(out[0], 25, "FW %.21s", FW_VERSION);
       snprintf(out[1], 25, "%s %s", w[0], w[1]);
       snprintf(out[2], 25, "%s %s", w[2], w[3]);
       upper(out[1]);

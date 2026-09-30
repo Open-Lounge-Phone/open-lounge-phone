@@ -85,3 +85,9 @@ void display_dump(void) {
   printf("FB END\n");
   free(line);
 }
+
+// QEMU has no display: keep the framebuffer (for `screen`) and draw nothing.
+static esp_err_t none_init(void) { return ESP_OK; }
+static void none_flush(const uint8_t *fb, bool full) {}
+const display_driver_t display_none = {
+    .name = "none", .width = 296, .height = 128, .init = none_init, .flush = none_flush};

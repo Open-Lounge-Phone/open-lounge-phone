@@ -16,7 +16,9 @@ hook switch, a display module, a piezo ringer and one status LED. That means:
 
 - **No hardware mic cut-off.** There is **no mute switch** and there are **no mic lights wired to
   the mic's power**: the handset mic is biased whenever the handset is plugged in and the board
-  is powered, and the **firmware** decides when audio is captured and sent. A compromised
+  is powered, and the **firmware** decides when audio is captured and sent (firmware 0.2: only
+  while a call's encrypted media is connected, or during the explicit `audio loop` bring-up test on
+  the serial console; otherwise the codec's ADC is muted and I2S receive is off). A compromised
   firmware could listen through a plugged-in handset. The protections are therefore the
   firmware ones below (signed, reproducible, debug-locked) and unplugging the handset.
 - **The hook is read by firmware** (an MX switch under the hook rest); nothing in hardware
@@ -46,7 +48,10 @@ supply; the owner dropped them with the rest of that design on 2026-09-30.)
 ## Network and service
 
 - **Encrypted calls:** 1:1 calls use WebRTC (DTLS-SRTP), peer to peer. The TURN relay only forwards
-  encrypted packets. The server and relay never hear 1:1 audio.
+  encrypted packets. The server and relay never hear 1:1 audio. The hardware phone does the same
+  (**built**, firmware 0.2: Espressif's `esp_peer`, a fresh ECDSA DTLS certificate per boot, G.711
+  audio); its TURN credentials, like the browsers', are short-lived and never logged. Group rooms
+  have no media on the hardware phone yet.
 - **Rooms** (built): without a relay a room is a peer-to-peer mesh of up to 4 people, end-to-end
   encrypted like a 1:1 call. Through a relay (the Cloudflare Realtime SFU, or LiveKit when
   self-hosting) a room is **encrypted in transit but not end to end**: the relay could access the

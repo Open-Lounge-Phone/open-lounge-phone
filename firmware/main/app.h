@@ -4,7 +4,10 @@
 
 #include <stdbool.h>
 
-#define FW_VERSION "0.1.0"
+// The firmware version is PROJECT_VER in firmware/CMakeLists.txt (the app descriptor, which OTA
+// compares too).
+#include "esp_app_desc.h"
+#define FW_VERSION (esp_app_get_description()->version)
 
 typedef enum {
   EV_KEY,          // a = key index (0-9 digits in protocol order, 10 MENU, 11 BACK)
@@ -18,6 +21,8 @@ typedef enum {
   EV_DROP,         // console: drop the WebSocket (it reconnects)
   EV_WIPE,         // console: wipe like the server's `wipe`
   EV_RECONNECT,    // console: server changed
+  EV_RTC_SDP,      // data = our local SDP (malloc'd): send it as the offer or the answer
+  EV_RTC_STATE,    // a = 1 media connected, 2 disconnected, 3 failed to connect
 } ev_type_t;
 
 typedef struct {

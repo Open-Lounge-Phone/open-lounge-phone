@@ -33,6 +33,8 @@ typedef void (*phone_emit_fn)(cJSON *msg);
 void phone_init(phone_state_t *s);
 void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit);
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit);
+/** The phone ends its call itself (e.g. the media failed): hang up, stay off the hook. */
+void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit);
 /** call.ringing / call.state / room.state / room.ended. Returns false for other messages. */
 bool phone_server(phone_state_t *s, const cJSON *msg, phone_emit_fn emit);
 const char *phone_kind_name(phone_kind_t k);

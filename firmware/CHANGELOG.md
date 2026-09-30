@@ -1,5 +1,37 @@
 # Firmware changelog
 
+## 0.2.0 — 2026-09-30: call audio
+
+Two-way call audio between the phone and the apps.
+
+- WebRTC with Espressif's `esp_peer` (component registry, `~1.5.6`): ICE with the server's
+  STUN and TURN over UDP from `rtc.config`, DTLS-SRTP, RTP. TURN over TCP/TLS is opt-in
+  (`CONFIG_OLP_ICE_TCP_RELAY`, `ice tcp|tls`) because it doesn't work in `esp_peer` 1.5.6 (README). The caller offers; the other side's trickled `rtc.ice`
+  candidates are applied (queued until its SDP). No media, no call: a failed or lost connection
+  hangs up. The old signaling-only SDP (audio rejected) is gone.
+- G.711 µ-law (PCMU) at 8 kHz, chosen over Opus for robustness (README "Call audio").
+- Audio device interface: the ES8311 over I2S (8 kHz mono, MCLK 2.048 MHz, init over I2C on the
+  new `i2c_master` driver) or a test device (1 kHz source, analysing sink) for the simulators and
+  bring-up. The mic is captured only while a call's media is up.
+- Earpiece: call-progress tones mixed in locally (dial, ringback, busy, hold), volume 0-10 in 3 dB
+  steps under a -6 dBFS cap (Kconfig), MENU → 1 Volume. Muted on the hook.
+- Console: `audio` (counters, levels, `tone`, `loop` echo test, `watch`), `volume`, `rtc`,
+  `ice all|udp|tcp|tls`.
+  TURN credentials are never logged (`rtc.config` is logged without them; `esp_peer`'s agent log
+  stays at WARN).
+- ESP-IDF v5.5 (v5.5.5) is now required: `esp_peer`'s prebuilt libraries need `esp_log()`.
+- QEMU build (`sdkconfig.qemu`, `tools/qemu.sh`): Espressif's esp32s3 machine with its OpenCores
+  Ethernet standing in for Wi-Fi; CI boots it (`tools/qemu_smoke.py`). The e2e test runs on QEMU
+  by default (Wokwi's free plan ran out of CI minutes).
+- Host unit tests (`firmware/test/host`, in CI): G.711, tones and cadences, meters, ICE choice.
+- `hardware/BRINGUP.md`: the checklist for the first real board (codec, levels, cap, echo).
+
+Found and fixed on the way (TESTLOG.md): the test device's catch-up loop starved the idle task
+(watchdog); one-second sample buffers cost 48 KB of RAM (now running meters); the console's terminal
+probe swallowed the first command typed after boot (the e2e now waits for the prompt); QEMU with
+32 MB PSRAM left no address space for the flash (8 MB, like the board's module); QEMU's Ethernet
+dropped RTP bursts with 4 RX buffers (16).
+
 ## 0.1.0 (v0) — 2026-09-30
 
 First firmware for the minimal board (ESP32-S3, ESP-IDF v5.4). No call audio yet.

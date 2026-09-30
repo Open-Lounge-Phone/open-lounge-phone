@@ -1,15 +1,19 @@
 // The serial console (USB-Serial-JTAG on the board, UART0 in the simulator):
 //   wifi <ssid> [pass]   server <url>   status   key <0-9|menu|back>   hook <up|down>
-//   drop [wifi]   wipe   screen   reboot
+//   drop [wifi]   wipe   screen   reboot   audio   volume   rtc   ice
 // `key` and `hook` act like the real switches (for tests and bring-up).
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
 #include "app.h"
+#include "audio.h"
+#include "media.h"
 #include "display.h"
 #include "esp_console.h"
 #include "esp_log.h"
+#include "ice.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "net.h"
@@ -96,6 +100,63 @@ static int cmd_screen(int argc, char **argv) {
   return 0;
 }
 
+static tone_t tone_by_name(const char *n) {
+  for (int t = TONE_NONE; t <= TONE_TEST; t++)
+    if (!strcasecmp(n, tone_name((tone_t)t))) return (tone_t)t;
+  return TONE_NONE;
+}
+
+static int cmd_audio(int argc, char **argv) {
+  if (argc >= 3 && !strcmp(argv[1], "tone")) {
+    audio_force_tone(tone_by_name(argv[2]));
+  } else if (argc >= 3 && !strcmp(argv[1], "loop")) {
+    audio_loopback(strcmp(argv[2], "off") ? atoi(argv[2]) : 0);
+  } else if (argc >= 3 && !strcmp(argv[1], "watch")) {
+    audio_watch((float)atof(argv[2]));
+  } else if (argc > 1) {
+    printf("usage: audio [tone <dialtone|ringback|busy|hold|test|none>] [loop <ms>|off] "
+           "[watch <hz>]\n");
+    return 1;
+  }
+  audio_print_status();
+  return 0;
+}
+
+static int cmd_volume(int argc, char **argv) {
+  if (argc > 1) audio_set_volume(atoi(argv[1]));
+  printf("volume %d/%d (%.0f dBFS; cap %d dBFS)\n", audio_volume(), VOLUME_MAX,
+         audio_volume_db(audio_volume()), CONFIG_OLP_EARPIECE_MAX_DB);
+  return 0;
+}
+
+static int cmd_rtc(int argc, char **argv) {
+  if (argc > 1 && !strcmp(argv[1], "log")) {
+    esp_log_level_set("AGENT", argc > 2 && !strcmp(argv[2], "on") ? ESP_LOG_INFO : ESP_LOG_WARN);
+    printf("esp_peer agent log %s (it prints TURN credentials: debugging only)\n",
+           argc > 2 && !strcmp(argv[2], "on") ? "on" : "off");
+    return 0;
+  }
+  media_print_status();
+  return 0;
+}
+
+static int cmd_ice(int argc, char **argv) {
+  if (argc > 1) {
+    if (!strcmp(argv[1], "all")) media_set_ice_mode(ICE_ALL);
+    else if (!strcmp(argv[1], "udp")) media_set_ice_mode(ICE_UDP);
+    else if (!strcmp(argv[1], "tcp")) media_set_ice_mode(ICE_TCP);
+    else if (!strcmp(argv[1], "tls")) media_set_ice_mode(ICE_TLS);
+    else {
+      printf("usage: ice [all|udp|tcp|tls]  (tcp/tls = relay over TURN TCP / TLS only)\n");
+      return 1;
+    }
+  }
+  printf("ice %s (next call)\n", ice_mode_name(media_ice_mode()));
+  if (media_ice_mode() == ICE_TCP || media_ice_mode() == ICE_TLS)
+    printf("note: TURN over TCP/TLS doesn't work in esp_peer 1.5.6 (README \"Call audio\")\n");
+  return 0;
+}
+
 static int cmd_reboot(int argc, char **argv) {
   esp_restart();
   return 0;
@@ -123,6 +184,11 @@ void console_start(void) {
        .func = cmd_drop},
       {.command = "wipe", .help = "forget the device key, id and settings (keeps Wi-Fi)", .func = cmd_wipe},
       {.command = "screen", .help = "print the display's framebuffer (tools/fb2png.py)", .func = cmd_screen},
+      {.command = "audio", .help = "audio [tone <name>|loop <ms>|off|watch <hz>]: audio state and bring-up tests",
+       .func = cmd_audio},
+      {.command = "volume", .help = "volume [0-10]: earpiece volume (10 = the cap)", .func = cmd_volume},
+      {.command = "rtc", .help = "rtc [log on|off]: call media (WebRTC) state", .func = cmd_rtc},
+      {.command = "ice", .help = "ice [all|udp|tcp|tls]: which ICE servers the next call uses", .func = cmd_ice},
       {.command = "reboot", .help = "restart", .func = cmd_reboot},
   };
   for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++)

@@ -13,6 +13,9 @@
 #include "esp_netif.h"
 #include "esp_websocket_client.h"
 #include "esp_wifi.h"
+#if CONFIG_OLP_QEMU
+#include "esp_eth.h"
+#endif
 #include "nvs.h"
 #include "sdkconfig.h"
 
@@ -57,8 +60,10 @@ void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_l
   *rssi = 0;
   ip[0] = '\0';
   if (!s_wifi_up) return;
+#if !CONFIG_OLP_QEMU
   wifi_ap_record_t ap;
   if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) *rssi = ap.rssi;
+#endif
   esp_netif_ip_info_t info;
   if (esp_netif_get_ip_info(s_netif, &info) == ESP_OK) snprintf(ip, ip_len, IPSTR, IP2STR(&info.ip));
 }
@@ -90,14 +95,55 @@ static void apply_wifi(void) {
   nvs_str("ssid", s_ssid, sizeof s_ssid, CONFIG_OLP_WIFI_SSID);
   nvs_str("pass", pass, sizeof pass, CONFIG_OLP_WIFI_PASSWORD);
   wifi_config_t cfg = {0};
-  strncpy((char *)cfg.sta.ssid, s_ssid, sizeof cfg.sta.ssid);
-  strncpy((char *)cfg.sta.password, pass, sizeof cfg.sta.password);
+  // Fixed-size fields, not necessarily NUL-terminated (a 32-byte SSID fills it).
+  memcpy(cfg.sta.ssid, s_ssid, strnlen(s_ssid, sizeof cfg.sta.ssid));
+  memcpy(cfg.sta.password, pass, strnlen(pass, sizeof cfg.sta.password));
   cfg.sta.threshold.authmode = pass[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
   ESP_LOGI(TAG, "wifi: %s", s_ssid[0] ? s_ssid : "(not set: use `wifi <ssid> <pass>`)");
 }
 
+#if CONFIG_OLP_QEMU
+// QEMU has no Wi-Fi: its OpenCores Ethernet (user-mode NAT) stands in for it. Everything above
+// the link (DHCP, DNS, TLS, UDP for WebRTC) is the same as on the board.
+static void eth_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
+  if (base == IP_EVENT && id == IP_EVENT_ETH_GOT_IP) {
+    ip_event_got_ip_t *e = data;
+    s_wifi_up = true;
+    ESP_LOGI(TAG, "WIFI connected ip=" IPSTR " (QEMU Ethernet)", IP2STR(&e->ip_info.ip));
+    app_post(EV_WIFI_UP, 0, NULL);
+  } else if (base == ETH_EVENT && id == ETHERNET_EVENT_DISCONNECTED) {
+    if (s_wifi_up) app_post(EV_WIFI_DOWN, 0, NULL);
+    s_wifi_up = false;
+  }
+}
+
+static void start_qemu_ethernet(void) {
+  esp_netif_config_t ncfg = ESP_NETIF_DEFAULT_ETH();
+  s_netif = esp_netif_new(&ncfg);
+  eth_mac_config_t mac_cfg = ETH_MAC_DEFAULT_CONFIG();
+  eth_phy_config_t phy_cfg = ETH_PHY_DEFAULT_CONFIG();
+  phy_cfg.autonego_timeout_ms = 100;
+  esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mac_cfg);
+  esp_eth_phy_t *phy = esp_eth_phy_new_dp83848(&phy_cfg);
+  esp_eth_config_t cfg = ETH_DEFAULT_CONFIG(mac, phy);
+  esp_eth_handle_t eth = NULL;
+  ESP_ERROR_CHECK(esp_eth_driver_install(&cfg, &eth));
+  ESP_ERROR_CHECK(esp_netif_attach(s_netif, esp_eth_new_netif_glue(eth)));
+  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, eth_event, NULL));
+  ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, eth_event, NULL));
+  snprintf(s_ssid, sizeof s_ssid, "qemu-ethernet");
+  ESP_ERROR_CHECK(esp_eth_start(eth));
+}
+#endif
+
 void net_start(void) {
+#if CONFIG_OLP_QEMU
+  ESP_ERROR_CHECK(esp_netif_init());
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+  start_qemu_ethernet();
+  return;
+#endif
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   s_netif = esp_netif_create_default_wifi_sta();
@@ -165,7 +211,7 @@ void net_ws_open(const char *url) {
     esp_websocket_client_destroy(s_ws);
     s_ws = NULL;
   }
-#if CONFIG_OLP_SIM
+#if CONFIG_OLP_SIM && !CONFIG_OLP_QEMU
   // Wokwi emulates the S3's software ECC ~7x slower than silicon, so a full handshake with the
   // bundle (P-256 + P-384 chain checks, ECDHE) outlasts Cloudflare's handshake timeout. The sim
   // build trusts the servers' current intermediate (Google Trust Services WE1, until 2029-02;
@@ -175,7 +221,7 @@ void net_ws_open(const char *url) {
 #endif
   esp_websocket_client_config_t cfg = {
       .uri = url,
-#if CONFIG_OLP_SIM
+#if CONFIG_OLP_SIM && !CONFIG_OLP_QEMU
       .cert_pem = sim_ca_start,
 #else
       .crt_bundle_attach = esp_crt_bundle_attach,

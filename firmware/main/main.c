@@ -9,7 +9,7 @@
 #include "app.h"
 #include "board.h"
 #include "cJSON.h"
-#include "codec.h"
+#include "audio.h"
 #include "display.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -23,6 +23,7 @@
 #include "nvs_flash.h"
 #include "phone.h"
 #include "proto.h"
+#include "media.h"
 #include "signals.h"
 #include "strip.h"
 
@@ -53,6 +54,8 @@ static int64_t s_call_started = -1;
 static char s_shown[4][25];
 static int s_shown_n = -1;
 static phone_kind_t s_logged_kind = PH_IDLE;
+static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
+static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 
@@ -102,9 +105,57 @@ static void emit(cJSON *m) {
 }
 
 static void end_call(void) {
+  media_stop();
   phone_init(&s_phone);
   if (s_hook_up) s_phone.kind = PH_OFFHOOK;
   s_call_started = -1;
+}
+
+// --- call media and tones ----------------------------------------------------------------
+
+/** The earpiece tone for the state (`soundFor` in packages/core/src/device.ts; the ring is the
+ * piezo's). */
+static tone_t tone_for(const phone_state_t *p) {
+  switch (p->kind) {
+    case PH_OFFHOOK:
+      return !p->last_end[0] || !strcmp(p->last_end, "hangup") ? TONE_DIAL : TONE_BUSY;
+    case PH_DIALING: return TONE_RINGBACK;
+    case PH_INCALL: return p->held_by_them ? TONE_HOLD : TONE_NONE;
+    default: return TONE_NONE;
+  }
+}
+
+/** The peer connection belongs to the current call, or it goes. */
+static bool media_wanted(void) {
+  if (!media_active()) return false;
+  const char *id = media_call_id();
+  if (s_phone.kind == PH_INCALL) return !strcmp(s_phone.call_id, id);
+  if (s_phone.kind == PH_DIALING) return !s_phone.call_id[0] || !strcmp(s_phone.call_id, id);
+  return false;
+}
+
+static void send_local_sdp(void) {
+  // The offer goes out once the call is connecting (both sides have rtc.config), the answer
+  // once there's an offer: both mean the phone is in the call.
+  if (!s_local_sdp || s_phone.kind != PH_INCALL || strcmp(s_phone.call_id, media_call_id())) return;
+  cJSON *m = msg("rtc.sdp");
+  cJSON_AddStringToObject(m, "callId", s_phone.call_id);
+  cJSON_AddStringToObject(m, "type", s_rtc_offerer ? "offer" : "answer");
+  cJSON_AddStringToObject(m, "sdp", s_local_sdp);
+  emit(m);
+  free(s_local_sdp);
+  s_local_sdp = NULL;
+}
+
+static void sync_media(void) {
+  if (media_active() && !media_wanted()) {
+    media_stop();
+    free(s_local_sdp);
+    s_local_sdp = NULL;
+  }
+  send_local_sdp();
+  audio_set_offhook(s_hook_up);
+  audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
 }
 
 // --- rendering ---------------------------------------------------------------------------
@@ -281,7 +332,13 @@ static void on_message(char *text) {
   }
   const char *t = jstr(m, "t");
   if (!t) goto done;
-  if (strcmp(t, "pong")) ESP_LOGI("proto", "<- %s", text);
+  if (!strcmp(t, "rtc.config")) {
+    // Never log TURN credentials: the call id and the server count only.
+    ESP_LOGI("proto", "<- {\"t\":\"rtc.config\",\"callId\":\"%s\",…} (%d ICE servers; credentials not logged)",
+             or_q(jstr(m, "callId")), cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(m, "iceServers")));
+  } else if (strcmp(t, "pong")) {
+    ESP_LOGI("proto", "<- %s", text);
+  }
 
   if (!strcmp(t, "auth.challenge")) {
     uint8_t nonce[128];
@@ -322,14 +379,28 @@ static void on_message(char *text) {
     const char *code = jstr(m, "code");
     ESP_LOGW(TAG, "server error %s: %s", or_q(code), or_q(jstr(m, "message")));
     if (code && !strcmp(code, "unauthorized") && identity_device_id()[0]) forget_device_id();
+  } else if (!strcmp(t, "rtc.config")) {
+    // ICE servers for a call: start its peer connection now, so gathering (STUN/TURN) overlaps
+    // with the signaling. The caller offers (it is still dialing here), the callee answers.
+    const char *call = jstr(m, "callId");
+    bool dialing = s_phone.kind == PH_DIALING && (!s_phone.call_id[0] || !strcmp(s_phone.call_id, call ? call : ""));
+    bool answering = s_phone.kind == PH_INCALL && call && !strcmp(s_phone.call_id, call);
+    if (call && (dialing || answering) && !cJSON_HasObjectItem(m, "peer")) {
+      free(s_local_sdp);
+      s_local_sdp = NULL;
+      s_rtc_offerer = dialing;
+      media_start(call, dialing, cJSON_GetObjectItemCaseSensitive(m, "iceServers"));
+    } else {
+      ESP_LOGI(TAG, "rtc.config for %s ignored (%s)", or_q(call), phone_kind_name(s_phone.kind));
+    }
   } else if (!strcmp(t, "rtc.sdp")) {
-    // v0: signaling only (proto.h). The caller's offer gets an answer with no media.
-    const char *type = jstr(m, "type"), *call = jstr(m, "callId"), *sdp = jstr(m, "sdp");
-    if (type && call && sdp && !strcmp(type, "offer") && s_phone.kind == PH_INCALL &&
-        !strcmp(call, s_phone.call_id))
-      proto_sdp_answer(call, sdp);
-  } else if (!strncmp(t, "rtc.", 4) || !strcmp(t, "room.media")) {
-    // TODO: call audio (esp-webrtc): ICE servers and candidates are ignored in v0.
+    const char *call = jstr(m, "callId"), *sdp = jstr(m, "sdp");
+    if (call && sdp && !cJSON_HasObjectItem(m, "peer")) media_remote_sdp(call, sdp);
+  } else if (!strcmp(t, "rtc.ice")) {
+    const char *call = jstr(m, "callId"), *cand = jstr(m, "candidate");
+    if (call && cand && !cJSON_HasObjectItem(m, "peer")) media_remote_candidate(call, cand);
+  } else if (!strcmp(t, "room.media")) {
+    // TODO: rooms (mesh or relay) need more than one peer connection; not in this firmware yet.
   } else {
     phone_kind_t before = s_phone.kind;
     if (phone_server(&s_phone, m, emit)) {
@@ -337,9 +408,6 @@ static void on_message(char *text) {
         copy(s_active_label, sizeof s_active_label, s_phone.from);
         menu_close(&s_menu);
       }
-      // The party that placed the call sends the SDP offer once it's connecting.
-      if (before == PH_DIALING && s_phone.kind == PH_INCALL && !s_phone.connected)
-        proto_sdp_offer(s_phone.call_id);
       if (s_phone.kind == PH_VOICEMAIL)
         ESP_LOGI(TAG, "voicemail offered for %s: not recorded in v0", s_phone.from);
     }
@@ -419,7 +487,9 @@ void app_main(void) {
   }
   ESP_ERROR_CHECK(err);
   s_queue = xQueueCreate(32, sizeof(app_event_t));
-  #if CONFIG_OLP_SIM
+#if CONFIG_OLP_QEMU
+  ESP_LOGI(TAG, "Open Lounge Phone firmware %s (simulator build: QEMU)", FW_VERSION);
+#elif CONFIG_OLP_SIM
   ESP_LOGI(TAG, "Open Lounge Phone firmware %s (simulator build)", FW_VERSION);
 #else
   ESP_LOGI(TAG, "Open Lounge Phone firmware %s", FW_VERSION);
@@ -427,14 +497,21 @@ void app_main(void) {
   phone_init(&s_phone);
 
   signals_start();
-#if CONFIG_OLP_SIM
+#if CONFIG_OLP_QEMU
+  display_start(&display_none);
+#elif CONFIG_OLP_SIM
   display_start(&display_ili9341_sim);
 #else
   display_start(&display_epd_ssd1680);
 #endif
   net_start();       // starts the radio: esp_fill_random is truly random from here on
   identity_init();   // loads or generates the device key
-  codec_init();
+#if CONFIG_OLP_AUDIO_TEST_DEVICE
+  audio_start(true);
+#else
+  audio_start(false);
+#endif
+  media_init();
   input_start();
   console_start();
   render();
@@ -446,7 +523,7 @@ void app_main(void) {
       switch (ev.type) {
         case EV_KEY: on_key(ev.a); break;
         case EV_HOOK: on_hook(ev.a); break;
-        case EV_JACK: break;  // TODO: mute the earpiece path when unplugged (audio)
+        case EV_JACK: break;  // nothing to switch: the mic is only read in a call anyway
         case EV_WIFI_UP:
           if (!started) {
             started = true;
@@ -475,9 +552,26 @@ void app_main(void) {
         case EV_RECONNECT:
           if (started) open_socket();
           break;
+        case EV_RTC_SDP:
+          if (media_active()) {
+            free(s_local_sdp);
+            s_local_sdp = ev.data;  // sent by sync_media once the call is connecting
+          } else {
+            free(ev.data);
+          }
+          break;
+        case EV_RTC_STATE:
+          if (ev.a != 1 && media_active()) {
+            // No media, no call: hang up (the caller hears it ended) rather than sit in silence.
+            ESP_LOGW(TAG, "call media %s: hanging up", ev.a == 2 ? "lost" : "failed");
+            media_stop();
+            phone_hangup(&s_phone, "error", emit);
+          }
+          break;
       }
     }
     tick();
+    sync_media();
     render();
   }
 }

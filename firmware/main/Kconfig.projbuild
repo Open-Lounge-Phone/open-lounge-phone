@@ -18,10 +18,71 @@ config OLP_WIFI_PASSWORD
     default ""
 
 config OLP_SIM
-    bool "Build for the Wokwi simulator"
+    bool "Build for a simulator (Wokwi or QEMU)"
     default n
     help
-        Moves keys 6 and 7 off the UART0 pins (the simulator's console) and skips the
-        codec probe.
+        Moves keys 6 and 7 off the UART0 pins (the simulator's console) and uses the test audio
+        device (no ES8311 in a simulator).
+
+config OLP_QEMU
+    bool "Build for QEMU (Espressif's esp32s3 machine)"
+    depends on OLP_SIM
+    default n
+    select ETH_USE_OPENETH
+    help
+        QEMU has no Wi-Fi: the network is its emulated OpenCores Ethernet (user-mode NAT, see
+        tools/qemu.sh). There is no display either: the framebuffer is kept for `screen`.
+
+menu "Call audio"
+
+config OLP_EARPIECE_MAX_DB
+    int "Earpiece volume cap (dBFS)"
+    range -30 0
+    default -6
+    help
+        The loudest the earpiece plays (volume 10/10). Full scale reaches about 98 dB SPL with
+        the assumed receiver (hardware/SCHEMATIC_REVIEW.md, owner question 8), so the default
+        cap is -6 dBFS until the handset's receiver is measured. Each volume step is 3 dB.
+
+config OLP_MIC_PGA_DB
+    int "Handset mic PGA gain (dB, 0-30 in 3 dB steps)"
+    range 0 30
+    default 18
+    help
+        ES8311 PGA gain for the handset electret (hardware sim b07 assumed 18 dB).
+
+config OLP_AUDIO_TEST_DEVICE
+    bool "Use the test audio device (1 kHz source, analysing sink) instead of the ES8311"
+    default y if OLP_SIM
+    default n
+    help
+        The simulator has no ES8311. On a board without a codec the firmware falls back to the
+        test device anyway.
+
+config OLP_ICE_TCP_RELAY
+    bool "TURN over TCP/TLS as well as UDP (experimental: broken in esp_peer 1.5.6)"
+    default n
+    help
+        esp_peer uses one TURN server over UDP and one over TCP or TLS. In esp_peer 1.5.6 the
+        TCP/TLS relay doesn't work (TLS gives up before the TCP connect finishes; over TCP, ICE
+        pairs but DTLS reads fail) and listing it stalls candidate gathering, so calls use STUN +
+        TURN over UDP only. Turn this on to try a newer esp_peer. `ice tcp` / `ice tls` on the
+        console try it for the next call.
+
+config OLP_ICE_PREFER_TLS
+    bool "With the TCP/TLS relay: prefer TURN over TLS on port 443"
+    depends on OLP_ICE_TCP_RELAY
+    default y
+
+config OLP_RTC_AGENT_TIMEOUT_MS
+    int "ICE agent receive timeout (ms)"
+    default 300 if OLP_SIM
+    default 100
+
+config OLP_RTC_TASK_STACK
+    int "WebRTC task stack (bytes)"
+    default 16384
+
+endmenu
 
 endmenu

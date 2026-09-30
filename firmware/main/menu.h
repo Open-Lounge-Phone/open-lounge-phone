@@ -1,12 +1,12 @@
 // The on-device menu (a subset of apps/device-web/src/menu.ts): MENU opens it, a digit picks
 // the item shown for it, BACK steps out, 20 s without a key closes it.
-// v0 items: 3 Wi-Fi status, 0 About (firmware version + the four fingerprint words).
-// TODO: Volume, Voicemail, Brightness, call actions (hold/merge/transfer), Dial extension.
+// Items: 1 Volume (1 quieter, 2 louder), 3 Wi-Fi status, 0 About (firmware version + the four
+// fingerprint words). TODO: Voicemail, Brightness, call actions (hold/merge/transfer), Dial extension.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum { MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI } menu_screen_t;
+typedef enum { MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME } menu_screen_t;
 
 typedef struct {
   menu_screen_t screen;
