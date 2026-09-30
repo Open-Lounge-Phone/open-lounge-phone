@@ -64,10 +64,13 @@ void display_text(const char *const *lines, int n) {
 void display_dump(void) {
   if (!s_fb) return;
   int w = s_drv->width, h = s_drv->height, row = (w + 7) / 8;
+  char *line = malloc(8 + row * 2 + 2);
+  if (!line) return;
   printf("FB %d %d\n", w, h);
   for (int y = 0; y < h; y++) {
-    // Rows are w bits each, packed back to back; print them byte-aligned.
-    printf("FBROW ");
+    // Rows are w bits each, packed back to back; print them byte-aligned, one printf per row so
+    // other tasks' log lines can't split a row.
+    int n = sprintf(line, "FBROW ");
     for (int b = 0; b < row; b++) {
       uint8_t v = 0;
       for (int k = 0; k < 8; k++) {
@@ -75,9 +78,10 @@ void display_dump(void) {
         int bit = y * w + x;
         if (x < w && (s_fb[bit / 8] & (0x80 >> (bit % 8)))) v |= 0x80 >> k;
       }
-      printf("%02x", v);
+      n += sprintf(line + n, "%02x", v);
     }
-    printf("\n");
+    printf("%s\n", line);
   }
   printf("FB END\n");
+  free(line);
 }
