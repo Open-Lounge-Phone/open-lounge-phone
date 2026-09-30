@@ -29,6 +29,7 @@ import {
   resolveButton,
   roomAccess,
   roomStep,
+  utcOffsetMinutes,
 } from "@openloungephone/core";
 import {
   type Account,
@@ -1587,6 +1588,7 @@ export class HouseholdHub {
       ...(owner ? { owner } : {}),
       quiet,
       ...(quietUntil ? { quietUntil } : {}),
+      utcOffsetMin: utcOffsetMinutes(now, schedule.timeZone),
       ...(missed.length ? { missed: missed.map((from) => ({ from: from.slice(0, 24) })) } : {}),
       ...(greeting
         ? {

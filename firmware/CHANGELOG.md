@@ -1,5 +1,28 @@
 # Firmware changelog
 
+## 0.4.0 — 2026-09-30: signed over-the-air updates
+
+- Two app slots (`partitions.csv`, 4 MB layout) with bootloader rollback. **A USB flash is needed
+  once** to move from the one-slot table.
+- Updates come from one fixed channel, the `fw-stable` release's `firmware-manifest.json` (never
+  GitHub's `/releases/latest`, which can be a hardware release). Firmware releases are `fw-vX.Y.Z`
+  (made with `--latest=false`); hardware releases are `hw-vX.Y`. CI checks the scheme.
+- The manifest names the board (`minimal-revA`) and is signed (RSA-PSS, the release key built into
+  the phone); the phone refuses another board, an older or equal version, a bad signature, a size
+  or SHA-256 that differs, and (release builds) an image whose own Secure Boot V2 signature isn't by
+  its key. A new image runs on trial and is kept once it reaches the server; a crash or 5 minutes
+  without the server rolls it back.
+- Automatic updates only while hung up and idle for 10 minutes, at night (SNTP + the space's UTC
+  offset, a new optional `utcOffsetMin` in `config`); MENU → 9 updates now. Console `ota`.
+- `tools/release.sh` (keygen, signed build, draft by default, a confirmed real release that also
+  updates the channel), `tools/ota_manifest.py`, `sdkconfig.release`. The release key was generated
+  into `firmware/keys/` (gitignored); its public half is `main/ota_signing_pub.pem`.
+- The firmware version comes from the app descriptor (`PROJECT_VER`), one place.
+
+Found and fixed on the way (TESTLOG.md): the QEMU bootloader hangs on its own flash writes (an
+emulator bug; the OTA test makes those writes for it); a new Kconfig symbol didn't reach cached QEMU
+builds (the build key now includes `Kconfig.projbuild`).
+
 ## 0.3.0 — 2026-09-30: Wi-Fi setup network
 
 - With no Wi-Fi saved the phone opens "OpenLoungePhone-XXXX" (WPA2, a fresh 8-digit password shown

@@ -27,6 +27,7 @@ import { afterAll, it } from "vitest";
 import { api, type Person } from "../twoServers.ts";
 import { CHROMIUM_ARGS, Companion, setForceRelay, until } from "./browser.ts";
 import { mediaReport, parseAudioLine, writeToneWav } from "./media.ts";
+import { bootloaderStandIn, buildOtaAssets, deleteOtaAssets, type OtaAssets } from "./ota.ts";
 import { buildSimFirmware, FIRMWARE, SIM, simPhone, type WokwiPhone } from "./wokwi.ts";
 
 const A = process.env.OLP_E2E_SERVER ?? "";
@@ -152,6 +153,89 @@ async function pair(phone: WokwiPhone, g: Companion, code: string): Promise<stri
     `preview words ${JSON.stringify(pre)}`,
   );
   return `${id}; words ${fw.join(" ")}; ${strip[0]}`;
+}
+
+let otaCleanup = "";
+
+/**
+ * Over-the-air updates against the test pre-release: a manifest signed by another key, one for
+ * another board, a hash that doesn't match, an image signed by another key (Secure Boot V2 check
+ * in esp_ota_end) and an older version are all refused; a signed image that crashes at boot is
+ * rolled back; a good one boots on trial, is kept once it reaches the server, and stays after a
+ * restart. QEMU can't run the bootloader's own otadata writes, so the test makes them between
+ * runs (bootloaderStandIn); the slot choice and everything in the app run for real.
+ */
+async function ota(phone: WokwiPhone, a: OtaAssets): Promise<string> {
+  const p = phone as WokwiPhone & { buildDir?: string; resume(): void };
+  p.buildDir = a.baseBuild;
+  phones.push(phone);
+  phone.start();
+  await phone.waitFor(/running 0\.4\.0 from ota_0/, 90_000, "base 0.4.0 in ota_0");
+  await phone.consoleReady();
+  await phone.waitFor(/PAIRING CODE: \d{6}/, 90_000, "server reached");
+  /** Points the phone at a manifest; waits for the answer before typing anything else. */
+  const useUrl = async (which: keyof OtaAssets["urls"]) => {
+    phone.send(`ota url ${a.urls[which]}`);
+    await phone.waitFor(new RegExp(`url=${a.urls[which].replace(/[.?]/g, "\\$&")}`), 20_000);
+  };
+  const refuse = async (which: keyof OtaAssets["urls"], why: RegExp, cmd = "now") => {
+    await useUrl(which);
+    phone.send(`ota ${cmd}`);
+    const m = await phone.waitFor(why, 180_000, `${which}: ${why}`);
+    await new Promise((r) => setTimeout(r, 1_500));
+    return `${which}: ${m[0].replace(/^OTA /, "")}`;
+  };
+  const notes = [
+    await refuse("badsig", /OTA REFUSED: bad manifest signature/),
+    await refuse("board", /OTA REFUSED: for another board \(manifest for "minimal-revB"/),
+    await refuse("sha", /OTA REFUSED: sha256 mismatch/),
+    await refuse("sbv2", /OTA REFUSED: image invalid \(format or signature\)/),
+    await refuse("old", /OTA UP TO DATE \(running 0\.4\.0, latest 0\.3\.9\)/, "check"),
+  ];
+  const events: string[] = [];
+  /**
+   * The phone restarted. Normally its bootloader makes its otadata write and starts the app; if
+   * QEMU stalls on that write (tools/qemu_otadata.py), make it on the stopped emulator and go on.
+   * Records which happened.
+   */
+  const reboot = async (what: string) => {
+    await phone.waitFor(/2nd stage bootloader/, 60_000, `${what}: bootloader`);
+    try {
+      await phone.waitFor(/cpu_start: Pro cpu start user code/, 30_000, `${what}: app start`);
+      events.push(`${what}: bootloader wrote otadata itself`);
+    } catch {
+      await phone.stop();
+      events.push(`${what}: stalled, stand-in ${bootloaderStandIn(a.baseBuild)}`);
+      p.resume();
+    }
+  };
+  // A signed image that crashes at boot: installed, tried, rolled back.
+  await useUrl("broken");
+  phone.send("ota now");
+  await phone.waitFor(/OTA INSTALLED 0\.4\.2-test/, 240_000, "broken image installed");
+  await phone.waitFor(/OTA RESTART/, 30_000);
+  await reboot("into 0.4.2-test"); // NEW -> PENDING_VERIFY
+  await phone.waitFor(/TEST BUILD: crashing at boot on purpose/, 90_000, "the broken image ran");
+  await reboot("after the crash"); // PENDING_VERIFY -> ABORTED
+  await phone.waitFor(/running 0\.4\.0 from ota_0/, 120_000, "back on 0.4.0");
+  await phone.waitFor(/OTA ROLLED BACK: 0\.4\.2-test \(in ota_1\) didn't start properly/, 10_000);
+  notes.push("0.4.2-test crashed → rolled back to 0.4.0");
+  // A good image: trial boot, kept once the server answers, still there after a restart.
+  await phone.waitFor(/olp> /, 60_000);
+  await useUrl("good");
+  phone.send("ota now");
+  await phone.waitFor(/OTA INSTALLED 0\.4\.1-test/, 240_000, "good image installed");
+  await reboot("into 0.4.1-test"); // NEW -> PENDING_VERIFY
+  await phone.waitFor(/running 0\.4\.1-test from ota_1/, 120_000, "restarted into 0.4.1-test");
+  await phone.waitFor(/OTA TRIAL 0\.4\.1-test/, 10_000);
+  await phone.waitFor(/OTA VALID 0\.4\.1-test/, 120_000, "kept after reaching the server");
+  phone.send("reboot");
+  await reboot("a plain restart"); // VALID: nothing to write
+  await phone.waitFor(/running 0\.4\.1-test from ota_1/, 120_000, "0.4.1-test after a restart");
+  await new Promise((r) => setTimeout(r, 3_000));
+  assert(!/OTA TRIAL/.test(phone.log.slice(phone.cursor)), "still on trial after being kept");
+  notes.push("0.4.1-test: trial → valid → kept after restart");
+  return `${notes.join("; ")}; boots: ${events.join(", ")}`;
 }
 
 const SETUP_PORT = 18080;
@@ -290,6 +374,7 @@ afterAll(async () => {
         : `NOT deleted ${g.handle}: ${res.status}, /me ${after.status}`;
   }
   await browser?.close().catch(() => {});
+  if (otaCleanup) cleanup += `; ${otaCleanup}`;
   const report = { run: RUN, sim: SIM, server: A, results, cleanup };
   writeFileSync(join(OUT, `result-${RUN}.json`), JSON.stringify(report, null, 2));
   console.log(`\n=== firmware e2e ${RUN} (${OUT}) ===`);
@@ -589,6 +674,27 @@ it.skipIf(!LIVE)(
         provisioning(phone3, browser as Browser),
       );
       await phone3.stop();
+    }
+
+    // ------------------------------------------------------------ simulation D
+    if (want("11") && SIM === "qemu") {
+      let assets: OtaAssets | undefined;
+      const phone4 = simPhone(join(OUT, `serial-D-${RUN}.log`));
+      try {
+        await step(
+          "11",
+          "OTA: refuses bad signatures/hashes, rolls back a broken image, keeps a good one",
+          async () => {
+            assets = buildOtaAssets(WSS, RUN);
+            return ota(phone4, assets);
+          },
+        );
+      } finally {
+        await phone4.stop();
+        if (assets) otaCleanup = deleteOtaAssets(assets.tag);
+      }
+    } else if (want("11")) {
+      skip("11", "OTA", "QEMU only (a Wokwi run is capped at 5 minutes)");
     }
 
     const failed = results.filter((r) => r.status === "FAIL");

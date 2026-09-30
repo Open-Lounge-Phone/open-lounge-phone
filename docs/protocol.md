@@ -337,6 +337,7 @@ Sent after authentication and whenever guardians change settings.
 | `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24) }[] | yes | Only mapped buttons are listed. |
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
+| `utcOffsetMin` | integer (≥-720, ≤840) |  | The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock (SNTP) knows local time: hardware phones install updates overnight. |
 | `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |

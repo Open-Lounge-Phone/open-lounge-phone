@@ -1,7 +1,10 @@
 # Open Lounge Phone: ESP32-S3 minimal board (ESP32-S3-WROOM-1U-N16R8)
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# Two app slots (OTA) with rollback: partitions.csv
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 # Console on the native USB (USB-Serial-JTAG), as on the board
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 # Octal PSRAM on the N16R8 module; boot without it on other dev boards

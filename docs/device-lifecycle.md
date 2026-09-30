@@ -54,7 +54,8 @@ the phone.
    NFC). You pick the space and the mode.
 4. **Daily use:** per mode, as above.
 5. **Updates and health:**
-   - Signed OTA updates install only while the phone is hung up and idle, overnight by default.
+   - Signed OTA updates (**built**, firmware 0.4) install only while the phone is hung up and
+     idle, overnight by default; MENU → 9 updates now.
    - The firmware has two slots, so a bad update rolls back automatically.
    - The owner sees signal, offline alerts and (on phones that report them) battery and
      reduced-power mode.

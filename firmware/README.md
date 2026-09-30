@@ -15,12 +15,12 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | 12 keys + hook + jack detect (interrupts + debounce), piezo ring and beeps, status LED patterns (idle, pairing, offline, ringing, missed) | Voice prompts (the pairing code read out), AEC if the handset echoes; TURN over TCP/TLS (broken in `esp_peer` 1.5.6) |
 | 2.9" e-paper (SSD1680) behind a small display interface; the protocol's strip model (≤ 2 lines × 16 chars, large type) | Partial refresh uses the controller's built-in mode (`0x22 0xFC`): check on a real panel |
 | **Wi-Fi setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server from NVS (`server`) or Kconfig (default `wss://l1.openloungephone.app`) | Bluetooth setup from the companion; the QR sticker |
-| WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute | OTA updates (two slots, signed, rollback) |
+| WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
 | `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Encrypted NVS / flash encryption (the device key is in plain NVS) |
 | `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
 | **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
 | `wipe`: erases the device key, id and settings (keeps Wi-Fi), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
-| MENU → 1 Volume, 3 Wi-Fi status (→ 1 set up Wi-Fi), 0 About (firmware version + the four fingerprint words) | |
+| MENU → 1 Volume, 3 Wi-Fi status (→ 1 set up Wi-Fi), 9 Update now, 0 About (firmware version + the four fingerprint words) | |
 
 ## Build and flash
 
@@ -61,6 +61,7 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `wifi <ssid> [password]` | save Wi-Fi in NVS and connect |
 | `wifi forget` | forget the saved Wi-Fi (the setup network opens after `reboot`) |
 | `setup` | open the Wi-Fi setup network now |
+| `ota [check\|now\|url <url>\|url default]` | updates: status, check, install now, the channel URL |
 | `setup test [ssid [pass]]` | fetch the setup page from the phone itself and post a bad form (and, with an ssid, a real one): bring-up and Wokwi |
 | `server [wss://host]` | show or set the server (reconnects) |
 | `status` | phone state, connection, device id, Wi-Fi, the four words, the strip |
@@ -80,6 +81,72 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 The log shows every protocol message (`-> …`, `<- …`), `STATE <kind>`, `STRIP [line|line]`,
 `SIG led=…`/`SIG ring=…`, `TONE …`, `RTC state …`/`RTC CONNECTED …`, `AUDIO tx=… rx=…` every 5 s in
 a call, and the pairing code as **`PAIRING CODE: 123456`**.
+
+## Updates (OTA)
+
+**Releases and tags.** Hardware releases are `hw-vX.Y` (fab files; `hw-v0.1` = the minimal
+board, rev A); firmware releases are `fw-vX.Y.Z` (the signed image and its manifest), created with
+`--latest=false`. Phones **never use `/releases/latest`** (that is whatever release is newest, a
+hardware one included): they read one fixed channel, the `fw-stable` release's
+`firmware-manifest.json` (`CONFIG_OLP_OTA_MANIFEST_URL`), which `tools/release.sh publish
+--release` replaces. CI checks this scheme (`tools/check_release_scheme.py`).
+
+**The manifest** (`firmware-manifest.json`):
+`{"board","version","url","size","sha256","signature"}`, the signature being RSA-PSS/SHA-256 by the
+release key over `olp-ota-v1\n<board>\n<version>\n<url>\n<sha256>\n<size>\n`
+(`tools/ota_manifest.py` makes and verifies it; `main/ota_core.c` parses it, host-tested). The
+phone installs only a manifest that (1) is signed by the release key built into it
+(`main/ota_signing_pub.pem`), (2) names its board (`CONFIG_OLP_BOARD_ID`, `minimal-revA`), and
+(3) is newer than what runs. It then downloads the image over HTTPS (certificate bundle; GitHub's
+redirects followed), hashes it while writing the other slot, refuses a size or SHA-256 that differs
+from the manifest, and lets `esp_ota_end` check the image; in release builds that includes the
+image's own **Secure Boot V2 signature** (see below). It checks the new image's version too,
+then restarts into it only when the phone is idle.
+
+**Rollback.** Two app slots (`partitions.csv`, 1.875 MB each on 4 MB flash) and
+`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`: a new image boots **on trial** and is kept
+(`esp_ota_mark_app_valid_cancel_rollback`) once it reaches the server (a pairing code or a signed-in
+`config`). If it crashes before that, the bootloader boots the old slot; if it runs but can't reach
+the server for 5 minutes, it rolls itself back. The log says `OTA TRIAL`, `OTA VALID`,
+`OTA ROLLED BACK`. Changing `partitions.csv` needs a USB flash (older phones with the one-slot table
+must be flashed over USB once).
+
+**When.** Checked a minute after going online and every 6 hours. An automatic update installs
+only while the phone is **hung up and idle for 10 minutes**, and **overnight** (02:00-05:00 local:
+SNTP plus the space's `utcOffsetMin` from `config`; no clock, no automatic install;
+`CONFIG_OLP_OTA_NIGHT_ONLY`). **MENU → 9** updates now (not during a call); the display shows
+`UPDATING 42%` / `DON'T UNPLUG`. Console: `ota`, `ota check`, `ota now`, `ota url <url>|default`.
+
+**Signing without secure boot eFuses.** Release builds (`sdkconfig.release`) use ESP-IDF's
+"signed app images without hardware secure boot" (`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`, RSA-3072,
+the Secure Boot V2 scheme): the running firmware accepts an update only if it is signed with the key
+that signed itself. Nothing is burned, so dev boards stay reflashable over USB; the protection is
+against the network, not someone with the board in hand. Options: **(a)** this (the default);
+**(b)** real **Secure Boot V2**: burn the same key's digest into eFuses so the ROM and bootloader
+check every boot (one-time, irreversible; `espsecure`/`espefuse`, ESP-IDF's secure boot guide) — for
+production phones, together with flash encryption; **(c)** dev builds (`sdkconfig.defaults`): no
+image signature check (it would abort an unsigned running image), but the manifest signature and
+SHA-256 still authenticate every update, so a dev board only installs release-key-signed images.
+
+**Keys and releases.** `tools/release.sh keygen` made the release key in `firmware/keys/`
+(gitignored, never committed or printed: **back it up offline**; losing it means every phone needs
+a USB flash to trust a new key); the public half is `main/ota_signing_pub.pem`.
+`tools/release.sh build` signs a build of `PROJECT_VER` and writes `build-release/dist/`;
+`publish --draft` (the default) makes a draft `fw-vX.Y.Z` that no phone sees; `publish --release`
+asks for confirmation, publishes, and updates `fw-stable`.
+
+**Tested in simulation (QEMU e2e step 11):** against a test pre-release (deleted after the run),
+with throwaway keys: a manifest signed by another key, one for another board, a wrong SHA-256, an
+image signed by another key (refused by `esp_ota_end`), an older version: all refused; a signed image
+that crashes at boot: installed, tried, rolled back to the old slot; a good image: trial boot, kept
+after reaching the server, still running after a restart. **QEMU caveat:** Espressif's QEMU
+hangs on the bootloader's very first flash write, the one that records `ota_0` in a blank otadata
+(it is the emulator: its GDB stub stops answering; builds 20250817 and 20260417), so
+`tools/qemu.sh` writes that first entry into the flash image itself (`tools/qemu_otadata.py seed`,
+byte for byte what the bootloader writes). The later writes (NEW → PENDING_VERIFY on the trial boot,
+PENDING_VERIFY → ABORTED after the crash) were made by the bootloader itself in the test runs; the
+test would make them on the stopped emulator if it ever stalled there, and says which happened.
+**Needs the real board:** a power cut mid-update, and the first boot of a blank board's bootloader.
 
 ## Wi-Fi setup network
 

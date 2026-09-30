@@ -4,6 +4,7 @@ import {
   localClock,
   parseHHMM,
   type QuietHoursSchedule,
+  utcOffsetMinutes,
   validateSchedule,
   type Weekday,
 } from "./quietHours.ts";
@@ -124,5 +125,19 @@ describe("validateSchedule", () => {
         rules: [{ days: [7 as Weekday], start: "21:00", end: "07:00" }],
       }),
     ).toThrow(/weekday/);
+  });
+});
+
+describe("utcOffsetMinutes", () => {
+  it("follows daylight saving time", () => {
+    expect(utcOffsetMinutes(new Date("2026-07-01T12:00:00Z"), NY)).toBe(-240);
+    expect(utcOffsetMinutes(new Date("2026-01-15T12:00:00Z"), NY)).toBe(-300);
+  });
+
+  it("handles half hours, both extremes and UTC", () => {
+    expect(utcOffsetMinutes(new Date("2026-01-15T12:00:00Z"), "Asia/Kolkata")).toBe(330);
+    expect(utcOffsetMinutes(new Date("2026-01-15T12:00:00Z"), "Pacific/Kiritimati")).toBe(840);
+    expect(utcOffsetMinutes(new Date("2026-01-15T12:00:00Z"), "Etc/GMT+12")).toBe(-720);
+    expect(utcOffsetMinutes(new Date("2026-01-15T12:00:00Z"), "UTC")).toBe(0);
   });
 });

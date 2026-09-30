@@ -578,6 +578,15 @@ export const Config = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .optional()
       .describe("Local time (HH:MM) when current quiet hours end, if they end."),
+    utcOffsetMin: z
+      .number()
+      .int()
+      .min(-720)
+      .max(840)
+      .optional()
+      .describe(
+        "The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock (SNTP) knows local time: hardware phones install updates overnight.",
+      ),
     missed: z
       .array(z.object({ from: z.string().min(1).max(24) }))
       .max(8)

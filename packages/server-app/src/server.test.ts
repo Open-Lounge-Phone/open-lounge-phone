@@ -273,6 +273,8 @@ describe("pairing and device auth", () => {
       greeting: { kind: "default", canRecord: true },
       // The strip's trust line: whose phone, and how it's used.
       owner: { mode: "kids", space: "Home" },
+      // The space's UTC offset (the test household's time zone is UTC).
+      utcOffsetMin: 0,
     });
   });
 

@@ -25,6 +25,8 @@ typedef enum {
   EV_RTC_STATE,    // a = 1 media connected, 2 disconnected, 3 failed to connect
   EV_PROV_OPEN,    // console / MENU: open the Wi-Fi setup network
   EV_PROV_SAVED,   // the setup page saved new Wi-Fi: restart
+  EV_OTA_NOW,      // MENU -> 9 / console: check and install an update now
+  EV_OTA_DONE,     // a = -1 failed/refused, 0 up to date, 1 available, 2 installed (restart when idle)
 } ev_type_t;
 
 typedef struct {

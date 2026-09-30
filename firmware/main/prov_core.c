@@ -106,13 +106,13 @@ int prov_form_get(const char *body, const char *key, char *out, size_t n) {
 const char *prov_check(const char *ssid, const char *pass) {
   size_t s = strlen(ssid), k = strlen(pass);
   if (s == 0) return "Pick or type a network name.";
-  if (s > 32) return "That network name is too long (32 bytes at most).";
+  if (s > 32) return "That network name is too long.";
   if (k == 0) return NULL;  // an open network
   if (k < 8) return "Wi-Fi passwords have at least 8 characters.";
-  if (k > 64) return "That password is too long (63 characters at most).";
+  if (k > 64) return "That password is too long.";
   if (k == 64) {
     for (size_t i = 0; i < 64; i++)
-      if (hexval(pass[i]) < 0) return "A 64-character key must be hexadecimal.";
+      if (hexval(pass[i]) < 0) return "That password doesn't look right. Check it and try again.";
   }
   return NULL;
 }

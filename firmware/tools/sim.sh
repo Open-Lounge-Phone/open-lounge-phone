@@ -20,7 +20,7 @@ WOKWI="$(command -v wokwi-cli || echo "$HOME/.local/bin/wokwi-cli")"
 build() {
   # sdkconfig.defaults never override an existing sdkconfig: regenerate it when the server changes.
   local defaults="sdkconfig.defaults;sdkconfig.sim" want
-  want="${OLP_SIM_SERVER:-default}|$(cat sdkconfig.defaults sdkconfig.sim | shasum | cut -c1-12)"
+  want="${OLP_SIM_SERVER:-default}|$(cat sdkconfig.defaults sdkconfig.sim main/Kconfig.projbuild | shasum | cut -c1-12)"
   if [ -n "${OLP_SIM_SERVER:-}" ]; then
     printf 'CONFIG_OLP_SERVER_URL="%s"\n' "$OLP_SIM_SERVER" >build-sim/sdkconfig.server
     defaults="$defaults;build-sim/sdkconfig.server"

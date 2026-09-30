@@ -87,6 +87,22 @@ export function localClock(instant: Date, timeZone: string): { weekday: Weekday;
   return { weekday, minutes: hour * 60 + minute };
 }
 
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The UTC offset of `timeZone` at `instant`, in minutes (e.g. -240 for New York in summer). */
+export function utcOffsetMinutes(instant: Date, timeZone: string): number {
+  let fmt = offsetFormatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" });
+    offsetFormatters.set(timeZone, fmt);
+  }
+  const name = fmt.formatToParts(instant).find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+  const m = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(name);
+  if (!m) return 0; // "GMT": UTC itself
+  const minutes = Number(m[2]) * 60 + Number(m[3] ?? 0);
+  return m[1] === "-" ? -minutes : minutes;
+}
+
 function ruleActive(rule: QuietHoursRule, weekday: Weekday, minutes: number): boolean {
   const start = parseHHMM(rule.start);
   const end = parseHHMM(rule.end);

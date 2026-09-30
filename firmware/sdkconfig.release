@@ -1,0 +1,9 @@
+# Release builds (layered on sdkconfig.defaults by tools/release.sh). Signed images: the Secure
+# Boot V2 signature scheme (RSA-3072) without burning secure boot eFuses: the running firmware only
+# accepts updates signed with the key that signed it (esp_ota_end checks). Real Secure Boot V2
+# (the bootloader checks every boot, eFuses burned once) can use the same key: README "Updates".
+CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+CONFIG_SECURE_BOOT_SIGNING_KEY="keys/ota_signing_key.pem"

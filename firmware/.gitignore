@@ -7,3 +7,6 @@ sdkconfig.old
 build-qemu/
 test/host/build/
 build-qemu-smoke/
+keys/
+build-release/
+build-ota-*/

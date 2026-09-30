@@ -28,15 +28,18 @@ build() {
   mkdir -p "$B"
   local defaults="sdkconfig.defaults;sdkconfig.qemu${OLP_QEMU_EXTRA_DEFAULTS:+;$OLP_QEMU_EXTRA_DEFAULTS}"
   local want
-  want="${OLP_SIM_SERVER:-default}|${OLP_QEMU_EXTRA_DEFAULTS:-}|$(cat sdkconfig.defaults sdkconfig.qemu \
-    ${OLP_QEMU_EXTRA_DEFAULTS:+"$OLP_QEMU_EXTRA_DEFAULTS"} | shasum | cut -c1-12)"
+  local extra
+  extra="$(echo "${OLP_QEMU_EXTRA_DEFAULTS:-}" | tr ';' ' ')"
+  # shellcheck disable=SC2086
+  want="${OLP_SIM_SERVER:-default}|${OLP_QEMU_EXTRA_DEFAULTS:-}|${OLP_FW_VERSION:-}|$(cat sdkconfig.defaults \
+    sdkconfig.qemu main/Kconfig.projbuild $extra | shasum | cut -c1-12)"
   if [ -n "${OLP_SIM_SERVER:-}" ]; then
     printf 'CONFIG_OLP_SERVER_URL="%s"\n' "$OLP_SIM_SERVER" >"$B/sdkconfig.server"
     defaults="$defaults;$B/sdkconfig.server"
   fi
   # sdkconfig.defaults never override an existing sdkconfig: regenerate it when the inputs change.
   if [ "$(cat "$B/.inputs" 2>/dev/null)" != "$want" ]; then
-    rm -f "$B/sdkconfig"
+    rm -f "$B/sdkconfig" "$B/CMakeCache.txt"  # a new version (OLP_FW_VERSION) needs a fresh configure
     echo "$want" >"$B/.inputs"
   fi
   idf.py -B "$B" -D SDKCONFIG="$B/sdkconfig" -D "SDKCONFIG_DEFAULTS=$defaults" build \
@@ -53,6 +56,9 @@ b = bytearray(1024)
 b[38] = 0x0C
 open(sys.argv[1], "wb").write(bytes(b))
 EOF
+  # QEMU hangs when the bootloader writes flash: write the first boot's otadata ourselves
+  # (tools/qemu_otadata.py explains).
+  python tools/qemu_otadata.py seed "$B/qemu_flash.bin" >/dev/null
 }
 run() {
   local fwd=()

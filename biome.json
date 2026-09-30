@@ -1,5 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "**",
@@ -8,8 +13,9 @@
       "!**/.wrangler",
       "!apps/server-cloudflare/public",
       "!hardware",
-      "!firmware/build",
-      "!firmware/build-sim",
+      "!firmware/build*",
+      "!firmware/keys",
+      "!firmware/test/host/build",
       "!firmware/managed_components",
       "!.claude",
       "!apps/server-cloudflare/instances",

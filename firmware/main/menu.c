@@ -34,7 +34,10 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
   } else if (m->screen == MENU_ROOT) {
     int d = digit_of(key);
     if (d == 0) m->screen = MENU_ABOUT;
-    else if (d == 1) m->screen = MENU_VOLUME;
+    else if (d == 9) {
+      app_post(EV_OTA_NOW, 0, NULL);  // 9 = update now
+      m->screen = MENU_CLOSED;
+    } else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 3) m->screen = MENU_WIFI;
   } else if (m->screen == MENU_WIFI) {
     if (digit_of(key) == 1) {
@@ -63,7 +66,7 @@ int menu_lines(const menu_t *m, char out[4][25]) {
     case MENU_ROOT:
       snprintf(out[0], 25, "MENU");
       snprintf(out[1], 25, "1 VOLUME 3 WI-FI");
-      snprintf(out[2], 25, "0 ABOUT");
+      snprintf(out[2], 25, "9 UPDATE 0 ABOUT");
       return 3;
     case MENU_VOLUME:
       snprintf(out[0], 25, "VOLUME %d/%d", audio_volume(), VOLUME_MAX);

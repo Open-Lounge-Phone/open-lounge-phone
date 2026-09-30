@@ -33,6 +33,44 @@ config OLP_QEMU
         QEMU has no Wi-Fi: the network is its emulated OpenCores Ethernet (user-mode NAT, see
         tools/qemu.sh). There is no display either: the framebuffer is kept for `screen`.
 
+menu "Updates (OTA)"
+
+config OLP_BOARD_ID
+    string "Board id (updates must be signed for it)"
+    default "minimal-revA"
+    help
+        The board this firmware runs on (hardware release hw-v0.1 = the minimal board, rev A).
+        A signed manifest for another board is refused.
+
+config OLP_OTA_MANIFEST_URL
+    string "Firmware update channel (manifest URL)"
+    default "https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/download/fw-stable/firmware-manifest.json"
+    help
+        The fw-stable release holds only firmware-manifest.json; tools/release.sh replaces it when
+        a firmware release (tag fw-vX.Y.Z) is published. Never /releases/latest: that is whatever
+        release is newest, a hardware release (hw-v*) included. The console `ota url <url>`
+        overrides it (NVS).
+
+config OLP_OTA_PUBKEY
+    string "Release public key (PEM, relative to firmware/)"
+    default "main/ota_signing_pub.pem"
+    help
+        The key whose signature a manifest must carry (RSA-3072, RSA-PSS/SHA-256; the same key
+        signs release images for Secure Boot V2). tools/release.sh makes it; tests use their own.
+
+config OLP_OTA_NIGHT_ONLY
+    bool "Install automatic updates only at night (02:00-05:00 local)"
+    default y
+    help
+        Updates install only while the phone is hung up and idle (10 min) either way. Local time
+        comes from SNTP and the space's UTC offset in `config`. MENU -> 9 installs at once.
+
+config OLP_TEST_CRASH_AT_BOOT
+    bool "TEST ONLY: crash at boot (the OTA rollback test's broken image)"
+    default n
+
+endmenu
+
 menu "Call audio"
 
 config OLP_EARPIECE_MAX_DB

@@ -21,6 +21,8 @@
 #include "menu.h"
 #include "net.h"
 #include "nvs_flash.h"
+#include "ota.h"
+#include "ota_core.h"
 #include "phone.h"
 #include "proto.h"
 #include "prov.h"
@@ -57,6 +59,12 @@ static char s_shown[4][25];
 static int s_shown_n = -1;
 static phone_kind_t s_logged_kind = PH_IDLE;
 static prov_t s_prov;  // the Wi-Fi setup network (prov_core.c decides)
+// Updates: when to check, whether one is installed and waiting for the phone to be idle, and a
+// short message after MENU -> 9.
+static int64_t s_next_ota_check = -1, s_idle_since = -1, s_ota_msg_until;
+static bool s_ota_restart, s_ota_manual;
+static char s_ota_msg[2][25];
+#define OTA_CHECK_EVERY_MS (6LL * 60 * 60 * 1000)
 static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
@@ -178,6 +186,17 @@ static void render(void) {
   char lines[4][25] = {{0}};
   int n = menu_lines(&s_menu, lines);
   bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
+  if (n == 0 && (ota_state() == OTA_DOWNLOADING || ota_state() == OTA_RESTARTING ||
+                 (s_ota_manual && ota_state() == OTA_CHECKING))) {
+    if (ota_state() == OTA_CHECKING) snprintf(lines[0], 25, "CHECKING UPDATE");
+    else if (ota_state() == OTA_DOWNLOADING) snprintf(lines[0], 25, "UPDATING %d%%", ota_progress());
+    else snprintf(lines[0], 25, "UPDATED");
+    snprintf(lines[1], 25, "%s", ota_state() == OTA_CHECKING ? "PLEASE WAIT" : "DON'T UNPLUG");
+    n = 2;
+  } else if (n == 0 && now < s_ota_msg_until) {
+    memcpy(lines, s_ota_msg, sizeof s_ota_msg);
+    n = 2;
+  }
   if (n == 0 && prov_ap_active() && !busy) {
     // The steps, while the setup network is open: join it with the password, open the page.
     snprintf(lines[0], 25, "WI-FI SETUP: JOIN");
@@ -387,9 +406,12 @@ static void on_config(const cJSON *m) {
     copy(s_cfg.owner_space, sizeof s_cfg.owner_space, jstr(owner, "space"));
     copy(s_cfg.owner_person, sizeof s_cfg.owner_person, jstr(owner, "person"));
   }
+  const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
+  if (cJSON_IsNumber(off)) ota_set_utc_offset(off->valueint);
   s_authed = true;
   s_conn = CONN_ONLINE;
   s_unauthorized = 0;
+  ota_server_ok();  // a trial firmware reached the server and signed in: keep it
   if (first) {
     ESP_LOGI(TAG, "SIGNED IN as %s", identity_device_id());
     s_last_status = 0;  // report status right away
@@ -427,6 +449,7 @@ static void on_message(char *text) {
   } else if (!strcmp(t, "pair.code")) {
     copy(s_code, sizeof s_code, jstr(m, "code"));
     s_code_at = now_ms();
+    ota_server_ok();  // a trial firmware reached the server: keep it
     printf("PAIRING CODE: %s\n", s_code);  // the owner types this into the companion app
     fflush(stdout);
     signals_beep(BEEP_PAIR);
@@ -523,8 +546,43 @@ static void on_hook(bool up) {
 
 // --- main loop ---------------------------------------------------------------------------
 
+static void ota_tick(int64_t now) {
+  bool quiet = s_phone.kind == PH_IDLE && !s_hook_up && s_menu.screen == MENU_CLOSED &&
+               !prov_ap_active();
+  if (!quiet) s_idle_since = -1;
+  else if (s_idle_since < 0) s_idle_since = now;
+  // An installed update restarts the phone only when nothing is going on.
+  bool free_now = s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && s_ota_manual);
+  if (s_ota_restart && free_now && s_menu.screen == MENU_CLOSED) {
+    ESP_LOGI(TAG, "OTA RESTART into the new firmware");
+    const char *lines[] = {"UPDATED", "RESTARTING"};
+    display_text(lines, 2);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+  }
+  if (s_next_ota_check >= 0 && now >= s_next_ota_check && ota_state() == OTA_IDLE) {
+    s_next_ota_check = now + OTA_CHECK_EVERY_MS;
+    ota_check(false);
+  }
+  ota_ctx_t ctx = {
+      .on_hook = !s_hook_up,
+      .idle = quiet,
+      .idle_ms = s_idle_since < 0 ? 0 : now - s_idle_since,
+      .local_minute = ota_local_minute(),
+#if CONFIG_OLP_OTA_NIGHT_ONLY
+      .night_only = true,
+#endif
+  };
+  if (ota_available()[0] && !s_ota_restart && ota_state() == OTA_IDLE && ota_may_install(&ctx)) {
+    ESP_LOGI(TAG, "OTA auto install of %s (idle %lld s, local minute %d)", ota_available(),
+             (long long)(ctx.idle_ms / 1000), ctx.local_minute);
+    ota_check(true);
+  }
+}
+
 static void tick(void) {
   int64_t now = now_ms();
+  ota_tick(now);
   menu_tick(&s_menu, now);
   if (s_reopen_at >= 0 && now >= s_reopen_at) {
     s_reopen_at = -1;
@@ -567,6 +625,11 @@ void app_main(void) {
   ESP_LOGI(TAG, "Open Lounge Phone firmware %s", FW_VERSION);
 #endif
   phone_init(&s_phone);
+  ota_boot();
+#if CONFIG_OLP_TEST_CRASH_AT_BOOT
+  ESP_LOGE(TAG, "TEST BUILD: crashing at boot on purpose (the OTA rollback test)");
+  abort();
+#endif
 
   signals_start();
 #if CONFIG_OLP_QEMU
@@ -601,6 +664,8 @@ void app_main(void) {
         case EV_JACK: break;  // nothing to switch: the mic is only read in a call anyway
         case EV_WIFI_UP:
           prov_event(PROV_EV_STA_UP, false);
+          ota_time_start();
+          if (s_next_ota_check < 0) s_next_ota_check = now_ms() + 60 * 1000;  // first check
           if (!started) {
             started = true;
             open_socket();
@@ -609,6 +674,27 @@ void app_main(void) {
         case EV_WIFI_DOWN:
           prov_event(PROV_EV_STA_DOWN, false);
           if (!s_ws_open) s_conn = CONN_OFFLINE;
+          break;
+        case EV_OTA_NOW:
+          if (s_phone.kind == PH_IDLE || s_phone.kind == PH_OFFHOOK) {
+            s_ota_manual = true;
+            ota_check(true);
+          } else {
+            ESP_LOGI(TAG, "OTA: not during a call");
+          }
+          break;
+        case EV_OTA_DONE:
+          if (ev.a == 2) s_ota_restart = true;
+          if (s_ota_manual && ev.a != 2) {
+            static const char *msg[][2] = {{"UPDATE FAILED", "TRY LATER"},
+                                           {"UP TO DATE", ""},
+                                           {"UPDATE FOUND", ""}};
+            int i = ev.a < 0 ? 0 : ev.a == 0 ? 1 : 2;
+            snprintf(s_ota_msg[0], 25, "%s", msg[i][0]);
+            snprintf(s_ota_msg[1], 25, "%s", msg[i][1]);
+            s_ota_msg_until = now_ms() + 5000;
+            s_ota_manual = false;
+          }
           break;
         case EV_PROV_OPEN:
           prov_event(PROV_EV_OPEN, false);

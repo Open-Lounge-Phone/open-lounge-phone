@@ -18,6 +18,7 @@
 #include "esp_wifi.h"
 #include "net.h"
 #include "prov.h"
+#include "ota.h"
 #include "sdkconfig.h"
 
 void app_print_status(void);  // main.c
@@ -177,6 +178,21 @@ static int cmd_setup(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_ota(int argc, char **argv) {
+  if (argc >= 2 && !strcmp(argv[1], "check")) {
+    ota_check(false);
+  } else if (argc >= 2 && !strcmp(argv[1], "now")) {
+    app_post(EV_OTA_NOW, 0, NULL);
+  } else if (argc >= 3 && !strcmp(argv[1], "url")) {
+    ota_set_manifest_url(strcmp(argv[2], "default") ? argv[2] : NULL);
+  } else if (argc > 1) {
+    printf("usage: ota [check | now | url <https://…/manifest.json> | url default]\n");
+    return 1;
+  }
+  ota_print_status();
+  return 0;
+}
+
 static int cmd_reboot(int argc, char **argv) {
   esp_restart();
   return 0;
@@ -186,7 +202,7 @@ void console_start(void) {
   esp_console_repl_t *repl = NULL;
   esp_console_repl_config_t cfg = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
   cfg.prompt = "olp>";
-  cfg.max_cmdline_length = 256;
+  cfg.max_cmdline_length = 384;
 #if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
   esp_console_dev_usb_serial_jtag_config_t dev = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&dev, &cfg, &repl));
@@ -211,6 +227,7 @@ void console_start(void) {
       {.command = "ice", .help = "ice [all|udp|tcp|tls]: which ICE servers the next call uses", .func = cmd_ice},
       {.command = "setup", .help = "setup [test [ssid [pass]]]: open the Wi-Fi setup network (test: fetch/post its page from the phone)",
        .func = cmd_setup},
+      {.command = "ota", .help = "ota [check|now|url <u>|url default]: firmware updates", .func = cmd_ota},
       {.command = "reboot", .help = "restart", .func = cmd_reboot},
   };
   for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++)

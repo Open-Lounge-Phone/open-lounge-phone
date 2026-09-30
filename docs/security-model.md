@@ -34,16 +34,27 @@ hook switch, a display module, a piezo ringer and one status LED. That means:
 (An earlier board revision had a hardware mute switch and mic lights powered by the mic's own
 supply; the owner dropped them with the rest of that design on 2026-09-30.)
 
-## Firmware guarantees *(planned with the firmware)*
+## Firmware guarantees
 
-- **Secure boot and flash encryption** (ESP32-S3): only signed firmware runs, and a stolen phone's
-  memory is unreadable.
-- **Signed updates with anti-rollback protection**, installed only while hung up and idle.
+What the firmware does today (firmware/README.md has the details) and what is still planned:
+
+- **Signed updates** (**built**, firmware 0.4): a phone installs an update only from a manifest
+  signed by the project's release key (RSA-3072; the private key stays offline with the owner),
+  for its own board, newer than what it runs, with the image's SHA-256 checked while it is written.
+  Release builds also check the image's own Secure Boot V2 signature before switching to it. Updates
+  install only while the phone is hung up and idle (overnight by default, or MENU → 9), and a new
+  image that crashes or can't reach the server is rolled back to the previous one. Phones read a
+  fixed firmware channel, never GitHub's "latest release".
+- **Downgrades are refused** (only a newer version installs). *Planned:* eFuse anti-rollback
+  (secure version), so even a signed old image can't be installed by someone with the board.
+- *Planned for production phones:* **hardware Secure Boot V2 and flash encryption** (eFuses,
+  one-time): only signed firmware boots and a stolen phone's flash is unreadable. Today the image
+  signature protects against the network, not against someone who reflashes the board over USB.
 - **Device key** generated on the phone and never exported. Removing the phone in the app makes it
   useless.
-- **Debug ports locked** in production. Hobby builds get a clearly marked unlocked option.
-- **Reproducible builds with published fingerprints.** The phone shows its firmware fingerprint so
-  anyone can check it against the release.
+- *Planned:* **debug ports locked** in production; hobby builds get a clearly marked unlocked
+  option.
+- *Planned:* **reproducible builds with published fingerprints**, shown on the phone.
 
 ## Network and service
 

@@ -148,7 +148,10 @@ export class WokwiPhone {
     writeFileSync(this.logFile, this.log);
     if (this.proc && this.exited === undefined) {
       this.proc.kill("SIGTERM");
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 1_500));
+      // A QEMU stuck in its flash model ignores SIGTERM (tools/qemu_otadata.py): make sure.
+      if (this.exited === undefined) this.proc.kill("SIGKILL");
+      await new Promise((r) => setTimeout(r, 300));
     }
   }
 }
@@ -159,10 +162,20 @@ export class WokwiPhone {
  */
 export class QemuPhone extends WokwiPhone {
   hostfwd?: string;
+  /** Another build directory than build-qemu (e.g. the OTA test's base image). */
+  buildDir?: string;
+
+  private env(): NodeJS.ProcessEnv {
+    return {
+      ...process.env,
+      ...(this.hostfwd ? { QEMU_HOSTFWD: this.hostfwd } : {}),
+      ...(this.buildDir ? { OLP_QEMU_BUILD: this.buildDir } : {}),
+    };
+  }
 
   start(): void {
     const qemu = join(FIRMWARE, "tools/qemu.sh");
-    const fresh = spawnSync(qemu, ["fresh"], { encoding: "utf8" });
+    const fresh = spawnSync(qemu, ["fresh"], { encoding: "utf8", env: this.env() });
     if (fresh.status !== 0) throw new Error(`qemu image failed:\n${fresh.stdout}\n${fresh.stderr}`);
     this.resume();
   }
@@ -172,7 +185,7 @@ export class QemuPhone extends WokwiPhone {
     this.exited = undefined;
     this.attach(
       spawn(join(FIRMWARE, "tools/qemu.sh"), ["resume"], {
-        env: { ...process.env, ...(this.hostfwd ? { QEMU_HOSTFWD: this.hostfwd } : {}) },
+        env: this.env(),
         stdio: ["pipe", "pipe", "pipe"],
       }),
     );
