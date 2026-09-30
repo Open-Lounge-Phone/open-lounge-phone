@@ -215,7 +215,8 @@ static void forget_device_id(void) {
 }
 
 static void on_closed(int code) {
-  if (s_ws_open || code) ESP_LOGW(TAG, "WS closed%s%d", code ? " code " : "", code);
+  if (code) ESP_LOGW(TAG, "WS closed (code %d)", code);
+  else if (s_ws_open) ESP_LOGW(TAG, "WS closed");
   bool was_open = s_ws_open;
   s_ws_open = s_authed = false;
   s_code[0] = '\0';
