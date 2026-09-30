@@ -1,8 +1,107 @@
-# Firmware (later phase)
+# Firmware
 
-ESP32-S3 firmware (ESP-IDF / FreeRTOS). It will implement [protocol v1](../docs/protocol.md)
-and mirror the handset state machine in `packages/core/src/device.ts`, using the browser
-emulator (`apps/device-web`) as its reference implementation and test peer.
+ESP32-S3 firmware for the **minimal board** (`hardware/DESIGN.md`), in C on **ESP-IDF v5.4**.
+It speaks [protocol v1](../docs/protocol.md) and mirrors the browser phone (`apps/device-web`):
+the handset state machine (`packages/core/src/device.ts` → `main/phone.c`), the status strip
+(`strip.ts` → `strip.c`), the status light (`leds.ts` → `render()` in `main.c`) and a first
+part of the menu (`menu.ts` → `menu.c`).
+
+**v0 status: pairs, signs in and does call signaling; no call audio yet.**
+
+| Works | Stubbed / TODO |
+|---|---|
+| 12 keys + hook + jack detect (interrupts + debounce), piezo ring and beeps, status LED patterns (idle, pairing, offline, ringing, missed) | Call audio: I2S, the ES8311 path, prompts, WebRTC (esp-webrtc). The codec is only probed and reset over I2C |
+| 2.9" e-paper (SSD1680) behind a small display interface; the protocol's strip model (≤ 2 lines × 16 chars, large type) | Partial refresh uses the controller's built-in mode (`0x22 0xFC`): check on a real panel |
+| Wi-Fi from NVS (console `wifi`) or Kconfig; server from NVS (console `server`) or Kconfig (default `wss://l1.openloungephone.app`) | SoftAP provisioning ("OpenLoungePhone-XXXX" + a setup page) |
+| WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute | OTA updates (two slots, signed, rollback) |
+| `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Encrypted NVS / flash encryption (the device key is in plain NVS) |
+| `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
+| Signaling-only calls: the phone offers/answers SDP with its audio **rejected** (port 0), so calls go `active` with no media | First-run mode choice (always `kind: "kids"`), factory reset (MENU+BACK at power-on) |
+| `wipe`: erases the device key, id and settings (keeps Wi-Fi), reboots, pairs again | Volume, brightness, voicemail and call menus |
+| MENU → 3 Wi-Fi status, 0 About (firmware version + the four fingerprint words) | |
+
+## Build and flash
+
+Install ESP-IDF v5.4 once (official installer, ESP32-S3 only):
+
+```sh
+mkdir -p ~/esp && cd ~/esp
+git clone -b v5.4.2 --recursive https://github.com/espressif/esp-idf.git
+cd esp-idf && ./install.sh esp32s3
+```
+
+Then, in each new shell: `. ~/esp/esp-idf/export.sh`, and:
+
+```sh
+cd firmware
+idf.py build
+idf.py -p <port> flash monitor      # e.g. /dev/cu.usbmodem1101; Ctrl-] quits the monitor
+```
+
+Flashing and the console use the board's USB-C (native USB, USB-Serial-JTAG). If the board
+doesn't show up, hold BOOT, press RESET, release BOOT. `idf.py menuconfig` → *Open Lounge Phone*
+sets the default server and Wi-Fi. CI builds both targets with the `espressif/idf` image.
+
+**Pin map.** `main/board.h` is generated from `hardware/build/main/gpio_map.json`:
+`make -C hardware build`, then `python3 firmware/tools/gen_board.py` (it also copies the
+fingerprint word list from `packages/core`; `--check` fails on drift).
+
+## Console
+
+At the `olp>` prompt (USB serial, 115200 in the simulator):
+
+| Command | |
+|---|---|
+| `wifi <ssid> [password]` | save Wi-Fi in NVS and connect |
+| `server [wss://host]` | show or set the server (reconnects) |
+| `status` | phone state, connection, device id, Wi-Fi, the four words, the strip |
+| `key <0-9\|menu\|back>`, `hook <up\|down>` | press a key or move the hook, as the real switches do |
+| `drop [wifi]` | drop the WebSocket (or Wi-Fi) to test reconnects |
+| `wipe` | forget the device key, id and settings (keeps Wi-Fi), reboot |
+| `screen` | print the display's framebuffer (`tools/fb2png.py` turns it into a PNG) |
+| `reboot` | restart |
+
+The log shows every protocol message (`-> …`, `<- …`), `STATE <kind>`, `STRIP [line|line]`,
+`SIG led=…`/`SIG ring=…`, and the pairing code as **`PAIRING CODE: 123456`**.
+
+## Pairing a phone
+
+1. Power it; it joins Wi-Fi and shows `PAIR 123 456` on the strip (and prints `PAIRING CODE:`).
+2. In the companion app: Home → **+ Pair a phone**, type the code, pick the mode and name.
+3. The phone reconnects, signs the challenge and shows `READY` with its owner line. MENU → 0
+   shows its four words; the app shows the same four for that phone.
+
+## Wokwi simulator
+
+`wokwi/diagram.json` is an ESP32-S3 devkit with 12 key buttons, the hook button (held = on the
+hook), the status LED, the buzzer and a display. The simulator build (`sdkconfig.sim`) joins
+`Wokwi-GUEST`, connects to the test server `wss://t1.openloungephone.app`, prints the console
+on UART0 (so keys 6 and 7 move from IO43/IO44 to IO35/IO36) and has no PSRAM.
+
+```sh
+curl -L https://wokwi.com/ci/install.sh | sh      # or the release binary into ~/.local/bin
+echo "<token>" > firmware/.wokwi-token            # gitignored; never commit it
+firmware/tools/sim.sh smoke        # build + wokwi/smoke.yaml → build-sim/serial.log, *.png
+firmware/tools/sim.sh interactive  # the console on your terminal (hook, keys, status…)
+```
+
+`smoke.yaml` boots, joins Wi-Fi, opens the WebSocket, waits for `pair.code` and the strip, moves
+the hook, walks MENU → About → BACK, presses keys, and saves `build-sim/screenshot.png` (the
+simulated display) and `build-sim/display.png` (the firmware's own framebuffer). To finish
+pairing live, run `sim.sh interactive` and type the printed code into the companion on t1.
+
+Simulator notes (all only in the sim build):
+- **Display stand-in:** Wokwi has no supported 2.9" e-paper part. The community chip
+  (`board-epaper-2in9`, bonnyr/wokwi-ws29v2) takes one byte per chip select, animates every
+  refresh line by line (the whole simulation ran at a fraction of real time) and dropped the
+  simulator's connection. The sim uses Wokwi's ILI9341 SPI TFT on the same pins
+  (`main/display_ili9341.c`), drawing the same 296 × 128 strip image.
+- **TLS:** Wokwi emulates the S3's software ECC about 7× slower than silicon (a P-256 verify
+  takes 1.4 s of simulated time, P-384 2.4 s), so a full handshake with the certificate bundle
+  outlasted Cloudflare's handshake timeout. The sim trusts the servers' intermediate (Google
+  Trust Services WE1, `main/sim_ca_we1.pem`, valid until 2029-02) and uses P-256 for ECDHE.
+  Hardware builds verify the full chain against the bundle.
+- A simulation runs at most 5 minutes (the Wokwi plan), at roughly 0.4–0.8× real time.
 
 ## Requirements already decided
 

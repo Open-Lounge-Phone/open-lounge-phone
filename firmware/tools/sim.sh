@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Build the simulator firmware and run it in Wokwi.
+#   firmware/tools/sim.sh build        build into firmware/build-sim
+#   firmware/tools/sim.sh smoke        build + run wokwi/smoke.yaml; log + display PNG in build-sim/
+#   firmware/tools/sim.sh interactive  build + run with the console on stdin (type `help`)
+# Needs ESP-IDF (IDF_PATH or ~/esp/esp-idf), wokwi-cli, and a token in firmware/.wokwi-token
+# (or WOKWI_CLI_TOKEN). The token is never printed.
+set -euo pipefail
+FW="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$FW"
+if ! command -v idf.py >/dev/null; then
+  # shellcheck disable=SC1091
+  . "${IDF_PATH:-$HOME/esp/esp-idf}/export.sh" >/dev/null
+fi
+WOKWI="$(command -v wokwi-cli || echo "$HOME/.local/bin/wokwi-cli")"
+build() {
+  idf.py -B build-sim -D SDKCONFIG=build-sim/sdkconfig \
+    -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.sim" build >build-sim.log 2>&1 ||
+    { tail -40 build-sim.log; exit 1; }
+  mv build-sim.log build-sim/build.log
+}
+token() {
+  if [ -z "${WOKWI_CLI_TOKEN:-}" ]; then
+    [ -s .wokwi-token ] || { echo "no Wokwi token: put it in firmware/.wokwi-token" >&2; exit 1; }
+    WOKWI_CLI_TOKEN="$(cat .wokwi-token)"
+    export WOKWI_CLI_TOKEN
+  fi
+}
+case "${1:-smoke}" in
+  build) mkdir -p build-sim && build ;;
+  smoke)
+    mkdir -p build-sim && build && token
+    "$WOKWI" wokwi --scenario "$FW/wokwi/smoke.yaml" --timeout "${TIMEOUT:-240000}" \
+      --serial-log-file "$FW/build-sim/serial.log"
+    python3 tools/fb2png.py build-sim/serial.log build-sim/display.png
+    grep -m1 "PAIRING CODE" build-sim/serial.log
+    ;;
+  interactive)
+    mkdir -p build-sim && build && token
+    exec "$WOKWI" wokwi --interactive --timeout "${TIMEOUT:-3600000}"
+    ;;
+  *) echo "usage: $0 build|smoke|interactive" >&2; exit 2 ;;
+esac

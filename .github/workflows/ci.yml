@@ -22,3 +22,27 @@ jobs:
         run: npm run docs:protocol && git diff --exit-code docs/protocol.md
       - name: Federation spec is up to date
         run: npm run docs:federation && git diff --exit-code docs/federation-spec.md
+
+  firmware:
+    name: Firmware (ESP-IDF build)
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.4.2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generated sources are up to date
+        run: python3 firmware/tools/gen_board.py --check
+      - name: Build (board)
+        working-directory: firmware
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py build
+          idf.py size
+      - name: Build (Wokwi simulator)
+        working-directory: firmware
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -B build-sim -D SDKCONFIG=build-sim/sdkconfig \
+            -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.sim" build

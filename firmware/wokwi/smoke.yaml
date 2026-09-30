@@ -1,0 +1,53 @@
+# Open Lounge Phone firmware v0 in the Wokwi simulator: boot, Wi-Fi, the WebSocket to the
+# server, a pairing code, then keys and the hook. Pairing itself is finished live by a person
+# (the companion app) or by the e2e test (tests/e2e/live/firmware.test.ts).
+#   firmware/tools/sim.sh smoke
+name: Open Lounge Phone v0 smoke
+version: 1
+author: Open Lounge Phone
+steps:
+  - wait-serial: 'Open Lounge Phone firmware'
+  - wait-serial: 'fingerprint:'
+  - wait-serial: 'WIFI connected'
+  - wait-serial: 'WS connecting wss://'
+  - wait-serial: 'WS open'
+  - wait-serial: '"t":"pair.begin","alg":"p256"'
+  - wait-serial: '"t":"pair.code"'
+  - wait-serial: 'PAIRING CODE: '
+  - wait-serial: 'STRIP [PAIR '
+  # The hook: held = handset on the cradle.
+  - set-control: { part-id: hook, control: pressed, value: 1 }
+  - wait-serial: 'HOOK down'
+  - set-control: { part-id: hook, control: pressed, value: 0 }
+  - wait-serial: 'HOOK up'
+  # Keys: MENU → root, 0 → About (the four words), BACK, BACK, then a digit.
+  - set-control: { part-id: keymenu, control: pressed, value: 1 }
+  - wait-serial: 'MENU root'
+  - set-control: { part-id: keymenu, control: pressed, value: 0 }
+  - delay: 100ms
+  - set-control: { part-id: key0, control: pressed, value: 1 }
+  - wait-serial: 'ABOUT fw='
+  - set-control: { part-id: key0, control: pressed, value: 0 }
+  - delay: 100ms
+  - set-control: { part-id: keyback, control: pressed, value: 1 }
+  - wait-serial: 'MENU root'
+  - set-control: { part-id: keyback, control: pressed, value: 0 }
+  - delay: 100ms
+  - set-control: { part-id: keyback, control: pressed, value: 1 }
+  - wait-serial: 'MENU closed'
+  - set-control: { part-id: keyback, control: pressed, value: 0 }
+  - delay: 100ms
+  - set-control: { part-id: key1, control: pressed, value: 1 }
+  - wait-serial: 'not signed in yet'
+  - set-control: { part-id: key1, control: pressed, value: 0 }
+  - delay: 100ms
+  - set-control: { part-id: key6, control: pressed, value: 1 }
+  - wait-serial: 'KEY 6'
+  - set-control: { part-id: key6, control: pressed, value: 0 }
+  - delay: 100ms
+  # The pairing code is back on the strip: dump the framebuffer (tools/fb2png.py) and take a
+  # screenshot of the display.
+  - delay: 500ms
+  - write-serial: "screen\n"
+  - wait-serial: 'FB END'
+  - take-screenshot: { part-id: lcd, save-to: ../build-sim/screenshot.png }

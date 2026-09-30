@@ -1,0 +1,27 @@
+menu "Open Lounge Phone"
+
+config OLP_SERVER_URL
+    string "Server (WebSocket base URL)"
+    default "wss://l1.openloungephone.app"
+    help
+        Base URL of the Open Lounge Phone server; the phone connects to <url>/ws/device.
+        The console command `server <url>` overrides it (stored in NVS).
+
+config OLP_WIFI_SSID
+    string "Default Wi-Fi SSID"
+    default ""
+    help
+        Used when no Wi-Fi is stored in NVS (console: `wifi <ssid> <pass>`).
+
+config OLP_WIFI_PASSWORD
+    string "Default Wi-Fi password"
+    default ""
+
+config OLP_SIM
+    bool "Build for the Wokwi simulator"
+    default n
+    help
+        Moves keys 6 and 7 off the UART0 pins (the simulator's console) and skips the
+        codec probe.
+
+endmenu

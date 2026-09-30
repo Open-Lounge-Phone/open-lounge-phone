@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "author": "Open Lounge Phone",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key1",
+      "top": -150,
+      "left": 250,
+      "attrs": {
+        "color": "white",
+        "label": "1",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key2",
+      "top": -150,
+      "left": 330,
+      "attrs": {
+        "color": "white",
+        "label": "2",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key3",
+      "top": -150,
+      "left": 410,
+      "attrs": {
+        "color": "white",
+        "label": "3",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key4",
+      "top": -150,
+      "left": 490,
+      "attrs": {
+        "color": "white",
+        "label": "4",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key5",
+      "top": -150,
+      "left": 570,
+      "attrs": {
+        "color": "white",
+        "label": "5",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "keymenu",
+      "top": -150,
+      "left": 650,
+      "attrs": {
+        "color": "blue",
+        "label": "MENU",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key6",
+      "top": -80,
+      "left": 250,
+      "attrs": {
+        "color": "white",
+        "label": "6",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key7",
+      "top": -80,
+      "left": 330,
+      "attrs": {
+        "color": "white",
+        "label": "7",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key8",
+      "top": -80,
+      "left": 410,
+      "attrs": {
+        "color": "white",
+        "label": "8",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key9",
+      "top": -80,
+      "left": 490,
+      "attrs": {
+        "color": "white",
+        "label": "9",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "key0",
+      "top": -80,
+      "left": 570,
+      "attrs": {
+        "color": "white",
+        "label": "0",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "keyback",
+      "top": -80,
+      "left": 650,
+      "attrs": {
+        "color": "blue",
+        "label": "BACK",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "hook",
+      "top": -150,
+      "left": 760,
+      "attrs": {
+        "color": "red",
+        "label": "HOOK (held = on the hook)",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led",
+      "top": -60,
+      "left": -80,
+      "attrs": {
+        "color": "green",
+        "label": "STATUS"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rled",
+      "top": 10,
+      "left": -110,
+      "rotate": 90,
+      "attrs": {
+        "value": "330"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": -80,
+      "left": -180,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-ili9341",
+      "id": "lcd",
+      "top": 120,
+      "left": 250,
+      "rotate": 90,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["key1:1.l", "esp:3", "green", []],
+    ["key1:2.l", "esp:GND.1", "black", []],
+    ["key2:1.l", "esp:46", "green", []],
+    ["key2:2.l", "esp:GND.1", "black", []],
+    ["key3:1.l", "esp:9", "green", []],
+    ["key3:2.l", "esp:GND.1", "black", []],
+    ["key4:1.l", "esp:10", "green", []],
+    ["key4:2.l", "esp:GND.1", "black", []],
+    ["key5:1.l", "esp:11", "green", []],
+    ["key5:2.l", "esp:GND.1", "black", []],
+    ["keymenu:1.l", "esp:12", "green", []],
+    ["keymenu:2.l", "esp:GND.1", "black", []],
+    ["key6:1.l", "esp:35", "green", []],
+    ["key6:2.l", "esp:GND.1", "black", []],
+    ["key7:1.l", "esp:36", "green", []],
+    ["key7:2.l", "esp:GND.1", "black", []],
+    ["key8:1.l", "esp:42", "green", []],
+    ["key8:2.l", "esp:GND.1", "black", []],
+    ["key9:1.l", "esp:41", "green", []],
+    ["key9:2.l", "esp:GND.1", "black", []],
+    ["key0:1.l", "esp:40", "green", []],
+    ["key0:2.l", "esp:GND.1", "black", []],
+    ["keyback:1.l", "esp:39", "green", []],
+    ["keyback:2.l", "esp:GND.1", "black", []],
+    ["hook:1.l", "esp:2", "green", []],
+    ["hook:2.l", "esp:GND.1", "black", []],
+    ["esp:1", "rled:2", "green", []],
+    ["rled:1", "led:A", "green", []],
+    ["led:C", "esp:GND.1", "black", []],
+    ["buzzer:2", "esp:8", "purple", []],
+    ["buzzer:1", "esp:GND.1", "black", []],
+    ["lcd:SCK", "esp:13", "orange", []],
+    ["lcd:MOSI", "esp:14", "orange", []],
+    ["lcd:CS", "esp:47", "orange", []],
+    ["lcd:D/C", "esp:21", "orange", []],
+    ["lcd:RST", "esp:38", "orange", []],
+    ["lcd:VCC", "esp:3V3.1", "red", []],
+    ["lcd:LED", "esp:3V3.2", "red", []],
+    ["lcd:GND", "esp:GND.2", "black", []]
+  ],
+  "dependencies": {}
+}

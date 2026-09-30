@@ -1,0 +1,5 @@
+# Wokwi simulator for the Open Lounge Phone firmware (the sim build: see ../README.md).
+[wokwi]
+version = 1
+firmware = "../build-sim/flasher_args.json"
+elf = "../build-sim/openloungephone.elf"
