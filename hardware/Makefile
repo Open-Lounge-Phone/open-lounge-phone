@@ -1,7 +1,7 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build lcsc footprints clean layout tools freerouting proto review sim
+.PHONY: all venv build review lcsc footprints sim proto tools freerouting clean
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
@@ -9,7 +9,7 @@ KPY := $(KICAD_APP)/Contents/Frameworks/Python.framework/Versions/3.9/bin/python
 FR_VERSION := 2.4.1
 JDK_ARCH := $(if $(filter arm64,$(shell uname -m)),aarch64,x64)
 
-all: build layout
+all: build review
 
 venv: .venv/.ok
 .venv/.ok: requirements.txt
@@ -17,24 +17,32 @@ venv: .venv/.ok
 	.venv/bin/pip install -q -r requirements.txt
 	touch $@
 
-# ERC + checks + netlist + BOM + cost for the board into build/ (offline; uses lcsc_cache.json)
+# ERC + checks + netlist + BOM + part count + cost into build/ (offline; uses the caches)
 build: venv
 	cd schematic && ../$(PY) build.py
 
-# Re-verify every LCSC code used by the design against lcsc.com (network) and refresh the cache
+# Readable schematic PDF, one page per block: build/review/schematic.pdf
+review: build
+	cd schematic && ../$(PY) review.py --out ../build/review/schematic.pdf
+
+# Re-verify every LCSC code used by the design against lcsc.com + JLCPCB (network)
 lcsc: venv
 	cd schematic && ../$(PY) lcsc.py --all
-
-clean:
-	rm -rf build
 
 # Refresh the cached KiCad footprint-library listings (network)
 footprints: venv
 	cd schematic && ../$(PY) fpcheck.py --all
 
-# Layout toolchain into .tools/ (git-ignored, no sudo): PyYAML + numpy for KiCad's Python
-# (the router is our own, layout/router.py). `make freerouting` fetches the optional
-# FreeRouting $(FR_VERSION) + Java 25 runtime for `build_board.py --router freerouting`.
+# Regulator load-step bench (sim/README.md): ngspice from PATH or KiCad's libngspice
+sim: venv
+	$(PY) sim/run.py
+
+# Prototype box (code CAD in enclosure/; regenerated for the minimal board in M2)
+proto:
+	$(MAKE) -C enclosure proto
+
+# Layout tooling for M2 into .tools/ (git-ignored, no sudo): PyYAML + numpy for KiCad's Python
+# (layout/export.py, layout/dump_parts.py). `make freerouting` fetches FreeRouting + a JDK.
 tools: .tools/.ok
 .tools/.ok:
 	mkdir -p .tools
@@ -50,21 +58,5 @@ freerouting: .tools/freerouting-$(FR_VERSION).jar
 	curl -fsSL -o $@ \
 	  https://github.com/freerouting/freerouting/releases/download/v$(FR_VERSION)/freerouting-$(FR_VERSION).jar
 
-# Board (place + grid router, cached on an input hash), checks, fab outputs into build/.
-# FORCE=1 re-routes every board. Fails on DRC errors / unrouted nets / layout-check errors.
-layout: tools
-	cd layout && $(KPY) run_layout.py $(if $(FORCE),--force,)
-
-# Prototype box (code CAD in enclosure/, see enclosure/PROTO_BOX.md)
-proto:
-	$(MAKE) -C enclosure proto
-
-# Review pack (build/review/): schematic sheets, per-layer board PDF, 3D renders, DRC summary
-review: venv
-	layout/review_pack.sh
-
-# H4 simulation testbenches (sim/README.md): ngspice from PATH (brew install ngspice) or KiCad's
-# libngspice. Writes build/sim/report.md and refreshes the results table in sim/README.md.
-# VENDOR=1 also runs the (slow) TI switching-model smoke test.
-sim: venv
-	$(PY) sim/run.py $(if $(VENDOR),--vendor,)
+clean:
+	rm -rf build

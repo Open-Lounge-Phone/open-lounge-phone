@@ -1,23 +1,21 @@
-"""Build the board (one design, one BOM): SKiDL ERC, custom checks, KiCad netlist, BOM CSVs.
+"""Build the minimal board: SKiDL ERC, custom checks, KiCad netlist, BOM CSVs, part count, cost.
 
-    python build.py              # everything (what `make` runs); exit code 1 on any ERROR
-    python build.py --one main main   # the board (used internally)
+    python build.py            # everything (what `make build` runs); exit code 1 on any ERROR
+    python build.py --one      # the SKiDL run itself (used internally, in a subprocess)
 
-Outputs go to ../build/<board>/ :
-    <board>.net     KiCad netlist (import in KiCad PCB editor: File > Import > Netlist)
-    bom.csv         full BOM incl. DNP, MPN, LCSC, verification status
-    bom-jlc.csv     fitted parts only, JLCPCB assembly format (Comment,Designator,Footprint,LCSC)
+Outputs go to ../build/main/ :
+    main.net        KiCad netlist (KiCad PCB editor: File > Import > Netlist)
+    bom.csv         BOM: refs, qty, value, MPN, manufacturer, LCSC, footprint, JLC library type
+    bom-jlc.csv     JLCPCB assembly format (Comment, Designator, Footprint, LCSC)
     erc.txt         SKiDL ERC output
     checks.txt      checks.py results
-    i2c.json        I2C devices and addresses
-
-One board since the owner decision of 2026-09-27 (the deck board and its FFC were merged in).
+    cost.txt        cost per board at 1 / 100 / 1000 (cost.py)
+and ../build/summary.txt (the lines printed at the end).
 """
 
 from __future__ import annotations
 
 import csv
-import json
 import os
 import re
 import subprocess
@@ -26,121 +24,98 @@ from collections import defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BUILD = HERE.parent / "build"
-BOARDS = ("main",)
+OUT = HERE.parent / "build" / "main"
 
 
-def one(board: str, variant_name: str) -> int:
+def refkey(r: str):
+    m = re.match(r"([A-Z]+)(\d+)", r)
+    return (m.group(1), int(m.group(2))) if m else (r, 0)
+
+
+def one() -> int:
     sys.path.insert(0, str(HERE))
     import builtins
 
     from skidl import ERC, generate_netlist
 
+    import board_main
     import checks
-    import parts  # noqa: F401  (registers all part specs)
-    from config import VARIANTS
+    import parts  # noqa: F401  (registers the part specs)
+    from config import DESIGN
 
-    variant = VARIANTS[variant_name]
-    out = BUILD / board
-    out.mkdir(parents=True, exist_ok=True)
-    mod = __import__(f"board_{board}")
-    mod.build(variant)
-
+    board_main.build(DESIGN)
     circuit = builtins.default_circuit
     ERC()
-    results = checks.run_all(circuit, board, variant)
-    (out / "i2c.json").write_text(json.dumps(checks.i2c_devices(circuit), indent=1) + "\n")
+    results = checks.run_all(circuit)
 
-    net_path = out / f"{board}.net"
+    net_path = OUT / "main.net"
     generate_netlist(file_=str(net_path))
     # deterministic output: drop the timestamp so diffs show only real changes
-    text = re.sub(r'\(date "[^"]*"\)', '(date "")', net_path.read_text())
-    net_path.write_text(text)
-
-    write_boms(circuit, out)
-    for junk in list(out.glob("*_sklib.py")) + list(out.glob("*.erc")):
+    net_path.write_text(re.sub(r'\(date "[^"]*"\)', '(date "")', net_path.read_text()))
+    n_bom = write_boms(circuit)
+    for junk in list(OUT.glob("*_sklib.py")) + list(OUT.glob("*.erc")):
         junk.unlink()  # SKiDL side files
-    with (out / "checks.txt").open("w") as f:
+    with (OUT / "checks.txt").open("w") as f:
         for lvl, msg in results:
             f.write(f"{lvl:5} {msg}\n")
     n_err = sum(1 for lvl, _ in results if lvl == "ERROR")
-    print(f"{board}: {len(circuit.parts)} parts, {len(circuit.nets)} nets, "
-          f"{n_err} check errors")
+    n_bom_parts, n_lines = n_bom
+    print(f"main: {n_bom_parts} parts ({n_lines} BOM lines) + "
+          f"{len(circuit.parts) - n_bom_parts} non-BOM items (holes, logo), "
+          f"{len(circuit.nets)} nets, {n_err} check errors")
     return 1 if n_err else 0
 
 
-def write_boms(circuit, out: Path) -> None:
+def write_boms(circuit) -> tuple[int, int]:
+    from lcsc import load_cache
+
+    cache = load_cache()
     groups = defaultdict(list)
     for p in circuit.parts:
         if p.fields.get("BOM") == "exclude":
             continue
-        key = (p.value, p.footprint, p.fields.get("MPN", ""), p.fields.get("LCSC", ""),
-               p.fields.get("DNP", ""), p.fields.get("Verified", ""), p.description or "")
+        key = (p.value, p.footprint, p.fields.get("MPN", ""), p.fields.get("Manufacturer", ""),
+               p.fields.get("LCSC", ""), p.fields.get("Verified", ""), p.description or "")
         groups[key].append(p.ref)
-
-    def refkey(r):
-        m = re.match(r"([A-Z]+)(\d+)", r)
-        return (m.group(1), int(m.group(2))) if m else (r, 0)
-
-    rows = sorted(groups.items(), key=lambda kv: (kv[0][4], refkey(sorted(kv[1], key=refkey)[0])))
-    with (out / "bom.csv").open("w", newline="") as f:
+    rows = sorted(groups.items(), key=lambda kv: refkey(sorted(kv[1], key=refkey)[0]))
+    with (OUT / "bom.csv").open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["Refs", "Qty", "Value", "Description", "MPN", "LCSC", "Footprint", "Fitted",
-                    "Verified"])
-        for (value, fp, mpn, lcsc, dnp, ver, desc), refs in rows:
-            refs = sorted(refs, key=refkey)
-            w.writerow([" ".join(refs), len(refs), value, desc, mpn, lcsc, fp,
-                        "DNP" if dnp else "yes", "yes" if ver == "yes" else f"[UNVERIFIED] {ver}"])
-    with (out / "bom-jlc.csv").open("w", newline="") as f:
+        w.writerow(["Refs", "Qty", "Value", "Description", "MPN", "Manufacturer", "LCSC",
+                    "JLC library", "Footprint", "Verified"])
+        for (value, fp, mpn, manu, lcsc, ver, desc), refs in rows:
+            lib = (cache.get(lcsc) or {}).get("jlc_library") or ""
+            lib = {"base": "basic", "expand": "extended"}.get(lib, lib)
+            w.writerow([" ".join(sorted(refs, key=refkey)), len(refs), value, desc, mpn, manu,
+                        lcsc, lib, fp, "yes" if ver == "yes" else f"[UNVERIFIED] {ver}"])
+    with (OUT / "bom-jlc.csv").open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["Comment", "Designator", "Footprint", "LCSC"])
-        for (value, fp, mpn, lcsc, dnp, ver, desc), refs in rows:
-            if dnp:
-                continue
+        for (value, fp, mpn, manu, lcsc, ver, desc), refs in rows:
             w.writerow([mpn or value, ",".join(sorted(refs, key=refkey)), fp.split(":")[-1], lcsc])
+    return sum(len(r) for r in groups.values()), len(groups)
 
 
 def main() -> int:
     sys.path.insert(0, str(HERE))
-    from config import VARIANTS
-
-    import checks
-
-    BUILD.mkdir(exist_ok=True)
-    rc = 0
-    summary = []
-    for variant in VARIANTS:
-        for board in BOARDS:
-            out = BUILD / board
-            out.mkdir(parents=True, exist_ok=True)
-            # point SKiDL at an empty KiCad library dir: all parts are defined in parts.py
-            env = dict(os.environ, **{f"KICAD{v}_SYMBOL_DIR": str(HERE) for v in ("", "6", "7",
-                                                                                    "8", "9", "10")})
-            env["KICAD_SYMBOL_DIR"] = str(HERE)
-            proc = subprocess.run(
-                [sys.executable, str(Path(__file__).resolve()), "--one", board, variant],
-                cwd=out, capture_output=True, text=True, env=env,
-            )
-            log = proc.stdout + proc.stderr
-            # sorted: SKiDL reports in set order, which varies run to run
-            erc = sorted(line for line in log.splitlines() if line.startswith("ERC "))
-            (out / "erc.txt").write_text("\n".join(erc) + "\n")
-            (out / "build.log").write_text(log)
-            n_erc_err = sum(1 for line in erc if line.startswith("ERC ERROR"))
-            n_erc_warn = sum(1 for line in erc if line.startswith("ERC WARNING"))
-            status = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else "crashed"
-            summary.append(f"{status}; ERC {n_erc_err} errors / {n_erc_warn} warnings")
-            if proc.returncode or n_erc_err:
-                rc = 1
-                if proc.returncode and "check errors" not in status:
-                    summary.append(log[-3000:])
-        i2c = {b: json.loads((BUILD / b / "i2c.json").read_text())
-               for b in BOARDS if (BUILD / b / "i2c.json").exists()}
-        bus = checks.check_i2c_union(i2c)
-        summary.append(f"I2C bus ({variant}): " + "; ".join(m for _, m in bus))
-        if any(lvl == "ERROR" for lvl, _ in bus):
-            rc = 1
-    try:  # cost roll-up (never fails the build; WARNs are in the text)
+    OUT.mkdir(parents=True, exist_ok=True)
+    # point SKiDL at an empty KiCad library dir: every part is defined in parts.py
+    env = dict(os.environ, **{f"KICAD{v}_SYMBOL_DIR": str(HERE)
+                              for v in ("", "6", "7", "8", "9", "10")})
+    proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--one"], cwd=OUT,
+                          capture_output=True, text=True, env=env)
+    log = proc.stdout + proc.stderr
+    # sorted: SKiDL reports in set order, which varies run to run
+    erc = sorted(line for line in log.splitlines() if line.startswith("ERC "))
+    (OUT / "erc.txt").write_text("\n".join(erc) + "\n")
+    (OUT / "build.log").write_text(log)
+    n_err = sum(1 for line in erc if line.startswith("ERC ERROR"))
+    n_warn = sum(1 for line in erc if line.startswith("ERC WARNING"))
+    status = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else "crashed"
+    summary = [f"{status}; ERC {n_err} errors / {n_warn} warnings"]
+    rc = 1 if (proc.returncode or n_err) else 0
+    if proc.returncode and "check errors" not in status:
+        summary.append(log[-3000:])
+    try:
         import cost
 
         summary.append(cost.main().rstrip("\n"))
@@ -148,12 +123,12 @@ def main() -> int:
         summary.append(f"cost roll-up crashed: {exc!r}")
         rc = 1
     text = "\n".join(summary) + "\n"
-    (BUILD / "summary.txt").write_text(text)
+    (OUT.parent / "summary.txt").write_text(text)
     print(text, end="")
     return rc
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--one":
-        sys.exit(one(sys.argv[2], sys.argv[3]))
+    if sys.argv[1:] == ["--one"]:
+        sys.exit(one())
     sys.exit(main())

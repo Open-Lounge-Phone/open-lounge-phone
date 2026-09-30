@@ -1,5 +1,11 @@
 # Prototype box (proto_box.py)
 
+> **Minimal board (2026-09-30): this box is out of date and will be regenerated for the minimal
+> board in M2.** It was designed around the rejected 180 × 88 mm board (hall hook sensor and
+> magnet, speaker, mic lights, battery, e-ink FPC). The minimal board ([../DESIGN.md](../DESIGN.md))
+> is ≈ 160 × 88 mm with an MX switch under the hook plunger, a piezo ringer, a display module on
+> a header and no speaker or battery; `make proto` still builds the old geometry until then.
+
 A plain, functional box for bring-up and desk testing of the **single 180 × 88 mm board**
 (one board, keys on it). It is not the product enclosure (not designed yet); it only has to
 hold the board, act as the MX switch plate, give a cradle for the handset something to mount

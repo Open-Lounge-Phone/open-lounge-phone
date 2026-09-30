@@ -1,14 +1,13 @@
-"""Schematic review sheets (PDF) generated from the SKiDL netlist.
+"""Readable schematic PDF generated from the SKiDL netlist: `make review`.
 
     ../.venv/bin/python review.py [--out ../build/review/schematic.pdf]
 
-The schematic is code (board_main.py, ui.py), so there is no drawn sheet. This renders a
-"net-label schematic" per subsystem instead: every IC/connector/switch is a box with its pin
-numbers and names, and each pin's net name sits at the pin end (same name = connected, as with
-net labels in KiCad). Passives, which make up most of the part count, are listed per subsystem
-with the two nets they join. Page 1 is the block overview and the GPIO map (pin_table.yaml).
-
-DNP parts are marked.
+The schematic is code (board_main.py), so there is no drawn sheet. This renders a
+"net-label schematic": page 1 is the overview (blocks, power tree, GPIO map); then one page per
+block (board_main.build: power, mcu, keys, audio, ui). Every IC/connector/switch is a box with
+its pin numbers and names, and each pin's net name sits at the pin end (same name = connected,
+as with net labels in KiCad). Repeated parts (the 13 hot-swap sockets) are a table. The
+passives of the block are listed on the right with the two nets they join and their note.
 """
 
 from __future__ import annotations
@@ -34,33 +33,19 @@ sys.path.insert(0, str(HW / "layout"))
 
 import netlist as nl  # noqa: E402
 
-RAILS = {"GND", "3V3", "3V0", "VSYS", "VBUS", "VBUS_C", "VBAT", "VLED"}
-
-# Subsystems: anchor parts (by reference or SpecKey). Passives follow the anchor they touch
-# through a non-rail net; the rest land in "Power" (rail-only decoupling). H5 (2026-09-30).
+RAILS = {"GND", "3V3", "VBUS"}
 BLOCKS = [
-    ("Power in: USB-C sink + native USB, protection, charger, 3V3 buck, 3V0 LDO, battery",
-     {"J1", "D1", "D2", "F1", "D3", "U2", "U3", "L1", "U4", "J2", "U14"}, set()),
-    ("MCU: ESP32-S3-WROOM-1U, reset/boot, LED-data buffer",
-     {"U1", "SW1", "SW2", "U5"}, set()),
-    ("Audio: ES8311 codec (handset mic ADC, earpiece/speaker DAC), NS4150B speaker amp",
-     {"U6", "U9", "J4"}, set()),
-    ("Handset jack: 3.5 mm TRRS (CTIA), earpiece switch, mic bias, button/insertion sense, ESD",
-     {"J7", "D7", "D8", "D9", "U8", "FB3"}, set()),
-    ("Privacy chain + hook: MUTE AND hook -> MIC_VCC, DRV5032AJ",
-     {"Q5", "Q6", "U10"}, set()),
-    ("Side controls: VOL-, VOL+, MUTE (+ ESD)", {"SW3", "SW4", "SW5", "D4"}, set()),
-    ("Keys and LEDs: AW9523B, 12 hot-swap keys, 13 SK6812MINI-E, LED power gate",
-     {"U17", "Q2", "Q3"}, {"HOTSWAP", "SK6812MINI-E"}),
-    ("E-ink strip: 24-pin FPC + SSD1680 boost",
-     {"J6"}, {"L47u", "EPD_NFET", "MBR0530"}),
-    ("NFC tag, ambient light, mic lights (x2), recording light", {"U18", "U19"},
-     {"NFC_COIL", "LED_RED"}),
+    ("power", "Power: USB-C (5 V sink + native USB), USB ESD, SGM2212 3.3 V LDO"),
+    ("mcu", "MCU: ESP32-S3-WROOM-1U-N16R8, EN reset, RESET and BOOT buttons"),
+    ("keys", "Keys and hook: 13 MX hot-swap sockets, one GPIO each (internal pull-ups)"),
+    ("audio", "Audio: ES8311 codec + 3.5 mm TRRS handset jack (CTIA)"),
+    ("ui", "Display header, piezo ringer, status LED, board marking, mounting holes"),
 ]
+PAGE = (16.54, 11.69)   # A3 landscape, inches
+REPEATED = {"HOTSWAP"}
 
 
 def load_pin_names() -> dict:
-    """SpecKey -> {pin number: pin name} from parts.py (imports SKiDL)."""
     import parts  # noqa: F401
     from lib import SPECS
 
@@ -68,34 +53,7 @@ def load_pin_names() -> dict:
 
 
 def is_passive(c) -> bool:
-    return re.match(r"([A-Z]+)", c.ref).group(1) in ("R", "C", "TP", "NT", "JP", "SJ")
-
-
-def assign(net: nl.Netlist) -> dict:
-    """ref -> block index."""
-    out = {}
-    pin_net = net.pin_net()
-    for ref, c in net.comps.items():
-        key = c.fields.get("SpecKey", "")
-        for i, (_, refs, keys) in enumerate(BLOCKS):
-            if ref in refs or key in keys:
-                out[ref] = i
-                break
-    # the LED gate FETs live in ui.py but AO3400A is also used elsewhere: pin anchors win above;
-    # passives and leftovers: follow a non-rail net to an assigned part
-    for _ in range(3):
-        for ref, c in net.comps.items():
-            if ref in out:
-                continue
-            nets = [n for (r, p), n in pin_net.items() if r == ref and n not in RAILS]
-            for n in nets:
-                owners = {out[r] for r, _ in net.nets[n] if r in out and r != ref}
-                if owners:
-                    out[ref] = min(owners)
-                    break
-    for ref in net.comps:
-        out.setdefault(ref, 0)
-    return out
+    return re.match(r"([A-Z]+)", c.ref).group(1) in ("R", "C")
 
 
 def sort_key(ref):
@@ -103,49 +61,49 @@ def sort_key(ref):
     return (m.group(1), int(m.group(2))) if m else (ref, 0)
 
 
-def draw_box(ax, x, y, c, pins, pin_net, width=2.2):
+def color(netn: str) -> str:
+    return "#a33" if netn in RAILS else ("#888" if netn == "(nc)" else "#1f4e9a")
+
+
+def draw_box(ax, x, y, c, pins, pin_net, width=2.3):
     """IC box at (x, y) top-left (inches); pins split left/right. Returns height used."""
-    n = len(pins)
-    half = (n + 1) // 2
+    half = (len(pins) + 1) // 2
     left, right = pins[:half], pins[half:]
-    row = 0.115
-    h = max(half, len(right)) * row + 0.35
+    row = 0.13
+    h = max(half, len(right), 1) * row + 0.3
     ax.add_patch(Rectangle((x, y - h), width, h, fill=False, lw=0.8))
-    title = f"{c.ref}  {c.value}" + ("  (DNP)" if c.dnp else "")
-    ax.text(x + width / 2, y + 0.06, title, ha="center", va="bottom", fontsize=6.5,
-            weight="bold", color="#999" if c.dnp else "black")
-    for i, (num, name) in enumerate(left):
-        yy = y - 0.25 - i * row
-        netn = pin_net.get((c.ref, num), "(nc)")
-        ax.plot([x - 0.12, x], [yy, yy], lw=0.5, color="k")
-        ax.text(x + 0.04, yy, f"{num} {name}", fontsize=4.8, va="center")
-        ax.text(x - 0.14, yy, netn, fontsize=4.8, va="center", ha="right",
-                color="#1f4e9a" if netn not in RAILS else "#a33")
-    for i, (num, name) in enumerate(right):
-        yy = y - 0.25 - i * row
-        netn = pin_net.get((c.ref, num), "(nc)")
-        ax.plot([x + width, x + width + 0.12], [yy, yy], lw=0.5, color="k")
-        ax.text(x + width - 0.04, yy, f"{name} {num}", fontsize=4.8, va="center", ha="right")
-        ax.text(x + width + 0.14, yy, netn, fontsize=4.8, va="center",
-                color="#1f4e9a" if netn not in RAILS else "#a33")
+    ax.text(x + width / 2, y + 0.06, f"{c.ref}  {c.value}", ha="center", va="bottom",
+            fontsize=7, weight="bold")
+    for side, group in ((0, left), (1, right)):
+        for i, (num, name) in enumerate(group):
+            yy = y - 0.22 - i * row
+            netn = pin_net.get((c.ref, num), "(nc)")
+            if side == 0:
+                ax.plot([x - 0.12, x], [yy, yy], lw=0.5, color="k")
+                ax.text(x + 0.04, yy, f"{num} {name}", fontsize=5.5, va="center")
+                ax.text(x - 0.14, yy, netn, fontsize=5.5, va="center", ha="right",
+                        color=color(netn))
+            else:
+                ax.plot([x + width, x + width + 0.12], [yy, yy], lw=0.5, color="k")
+                ax.text(x + width - 0.04, yy, f"{name} {num}", fontsize=5.5, va="center",
+                        ha="right")
+                ax.text(x + width + 0.14, yy, netn, fontsize=5.5, va="center", color=color(netn))
     return h
 
 
-PAGE = (16.54, 11.69)   # A3 landscape, inches
-
-
-def new_page(pdf, title, sub=""):
+def new_page(title, sub=""):
     fig = plt.figure(figsize=PAGE)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, PAGE[0])
     ax.set_ylim(0, PAGE[1])
     ax.axis("off")
-    ax.text(0.4, PAGE[1] - 0.45, title, fontsize=13, weight="bold", va="top")
+    ax.text(0.4, PAGE[1] - 0.45, title, fontsize=14, weight="bold", va="top")
     if sub:
-        ax.text(0.4, PAGE[1] - 0.78, sub, fontsize=7.5, va="top", color="#444")
-    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone r0.1 - generated from the SKiDL netlist "
-            "(hardware/schematic/review.py). Blue = signal net, red = supply rail; same name = "
-            "connected.", fontsize=6, ha="right", color="#666")
+        ax.text(0.4, PAGE[1] - 0.8, sub, fontsize=8, va="top", color="#444")
+    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone minimal board (M1) - generated from the "
+            "SKiDL netlist by hardware/schematic/review.py. Blue = signal net, red = supply "
+            "rail; same name = connected. CERN-OHL-S-2.0.", fontsize=6.5, ha="right",
+            color="#666")
     return fig, ax
 
 
@@ -156,128 +114,102 @@ def main() -> int:
     net = nl.read(HW / "build" / "main" / "main.net")
     names = load_pin_names()
     pin_net = net.pin_net()
-    blocks = assign(net)
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     pins_of = {}
     for ref, c in net.comps.items():
-        key = c.fields.get("SpecKey", "")
-        pmap = names.get(key, {})
+        pmap = names.get(c.fields.get("SpecKey", ""), {})
         nums = sorted({p for r, p in pin_net if r == ref} | set(pmap),
                       key=lambda p: (not p.isdigit(), int(p) if p.isdigit() else 0, p))
         pins_of[ref] = [(p, pmap.get(p, "")) for p in nums]
+    by_block = defaultdict(list)
+    for ref, c in net.comps.items():
+        by_block[c.fields.get("Block", "")].append(ref)
+
+    from config import DESIGN
 
     with PdfPages(out) as pdf:
-        # ---- page 1: overview + GPIO map
-        fig, ax = new_page(pdf, "Open Lounge Phone - schematic review (single board)",
-                           "One 180 x 88 mm 4-layer board (owner decision 2026-09-27). Pages 2+: "
-                           "one sheet per subsystem; ICs as boxes with net labels, then the "
-                           "passives of that subsystem.")
+        # ---- page 1: overview
+        w, h = DESIGN.board_mm
+        fig, ax = new_page("Open Lounge Phone - minimal board, schematic review",
+                           f"{DESIGN.layers}-layer board, proposed {w:.0f} x {h:.0f} mm. Pages "
+                           "2-6: one page per block. Hardware docs: hardware/DESIGN.md.")
         y = PAGE[1] - 1.3
-        ax.text(0.4, y, "Subsystems", fontsize=10, weight="bold")
-        count = defaultdict(int)
-        for ref in net.comps:
-            count[blocks[ref]] += 1
-        for i, (title, _, _) in enumerate(BLOCKS):
-            y -= 0.28
-            ax.text(0.5, y, f"{i + 2:>2}.  {title}  ({count[i]} parts)", fontsize=8)
-        y -= 0.5
-        ax.text(0.4, y, "Rails", fontsize=10, weight="bold")
+        ax.text(0.4, y, "Blocks", fontsize=11, weight="bold")
+        for i, (key, title) in enumerate(BLOCKS):
+            refs = by_block[key]
+            bom = [r for r in refs if net.comps[r].fields.get("BOM") != "exclude"]
+            y -= 0.3
+            ax.text(0.5, y, f"{i + 2}.  {title}  ({len(bom)} parts)", fontsize=8.5)
+        y -= 0.55
+        ax.text(0.4, y, "Power tree", fontsize=11, weight="bold")
         for line in [
-            "USB-C VBUS_C -> PTC F1 (2 A) -> VBUS (TVS D3) -> BQ24074 U2 -> VSYS 4.4 V (1S pack "
-            "on VBAT); J1 D+/D- -> ESP32 native USB (flash, console)",
-            "VSYS -> TLV62569 buck U3 -> 3V3 3.19 V (digital, ESP32, sensors) ; VSYS -> LP5907 U4 "
-            "-> 3V0 (codec, handset mic)",
-            "3V0 -> 100R/10u -> MUTE SW5 -> Q5 (HOOK) -> MIC_VCC (2 mic lights, mic bias) ; "
-            "VSYS -> Q2 soft start -> VLED (13 x SK6812MINI-E)",
+            "USB-C J1 VBUS (5 V, 5.1k Rd on CC1/CC2 = USB default power, no PD) -> 10 uF",
+            "  -> SGM2212-3.3 U2 (800 mA LDO) -> 3V3: ESP32 module, ES8311, display module, "
+            "mic bias, pull-ups, LED",
+            "  -> piezo ringer BZ1 (through Q1, from VBUS directly)",
+            "USB-C D+/D- -> USBLC6-2SC6 D1 -> ESP32 native USB (IO19/IO20): flashing + console",
+            "No fuse (compliant USB sources current-limit), no battery, one regulator.",
         ]:
-            y -= 0.26
-            ax.text(0.5, y, line, fontsize=7.5)
-        pt = yaml.safe_load((HERE / "pin_table.yaml").read_text())
-        gp = pt.get("gpio") or {}
-        ax.text(8.6, PAGE[1] - 1.3, "ESP32-S3 GPIO map (pin_table.yaml)", fontsize=10,
+            y -= 0.27
+            ax.text(0.5, y, line, fontsize=8)
+        pt = yaml.safe_load((HERE / "pin_table.yaml").read_text())["gpio"]
+        ax.text(8.6, PAGE[1] - 1.3, "ESP32-S3 GPIO map (pin_table.yaml)", fontsize=11,
                 weight="bold")
-        yy = PAGE[1] - 1.55
-        for g in sorted(gp, key=lambda k: int(k) if str(k).isdigit() else 999):
-            e = gp[g]
-            note = e.get("note", "") if isinstance(e, dict) else ""
-            netn = str((e.get("net") if isinstance(e, dict) else e) or "(unconnected)")
-            ax.text(8.7, yy, f"GPIO{g:<3} {netn:<16} {note}"[:110], fontsize=6.3,
+        yy = PAGE[1] - 1.58
+        for g in sorted(pt):
+            e = pt[g]
+            netn = str(e.get("net") or "(unconnected)")
+            ax.text(8.7, yy, f"GPIO{g:<3} {netn:<12} {e.get('note', '')}"[:112], fontsize=6.4,
                     family="monospace")
-            yy -= 0.19
+            yy -= 0.205
         pdf.savefig(fig)
         plt.close(fig)
 
-        # ---- one or more pages per block
-        for i, (title, _, _) in enumerate(BLOCKS):
-            refs = sorted([r for r in net.comps if blocks[r] == i], key=sort_key)
-            ics = [r for r in refs if not is_passive(net.comps[r])]
+        # ---- one page per block
+        for i, (key, title) in enumerate(BLOCKS):
+            refs = sorted(by_block[key], key=sort_key)
+            comps = [r for r in refs if not is_passive(net.comps[r])]
             pas = [r for r in refs if is_passive(net.comps[r])]
-            # collapse repeated identical parts (keys, LEDs) after the first two
-            shown, seen = [], defaultdict(int)
-            for r in ics:
-                k = net.comps[r].fields.get("SpecKey", "")
-                seen[k] += 1
-                if k in ("HOTSWAP", "SK6812MINI-E") and seen[k] > 2:
-                    continue
-                shown.append(r)
-            reps = {k: n for k, n in seen.items() if k in ("HOTSWAP", "SK6812MINI-E") and n > 2}
-            fig, ax = new_page(pdf, f"{i + 2}. {title}")
-            x, y, col_h = 1.6, PAGE[1] - 1.3, 0.0
-            colw = 4.1
-            for r in shown:
+            fig, ax = new_page(f"{i + 2}. {title}")
+            x, y = 1.9, PAGE[1] - 1.35
+            reps = [r for r in comps if net.comps[r].fields.get("SpecKey") in REPEATED]
+            items = [r for r in comps if r not in reps]
+            for r in items:
                 pins = pins_of[r]
-                h = (len(pins) + 1) // 2 * 0.115 + 0.35
-                if y - h < 0.6:
-                    x += colw
-                    y = PAGE[1] - 1.3
-                if x + colw > PAGE[0]:
-                    pdf.savefig(fig)
-                    plt.close(fig)
-                    fig, ax = new_page(pdf, f"{i + 2}. {title} (cont.)")
-                    x, y = 1.6, PAGE[1] - 1.3
-                used = draw_box(ax, x, y, net.comps[r], pins, pin_net)
-                y -= used + 0.45
+                if not pins:  # pinless: mounting holes, silkscreen marking
+                    continue
+                hh = max((len(pins) + 1) // 2, 1) * 0.13 + 0.3
+                if y - hh < 0.7:
+                    x, y = x + 4.3, PAGE[1] - 1.35
+                y -= draw_box(ax, x, y, net.comps[r], pins, pin_net) + 0.5
+            pinless = [r for r in items if not pins_of[r]]
+            if pinless:
+                ax.text(x - 1.5, max(y, 0.9), "No-pin items (layout only): " + ", ".join(
+                    f"{r} {net.comps[r].value}" for r in pinless), fontsize=7, color="#444")
             if reps:
-                txt = "; ".join(f"{n} x {k} in total (2 drawn): see the passives/refs list"
-                                for k, n in reps.items())
-                ax.text(0.4, 0.55, txt, fontsize=7, color="#444")
-                lines = []
-                for k in reps:
-                    rs = [r for r in ics if net.comps[r].fields.get("SpecKey") == k]
-                    for r in rs:
-                        lines.append(f"{r}: " + ", ".join(
-                            f"{p}={pin_net.get((r, p), 'nc')}" for p, _ in pins_of[r]))
-                pdf.savefig(fig)
-                plt.close(fig)
-                fig, ax = new_page(pdf, f"{i + 2}. {title}: every repeated part")
-                yy = PAGE[1] - 1.2
-                for ln in lines:
-                    ax.text(0.5, yy, ln[:200], fontsize=6.3, family="monospace")
+                ax.text(0.5, PAGE[1] - 1.35, "Socket  pin 1 net     pin 2 net   note",
+                        fontsize=8, family="monospace", weight="bold")
+                yy = PAGE[1] - 1.6
+                for r in reps:
+                    c = net.comps[r]
+                    ns = [pin_net.get((r, p), "nc") for p, _ in pins_of[r]]
+                    ax.text(0.5, yy, f"{r:<7} {ns[0]:<13} {ns[1]:<11} {c.fields.get('Note', '')}",
+                            fontsize=8, family="monospace")
+                    yy -= 0.24
+            if pas:
+                xx, yy = 9.3, PAGE[1] - 1.35
+                ax.text(xx, yy, "Passives  (ref, value, nets, note)", fontsize=9, weight="bold")
+                yy -= 0.28
+                for r in pas:
+                    c = net.comps[r]
+                    ns = " - ".join(pin_net.get((r, p), "nc") for p, _ in pins_of[r])
+                    ax.text(xx, yy, f"{r:<5} {c.value[:14]:<14} {ns[:26]:<26} "
+                                    f"{c.fields.get('Note', '')[:62]}", fontsize=6.6,
+                            family="monospace")
                     yy -= 0.2
             pdf.savefig(fig)
             plt.close(fig)
-            if pas:
-                fig, ax = new_page(pdf, f"{i + 2}. {title}: passives and test points")
-                yy, xx = PAGE[1] - 1.2, 0.5
-                for r in pas:
-                    c = net.comps[r]
-                    ns = [pin_net.get((r, p), "nc") for p, _ in pins_of[r]]
-                    note = c.description[:60] if c.description else ""
-                    ln = f"{r:<6} {c.value[:14]:<14} {' - '.join(ns)[:52]:<52}" + \
-                         (" DNP" if c.dnp else "    ")
-                    ax.text(xx, yy, ln, fontsize=6.0, family="monospace",
-                            color="#999" if c.dnp else "black")
-                    yy -= 0.17
-                    if yy < 0.6:
-                        yy, xx = PAGE[1] - 1.2, xx + 8.0
-                        if xx > PAGE[0] - 7:
-                            pdf.savefig(fig)
-                            plt.close(fig)
-                            fig, ax = new_page(pdf, f"{i + 2}. {title}: passives (cont.)")
-                            yy, xx = PAGE[1] - 1.2, 0.5
-                pdf.savefig(fig)
-                plt.close(fig)
     print(f"wrote {out}")
     return 0
 

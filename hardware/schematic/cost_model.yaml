@@ -1,54 +1,29 @@
-# Cost roll-up assumptions for cost.py (owner guidance 2026-09-27: $28-40 per phone is fine; it
-# should be affordable to build ONE and cheap at scale). Part prices come from lcsc_cache.json
-# (JLCPCB assembly ladder first, then LCSC). Everything in this file is an ESTIMATE (EST) dated
-# below; re-quote before relying on it. JLCPCB is the reference quote, not a requirement.
+# Cost roll-up assumptions for cost.py (owner: $28-40 per phone is fine; affordable to build ONE,
+# cheap at scale). Part prices come from lcsc_cache.json (JLCPCB assembly ladder first, then
+# LCSC). Everything in this file is an ESTIMATE (EST), dated; re-quote before relying on it.
+# JLCPCB is the reference quote, not a requirement.
 date: 2026-09-30
-warn_at_scale_usd: 40      # WARN when the 1k-qty electronics total exceeds this
+quantities: [1, 100, 1000]
 
-scales: [1000, 10000]
+pcb:        # 2-layer FR-4 1.6 mm, HASL lead-free, 160 x 88 mm (jlcpcb.com list prices, EST)
+  min_order: 5
+  order_usd: {1: 7.00, 100: 40.00, 1000: 220.00}   # whole order: 5 pcs, 100 pcs, 1000 pcs
+shipping_usd: {1: 18.00, 100: 30.00, 1000: 60.00}
 
-# Bare PCB per phone at volume (DESIGN.md §12; 4-layer 1.6 mm ENIG, 180 x 88 mm).
-pcb_at_scale:
-  1000: {main: 1.65}
-  10000: {main: 1.17}
-# SMT + THT assembly per phone (one double-sided board, extended-part fees amortised).
-assembly_at_scale:
-  1000: 2.00
-  10000: 1.40
+assembly:   # JLCPCB "Economic" PCBA, ONE side (all SMD parts on the bottom, see DESIGN.md §9)
+  min_boards: 2             # smallest PCBA quantity
+  setup_usd: 8.00
+  stencil_usd: 1.50
+  extended_fee_usd: 3.00    # per unique extended-library part per order
+  per_joint_usd: 0.0017
+  tht_setup_usd: 3.50       # through-hole soldering (header, piezo), per order
+  tht_per_joint_usd: 0.0173
+  tht_refs_prefix: [BZ, J3] # THT parts (J3 = display header); the rest is SMD
 
-one_off:
-  phones: 2                 # smallest JLC PCBA quantity; the other 3 bare boards are spares
-  boards_ordered: 5
-  jlc:                      # reference quote (EST, jlcpcb.com list prices seen 2026-09)
-    pcb: {main: 45.0}               # 5 pcs; 4L 1.6 mm ENIG 180 x 88
-    shipping: 20.0
-    pcba_setup: {main: 50.0}        # standard PCBA, double-sided (sockets + LEDs on the bottom)
-    stencil: {main: 15.8}
-    extended_fee: 3.0       # per unique "extended" library part per board
-    per_joint: 0.0017
-    joints: {main: 935}             # EST: 1070 x 633/724 netlist nodes after H5 (was 1070)
-  osh_park:                 # published formula (docs.oshpark.com, 2026-09-27): 3 copies
-    per_sq_in_4layer: 10.0
-    copies: 3
-    boards_mm: {main: [180, 88]}
-  hand_assembly_min_line_usd: 0.10  # LCSC cut-tape minimums make each BOM line cost >= ~$0.10
-
-# Fitted on-board parts with no LCSC/JLC price (value per phone).
-unpriced:
-  PCB coil (copper): {scale: 0.0, retail: 0.0}
-
-# Off-board electronics included in DESIGN.md §12.3 totals.
+# Off-board parts per phone (not on the PCB), EST: at-scale / retail single unit
 off_board:
-  mx_switches_x12:   {scale: 3.00, retail: 5.40}
-  keycaps:           {scale: 1.44, retail: 3.60}   # 12 printed DSA (digits, MENU, BACK)
-  # Soberton SP-2040, 20 x 40 x 8.4 mm, 8 ohm 1 W, 86 dB/1 W/0.5 m (H4 b06, H5: chosen for the
-  # >= 75 dBA ringer; the proto box grew to its depth). Prices UNVERIFIED (distributor list).
-  speaker_sp2040_8ohm: {scale: 1.10, retail: 2.60}
-  # off-the-shelf analog G-style handset on a 3.5 mm TRRS plug (CTIA), e.g. Opis 60s Micro
-  # (Amazon US $29.90, 2026-09-30); generic OEM retro handsets at scale: guess, UNVERIFIED.
-  handset_trrs_analog: {scale: 4.00, retail: 29.90}
-  # WROOM-1U external antenna: general-purpose 2.4 GHz antenna with U.FL/IPEX (owner F,
-  # 2026-09-30; user-upgradable, same type and gain <= certified, see DESIGN §4)
-  antenna_ipex_2g4:  {scale: 0.45, retail: 2.50}
-  eink_panel_gdey029t94: {scale: 4.50, retail: 6.50}
-  lipo_1200mah:      {scale: 2.50, retail: 6.00}
+  mx_switches_x13:       {scale: 2.60, retail: 5.20}   # 12 keys + hook
+  keycaps_x12:           {scale: 1.44, retail: 3.60}
+  display_module_2in9:   {scale: 6.00, retail: 15.00}  # WeAct ~$8, Waveshare ~$15 (retail)
+  antenna_2g4_ufl:       {scale: 0.45, retail: 2.50}
+  handset_trrs_analog:   {scale: 4.00, retail: 29.90}  # e.g. Opis 60s Micro retail; OEM at scale: guess

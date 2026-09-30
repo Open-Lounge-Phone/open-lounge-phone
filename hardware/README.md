@@ -1,46 +1,40 @@
 # Hardware (in design)
 
-One ESP32-S3 board (180 × 88 mm, 4 layers, one BOM) in a compact 3D-printable base, with 12
-hot-swap MX keys, an e-ink status strip, NFC, an optional battery and a 3.5 mm jack for an
-off-the-shelf analog G-style handset (e.g. the Opis 60s Micro). The handset mic is powered only
-when the mute switch is off and the handset is off the hook, in hardware. Status: **schematic
-revised (H5, 2026-09-30) and checked; the layout predates H5 and is redone next (H6)**; a
-functional prototype box exists, the product enclosure is not designed yet.
-Nothing to buy yet.
+The **minimal board** (owner decision 2026-09-30): an ESP32-S3 module, one USB-C port for power
+and flashing, one 3.3 V regulator, 12 hot-swap MX keys and a hook switch wired straight to
+GPIOs, a header for a ready-made 2.9" e-paper display module, a 3.5 mm jack with an ES8311
+codec for an off-the-shelf analog handset, a piezo ringer and one status LED. 53 parts on a
+2-layer board. It has **no** battery, NFC, speaker, per-key LEDs, hardware mute switch or mic
+lights.
 
-- [DESIGN.md](DESIGN.md): the hardware design (parts, power, security, staging); its top box
-  lists the current owner decisions.
-- [SCHEMATIC.md](SCHEMATIC.md): the schematic as code (SKiDL, `schematic/`). `make build`
-  runs ERC and design checks, then writes the netlist, BOM and cost roll-up to `build/main/`.
-- [LAYOUT.md](LAYOUT.md): the board layout as code (`layout/`), placement status and routing plan.
-- [ASSEMBLY.md](ASSEMBLY.md): building the board (PCBA, hybrid, by hand).
+Status: **schematic done and checked (M1)**; placement and layout are next (M2). Nothing to buy
+yet.
+
+- [DESIGN.md](DESIGN.md): the design, GPIO map, cost, what the board does and doesn't do, and
+  the questions for the owner before M2.
+- [SCHEMATIC.md](SCHEMATIC.md): the schematic as code (SKiDL, `schematic/`) and its checks.
+- [REQUIREMENTS.md](REQUIREMENTS.md) and [BOARD_REQUIREMENTS.md](BOARD_REQUIREMENTS.md): the
+  requirements and the 2-layer layout checklist.
+- [components/](components/README.md): one file per part, with datasheet pages.
 - [GUIDELINES.md](GUIDELINES.md): the design rules (child-safe, rugged, simple).
-- [REQUIREMENTS.md](REQUIREMENTS.md): numbered, traceable hardware requirements (H1), and
-  [BOARD_REQUIREMENTS.md](BOARD_REQUIREMENTS.md): the layout checklist (H3).
-- [sim/](sim/README.md): ngspice testbenches (`make sim`, H4).
-- [SCHEMATIC_REVIEW.md](SCHEMATIC_REVIEW.md): the H5 schematic reviewed against every
-  requirement.
-- [components/](components/README.md): one file per part, checked against its datasheet and
-  footprint (H2); [components/FINDINGS.md](components/FINDINGS.md) ranks the problems found.
-- [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): a functional, printable prototype box for
-  the board (`make proto`).
+- [ASSEMBLY.md](ASSEMBLY.md): building the board (PCBA or by hand).
+- [sim/](sim/README.md): the regulator simulation (`make sim`).
+- [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the prototype box (regenerated for the
+  minimal board in M2).
 
 ## Building the outputs
 
-Everything here is source: the schematic, layout and enclosure are code, and generated outputs
-are not committed. With Python 3 (and KiCad 10 for the layout and review steps):
+Everything here is source; generated outputs are not committed. With Python 3:
 
 ```sh
 cd hardware
-make build     # ERC + design checks -> build/main/ (netlist, BOM, checks, cost)
-make layout    # place + route, layout checks, fab outputs -> build/main/layout/ (KiCad 10)
-make review    # review pack -> build/review/ (schematic PDF, per-layer PDF, renders, DRC)
-make sim       # circuit simulation benches -> build/sim/report.md (ngspice or KiCad's libngspice)
-make proto     # prototype box STL/STEP + fit checks -> enclosure/build/proto/
+make build     # ERC + design checks -> build/main/ (netlist, BOM, checks, cost, part count)
+make review    # readable schematic PDF -> build/review/schematic.pdf
+make sim       # regulator simulation -> build/sim/report.md (ngspice or KiCad's libngspice)
 ```
 
-Fab outputs (Gerbers, drill, IPC-2581, BOM, pick-and-place) will ship as GitHub Release assets
-when the board is final.
+`layout/` keeps the generic layout tooling (netlist reader, fab-output export, the project
+footprint library with the hot-swap socket and the board marking); the M2 layout builds on it.
 
 Hardware designs in this directory are licensed under the
 [CERN Open Hardware Licence v2 – Strongly Reciprocal](LICENSE).

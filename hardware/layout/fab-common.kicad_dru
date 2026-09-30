@@ -1,9 +1,9 @@
 (version 1)
-# OpenLoungePhone: design rules = the intersection of common 4-layer fab capabilities
+# OpenLoungePhone: design rules = the intersection of common 2-layer fab capabilities
 # (JLCPCB, PCBWay, OSH Park, Eurocircuits, Aisler, Seeed Fusion, NextPCB, ...), with margin.
 # Nothing here needs a premium process. If a board ever needs tighter values, flag it in
-# hardware/LAYOUT.md instead of editing this file silently.
-# Copied next to each board as <board>.kicad_dru by layout/build_board.py.
+# hardware/BOARD_REQUIREMENTS.md instead of editing this file silently.
+# Copied next to the board as <board>.kicad_dru by the M2 layout scripts.
 
 (rule "fab: min track width 0.15 mm"
 	(constraint track_width (min 0.15mm)))

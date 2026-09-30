@@ -1,14 +1,9 @@
-"""Design parameters. One board, one BOM (owner decision 2026-09-28): no Kids/Lounge variants.
+"""Design parameters of the minimal board (M1, owner decision 2026-09-30). One board, one BOM.
 
-On the board: every core part plus the e-ink strip (GDEY029T94 ZIF + boost), NFC (ST25DV04K +
-PCB coil) and the battery charger with its fuel gauge (1S LiPo on the JST-PH-3). Removed: the
-Lounge radar (LD2410C) and supercap hold-up (deferred to a future board), the ATECC608B footprint
-(the ESP32-S3 uses flash encryption + eFuse HMAC), the IR hook option (the magnet is in the hook
-plunger) and the DNP Qwiic display port.
-
-- ``n_keys``: 12 (owner decision 2026-09-27: digits 1-9, 0 + MENU + BACK in two rows of six).
-  The key circuit (ui.py) and key grid are generated from this number (4..12, even).
-- ``ir_hook``: IR reflective hook sensor for magnet-less handsets (§6.4); False = not on the board.
+- ``n_keys``: 12 (owner decision 2026-09-27): rear row ``1 2 3 4 5 MENU``, front row
+  ``6 7 8 9 0 BACK``. Every key is an MX switch in a hot-swap socket wired straight to its own
+  ESP32 GPIO (internal pull-up); no expander, no matrix.
+- ``board_mm``: proposed outline (M2 places the parts), see DESIGN.md §9.
 """
 
 from __future__ import annotations
@@ -17,11 +12,14 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Variant:
+class Design:
     name: str = "main"
     n_keys: int = 12
-    ir_hook: bool = False
+    board_mm: tuple = (160.0, 88.0)
+    layers: int = 2
 
 
-DESIGN = Variant()
-VARIANTS = {"main": DESIGN}   # one entry: the build and cost scripts iterate this
+DESIGN = Design()
+
+# Key legends in protocol order (index = protocol `button` for digits: 1-9 -> 0-8, 0 -> 9)
+KEYS = ["1", "2", "3", "4", "5", "MENU", "6", "7", "8", "9", "0", "BACK"]

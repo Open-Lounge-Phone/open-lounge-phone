@@ -1,56 +1,35 @@
-# Power budget checked by checks.check_power_budget on every build.
-# Loads are mA at the 5 V USB input, from DESIGN.md §9.2. `vbus_direct` is the part that bypasses
-# the charger; since H5 (owner 2026-09-30: analog TRRS handset, no USB host port, no handset
-# VBUS) nothing bypasses it, so every row has vbus_direct 0 and everything counts against the
-# BQ24074 input current limit (ILIM). The analog handset draws only the mic bias (<= 1.4 mA
-# from 3V0) and the earpiece drive (ES8311 HP driver, <= 14 mA rms from 3V0 at full scale into
-# 32 ohm + 22 ohm): ~10 mA at the 5 V input in a call.
+# Power budget of the minimal board, checked by checks.check_power_budget on every build.
+# Currents in mA. One 3.3 V LDO from USB VBUS; the ringer runs from VBUS directly.
 
-charger:
-  # BQ24074 datasheet SLUS810N, Electrical Characteristics + Thermal Information
-  k_ilim_aohm: {min: 1500, typ: 1610, max: 1720}   # ILIM = K_ILIM / R_ILIM, 0.5-1.5 A range
-  r_ilim_tolerance: 0.01                            # 1 % resistor
-  vsys_max_v: 4.5                                   # VO(REG) max; OUT is regulated, not VBUS
-  theta_ja_c_per_w: 44.5
-  tj_reg_c: 125                                     # charge current folds back above this
+ldo:
+  part: SGM2212-3.3
+  vout_v: 3.3
+  rated_ma: 800                 # SGM2212 rev A.2 p1 (current limit >= 810 mA, p6)
+  dropout_max_mv: {100: 80, 500: 380, 800: 610}   # 3.3 V version, full temperature range, p6
+  theta_ja_c_per_w: 117         # SOT-223-3, p3 (JEDEC board; our copper pour only helps)
+  tj_max_c: 125                 # operating range p3; thermal shutdown at 165 C, p6
 
-supply:
-  vbus_max_v: 5.25          # USB 2.0 / Type-C default range 4.75-5.25 V
-  ambient_max_c: 40         # inside the enclosure, warm room
+# The module must be fed by a supply able to deliver >= 0.5 A (WROOM-1 datasheet v1.8 p27)
+module_supply_min_ma: 500
 
-# Supply-voltage ratings of everything on VSYS; must exceed charger vsys_max_v.
-vsys_parts_max_v:
-  NS4150B: 5.25
-  LP5907-3.0: 5.5
-  TLV62569: 5.5
-  SN74LV1T125: 5.5
-  SK6812MINI-E: 5.5
+source:
+  name: "USB default power (5.1k Rd, no PD)"
+  limit_ma: 500                 # USB 2.0 default; Type-C "Default USB Power"
+  vbus_min_v: 4.40              # worst case at the device receptacle (USB 2.0 low-power port)
+  vbus_max_v: 5.25
+  cable_ohm: 0.0                # already inside vbus_min_v
 
-# margin: required headroom below the guaranteed-minimum ILIM for firmware-capped scenarios.
-policy_margin: 0.10
+ambient_max_c: 40               # inside the enclosure, warm room
+margin: 0.20                    # peak must stay 20 % below the LDO rating
 
-scenarios:
-  # name: [total_mA, vbus_direct_mA, source_limit_mA, kind]
-  # kind: policy = firmware caps applied (must pass with margin);
-  #       uncapped = firmware bug / caps off (must still not exceed guaranteed ILIM)
-  # One board since 2026-09-28 (owner): no radar, e-ink, NFC and the battery charger + fuel
-  # gauge fitted. H5 (2026-09-30): the UAC handset rows (30 mA idle, 100 mA in a call, 450 mA
-  # switch limit, all VBUS-direct) are gone, the analog handset adds ~10 mA in a call, and there
-  # is no speakerphone row. Charging is not budgeted: the BQ24074's DPPM cuts the charge current
-  # first when the input limit is reached.
-  idle:                    [79, 0, 1500, policy]
-  handset_call:            [176, 0, 1500, policy]     # 266 - 100 (UAC handset) + 10 (earpiece/mic)
-  ringing_max:             [600, 0, 1500, policy]     # 1 W firmware cap (H4 b06/P-15)
-  worst_case_capped:       [992, 0, 1500, policy]     # 1113 - 121 (handset port)
-  worst_case_uncapped:     [1323, 0, 1500, uncapped]  # 1794 - 471 (handset port at its limit)
-  # Default-USB source (USB-C "Default" Rp, or any USB-A charger via an A-to-C cable: 500 mA):
-  # reduced mode: ringer <=0.5 W, LEDs <=8 %, charging off.
-  # ESP32 TX peak 266 + codecs 25 + e-ink 6 + misc 1 + LEDs 67 + amp 0.5 W/(4.4 V*0.9)=126.
-  default_usb_reduced:     [491, 0, 500, policy]
-  default_usb_handset_call: [275, 0, 500, policy]  # TX 266 + codecs 25 + e-ink 6 + misc 1 + LEDs 67 (-100 amp) + earpiece/mic 10
-  # What the board would draw on a Default source if firmware did NOT enter reduced mode.
-  default_usb_full:        [491, 0, 500, advisory]
+loads_3v3:
+  # peak: worst simultaneous; avg: a call in progress (Wi-Fi on, audio both ways, display on)
+  esp32_s3_module: {peak_ma: 355, avg_ma: 150}   # TX 802.11b 20.5 dBm 355 mA peak (p28); avg EST: RX 95 mA (p28) + CPU
+  es8311_and_earpiece: {peak_ma: 30, avg_ma: 8}  # 14 mW codec (ES8311 p1) + 1 Vrms full scale into 32+22 ohm (p9)
+  display_module: {peak_ma: 60, avg_ma: 40}      # allowance: e-paper refresh ~8 mA; small OLED/TFT alternatives up to ~60 mA with backlight
+  mic_bias: {peak_ma: 1, avg_ma: 1}              # electret 0.5 mA typ through 1k + 2.2k
+  pullups_and_led: {peak_ma: 3, avg_ma: 2}       # I2C 2 x 0.7 mA, EN 0.33 mA, status LED 1.3 mA
 
-required_source_ma:
-  full: 1500      # full features need a >=1.5 A USB-C source (ship a 5 V / 3 A adapter)
-  reduced: 500    # any source works in reduced mode (status.power {source, reduced})
+loads_vbus:
+  piezo_ringer: {peak_ma: 6, avg_ma: 0}          # 5 V across the 1k (TDK PS p2 circuit) while the NPN is on
+  ldo_quiescent: {peak_ma: 2, avg_ma: 0}         # IGND 1.6 mA max at 800 mA, p6

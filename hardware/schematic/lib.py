@@ -1,4 +1,4 @@
-"""Small helper layer over SKiDL: part specs with sourcing data, passives, DNP, variants.
+"""Small helper layer over SKiDL: part specs with sourcing data, passives, pinless board items.
 
 Every part in the design is created through ``make()`` (ICs, connectors) or the passive helpers
 ``R() C() L() FB()``. Each part carries these fields, which end up in the KiCad netlist and BOM:
@@ -7,7 +7,7 @@ Every part in the design is created through ``make()`` (ICs, connectors) or the 
 - ``LCSC``  - LCSC/JLCPCB code, checked against LCSC by ``lcsc.py`` (cache: lcsc_cache.json)
 - ``Verified`` - "yes" when the pin map was checked against the cited datasheet, otherwise the
   reason it is not (rendered as ``[UNVERIFIED] ...`` in the BOM)
-- ``DNP`` - "1" when the part is not fitted in the variant being built
+- ``DNP`` - "1" when the part is not fitted (the minimal board fits everything)
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ class Spec:
 
 
 SPECS: dict[str, Spec] = {}
+BLOCK = {"name": ""}  # schematic block of the parts being made (review.py: one page per block)
 _counters: dict[str, int] = {}
 _used: set[str] = set()
 
@@ -100,6 +101,7 @@ def make(key: str, ref: str | None = None, value: str | None = None, dnp: bool =
     p.fields["DNP"] = "1" if dnp else ""
     p.fields["Note"] = note
     p.fields["SpecKey"] = key
+    p.fields["Block"] = BLOCK["name"]
     return p
 
 
@@ -199,49 +201,15 @@ def C(value: str, dnp: bool = False, note: str = "") -> Part:
     return _two_pin("C", "capacitor", f"{v}F {volt}", _FP_C[size], lcsc, mpn, dnp, note)
 
 
-def SJ(name: str = "SJ", three: bool = False, default: str = "1-2", note: str = "") -> Part:
-    """Solder jumper (bare copper, no BOM line)."""
-    if three:
-        key = "_SJ3"
-        if key not in SPECS:
-            spec(key, ref="JP", mpn="", manufacturer="", lcsc=None,
-                 footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm",
-                 pins=[(1, "A", "pas"), (2, "C", "pas"), (3, "B", "pas")],
-                 desc="3-pad solder jumper")
-    else:
-        key = "_SJ2"
-        if key not in SPECS:
-            spec(key, ref="JP", mpn="", manufacturer="", lcsc=None,
-                 footprint="Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm",
-                 pins=[(1, "1", "pas"), (2, "2", "pas")], desc="2-pad solder jumper")
-    p = make(key, value=f"{name} ({default})", note=note)
-    p.fields["Verified"] = "yes"
-    p.fields["BOM"] = "exclude"
-    return p
-
-
-def TP(net: Net, name: str | None = None) -> Part:
-    key = "_TP"
+def graphic(footprint: str, value: str, prefix: str = "G") -> Part:
+    """A pinless board item (mounting hole, silkscreen logo/text): in the netlist so layout
+    places it, never in the BOM."""
+    key = f"_{prefix}_{footprint}"
     if key not in SPECS:
-        spec(key, ref="TP", mpn="", manufacturer="", lcsc=None,
-             footprint="TestPoint:TestPoint_Pad_D1.0mm", pins=[(1, "1", "pas")],
-             desc="test pad, 1.0 mm, bottom side")
-    p = make(key, value=name or net.name)
+        spec(key, ref=prefix, mpn="", manufacturer="", lcsc=None, footprint=footprint, pins=[],
+             desc=value)
+    p = make(key, value=value)
     p.fields["BOM"] = "exclude"
-    p[1] += net
-    return p
-
-
-def NetTie(a: Net, b: Net, note: str = "") -> Part:
-    key = "_NT"
-    if key not in SPECS:
-        spec(key, ref="NT", mpn="", manufacturer="", lcsc=None,
-             footprint="NetTie:NetTie-2_SMD_Pad0.5mm", pins=[(1, "1", "pas"), (2, "2", "pas")],
-             desc="net tie (single-point return)")
-    p = make(key, value="NetTie", note=note)
-    p.fields["BOM"] = "exclude"
-    p[1] += a
-    p[2] += b
     return p
 
 

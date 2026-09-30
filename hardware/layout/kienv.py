@@ -27,7 +27,7 @@ FREEROUTING_JAR = Path(os.environ.get("FREEROUTING_JAR",
 _jdk = sorted(TOOLS.glob("jdk-25*/Contents/Home/bin/java")) + sorted(TOOLS.glob("jdk-25*/bin/java"))
 JAVA = os.environ.get("JAVA", str(_jdk[-1]) if _jdk else "java")
 
-# PyYAML is not bundled with KiCad's Python: `make layout` installs it into .tools/pylib.
+# PyYAML is not bundled with KiCad's Python: `make tools` installs it into .tools/pylib.
 sys.path.insert(0, str(TOOLS / "pylib"))
 sys.path.insert(0, str(LAYOUT))
 

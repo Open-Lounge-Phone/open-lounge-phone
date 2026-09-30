@@ -1,4 +1,4 @@
-"""Shared bits for the H4 benches: the check record, the context, units and helpers."""
+"""Shared bits for the benches: the check record, the context, units and helpers."""
 
 from __future__ import annotations
 
@@ -21,19 +21,7 @@ class Check:
     value: str          # measured / computed value, formatted
     limit: str          # pass criterion, formatted
     ok: bool | None     # True PASS, False FAIL, None INFO (reported, not judged)
-    reqs: str = ""      # requirement IDs this check verifies
     note: str = ""
-    scope: str = "both"  # "current" = the pre-H5 (H3) schematic only, "proposal" = the H5
-    #                      schematic as built (was the H4 proposal),
-    #                      "alt" = a rejected alternative, "both" = applies to both
-
-    def __post_init__(self):
-        n = self.name.lower()
-        if self.scope == "both":   # naming convention used by the benches
-            if "(current" in n or "[current" in n or n.startswith("current schematic"):
-                self.scope = "current"
-            elif "(proposed" in n or "[proposed" in n or "(proposal" in n:
-                self.scope = "proposal"
 
     @property
     def verdict(self) -> str:
@@ -44,44 +32,25 @@ class Check:
 class Bench:
     key: str
     title: str
-    reqs: str
     provenance: list[str]
     assumptions: list[str]
     checks: list[Check] = field(default_factory=list)
-    notes: list[str] = field(default_factory=list)
     error: str = ""
 
-    def add(self, *a, key: bool = False, **k) -> Check:
+    def add(self, *a, **k) -> Check:
         c = Check(*a, **k)
-        c.key = key  # shown in the README summary
         self.checks.append(c)
         return c
 
-    def _v(self, scopes) -> str:
-        if self.error:
-            return "ERROR"
-        judged = [c.ok for c in self.checks if c.ok is not None and c.scope in scopes]
-        if not judged:
-            return "n/a"
-        return "PASS" if all(judged) else "FAIL"
-
     @property
     def verdict(self) -> str:
-        """Verdict for the H5 schematic (the H4 proposal, now built)."""
-        return self._v(("both", "proposal"))
-
-    @property
-    def verdict_current(self) -> str:
-        """Verdict for the pre-H5 (H3) schematic, kept as the before/after record."""
-        return self._v(("both", "current"))
+        if self.error:
+            return "ERROR"
+        judged = [c.ok for c in self.checks if c.ok is not None]
+        return "PASS" if judged and all(judged) else ("n/a" if not judged else "FAIL")
 
 
 class Ctx:
-    def __init__(self, quick: bool = False, vendor: bool = False):
-        self.quick = quick
-        self.vendor = vendor
-        self.models = BUILD / "models"
-
     def dir(self, key: str) -> Path:
         d = BUILD / key
         d.mkdir(parents=True, exist_ok=True)
@@ -90,11 +59,6 @@ class Ctx:
     def sim(self, key: str, name: str, netlist: str, analysis, vectors, **kw) -> dict:
         head = f"* {key}/{name}\n.include {LIB}\n"
         return spice.run(head + netlist, analysis, vectors, self.dir(key), name, **kw)
-
-
-def at(r: dict, vec: str, t: float) -> float:
-    i = min(np.searchsorted(r["x"], t), len(r["x"]) - 1)
-    return float(r[vec][i])
 
 
 def window(r: dict, vec: str, t0: float, t1: float) -> np.ndarray:
@@ -111,11 +75,3 @@ def si(v: float, unit: str, digits: int = 3) -> str:
         if abs(v) >= exp:
             return f"{v / exp:.{digits}g} {pre}{unit}"
     return f"{v:.3g} {unit}"
-
-
-def a_weight_db(f: np.ndarray) -> np.ndarray:
-    """IEC 61672-1 A-weighting in dB."""
-    f2 = np.asarray(f, float) ** 2
-    ra = (12194.0**2 * f2**2) / ((f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2))
-                                 * (f2 + 12194.0**2))
-    return 20 * np.log10(ra) + 2.00

@@ -1,61 +1,53 @@
-# ESP32-S3-WROOM-1-N16R8 pin allocation, transcribed from hardware/DESIGN.md §5.
-# checks.py fails the build if the schematic's module pad nets differ from this table.
+# ESP32-S3-WROOM-1U-N16R8 pin allocation of the minimal board (DESIGN.md §4).
+# checks.py fails the build if the module's pad nets differ from this table, if a GPIO not
+# listed here is connected, or if a rule below is broken.
 #
-# net:    net name the GPIO must connect to (None/omitted = must be unconnected)
-# adc1:   signal is analog; GPIO must be on ADC1 (GPIO1-10, usable with Wi-Fi)
-# rtc:    signal is a deep-sleep wake source; GPIO must be an RTC GPIO (0-21)
-# strap:  required resistor at reset: pullup | pulldown (value checked loosely)
-# board:  where the signal ends up (main | tp); one board since 2026-09-27
-
-# GPIO assignment follows the board geometry (layout/pinswap.py, 2026-09-28): each signal
-# leaves the module on the side facing what it connects to. Fixed: straps 0/3/45/46, PSRAM
-# 35-37, native USB 19/20, UART0 43/44; analog inputs only on ADC1 (GPIO1-10, usable with Wi-Fi).
-# H5 (2026-09-30): the USB host port, its VBUS switch/sense and the CH340C are gone. Native USB
-# now serves the power USB-C (device). Freed: IO3 (strap), IO9 (ADC1, kept free for analog),
-# IO46 (strap). New: MIC_SENSE on ADC1 IO10, JACK_DET IO12, REC_LED IO13; HOOK_IN reads the
-# hook through 47k (privacy: the GPIO cannot hold the hook line high).
+# net:     net the GPIO connects to (null = must stay unconnected)
+# rtc:     deep-sleep wake source: must be an RTC GPIO (0-21)
+# pull:    up = needs exactly one pull-up resistor to 3V3 (I2C)
+# strap:   strapping pin (datasheet v1.8 p13-15). `low_only: true` = only circuits that can
+#          never pull the pin HIGH at reset (a key or hook switch to GND, a transistor base, an
+#          LED): the required strap value is the default low (GPIO45 3.3 V flash, GPIO46 any).
+#          GPIO0 keeps its internal weak pull-up (SPI boot); BOOT pulls it low.
+# Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: IO43 (TXD0, ROM log).
 gpio:
-  0:  {net: BOOT, strap: pullup, board: main, note: "10k pull-up + BOOT button; runtime long-press = factory reset"}
-  1:  {net: I2S_DOUT, board: main}
-  2:  {net: I2S_WS, board: main}
-  3:  {net: null, note: "free (strap: JTAG source select only if EFUSE_STRAP_JTAG_SEL is burned; left open)"}
-  4:  {net: I2S_DIN, board: main}
-  5:  {net: IRQ, rtc: true, board: main, pull: up}
-  6:  {net: CC2_SENSE, adc1: true, board: main}
-  7:  {net: I2C_SCL, board: main, pull: up}
-  8:  {net: CC1_SENSE, adc1: true, board: main}
-  9:  {net: null, note: "free: spare ADC1 input, keep for an analog signal"}
-  10: {net: MIC_SENSE, adc1: true, board: main, note: "handset mic line via 1N4148W (one-way) + 100k, 1M/10n to GND: plug/mic present, inline button, OMTP plug"}
-  11: {net: I2S_MCLK, board: main}
-  12: {net: JACK_DET, rtc: true, board: main, note: "jack TN contact via 1k, 1M pull-up: high = plug inserted"}
-  13: {net: REC_LED, board: main, note: "recording light (red LED + 680R to GND), owner D1"}
-  14: {net: I2S_BCLK, board: main}
-  15: {net: I2C_SDA, board: main, pull: up}
-  16: {net: PGOOD, board: main, pull: up}
-  17: {net: HOOK_IN, rtc: true, board: main, note: "hook via 47k from HOOK (DRV5032AJ open-drain, 100k pull-up): high = off-hook"}
-  18: {net: CHG_STAT, board: main, pull: up}
-  19: {net: USB_DN, board: main, note: "native USB (device) on the power USB-C J1: flashing + USB-Serial-JTAG console"}
-  20: {net: USB_DP, board: main}
-  21: {net: LED_DATA, board: main, note: "via SN74LV1T125 buffer on main"}
+  0:  {net: BOOT, strap: true, note: "BOOT button to GND; internal weak pull-up = SPI boot (p13)"}
+  1:  {net: I2C_SDA, pull: up, note: "ES8311 only; 4.7k pull-up"}
+  2:  {net: I2C_SCL, pull: up}
+  3:  {net: KEY_9, rtc: true, strap: true, low_only: true, note: "JTAG-source strap, ignored unless EFUSE_STRAP_JTAG_SEL is burned (p15)"}
+  4:  {net: KEY_1, rtc: true}
+  5:  {net: KEY_2, rtc: true}
+  6:  {net: KEY_3, rtc: true}
+  7:  {net: KEY_4, rtc: true}
+  8:  {net: KEY_8, rtc: true}
+  9:  {net: KEY_BACK, rtc: true}
+  10: {net: HOOK, rtc: true, note: "MX switch under the hook plunger: low = handset on the hook"}
+  11: {net: JACK_DET, rtc: true, note: "jack TN via 1k: low = no plug, high = plug in (internal pull-up)"}
+  12: {net: I2S_MCLK}
+  13: {net: I2S_BCLK}
+  14: {net: I2S_WS}
+  15: {net: KEY_5, rtc: true}
+  16: {net: KEY_MENU, rtc: true}
+  17: {net: KEY_6, rtc: true}
+  18: {net: KEY_7, rtc: true}
+  19: {net: USB_DN, note: "native USB D- (flashing + USB-Serial-JTAG console)"}
+  20: {net: USB_DP, note: "native USB D+"}
+  21: {net: I2S_DOUT, note: "to ES8311 DSDIN (playback)"}
   35: {net: null, note: "reserved: octal PSRAM"}
   36: {net: null, note: "reserved: octal PSRAM"}
   37: {net: null, note: "reserved: octal PSRAM"}
-  38: {net: PA_EN, pulldown: true, board: main, note: "100k pull-down: amp off at boot"}
-  39: {net: EPD_BUSY, board: main}
-  40: {net: EPD_RST, board: main}
-  41: {net: EPD_CS, board: main}
-  42: {net: EPD_SCK, board: main}
-  43: {net: U0TXD, board: tp}
-  44: {net: U0RXD, board: tp}
-  45: {net: CHG_CE, strap: pulldown, board: main, note: "must be low at reset (3.3 V flash)"}
-  46: {net: null, note: "strap: left open, internal pull-down"}
-  47: {net: EPD_MOSI, board: main}
-  48: {net: EPD_DC, board: main}
+  38: {net: EPD_DIN}
+  39: {net: EPD_CLK}
+  40: {net: EPD_CS}
+  41: {net: EPD_DC}
+  42: {net: EPD_RST}
+  43: {net: null, note: "free (TXD0: ROM boot log)"}
+  44: {net: STATUS_LED, note: "RXD0 (input at boot); LED + 1k to GND"}
+  45: {net: BUZZER, strap: true, low_only: true, note: "VDD_SPI strap (must be low: 3.3 V flash); a transistor base cannot pull it high"}
+  46: {net: KEY_0, strap: true, low_only: true, note: "boot-mode strap (default low); a key can only pull it low"}
+  47: {net: I2S_DIN, note: "from ES8311 ASDOUT (record)"}
+  48: {net: EPD_BUSY}
 
-# I2C devices (7-bit). checks.py verifies no two parts on one bus share an address.
+# I2C devices (7-bit)
 i2c_expected:
   ES8311: 0x18
-  LTR-303ALS: 0x29
-  MAX17048: 0x36
-  ST25DV04K: [0x53, 0x57]   # KC: A6h/AEh device select (DS13519 p165); no 0x2D (F-27)
-  AW9523B: 0x58
