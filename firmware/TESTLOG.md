@@ -1,8 +1,9 @@
 # Firmware test log
 
-Wokwi simulation (ESP32-S3 devkit, `wokwi/diagram.json`). E2E runs r1-r4 used the disposable
-test server `t1.openloungephone.app` (since deleted; now `OLP_E2E_SERVER`); the smoke runs l1, driven by `tests/e2e/live/firmware.test.ts` (serial console + the
-companion in Chromium with a virtual passkey) or by `wokwi/smoke.yaml`. Newest last.
+Wokwi simulation (ESP32-S3 devkit, `wokwi/diagram.json`), driven by `wokwi/smoke.yaml` (against
+the owner's l1 since t1 was deleted) or by `tests/e2e/live/firmware.test.ts` (serial console + the
+companion in Chromium with a virtual passkey; runs r1-r4 used the disposable server
+`t1.openloungephone.app`, now any `OLP_E2E_SERVER`). Newest last.
 
 | Date | Run | Step | Result | Issue found | Fix |
 |---|---|---|---|---|---|
