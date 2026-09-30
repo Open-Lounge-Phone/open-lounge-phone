@@ -7,7 +7,10 @@ recording as designed below). Items marked *(planned)* are not built yet.
 
 ## What the hardware does and doesn't guarantee
 
-The phone's only microphone is the one in the handset (no base microphone, no speakerphone).
+**The board has no microphone of its own.** The phone's only microphone is the one in the
+handset, on the 3.5 mm jack (no base microphone, no speakerphone). So the hardware guarantee is
+simple: **unplug the handset and there is no microphone connected at all.** With the handset
+plugged in, the software mutes its mic while it is hung up and captures audio only in a call.
 The minimal board (`hardware/DESIGN.md`) is deliberately simple: an ESP32-S3, a codec, keys, a
 hook switch, a display module, a piezo ringer and one status LED. That means:
 
@@ -22,7 +25,8 @@ hook switch, a display module, a piezo ringer and one status LED. That means:
   drives them from the call's recording state, see below), which is a firmware signal, not a
   hardware one.
 - **No camera, no radar, no NFC, no light sensor.** Nothing on the board can see anyone.
-- **USB power only**, no battery.
+- **Mains/USB-powered like a landline**: no battery by design. It is not a mobile device and
+  does not go anywhere with you.
 - **Open hardware** (CERN-OHL-S): the schematic, layout and parts list are public.
 
 (An earlier board revision had a hardware mute switch and mic lights powered by the mic's own
