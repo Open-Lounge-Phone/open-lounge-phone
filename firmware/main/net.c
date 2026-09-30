@@ -187,6 +187,9 @@ void net_save_wifi(const char *ssid, const char *pass) {
 void net_set_wifi(const char *ssid, const char *pass) {
   nvs_put("ssid", ssid);
   nvs_put("pass", pass ? pass : "");
+#if CONFIG_OLP_QEMU
+  return;  // no Wi-Fi driver in QEMU: saved only
+#endif
   esp_wifi_disconnect();
   apply_wifi();
   esp_wifi_connect();

@@ -93,7 +93,20 @@ The earpiece plays only with the handset lifted; `audio tone` overrides that for
 5. Turn the home router off for 3+ minutes: the setup network opens; turn it back on: it closes
    and the phone reconnects.
 
-## 7. What to record
+## 7. Release firmware on a board (encrypted storage, signed updates)
+
+Only on a board meant to stay a phone: a release build burns an eFuse key on its first boot,
+**one-time and irreversible** (firmware/README.md "Encrypted storage").
+
+1. `idf.py -B build-release … flash` of a release build (`tools/release.sh build`), or an update to one.
+2. First boot: `FIRST ENCRYPTED BOOT: burning a new NVS HMAC key into eFuse KEY5`, then
+   `STORAGE encrypted (… new)`. `espefuse.py summary` shows KEY5 with purpose `HMAC_UP` and
+   read-protected.
+3. Set up Wi-Fi and pair; restart: `STORAGE encrypted (… existing)`, same four words, signs in.
+4. `esptool.py read_flash 0x9000 0x6000 nvs.bin`: the Wi-Fi name and password don't appear in it.
+5. Remove the phone in the app: `WIPE: NVS partition erased`, a new pairing code, Wi-Fi kept.
+
+## 8. What to record
 
 Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the chosen cap,
 `miclevel` for speech and for silence, the PGA gain used, call setup time (`RTC CONNECTED … ms`),

@@ -51,7 +51,12 @@ What the firmware does today (firmware/README.md has the details) and what is st
   one-time): only signed firmware boots and a stolen phone's flash is unreadable. Today the image
   signature protects against the network, not against someone who reflashes the board over USB.
 - **Device key** generated on the phone and never exported. Removing the phone in the app makes it
-  useless.
+  useless: the phone erases its whole storage partition (not just "marks deleted").
+- **Encrypted storage** (**built**, firmware 0.5, release builds): the device key, its id and the
+  Wi-Fi password are encrypted at rest (ESP-IDF's NVS encryption with keys derived from an eFuse
+  HMAC key that software can use but never read; burned once, on the first boot). Reading the flash
+  chip shows only ciphertext. Someone who can run their own firmware on the chip could still use
+  the HMAC key; hardware Secure Boot V2 (planned) closes that.
 - *Planned:* **debug ports locked** in production; hobby builds get a clearly marked unlocked
   option.
 - *Planned:* **reproducible builds with published fingerprints**, shown on the phone.
@@ -86,7 +91,7 @@ What the firmware does today (firmware/README.md has the details) and what is st
 - **Wi-Fi setup network** (**built**, firmware 0.3): WPA2 with a fresh random 8-digit password
   shown only on the phone's display, so joining it needs someone at the phone. The setup page
   answers only on that network (not on the home LAN), and only while setup is open; the Wi-Fi
-  password is stored like the device key (NVS)
+  password is stored like the device key (NVS, encrypted in release builds)
   and never logged.
 
 ## Trust signals people can see

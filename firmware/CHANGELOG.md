@@ -1,5 +1,19 @@
 # Firmware changelog
 
+## 0.5.0 — 2026-09-30: encrypted storage
+
+- `CONFIG_OLP_STORAGE_ENCRYPTED` (on in `sdkconfig.release`, off for development and the
+  simulators): ESP-IDF's HMAC-based NVS encryption. The device key, its id and the Wi-Fi password
+  are encrypted at rest with keys derived from a random eFuse key (KEY5, purpose HMAC_UP) burned on
+  the first boot: **one-time and irreversible** (README "Encrypted storage" says what happens).
+- Wipes erase the whole NVS partition physically (remote removal, the console `wipe`, and the
+  factory reset); a removal writes back only the Wi-Fi, the server and the update URL. Before, a
+  removal marked the identity namespace deleted and the old key stayed in the flash until reused.
+- `status` shows `storage=encrypted|plain`.
+- QEMU e2e: step 12 (a build with encryption on: the key is burned once, nothing readable in the
+  flash, decrypts after a restart, a removal erases and keeps the Wi-Fi) and step 6 now checks the
+  old device id is gone from the flash after a wipe.
+
 ## 0.4.0 — 2026-09-30: signed over-the-air updates
 
 - Two app slots (`partitions.csv`, 4 MB layout) with bootloader rollback. **A USB flash is needed

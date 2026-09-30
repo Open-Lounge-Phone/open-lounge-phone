@@ -180,6 +180,17 @@ export class QemuPhone extends WokwiPhone {
     this.resume();
   }
 
+  /** The NVS partition (partitions.csv: 0x9000, 24 KB) of the flash file; stop QEMU first. */
+  nvs(): Buffer {
+    const file = join(FIRMWARE, this.buildDir ?? "build-qemu", "qemu_flash.bin");
+    return readFileSync(file).subarray(0x9000, 0xf000);
+  }
+
+  /** The eFuse file (QEMU's emulated eFuses). */
+  efuse(): Buffer {
+    return readFileSync(join(FIRMWARE, this.buildDir ?? "build-qemu", "qemu_efuse.bin"));
+  }
+
   /** Runs QEMU on the existing flash/eFuse files (after `start` or a previous run). */
   resume(): void {
     this.exited = undefined;

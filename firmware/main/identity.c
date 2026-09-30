@@ -8,6 +8,7 @@
 #include "mbedtls/ecdsa.h"
 #include "mbedtls/sha256.h"
 #include "nvs.h"
+#include "storage.h"
 
 static const char *TAG = "identity";
 #define NS "olp"  // identity + settings; erased by a wipe (Wi-Fi lives in "net")
@@ -132,12 +133,9 @@ bool identity_sign_b64(const uint8_t *msg, size_t len, char *out, size_t out_len
 }
 
 void identity_wipe(void) {
-  nvs_handle_t h;
-  if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
-    nvs_erase_all(h);
-    nvs_commit(h);
-    nvs_close(h);
-  }
+  // The whole NVS partition is erased (not "mark deleted"): the old key is gone from the flash.
+  // Wi-Fi, the server and the update URL are written back (storage.c).
+  storage_wipe(true);
   memset(s_priv, 0, sizeof s_priv);
   s_device_id[0] = '\0';
   ESP_LOGW(TAG, "wiped the device key, id and settings (Wi-Fi kept)");

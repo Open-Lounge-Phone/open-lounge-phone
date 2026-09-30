@@ -1,5 +1,5 @@
 // The device key (P-256, mbedTLS) and the phone's paired identity, in NVS.
-// TODO: encrypted NVS (flash encryption + NVS encryption keys).
+// NVS is encrypted at rest in release builds (storage.c).
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>

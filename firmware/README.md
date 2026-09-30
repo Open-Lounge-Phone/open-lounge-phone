@@ -16,10 +16,10 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | 2.9" e-paper (SSD1680) behind a small display interface; the protocol's strip model (≤ 2 lines × 16 chars, large type) | Partial refresh uses the controller's built-in mode (`0x22 0xFC`): check on a real panel |
 | **Wi-Fi setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server from NVS (`server`) or Kconfig (default `wss://l1.openloungephone.app`) | Bluetooth setup from the companion; the QR sticker |
 | WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
-| `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Encrypted NVS / flash encryption (the device key is in plain NVS) |
+| `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Flash encryption and hardware secure boot (eFuses; planned for production phones) |
 | `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
 | **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
-| `wipe`: erases the device key, id and settings (keeps Wi-Fi), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
+| `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
 | MENU → 1 Volume, 3 Wi-Fi status (→ 1 set up Wi-Fi), 9 Update now, 0 About (firmware version + the four fingerprint words) | |
 
 ## Build and flash
@@ -147,6 +147,44 @@ byte for byte what the bootloader writes). The later writes (NEW → PENDING_VER
 PENDING_VERIFY → ABORTED after the crash) were made by the bootloader itself in the test runs; the
 test would make them on the stopped emulator if it ever stalled there, and says which happened.
 **Needs the real board:** a power cut mid-update, and the first boot of a blank board's bootloader.
+
+## Encrypted storage
+
+Everything the phone keeps lives in NVS: its device key (the P-256 key that signs in to the
+server), its id, and the Wi-Fi name and password. **Release builds encrypt NVS at rest**
+(`CONFIG_OLP_STORAGE_ENCRYPTED`, set in `sdkconfig.release`; off in development and simulator
+builds): ESP-IDF's HMAC-based NVS encryption. The keys that encrypt NVS (XTS-AES) are derived by
+the chip's HMAC peripheral from a 256-bit key in an eFuse block (`KEY5`), which software can use but
+never read. No flash encryption is needed for it, and nothing else about the phone changes.
+
+**First boot with it (one-time, irreversible):** when the eFuse block is still empty, the firmware
+generates a random key and **burns it into eFuse KEY5 with the purpose HMAC_UP**. That can't be
+undone or changed: that block is used up for good, and the phone can only ever decrypt NVS written
+under that key. If the board already ran a development build, the old (plain) NVS can't be read as
+encrypted data, so the phone starts fresh: a new device key, and Wi-Fi setup and pairing again.
+The log says `FIRST ENCRYPTED BOOT: burning a new NVS HMAC key into eFuse KEY5`, later
+`STORAGE encrypted (… existing)`. Before flashing a release build on a dev board, decide whether
+that board should stay a development board: the eFuse can't be un-burned.
+
+**What it protects:** someone who reads the flash chip (desoldered, or over USB with esptool) sees
+only ciphertext. **What it doesn't:** someone who can run their own firmware on the same chip can
+use the HMAC peripheral too; that needs hardware Secure Boot V2 (see "Updates"), planned for
+production phones.
+
+**Wipes erase for real.** A remote removal (`wipe` from the server) or the console `wipe` erases
+the **whole NVS partition** (every flash sector, not "mark deleted"), then writes back only the
+Wi-Fi, server and update URL; a factory reset (MENU+BACK 10 s) erases it all. The old device key is
+gone from the chip, not just unreachable. The HMAC key stays in eFuse (it can't be erased), which is
+harmless: there is no old data left for it to decrypt.
+
+**Tested in simulation (QEMU, which emulates the S3's eFuses and HMAC peripheral; e2e step 12):**
+a build with encryption on burns KEY5 on the first boot (and only then), pairs and signs in; with
+the emulator stopped, the device id, a Wi-Fi name and its password don't appear in the NVS flash
+and the eFuse file has changed; after a restart the storage decrypts (same Wi-Fi, same phone signs
+in); a removal erases it, generates a new key and keeps the Wi-Fi. Step 6 (a plain build) checks
+that the old device id is gone from the flash after a wipe; with the old namespace-only erase it
+fails (mutation-tested). **Needs the real board:** `espefuse.py summary` after the first boot
+(KEY5 read-protected with purpose HMAC_UP), `hardware/BRINGUP.md` §7.
 
 ## Wi-Fi setup network
 

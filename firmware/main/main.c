@@ -29,6 +29,7 @@
 #include "prov_core.h"
 #include "media.h"
 #include "signals.h"
+#include "storage.h"
 #include "strip.h"
 
 static const char *TAG = "olp";
@@ -253,11 +254,12 @@ void app_print_status(void) {
   const char *const *w = identity_fingerprint();
   static const char *conns[] = {"connecting", "online", "offline"};
   printf("STATUS state=%s conn=%s authed=%d device=%s code=%s wifi=%s rssi=%d ip=%s "
-         "words=%s-%s-%s-%s missed=%d strip=%s|%s menu=%s\n",
+         "words=%s-%s-%s-%s missed=%d storage=%s strip=%s|%s menu=%s\n",
          phone_kind_name(s_phone.kind), conns[s_conn], s_authed,
          identity_device_id()[0] ? identity_device_id() : "-", s_code[0] ? s_code : "-",
          ssid[0] ? ssid : "-", rssi, ip[0] ? ip : "-", w[0], w[1], w[2], w[3], s_cfg.missed_count,
-         s_shown[0], s_shown[1], menu_screen_name(s_menu.screen));
+         storage_encrypted() ? "encrypted" : "plain", s_shown[0], s_shown[1],
+         menu_screen_name(s_menu.screen));
 }
 
 // --- the Wi-Fi setup network ----------------------------------------------------------------
@@ -307,7 +309,7 @@ static bool boot_keys(void) {
       ESP_LOGW(TAG, "FACTORY RESET (MENU+BACK held %d ms): erasing Wi-Fi, owner and keys", held);
       const char *lines[] = {"FACTORY RESET", "RESTARTING"};
       display_text(lines, 2);
-      nvs_flash_erase();
+      storage_wipe(false);  // everything: Wi-Fi, owner, keys
       vTaskDelay(pdMS_TO_TICKS(1500));
       esp_restart();
       return false;
@@ -610,12 +612,7 @@ static void tick(void) {
 }
 
 void app_main(void) {
-  esp_err_t err = nvs_flash_init();
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    err = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(err);
+  ESP_ERROR_CHECK(storage_init());  // NVS (encrypted in release builds)
   s_queue = xQueueCreate(32, sizeof(app_event_t));
 #if CONFIG_OLP_QEMU
   ESP_LOGI(TAG, "Open Lounge Phone firmware %s (simulator build: QEMU)", FW_VERSION);

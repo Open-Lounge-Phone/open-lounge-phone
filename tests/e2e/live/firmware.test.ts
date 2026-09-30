@@ -28,7 +28,7 @@ import { api, type Person } from "../twoServers.ts";
 import { CHROMIUM_ARGS, Companion, setForceRelay, until } from "./browser.ts";
 import { mediaReport, parseAudioLine, writeToneWav } from "./media.ts";
 import { bootloaderStandIn, buildOtaAssets, deleteOtaAssets, type OtaAssets } from "./ota.ts";
-import { buildSimFirmware, FIRMWARE, SIM, simPhone, type WokwiPhone } from "./wokwi.ts";
+import { buildSimFirmware, FIRMWARE, QemuPhone, SIM, simPhone, type WokwiPhone } from "./wokwi.ts";
 
 const A = process.env.OLP_E2E_SERVER ?? "";
 const LIVE = process.env.OLP_LIVE === "1" && process.env.OLP_FIRMWARE === "1" && A !== "";
@@ -236,6 +236,78 @@ async function ota(phone: WokwiPhone, a: OtaAssets): Promise<string> {
   assert(!/OTA TRIAL/.test(phone.log.slice(phone.cursor)), "still on trial after being kept");
   notes.push("0.4.1-test: trial → valid → kept after restart");
   return `${notes.join("; ")}; boots: ${events.join(", ")}`;
+}
+
+const ENC_BUILD = "build-qemu-enc";
+
+/**
+ * NVS encryption with the eFuse HMAC key (a release-build option) in QEMU, whose eFuses and HMAC
+ * peripheral are emulated: the first boot burns the key; the device key, its id and the Wi-Fi
+ * password are not readable in the flash; after a restart they decrypt (same phone, signs in); a
+ * wipe from the server erases them and keeps the Wi-Fi.
+ */
+async function encryptedStorage(phone: QemuPhone, g: Companion): Promise<string> {
+  const defaults = join(FIRMWARE, ENC_BUILD + ".defaults");
+  writeFileSync(
+    defaults,
+    [
+      "CONFIG_OLP_STORAGE_ENCRYPTED=y",
+      "CONFIG_NVS_ENCRYPTION=y",
+      "CONFIG_NVS_SEC_KEY_PROTECT_USING_HMAC=y",
+      "CONFIG_NVS_SEC_HMAC_EFUSE_KEY_ID=5",
+      "",
+    ].join("\n"),
+  );
+  const r = spawnSync(join(FIRMWARE, "tools/qemu.sh"), ["build"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      OLP_QEMU_BUILD: ENC_BUILD,
+      OLP_QEMU_EXTRA_DEFAULTS: defaults,
+      OLP_SIM_SERVER: WSS,
+    },
+  });
+  assert(r.status === 0, `encrypted build failed:\n${r.stdout}\n${r.stderr}`);
+  phone.buildDir = ENC_BUILD;
+  const blankEfuse = Buffer.alloc(1024);
+  blankEfuse[38] = 0x0c;
+  const code = await boot(phone);
+  const burn = /FIRST ENCRYPTED BOOT: burning a new NVS HMAC key into eFuse KEY5/.exec(phone.log);
+  assert(burn, "no key burned on the first boot");
+  assert(
+    /STORAGE encrypted \(NVS, HMAC key in eFuse KEY5, new\): ESP_OK/.test(phone.log),
+    "storage",
+  );
+  const id = (await pair(phone, g, code)).split(";")[0] as string;
+  phone.send("wifi Canary-Net-7431 canary-pass-9913");
+  await phone.waitFor(/wifi saved: Canary-Net-7431/, 10_000);
+  await new Promise((r) => setTimeout(r, 1_000));
+  await phone.stop();
+  const nvs = phone.nvs();
+  for (const secret of [id, "Canary-Net-7431", "canary-pass-9913"])
+    assert(!nvs.includes(secret), `"${secret}" is readable in the NVS flash`);
+  assert(
+    nvs.some((b) => b !== 0xff),
+    "NVS is empty",
+  );
+  assert(!phone.efuse().equals(blankEfuse), "the eFuse file didn't change");
+  phone.resume();
+  await phone.waitFor(
+    /STORAGE encrypted \(NVS, HMAC key in eFuse KEY5, existing\): ESP_OK/,
+    90_000,
+  );
+  await phone.waitFor(/saved Wi-Fi: Canary-Net-7431/, 30_000, "Wi-Fi decrypted");
+  await phone.waitFor(new RegExp(`SIGNED IN as ${id}`), 90_000, "same phone signs in again");
+  const del = await json(g.person, `/devices/${id}`, { method: "DELETE" });
+  assert(del.status === 204, `remove ${del.status}`);
+  await phone.waitFor(
+    /WIPE: NVS partition erased \(ESP_OK\); putting Wi-Fi and the server back/,
+    30_000,
+  );
+  await phone.waitFor(/saved Wi-Fi: Canary-Net-7431/, 90_000, "Wi-Fi kept");
+  await phone.waitFor(/no device key: generating a P-256 key/, 30_000, "new key after the wipe");
+  assert(!/FIRST ENCRYPTED BOOT/.test(phone.log.slice(phone.cursor)), "burned again");
+  return `key burned once into KEY5; ${id}, Wi-Fi name and password not in the flash; decrypted after a restart and signed in; wipe erased and kept Wi-Fi`;
 }
 
 const SETUP_PORT = 18080;
@@ -648,6 +720,14 @@ it.skipIf(!LIVE)(
         const note = await pair(phone2, g, first);
         const id = note.split(";")[0] as string;
         const oldWords = /identity: fingerprint: (\w+ \w+ \w+ \w+)/.exec(phone2.log)?.[1];
+        // QEMU: the id is in the (plain, development build) NVS flash now…
+        const qemu = phone2 instanceof QemuPhone ? phone2 : undefined;
+        if (qemu) {
+          await qemu.stop();
+          assert(qemu.nvs().includes(id), "the device id isn't in the NVS flash (check broken?)");
+          qemu.resume();
+          await phone2.waitFor(/SIGNED IN as/, 90_000, "signed in again");
+        }
         const del = await json(g.person, `/devices/${id}`, { method: "DELETE" });
         assert(del.status === 204, `remove ${del.status}`);
         await phone2.waitFor(/<- \{"t":"wipe","reason":"removed"\}/, 30_000, "wipe");
@@ -656,6 +736,14 @@ it.skipIf(!LIVE)(
         await phone2.waitFor(/no device key: generating a P-256 key/, 30_000, "new key");
         const words = await phone2.waitFor(/identity: fingerprint: (\w+ \w+ \w+ \w+)/, 30_000);
         await phone2.waitFor(/device id: \(unpaired\)/, 10_000);
+        let erased = "";
+        if (qemu) {
+          // …and after the wipe it's gone from the flash: erased, not just marked deleted.
+          await qemu.stop();
+          assert(!qemu.nvs().includes(id), "the old device id is still in the NVS flash");
+          erased = "; old id erased from the flash";
+          qemu.resume();
+        }
         await phone2.waitFor(/olp> /, 60_000, "the console after the reboot");
         phone2.send("hook down");
         const again = await phone2.waitFor(/PAIRING CODE: (\d{6})/, 120_000, "a new code");
@@ -663,7 +751,7 @@ it.skipIf(!LIVE)(
         assert(words[1] !== oldWords, "same fingerprint after the wipe");
         const still = (await json(g.person, "/devices")).json as { id: string }[];
         assert(!still.some((d) => d.id === id), "the phone is still listed");
-        return `old ${oldWords} → new ${words[1]}; code ${again[1]}`;
+        return `old ${oldWords} → new ${words[1]}; code ${again[1]}${erased}`;
       });
     await phone2.stop();
 
@@ -674,6 +762,19 @@ it.skipIf(!LIVE)(
         provisioning(phone3, browser as Browser),
       );
       await phone3.stop();
+    }
+
+    // ------------------------------------------------------------ simulation E
+    if (want("12") && SIM === "qemu") {
+      const phone5 = new QemuPhone(join(OUT, `serial-E-${RUN}.log`));
+      await step(
+        "12",
+        "encrypted storage: key burned once, NVS unreadable in flash, wipe erases",
+        () => encryptedStorage(phone5, g),
+      );
+      await phone5.stop();
+    } else if (want("12")) {
+      skip("12", "encrypted storage", "QEMU only (eFuse and HMAC emulation)");
     }
 
     // ------------------------------------------------------------ simulation D

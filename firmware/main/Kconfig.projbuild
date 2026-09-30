@@ -33,6 +33,16 @@ config OLP_QEMU
         QEMU has no Wi-Fi: the network is its emulated OpenCores Ethernet (user-mode NAT, see
         tools/qemu.sh). There is no display either: the framebuffer is kept for `screen`.
 
+config OLP_STORAGE_ENCRYPTED
+    bool "Encrypt NVS (device key, Wi-Fi) with the eFuse HMAC key: release builds"
+    default n
+    select NVS_ENCRYPTION
+    help
+        ESP-IDF's HMAC-based NVS encryption (no flash encryption needed). ON in release builds
+        (sdkconfig.release, which also sets NVS_SEC_HMAC_EFUSE_KEY_ID=5), OFF for development and
+        the simulators. The first boot with it BURNS a random key into eFuse KEY5: one-time and
+        irreversible (README "Encrypted storage").
+
 menu "Updates (OTA)"
 
 config OLP_BOARD_ID
