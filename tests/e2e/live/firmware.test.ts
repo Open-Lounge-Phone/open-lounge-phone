@@ -5,8 +5,9 @@
 //   OLP_LIVE=1 OLP_FIRMWARE=1 PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
 //     OLP_CHROMIUM="/path/to/chrome" npx vitest run tests/e2e/live/firmware.test.ts
 //
-// Env: OLP_LIVE_A (server, default https://t1.openloungephone.app: the simulator build connects
-// to t1, see firmware/sdkconfig.sim), OLP_LIVE_OUT (logs, PNGs and the result JSON; default
+// Env: OLP_E2E_SERVER (required: a disposable test server with open sign-up, e.g.
+// https://t2.openloungephone.app; never the owner's l1 — the test creates an account there; the
+// simulator firmware is built for it: OLP_SIM_SERVER in firmware/tools/sim.sh), OLP_LIVE_OUT (logs, PNGs and the result JSON; default
 // firmware/build-sim/e2e), OLP_LIVE_KEEP=1 (keep the test account), OLP_CHROMIUM (a Chromium
 // binary if playwright-core's own isn't installed), OLP_FW_NO_BUILD=1 (skip the sim build),
 // WOKWI_CLI_TOKEN or firmware/.wokwi-token, OLP_WOKWI_CLI.
@@ -22,8 +23,13 @@ import { api, type Person } from "../twoServers.ts";
 import { CHROMIUM_ARGS, Companion, until } from "./browser.ts";
 import { buildSimFirmware, FIRMWARE, WokwiPhone } from "./wokwi.ts";
 
-const LIVE = process.env.OLP_LIVE === "1" && process.env.OLP_FIRMWARE === "1";
-const A = process.env.OLP_LIVE_A ?? "https://t1.openloungephone.app";
+const A = process.env.OLP_E2E_SERVER ?? "";
+const LIVE = process.env.OLP_LIVE === "1" && process.env.OLP_FIRMWARE === "1" && A !== "";
+/** The simulator build's own server (firmware/sdkconfig.sim) is the owner's: never test there. */
+if (LIVE && new URL(A).host === "l1.openloungephone.app") {
+  throw new Error("OLP_E2E_SERVER must be a disposable test server, not l1");
+}
+const WSS = A.replace(/^http/, "ws").replace(/\/$/, "");
 const RUN = process.env.OLP_LIVE_RUN ?? Math.random().toString(36).slice(2, 7);
 const OUT = process.env.OLP_LIVE_OUT ?? join(FIRMWARE, "build-sim/e2e");
 const PHONE_NAME = "Wokwi phone";
@@ -77,6 +83,11 @@ async function boot(phone: WokwiPhone): Promise<string> {
   await phone.waitFor(/Open Lounge Phone firmware [\d.]+ \(simulator build\)/, 90_000, "boot");
   await phone.waitFor(/WIFI connected/, 60_000, "Wi-Fi");
   phone.send("hook down"); // the Wokwi hook button isn't held: put the handset down
+  await phone.waitFor(
+    new RegExp(`WS connecting ${WSS.replace(/[.]/g, "\\.")}/ws/device`),
+    60_000,
+    "test server",
+  );
   await phone.waitFor(/WS open/, 90_000, "WebSocket open");
   await phone.waitFor(/"t":"pair\.begin","alg":"p256"/, 20_000, "pair.begin");
   const m = await phone.waitFor(/PAIRING CODE: (\d{6})/, 30_000, "pairing code");
@@ -146,7 +157,7 @@ it.skipIf(!LIVE)(
   "firmware e2e: the simulated phone against a live server",
   async () => {
     mkdirSync(OUT, { recursive: true });
-    if (process.env.OLP_FW_NO_BUILD !== "1") buildSimFirmware();
+    if (process.env.OLP_FW_NO_BUILD !== "1") buildSimFirmware(WSS);
     const pw = await import(process.env.PLAYWRIGHT_CORE ?? "playwright-core");
     const chromium = pw.chromium ?? pw.default?.chromium;
     browser = (await chromium.launch({

@@ -23,9 +23,12 @@ function token(): string {
   return readFileSync(file, "utf8").trim();
 }
 
-/** Builds the simulator firmware (firmware/tools/sim.sh build). */
-export function buildSimFirmware(): void {
-  const r = spawnSync(join(FIRMWARE, "tools/sim.sh"), ["build"], { encoding: "utf8" });
+/** Builds the simulator firmware for `server` (wss://…): firmware/tools/sim.sh build. */
+export function buildSimFirmware(server: string): void {
+  const r = spawnSync(join(FIRMWARE, "tools/sim.sh"), ["build"], {
+    encoding: "utf8",
+    env: { ...process.env, OLP_SIM_SERVER: server },
+  });
   if (r.status !== 0) throw new Error(`sim build failed:\n${r.stdout}\n${r.stderr}`);
 }
 

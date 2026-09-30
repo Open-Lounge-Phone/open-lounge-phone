@@ -1,11 +1,11 @@
 # Wokwi simulator build (layered on sdkconfig.defaults): UART0 console, no PSRAM,
-# Wokwi-GUEST Wi-Fi, the disposable test server.
+# Wokwi-GUEST Wi-Fi, the owner's server (tests point it elsewhere with the `server` command).
 CONFIG_OLP_SIM=y
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 # CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG is not set
 # CONFIG_SPIRAM is not set
 CONFIG_OLP_WIFI_SSID="Wokwi-GUEST"
 CONFIG_OLP_WIFI_PASSWORD=""
-CONFIG_OLP_SERVER_URL="wss://t1.openloungephone.app"
+CONFIG_OLP_SERVER_URL="wss://l1.openloungephone.app"
 # Wokwi's emulated ECC is slow: prefer P-256 (fixed-point tables) over X25519 for ECDHE.
 # CONFIG_MBEDTLS_ECP_DP_CURVE25519_ENABLED is not set

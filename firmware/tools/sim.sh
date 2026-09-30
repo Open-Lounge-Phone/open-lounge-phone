@@ -3,6 +3,7 @@
 #   firmware/tools/sim.sh build        build into firmware/build-sim
 #   firmware/tools/sim.sh smoke        build + run wokwi/smoke.yaml; log + display PNG in build-sim/
 #   firmware/tools/sim.sh interactive  build + run with the console on stdin (type `help`)
+# OLP_SIM_SERVER=wss://host builds for another server (default: sdkconfig.sim, the owner's l1).
 # Needs ESP-IDF (IDF_PATH or ~/esp/esp-idf), wokwi-cli, and a token in firmware/.wokwi-token
 # (or WOKWI_CLI_TOKEN). The token is never printed.
 set -euo pipefail
@@ -14,8 +15,18 @@ if ! command -v idf.py >/dev/null; then
 fi
 WOKWI="$(command -v wokwi-cli || echo "$HOME/.local/bin/wokwi-cli")"
 build() {
+  # sdkconfig.defaults never override an existing sdkconfig: regenerate it when the server changes.
+  local defaults="sdkconfig.defaults;sdkconfig.sim" want="${OLP_SIM_SERVER:-default}"
+  if [ -n "${OLP_SIM_SERVER:-}" ]; then
+    printf 'CONFIG_OLP_SERVER_URL="%s"\n' "$OLP_SIM_SERVER" >build-sim/sdkconfig.server
+    defaults="$defaults;build-sim/sdkconfig.server"
+  fi
+  if [ "$(cat build-sim/.server 2>/dev/null)" != "$want" ]; then
+    rm -f build-sim/sdkconfig
+    echo "$want" >build-sim/.server
+  fi
   idf.py -B build-sim -D SDKCONFIG=build-sim/sdkconfig \
-    -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.sim" build >build-sim.log 2>&1 ||
+    -D "SDKCONFIG_DEFAULTS=$defaults" build >build-sim.log 2>&1 ||
     { tail -40 build-sim.log; exit 1; }
   mv build-sim.log build-sim/build.log
 }

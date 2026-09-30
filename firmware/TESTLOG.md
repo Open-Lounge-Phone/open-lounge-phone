@@ -1,7 +1,7 @@
 # Firmware test log
 
-Wokwi simulation (ESP32-S3 devkit, `wokwi/diagram.json`) against the disposable test server
-`t1.openloungephone.app`, driven by `tests/e2e/live/firmware.test.ts` (serial console + the
+Wokwi simulation (ESP32-S3 devkit, `wokwi/diagram.json`). E2E runs r1-r4 used the disposable
+test server `t1.openloungephone.app` (since deleted; now `OLP_E2E_SERVER`); the smoke runs l1, driven by `tests/e2e/live/firmware.test.ts` (serial console + the
 companion in Chromium with a virtual passkey) or by `wokwi/smoke.yaml`. Newest last.
 
 | Date | Run | Step | Result | Issue found | Fix |
@@ -18,3 +18,4 @@ companion in Chromium with a virtual passkey) or by `wokwi/smoke.yaml`. Newest l
 | 2026-09-30 | e2e r2 | screen | FAIL | Some framebuffer dumps unreadable: another task's log line split a row | One `printf` per row — `76a9057` |
 | 2026-09-30 | e2e r3 | 1, 6 | FAIL (infra) | Wokwi stalled: simulation A stopped printing mid-reconnect for ~110 s; simulation B never got past the CLI banner. No firmware fault in the log | Re-run later |
 | 2026-09-30 | e2e r4 | 0-7 | PASS | all 8 steps (3.5 min), every framebuffer PNG readable (pairing, About words, idle, IN CALL, QUIET TIL 23:59 / MISSED MOM, new code after the wipe); test account deleted | — |
+| 2026-09-30 | smoke l1 | boot → code | PASS | t1 deleted; the sim build now targets the owner's `wss://l1.openloungephone.app`. l1 has the same chain (GTS WE1 → GTS Root R4, identical SHA-256), so the pinned intermediate is unchanged. TLS opened on the first attempt; `PAIRING CODE: 399091` (left unpaired, no accounts made on l1) | this commit |

@@ -168,7 +168,8 @@ void net_ws_open(const char *url) {
 #if CONFIG_OLP_SIM
   // Wokwi emulates the S3's software ECC ~7x slower than silicon, so a full handshake with the
   // bundle (P-256 + P-384 chain checks, ECDHE) outlasts Cloudflare's handshake timeout. The sim
-  // build trusts the servers' current intermediate (Google Trust Services WE1, until 2029-02)
+  // build trusts the servers' current intermediate (Google Trust Services WE1, until 2029-02;
+  // l1 and the hub use it: check with `openssl s_client -showcerts`)
   // directly, which skips the P-384 check. Hardware builds always use the certificate bundle.
   extern const char sim_ca_start[] asm("_binary_sim_ca_we1_pem_start");
 #endif

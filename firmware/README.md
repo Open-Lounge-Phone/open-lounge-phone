@@ -75,7 +75,7 @@ The log shows every protocol message (`-> …`, `<- …`), `STATE <kind>`, `STRI
 
 `wokwi/diagram.json` is an ESP32-S3 devkit with 12 key buttons, the hook button (held = on the
 hook), the status LED, the buzzer and a display. The simulator build (`sdkconfig.sim`) joins
-`Wokwi-GUEST`, connects to the test server `wss://t1.openloungephone.app`, prints the console
+`Wokwi-GUEST`, connects to the owner's server `wss://l1.openloungephone.app`, prints the console
 on UART0 (so keys 6 and 7 move from IO43/IO44 to IO35/IO36) and has no PSRAM.
 
 ```sh
@@ -88,7 +88,8 @@ firmware/tools/sim.sh interactive  # the console on your terminal (hook, keys, s
 `smoke.yaml` boots, joins Wi-Fi, opens the WebSocket, waits for `pair.code` and the strip, moves
 the hook, walks MENU → About → BACK, presses keys, and saves `build-sim/screenshot.png` (the
 simulated display) and `build-sim/display.png` (the firmware's own framebuffer). To finish
-pairing live, run `sim.sh interactive` and type the printed code into the companion on t1.
+pairing live, run `sim.sh interactive` and type the printed code into the companion on l1
+(Home → + Pair a phone). Another server: `server wss://host` at the `olp>` prompt.
 
 Simulator notes (all only in the sim build):
 - **Display stand-in:** Wokwi has no supported 2.9" e-paper part. The community chip
