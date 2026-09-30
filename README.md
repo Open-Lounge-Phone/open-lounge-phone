@@ -27,7 +27,8 @@ network, ever.
 
 ## Status
 
-The software works end to end today; the hardware is being designed in the open.
+The software works end to end today. The hardware has its first **early dev board prototype**:
+[hardware v0.1](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) (rev A), ordered from JLCPCB on 2026-09-30. Its files are in that release.
 
 | Phase | What | State |
 |---|---|---|
@@ -47,7 +48,7 @@ The software works end to end today; the hardware is being designed in the open.
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
 | Firmware | ESP32-S3 firmware v0 (ESP-IDF, [firmware/](firmware/README.md)): keys, hook, ringer, status light, 2.9" e-paper strip; Wi-Fi and server from the console; pairing with a P-256 key, sign-in, `wipe`; calls ring, answer and hang up (signaling only); a Wokwi simulation and a live end-to-end test | v0 done in the simulator (2026-09-30), not yet on a board; next: call audio (esp-webrtc), SoftAP Wi-Fi setup, OTA, encrypted NVS |
-| Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | schematic done and checked (M1, 2026-09-30, 53 parts); placement and layout next (M2); product enclosure not designed yet |
+| Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | **v0.1 early dev board prototype** ([`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1), rev A): designed, routed (DRC clean) and first boards ordered 2026-09-30; bring-up pending; product enclosure not designed yet (a prototype box exists) |
 
 More: [architecture](docs/architecture.md), [federation](docs/federation.md) (and its
 [spec](docs/federation-spec.md)),
