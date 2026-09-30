@@ -31,7 +31,7 @@ First message on every connection.
 | `model` | `"web-emulator"` \| `"desktop"` \| `"esp32s3"` | yes |  |
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
-| `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = the e-ink strip (standard on the board); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
+| `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = a 2.9-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
 
 ### `call.extension`
 
@@ -438,7 +438,7 @@ Call progress update.
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
-| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it. |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
 
 ### `rtc.config`
 
@@ -902,7 +902,7 @@ Call progress update.
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
-| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it. |
+| `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
 
 ### `rtc.config`
 

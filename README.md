@@ -4,7 +4,8 @@ A free, open-source, screen-free phone. Real mechanical keys, a handset, and not
 browser, no games, no strangers.
 
 - **Kids' phone** — calls only the contacts a guardian approves, respects quiet hours (callers
-  get voicemail with a transcript instead of waking anyone up), and reports its battery level.
+  get voicemail with a transcript instead of waking anyone up), and its guardian sees when it
+  was last online.
 - **Voicemail everywhere** — any call that isn't answered (no answer, declined, busy, quiet
   hours, unavailable) goes to a greeting — the standard one, your recorded name, or your own —
   and the message lands in the callee's inbox, across servers too.
@@ -33,7 +34,7 @@ The software works end to end today; the hardware is being designed in the open.
 | M0–M4 | Protocol and core logic; self-hosted server, browser phone, companion app; Cloudflare backend; invites, passkeys, voicemail with transcripts | done |
 | Lounge | QR takeover with a key-press proof, ephemeral sessions, "open to chat" | done (software) |
 | Security (software) | Four-word device fingerprint (phone MENU → About, pairing, the phone's page); phone page with last seen, software version and remove-and-wipe; retention defaults and transcription on/off per space | done (software) |
-| Recording (C2) | Opt-in per space (never with kids' phones), always announced to every party (spoken prompt, recording light, a mark in the apps, other servers too), made by the recording side's own client and uploaded, in the timeline and call log, transcribed only where the space transcribes, expiring with history; other servers may refuse recorded calls | done (software) |
+| Recording (C2) | Opt-in per space (never with kids' phones), always announced to every party (spoken prompt, the phone's status light and `REC` on its display, a mark in the apps, other servers too), made by the recording side's own client and uploaded, in the timeline and call log, transcribed only where the space transcribes, expiring with history; other servers may refuse recorded calls | done (software) |
 | Device lifecycle | Modes at claim (kids, personal desk phone, Lounge); per-space Lounge session length (idle, end of day, until logout); optional house-line keys and "who's here" on idle Lounge phones (off by default); remove = the phone wipes itself | done (server, apps, browser phone); firmware later |
 | P1 / P1b | Accounts and handles (`name@server`), several households per account, open sign-up; spaces (home, team, organization); handles reserved 90 days | done |
 | P2 | Connections ("buddies"): knock, accept, decline, block — on one server and across servers (signed server-to-server requests) | done |
@@ -46,7 +47,7 @@ The software works end to end today; the hardware is being designed in the open.
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
 | Firmware | ESP32-S3 firmware, starting on dev boards | not started |
-| Hardware | One board (ESP32-S3, 12 hot-swap keys, e-ink strip, NFC, 3.5 mm jack for an analog handset, hardware mic privacy) in a 3D-printable base | schematic revised (H5, 2026-09-30: analog handset, no speakerphone); layout to redo (H6); printable prototype box; product enclosure not designed yet |
+| Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | schematic done and checked (M1, 2026-09-30, 53 parts); placement and layout next (M2); product enclosure not designed yet |
 
 More: [architecture](docs/architecture.md), [federation](docs/federation.md) (and its
 [spec](docs/federation-spec.md)),

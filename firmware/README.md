@@ -11,16 +11,19 @@ emulator (`apps/device-web`) as its reference implementation and test peer.
 - Media is WebRTC peer to peer with the ICE servers the server sends in `rtc.config`; enable
   **Opus DTX** (`usedtx=1` in the local description, as `packages/client` `withOpusDtx` does)
   so silence costs almost nothing on a relay.
-- The handset is analog, on a 3.5 mm TRRS jack (CTIA): the ES8311 records its mic (MIC1, PGA
-  ≈ 18 dB) and drives its earpiece from OUTP; the earpiece switch and the mic supply are
-  switched by the hook sensor and the mute switch in hardware, so firmware only reads HOOK
-  (GPIO17), JACK_DET (GPIO12, high = plug in) and MIC_SENSE (GPIO10, ADC1: ≈ 1.4–2.2 V mic,
-  < 0.1 V inline button pressed or an OMTP plug, only while the mic is powered). The recording
-  light is GPIO13. No speakerphone: the NS4150B (PA_EN, GPIO38) only rings and speaks prompts.
-  If EVT shows receiver-to-mic echo, run AEC with the playback stream as the reference (same
-  I2S clock).
-- Flashing and the console use the ESP32-S3's native USB (USB-Serial-JTAG) on the power USB-C;
-  UART0 pads remain for recovery. See `hardware/schematic/pin_table.yaml`.
+- The board is the **minimal board** (`hardware/DESIGN.md`, GPIO map in
+  `hardware/schematic/pin_table.yaml`). The handset is analog, on a 3.5 mm TRRS jack (CTIA):
+  the ES8311 (I2C 0x18 on IO1/IO2; I2S MCLK IO12, BCLK IO13, WS IO14, DOUT IO21, DIN IO47)
+  records its mic on MIC1 and drives its earpiece from OUTP. Nothing is switched in hardware:
+  firmware reads HOOK (IO10, an MX switch, low = on hook, internal pull-up) and JACK_DET (IO11,
+  high = plug in, internal pull-up), mutes the earpiece on hook and only captures audio in a
+  call. No inline-button detect (a press may show as a transient on the mic ADC). No speaker:
+  the piezo ringer is IO45 (PWM, ~4 kHz resonance) and voice prompts play in the earpiece.
+  If EVT shows receiver-to-mic echo, run AEC with the playback stream as the reference.
+- Keys: 12 GPIOs with internal pull-ups, active low, debounce 5-10 ms (`pin_table.yaml`:
+  KEY_1 … KEY_0, KEY_MENU, KEY_BACK). The status LED is IO44 (the recording light too). The
+  display module is on SPI: DIN IO38, CLK IO39, CS IO40, DC IO41, RST IO42, BUSY IO48.
+- Flashing and the console use the ESP32-S3's native USB (USB-Serial-JTAG) on the USB-C port.
 
 ### Modes and remove = wipe (docs/device-lifecycle.md)
 
@@ -37,17 +40,7 @@ emulator (`apps/device-web`) as its reference implementation and test peer.
 - An idle Lounge phone may get `config.houseLine` (its keys call as the space) and
   `config.here` ("who's here"); both are off unless the space turns them on.
 
-### USB power source policy (hardware/DESIGN.md §9.2a)
+### USB power
 
-- Read the USB-C Rp advertisement on CC1/CC2 (GPIO8 / GPIO6, ADC1, per
-  `hardware/schematic/pin_table.yaml`; 5.1 kΩ Rd fitted):
-  `< 0.66 V` = Default (500 mA, also every USB-A→C cable), `0.66–1.23 V` = 1.5 A, `> 1.23 V` = 3 A.
-  Use the higher of the two pins (only the connected one carries Rp). Re-read on attach and
-  every few seconds.
-- **Kids:** full features on any source.
-- **Lounge on a Default source → reduced mode:** LEDs ≤ 10 %, ringer ≤ 0.5 W, charging off
-  (`CHG_CE` high). (The radar in the original plan is not on the board: one board, one BOM
-  since 2026-09-28.)
-  Status display: `USE 1.5A CHARGER`.
-- Always cap LEDs ≤ 30 % and amp level per `hardware/schematic/power_budget.yaml`.
-- Report it in `status`: `power: { source: "default" | "1.5A" | "3A", reduced: boolean }`.
+- The minimal board has no CC sensing and draws under 500 mA: it runs fully on any USB source.
+  Report `status.power` as `{ source: "default", reduced: false }` (or omit it).

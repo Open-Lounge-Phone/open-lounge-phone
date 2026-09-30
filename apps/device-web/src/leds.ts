@@ -50,7 +50,10 @@ export interface LedState {
 
 const OFF: Led = { color: "white", mode: "off" };
 
-/** Per-key and status LEDs for the current phone state. Pure, so firmware can mirror it. */
+/**
+ * Per-key and status LEDs for the current phone state. Pure, so firmware can mirror it. The
+ * minimal board (hardware/DESIGN.md) has only the status LED; the key lights are emulator-only.
+ */
 export function ledsFor(input: LedInput): LedState {
   const { deviceState: s, config, pairing, connection, buttons, activeKey } = input;
   const mapped = new Set(config?.buttons.map((b) => b.index) ?? []);

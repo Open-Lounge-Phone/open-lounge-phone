@@ -255,22 +255,22 @@ here" (`config.houseLine`, `config.here`).
 
 ## Phases beyond software
 
-The phone has **no main screen**: keycapped keys with per-key LEDs, a small e-ink status strip,
-handset audio, a ringer speaker, and radios and sensors. Hardware details and part choices live in [hardware/DESIGN.md](../hardware/DESIGN.md).
+The phone has **no main screen**: keycapped keys, a small e-paper status display, handset audio,
+a piezo ringer, one status LED and Wi-Fi/BLE. Hardware details and part choices live in
+[hardware/DESIGN.md](../hardware/DESIGN.md). (The browser phone also shows per-key lights; the
+minimal board does not have them.)
 
 1. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, esp-webrtc) on off-the-shelf dev boards with an
-   audio codec, an analog handset on a 3.5 mm jack, and MX-style key switches with per-key LEDs, implementing
+   audio codec, an analog handset on a 3.5 mm jack, and MX-style key switches, implementing
    the same protocol and the `deviceStep` state machine from `packages/core`.
-2. **Custom PCB** — one board, one BOM (owner, 2026-09-28) in a compact 3D-printed base: an
+2. **Custom PCB** — the minimal board (owner, 2026-09-30) in a compact 3D-printed base: an
    off-the-shelf analog G-style handset (3.5 mm TRRS plug, e.g. the Opis 60s Micro) on a raised
-   hook rest, USB-C power (also flashing and the console) with an optional battery, 12 hot-swap
-   keys with per-key LEDs, the e-ink strip, a hall-effect hook sensor that — with the mute switch —
-   cuts the handset mic's power in hardware, a light sensor, and NFC for provisioning and Lounge
-   takeover. No speakerphone: the speaker rings and speaks prompts. Schematic revised (H5,
-   2026-09-30); layout next (H6).
-3. **Lounge hardware** — the Lounge software works today with the on-screen QR code; the board
-   adds an NFC tap. mmWave presence (a presence-based logout) is deferred to a possible future
-   board.
+   hook rest that presses an MX hook switch, USB-C power (also flashing and the console), 12
+   hot-swap keys wired straight to the ESP32, a 2.9" e-paper display module on a header, an ES8311
+   codec, a piezo ringer and one status LED. No battery, NFC, speaker, per-key LEDs or hardware
+   mute switch. Schematic done (M1, 2026-09-30); placement and layout next (M2).
+3. **Lounge hardware** — the Lounge software works today with the on-screen or printed QR code
+   and a key press as the proximity proof. NFC and mmWave presence are not on the minimal board.
 
 All planned software phases are done (see the status table in the [README](../README.md)):
 interop tests run in CI and the federation protocol has a versioned spec

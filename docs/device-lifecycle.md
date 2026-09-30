@@ -39,20 +39,21 @@ the phone.
 ## Lifecycle
 
 1. **Out of the box:** no owner and no Wi-Fi. The phone generates its own device key on first boot.
-   The strip shows "Set me up", the key lights breathe, and lifting the handset plays a spoken
+   The display shows "Set me up", the status light breathes, and lifting the handset plays a spoken
    prompt.
 2. **Wi-Fi setup:**
    - **Universal path:** the phone opens a temporary network "OpenLoungePhone-XXXX", and a setup
      page lets you choose your Wi-Fi.
    - **Android:** Bluetooth setup from the companion is optional.
-   - **Later:** an NFC tap or the sticker opens the page directly.
-3. **Claim:** an NFC tap (an NDEF URL, which iPhones read natively), the QR code on the base, or the
-   6-digit code on the strip. You pick the space and the mode.
+   - **Later:** the QR sticker on the base opens the page directly.
+3. **Claim:** the QR code on the base or the 6-digit code on the display (the minimal board has no
+   NFC). You pick the space and the mode.
 4. **Daily use:** per mode, as above.
 5. **Updates and health:**
    - Signed OTA updates install only while the phone is hung up and idle, overnight by default.
    - The firmware has two slots, so a bad update rolls back automatically.
-   - The owner sees battery, signal, offline alerts and reduced-power mode.
+   - The owner sees signal, offline alerts and (on phones that report them) battery and
+     reduced-power mode.
 6. **Remove, reset, retire:**
    - **Remove in the app:** the server forgets the device key, and the phone wipes itself: at once
      if it's connected (`wipe`), otherwise the next time it connects — the server remembers the
@@ -69,6 +70,6 @@ the phone.
      history, no keys that still work), so anyone can reset it and claim it again. That keeps
      second-hand and handed-down phones easy.
 
-See [security-model.md](security-model.md) for the protections and trust signals. It covers the
-hardware mute, the mic-power lights, the handset mic being unpowered on hook and when muted,
+See [security-model.md](security-model.md) for the protections and trust signals. It covers what
+the minimal board's hardware does and doesn't guarantee (no hardware mute switch or mic lights),
 secure boot, and the four-word device fingerprint.

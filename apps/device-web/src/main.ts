@@ -98,7 +98,7 @@ const CLOSE_REPLACED = 4000;
 const params = new URLSearchParams(location.search);
 const profile = params.get("profile")?.trim() || "default";
 const startedAt = Date.now();
-// The hardware display is undecided: a small e-ink stripe or 14-segment LED characters.
+// The board has a header for a display module (standard: a 2.9-inch e-paper module).
 // `none` = Kids Lite (no display; keys carry printed labels), `segments` = 14-segment module.
 const displayParam = params.get("display");
 const displayMode =
@@ -1274,7 +1274,7 @@ function renderDisplay(): void {
     return div;
   });
   if (qr) {
-    // The takeover code (on hardware: the printed QR/NFC tag, or the strip if it can draw one).
+    // The takeover code (on hardware: the printed QR tag, or the display if it can draw one).
     const code = document.createElement("a");
     code.className = "eink-qr";
     code.href = qr;

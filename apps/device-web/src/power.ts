@@ -8,9 +8,10 @@ export type Variant = "kids" | "personal" | "lounge";
 export type PowerSource = "default" | "1.5A" | "3A";
 
 /**
- * Mirrors the firmware policy in hardware/DESIGN.md §9.2a: the Lounge phone needs a ≥1.5 A
- * source for full features and runs in reduced mode (radar off, dimmer LEDs, quieter ringer)
- * on a Default source. Kids works on anything.
+ * The power-source policy reported in `status.power`: a Lounge phone on a Default USB source
+ * reports reduced mode. (The minimal board, hardware/DESIGN.md §2, draws under 500 mA and runs
+ * fully on any USB source; the policy stays for boards with heavier loads.) Kids works on
+ * anything.
  */
 export function powerStatus(variant: Variant, source: PowerSource) {
   return { source, reduced: variant === "lounge" && source === "default" };

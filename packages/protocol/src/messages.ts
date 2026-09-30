@@ -204,7 +204,7 @@ export const RecordingNotice = z
     maxMs: z.number().int().positive().optional().describe("With `ticket`: the longest recording."),
   })
   .describe(
-    'This call or room is recorded. Every party gets it — on other servers too, from their own server — before the recorder gets its ticket. Play prompt `call.recorded` ("This call is recorded."), show a mark in the app, and on a phone light the recording light, until the call ends. Absent = not recorded.',
+    'This call or room is recorded. Every party gets it — on other servers too, from their own server — before the recorder gets its ticket. Play prompt `call.recorded` ("This call is recorded."), show a mark in the app, and on a phone light its recording light (the status LED on the minimal board) and show `REC`, until the call ends. Absent = not recorded.',
   );
 export type RecordingNotice = z.infer<typeof RecordingNotice>;
 
@@ -392,7 +392,7 @@ export const DeviceHello = z
     display: z
       .enum(["eink", "seg14", "oled", "none"])
       .describe(
-        "Status display fitted: `eink` = the e-ink strip (standard on the board); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
+        "Status display fitted: `eink` = a 2.9-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
       ),
   })
   .describe("First message on every connection.");
@@ -682,7 +682,7 @@ export const CallStateMsg = z
         "With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`).",
       ),
     recording: RecordingNotice.optional().describe(
-      "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light from it.",
+      "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it.",
     ),
   })
   .describe("Call progress update.");
