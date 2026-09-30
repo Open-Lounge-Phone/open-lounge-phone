@@ -43,3 +43,13 @@ export and the project footprint library (hot-swap socket, board marking).
 
 Hardware designs in this directory are licensed under the
 [CERN Open Hardware Licence v2 – Strongly Reciprocal](LICENSE).
+
+## Versions
+
+| Tag | What | Date |
+|---|---|---|
+| [`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) | Minimal board, silkscreen **rev A**: the first board ordered from JLCPCB. The release holds the exact Gerbers, BOM/CPL, schematic and layer PDFs, STEP, and the build guide | 2026-09-30 |
+
+Hardware releases are tagged `hw-vX.Y`; firmware releases are tagged `fw-vX.Y.Z`. A board revision
+gets a new `hw-` tag and a new silkscreen rev letter, and the fab files for a tag come from that
+tag's release, not from a fresh `make fab` (the router isn't byte-for-byte deterministic yet).
