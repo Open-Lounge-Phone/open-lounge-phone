@@ -1,6 +1,6 @@
 // Wi-Fi station (credentials from NVS, else Kconfig) and the WebSocket to the server
-// (esp_websocket_client + TLS with the ESP-IDF certificate bundle).
-// TODO: SoftAP provisioning ("OpenLoungePhone-XXXX" + a setup page), see docs/device-lifecycle.md.
+// (esp_websocket_client + TLS with the ESP-IDF certificate bundle). The setup network (SoftAP
+// provisioning) is prov.c; it saves credentials here.
 #include "net.h"
 
 #include <stdlib.h>
@@ -10,6 +10,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_netif.h"
 #include "esp_websocket_client.h"
 #include "esp_wifi.h"
@@ -68,19 +69,36 @@ void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_l
   if (esp_netif_get_ip_info(s_netif, &info) == ESP_OK) snprintf(ip, ip_len, IPSTR, IP2STR(&info.ip));
 }
 
+static esp_timer_handle_t s_retry;
+static volatile bool s_slow_retry;  // the setup network is up: retry rarely (scans disturb it)
+
+bool net_has_wifi(void) {
+  char ssid[33];
+  nvs_str("ssid", ssid, sizeof ssid, CONFIG_OLP_WIFI_SSID);
+  return ssid[0] != '\0';
+}
+
+void net_slow_retry(bool slow) { s_slow_retry = slow; }
+
+static void retry_now(void *arg) {
+  if (s_ssid[0]) esp_wifi_connect();
+}
+
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
   static int retries;
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
     if (s_ssid[0]) esp_wifi_connect();
+    else app_post(EV_WIFI_DOWN, 0, NULL);  // nothing to join: the setup network decides
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-    if (s_wifi_up) app_post(EV_WIFI_DOWN, 0, NULL);
     s_wifi_up = false;
-    // Back off a little (up to ~10 s) and try again, forever.
-    int delay = retries < 10 ? 500 * (retries + 1) : 10000;
+    app_post(EV_WIFI_DOWN, 0, NULL);
+    // Back off a little (up to ~10 s; a minute while the setup network is up: a station
+    // scanning for a missing network hops channels and drops the setup network's clients).
+    int delay = s_slow_retry ? 60000 : retries < 10 ? 500 * (retries + 1) : 10000;
     retries++;
     ESP_LOGW(TAG, "wifi disconnected; retry in %d ms", delay);
-    vTaskDelay(pdMS_TO_TICKS(delay));
-    if (s_ssid[0]) esp_wifi_connect();
+    esp_timer_stop(s_retry);
+    esp_timer_start_once(s_retry, (uint64_t)delay * 1000);
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *e = data;
     retries = 0;
@@ -132,6 +150,9 @@ static void start_qemu_ethernet(void) {
   ESP_ERROR_CHECK(esp_netif_attach(s_netif, esp_eth_new_netif_glue(eth)));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, eth_event, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, eth_event, NULL));
+  char saved[33];
+  nvs_str("ssid", saved, sizeof saved, CONFIG_OLP_WIFI_SSID);
+  ESP_LOGI(TAG, "saved Wi-Fi: %s (QEMU uses its Ethernet)", saved[0] ? saved : "(none)");
   snprintf(s_ssid, sizeof s_ssid, "qemu-ethernet");
   ESP_ERROR_CHECK(esp_eth_start(eth));
 }
@@ -151,9 +172,16 @@ void net_start(void) {
   ESP_ERROR_CHECK(esp_wifi_init(&init));
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, NULL));
+  const esp_timer_create_args_t t = {.callback = retry_now, .name = "wifi_retry"};
+  ESP_ERROR_CHECK(esp_timer_create(&t, &s_retry));
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   apply_wifi();
   ESP_ERROR_CHECK(esp_wifi_start());
+}
+
+void net_save_wifi(const char *ssid, const char *pass) {
+  nvs_put("ssid", ssid);
+  nvs_put("pass", pass ? pass : "");
 }
 
 void net_set_wifi(const char *ssid, const char *pass) {

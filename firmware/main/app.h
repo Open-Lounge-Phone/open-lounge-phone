@@ -23,6 +23,8 @@ typedef enum {
   EV_RECONNECT,    // console: server changed
   EV_RTC_SDP,      // data = our local SDP (malloc'd): send it as the offer or the answer
   EV_RTC_STATE,    // a = 1 media connected, 2 disconnected, 3 failed to connect
+  EV_PROV_OPEN,    // console / MENU: open the Wi-Fi setup network
+  EV_PROV_SAVED,   // the setup page saved new Wi-Fi: restart
 } ev_type_t;
 
 typedef struct {

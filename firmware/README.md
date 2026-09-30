@@ -6,7 +6,7 @@ the handset state machine (`packages/core/src/device.ts` → `main/phone.c`), th
 (`strip.ts` → `strip.c`), the status light (`leds.ts` → `render()` in `main.c`) and a first
 part of the menu (`menu.ts` → `menu.c`).
 
-**Status: pairs, signs in, and makes and takes calls with two-way audio (WebRTC, G.711).** Call
+**Status: sets up its Wi-Fi, pairs, signs in, and makes and takes calls with two-way audio (WebRTC, G.711).** Call
 audio is verified end to end in the QEMU simulator with a test tone; the codec path (ES8311) needs a
 real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 
@@ -14,13 +14,13 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 |---|---|
 | 12 keys + hook + jack detect (interrupts + debounce), piezo ring and beeps, status LED patterns (idle, pairing, offline, ringing, missed) | Voice prompts (the pairing code read out), AEC if the handset echoes; TURN over TCP/TLS (broken in `esp_peer` 1.5.6) |
 | 2.9" e-paper (SSD1680) behind a small display interface; the protocol's strip model (≤ 2 lines × 16 chars, large type) | Partial refresh uses the controller's built-in mode (`0x22 0xFC`): check on a real panel |
-| Wi-Fi from NVS (console `wifi`) or Kconfig; server from NVS (console `server`) or Kconfig (default `wss://l1.openloungephone.app`) | SoftAP provisioning ("OpenLoungePhone-XXXX" + a setup page) |
+| **Wi-Fi setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server from NVS (`server`) or Kconfig (default `wss://l1.openloungephone.app`) | Bluetooth setup from the companion; the QR sticker |
 | WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute | OTA updates (two slots, signed, rollback) |
 | `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Encrypted NVS / flash encryption (the device key is in plain NVS) |
 | `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
-| **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`), factory reset (MENU+BACK at power-on) |
-| `wipe`: erases the device key, id and settings (keeps Wi-Fi), reboots, pairs again | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
-| MENU → 1 Volume, 3 Wi-Fi status, 0 About (firmware version + the four fingerprint words) | |
+| **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
+| `wipe`: erases the device key, id and settings (keeps Wi-Fi), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
+| MENU → 1 Volume, 3 Wi-Fi status (→ 1 set up Wi-Fi), 0 About (firmware version + the four fingerprint words) | |
 
 ## Build and flash
 
@@ -59,6 +59,9 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | Command | |
 |---|---|
 | `wifi <ssid> [password]` | save Wi-Fi in NVS and connect |
+| `wifi forget` | forget the saved Wi-Fi (the setup network opens after `reboot`) |
+| `setup` | open the Wi-Fi setup network now |
+| `setup test [ssid [pass]]` | fetch the setup page from the phone itself and post a bad form (and, with an ssid, a real one): bring-up and Wokwi |
 | `server [wss://host]` | show or set the server (reconnects) |
 | `status` | phone state, connection, device id, Wi-Fi, the four words, the strip |
 | `key <0-9\|menu\|back>`, `hook <up\|down>` | press a key or move the hook, as the real switches do |
@@ -77,6 +80,33 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 The log shows every protocol message (`-> …`, `<- …`), `STATE <kind>`, `STRIP [line|line]`,
 `SIG led=…`/`SIG ring=…`, `TONE …`, `RTC state …`/`RTC CONNECTED …`, `AUDIO tx=… rx=…` every 5 s in
 a call, and the pairing code as **`PAIRING CODE: 123456`**.
+
+## Wi-Fi setup network
+
+With no Wi-Fi saved (a new phone, or after a factory reset) the phone opens **"OpenLoungePhone-XXXX"**
+(the last MAC bytes) and shows the steps on its display: the network name, its **8-digit password**
+(WPA2, fresh each time, shown only there: joining needs someone at the phone) and
+`OPEN 192.168.4.1`. Phones usually open the page by themselves: every DNS name answers with the
+phone's address and the OS connectivity checks (`/generate_204`, `/hotspot-detect.html`, …) are
+redirected to the page. The page lists nearby networks (strongest first) or takes a typed name,
+and a password (checked: 8-63 characters or 64 hex); **Save and restart** stores it and the phone
+restarts onto it. The page answers only on the setup network, never on the home LAN.
+
+It also opens when the saved Wi-Fi has been unreachable for 3 minutes (it closes again if the
+saved one comes back), from MENU → 3 Wi-Fi → 1, from the console (`setup`), and with **MENU+BACK
+held at power-on**: release after 3 s for setup, keep holding to 10 s for a factory reset (the
+display says which). While it is open the phone retries its saved Wi-Fi only once a minute (a
+station scanning for a missing network hops channels and drops the setup network's clients).
+The decisions are pure code (`main/prov_core.c`: when to open/close, form decoding, input checks,
+scan list, the captive DNS answer) with host tests; `main/prov.c` is the ESP side.
+
+**Tested:** host unit tests; QEMU e2e step 10 (no radio in QEMU: the setup site runs on its
+Ethernet through a forwarded port) — `wifi forget` → reboot → the setup screen → the page in
+Chromium: captive redirect, a short password refused, save → restart with the saved network.
+**Not tested in a simulator:** the SoftAP itself (QEMU has no Wi-Fi; Wokwi has no Wi-Fi clients
+and its CI minutes were used up; `wokwi/setup.yaml` covers the MENU+BACK hold and the phone's own
+`setup test` when they're back), the captive-portal pop-up on real phones (iOS, Android), and
+the physical MENU+BACK hold. Bring-up: `hardware/BRINGUP.md` §6.
 
 ## Call audio
 
@@ -133,7 +163,8 @@ quality over real Wi-Fi: [`hardware/BRINGUP.md`](../hardware/BRINGUP.md).
 
 ## Pairing a phone
 
-1. Power it; it joins Wi-Fi and shows `PAIR 123 456` on the strip (and prints `PAIRING CODE:`).
+1. Power it. A new phone opens its Wi-Fi setup network first (above); once online it shows
+   `PAIR 123 456` on the strip (and prints `PAIRING CODE:`).
 2. In the companion app: Home → **+ Pair a phone**, type the code, pick the mode and name.
 3. The phone reconnects, signs the challenge and shows `READY` with its owner line. MENU → 0
    shows its four words; the app shows the same four for that phone.

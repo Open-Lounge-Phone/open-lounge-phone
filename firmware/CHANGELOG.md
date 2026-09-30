@@ -1,5 +1,24 @@
 # Firmware changelog
 
+## 0.3.0 — 2026-09-30: Wi-Fi setup network
+
+- With no Wi-Fi saved the phone opens "OpenLoungePhone-XXXX" (WPA2, a fresh 8-digit password shown
+  on the display) with a captive-portal DNS and a one-page setup site at http://192.168.4.1/:
+  nearby networks or a typed name, a checked password, Save and restart. The page answers only on
+  the setup network.
+- It also opens after 3 minutes without the saved Wi-Fi (and closes when it's back), from
+  MENU → 3 Wi-Fi → 1, from the console (`setup`), and with MENU+BACK held 3 s at power-on;
+  held 10 s it's a factory reset (erases everything, as docs/device-lifecycle.md says).
+- The display shows the steps. Console: `setup`, `setup test` (the phone fetches and posts its own
+  page), `wifi forget`.
+- Wi-Fi reconnects use a timer instead of sleeping in the event handler (which stalled every other
+  Wi-Fi event), and retry once a minute while the setup network is up.
+- Pure logic in `main/prov_core.c` with host tests; QEMU e2e step 10 drives the page from Chromium.
+
+Found and fixed (TESTLOG.md): a phone without saved Wi-Fi closed the setup network as soon as any
+link came up; the setup site answered 403 because the HTTP server listens dual-stack (IPv4
+clients appear as `::ffff:a.b.c.d`).
+
 ## 0.2.0 — 2026-09-30: call audio
 
 Two-way call audio between the phone and the apps.

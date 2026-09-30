@@ -42,8 +42,12 @@ the phone.
    The display shows "Set me up", the status light breathes, and lifting the handset plays a spoken
    prompt.
 2. **Wi-Fi setup:**
-   - **Universal path:** the phone opens a temporary network "OpenLoungePhone-XXXX", and a setup
-     page lets you choose your Wi-Fi.
+   - **Universal path** (**built**, firmware 0.3): with no Wi-Fi saved the phone opens a temporary
+     network "OpenLoungePhone-XXXX" (WPA2; its 8-digit password is on the display, so only
+     someone at the phone can join) and a setup page at http://192.168.4.1/ (phones open it as a
+     captive portal) lets you pick your Wi-Fi and type its password; the phone saves it and
+     restarts. It also opens when the saved Wi-Fi has been unreachable for 3 minutes (moved, new
+     password), from MENU → 3 Wi-Fi → 1, or with MENU+BACK held 3 s at power-on.
    - **Android:** Bluetooth setup from the companion is optional.
    - **Later:** the QR sticker on the base opens the page directly.
 3. **Claim:** the QR code on the base or the 6-digit code on the display (the minimal board has no
@@ -61,7 +65,8 @@ the phone.
      the challenge with that key, so nobody else can trigger it. Deleting an account or space
      wipes its phones the same way. The browser phone deletes its key from IndexedDB, its id and
      its first-run choice, and starts over.
-   - **Factory reset** (MENU+BACK held at power-on): wipes Wi-Fi, owner and keys, and generates a new
+   - **Factory reset** (MENU+BACK held **10 s** at power-on; released after 3 s it opens the
+     Wi-Fi setup network instead; the display says which): wipes Wi-Fi, owner and keys, and generates a new
      device key.
    - **Changing mode or owner:** always goes through a wipe. No data ever carries over. The server
      enforces it: `PATCH /api/devices/:id` only renames a phone and answers `409` to any owner or

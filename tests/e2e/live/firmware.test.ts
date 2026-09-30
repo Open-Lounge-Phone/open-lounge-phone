@@ -154,6 +154,75 @@ async function pair(phone: WokwiPhone, g: Companion, code: string): Promise<stri
   return `${id}; words ${fw.join(" ")}; ${strip[0]}`;
 }
 
+const SETUP_PORT = 18080;
+
+/**
+ * The Wi-Fi setup network (SoftAP provisioning). QEMU has no radio, so its Ethernet stands in and
+ * the setup site is reached through a forwarded port; Wokwi (no port forwarding) uses the phone's
+ * own `setup test`. Forget Wi-Fi → reboot → the setup screen → the page in Chromium (form, a bad
+ * password refused, save) → the phone restarts with the saved network and no setup network.
+ */
+async function provisioning(phone: WokwiPhone, b: Browser): Promise<string> {
+  const qemu = SIM === "qemu";
+  if (qemu) (phone as { hostfwd?: string }).hostfwd = `tcp:127.0.0.1:${SETUP_PORT}-:80`;
+  phones.push(phone);
+  phone.start();
+  await phone.waitFor(/Open Lounge Phone firmware [\d.]+ \(simulator build/, 90_000, "boot");
+  await phone.consoleReady();
+  phone.send("wifi forget");
+  await phone.waitFor(/wifi forgotten/, 10_000);
+  phone.send("reboot");
+  await phone.waitFor(/PROV open \(no Wi-Fi saved\)/, 90_000, "setup opens by itself");
+  const ap = await phone.waitFor(/PROV AP UP ssid=(OpenLoungePhone-[0-9A-F]{4})/, 20_000);
+  const strip = await phone.waitFor(
+    /STRIP \[WI-FI SETUP: JOIN\|(OpenLoungePhone-[0-9A-F]{4})\|PASSWORD (\d{8})\|OPEN 192\.168\.4\.1\]/,
+    20_000,
+    "the setup steps on the display",
+  );
+  assert(strip[1] === ap[1], "display and network names differ");
+  await snapshot(phone, `C10-setup-${RUN}`);
+  await phone.waitFor(/olp> /, 60_000, "console after the reboot");
+  // The phone checks its own site (the way the Wokwi run can).
+  phone.send("setup test");
+  await phone.waitFor(/PROV TEST GET \/ 200 form/, 30_000, "self-test page");
+  await phone.waitFor(/PROV TEST GET \/generate_204 302/, 30_000, "self-test captive redirect");
+  await phone.waitFor(/PROV TEST POST bad 200 error-shown/, 30_000, "self-test bad input");
+  if (!qemu) return `${ap[1]}; self-test only (no port forwarding in Wokwi)`;
+
+  const base = `http://127.0.0.1:${SETUP_PORT}`;
+  // What a phone's captive-portal check sees.
+  const probe = await fetch(`${base}/hotspot-detect.html`, { redirect: "manual" });
+  assert(probe.status === 302, `captive probe ${probe.status}`);
+  assert(probe.headers.get("location") === "http://192.168.4.1/", "captive redirect target");
+  // A person in a browser: the page, a too-short password (refused), then a good one.
+  const page = await b.newPage();
+  try {
+    await page.goto(`${base}/`);
+    await page.getByRole("heading", { name: "Set up your phone" }).waitFor({ timeout: 20_000 });
+    await page.getByLabel("Or type its name").fill("Home Wi-Fi & Co");
+    await page.getByLabel("Password").fill("short");
+    await page.getByRole("button", { name: "Save and restart" }).click();
+    await page
+      .getByText("Wi-Fi passwords have at least 8 characters.")
+      .waitFor({ timeout: 20_000 });
+    await page.getByLabel("Or type its name").fill("Home Wi-Fi & Co");
+    await page.getByLabel("Password").fill("pa ss&word=1");
+    await page.getByRole("button", { name: "Save and restart" }).click();
+    await page.getByRole("heading", { name: "Saved" }).waitFor({ timeout: 20_000 });
+    await page.getByText("joins Home Wi-Fi & Co").waitFor({ timeout: 5_000 });
+  } finally {
+    await page.close();
+  }
+  await phone.waitFor(/PROV SAVED ssid=Home Wi-Fi & Co \(restarting\)/, 20_000);
+  await phone.waitFor(/Open Lounge Phone firmware/, 60_000, "restart");
+  await phone.waitFor(/saved Wi-Fi: Home Wi-Fi & Co/, 30_000, "the network was saved");
+  await phone.waitFor(/WIFI connected/, 60_000);
+  await new Promise((r) => setTimeout(r, 5_000));
+  const after = phone.log.slice(phone.cursor);
+  assert(!/PROV open/.test(after), "the setup network opened again after saving");
+  return `${ap[1]}; captive redirect, bad password refused, saved "Home Wi-Fi & Co", restarted`;
+}
+
 /** Puts the handset down (a no-op when idle) so a failed step doesn't leave a call running. */
 async function idle(phone: WokwiPhone): Promise<void> {
   phone.send("hook down");
@@ -512,6 +581,15 @@ it.skipIf(!LIVE)(
         return `old ${oldWords} → new ${words[1]}; code ${again[1]}`;
       });
     await phone2.stop();
+
+    // ------------------------------------------------------------ simulation C
+    if (want("10")) {
+      const phone3 = simPhone(join(OUT, `serial-C-${RUN}.log`));
+      await step("10", "no Wi-Fi → the setup network and its page → save → restart", () =>
+        provisioning(phone3, browser as Browser),
+      );
+      await phone3.stop();
+    }
 
     const failed = results.filter((r) => r.status === "FAIL");
     assert(failed.length === 0, `failed: ${failed.map((r) => r.id).join(", ")}`);

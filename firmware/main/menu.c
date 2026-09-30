@@ -36,6 +36,11 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     if (d == 0) m->screen = MENU_ABOUT;
     else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 3) m->screen = MENU_WIFI;
+  } else if (m->screen == MENU_WIFI) {
+    if (digit_of(key) == 1) {
+      app_post(EV_PROV_OPEN, 0, NULL);  // 1 = set up Wi-Fi (the setup network)
+      m->screen = MENU_CLOSED;
+    }
   } else if (m->screen == MENU_VOLUME) {
     int d = digit_of(key);
     if (d == 1) audio_set_volume(audio_volume() - 1);
@@ -81,13 +86,15 @@ int menu_lines(const menu_t *m, char out[4][25]) {
         snprintf(out[0], 25, "WI-FI OFFLINE");
         snprintf(out[1], 25, "%.24s", ssid[0] ? ssid : "NOT SET");
         upper(out[1]);
-        return 2;
+        snprintf(out[2], 25, "1 SET UP WI-FI");
+        return 3;
       }
       snprintf(out[0], 25, "%.24s", ssid);
       upper(out[0]);
       snprintf(out[1], 25, "SIGNAL %d DBM", rssi);
       snprintf(out[2], 25, "%s", ip);
-      return 3;
+      snprintf(out[3], 25, "1 SET UP WI-FI");
+      return 4;
     }
     default:
       return 0;

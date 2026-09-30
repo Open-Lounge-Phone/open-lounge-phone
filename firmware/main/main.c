@@ -23,6 +23,8 @@
 #include "nvs_flash.h"
 #include "phone.h"
 #include "proto.h"
+#include "prov.h"
+#include "prov_core.h"
 #include "media.h"
 #include "signals.h"
 #include "strip.h"
@@ -54,6 +56,7 @@ static int64_t s_call_started = -1;
 static char s_shown[4][25];
 static int s_shown_n = -1;
 static phone_kind_t s_logged_kind = PH_IDLE;
+static prov_t s_prov;  // the Wi-Fi setup network (prov_core.c decides)
 static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
@@ -174,6 +177,15 @@ static void render(void) {
 
   char lines[4][25] = {{0}};
   int n = menu_lines(&s_menu, lines);
+  bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
+  if (n == 0 && prov_ap_active() && !busy) {
+    // The steps, while the setup network is open: join it with the password, open the page.
+    snprintf(lines[0], 25, "WI-FI SETUP: JOIN");
+    snprintf(lines[1], 25, "%.24s", prov_ssid());
+    snprintf(lines[2], 25, "PASSWORD %s", prov_password());
+    snprintf(lines[3], 25, "OPEN 192.168.4.1");
+    n = 4;
+  }
   if (n == 0) {
     char strip[2][STATUS_WIDTH + 1];
     strip_input_t in = {
@@ -227,6 +239,66 @@ void app_print_status(void) {
          identity_device_id()[0] ? identity_device_id() : "-", s_code[0] ? s_code : "-",
          ssid[0] ? ssid : "-", rssi, ip[0] ? ip : "-", w[0], w[1], w[2], w[3], s_cfg.missed_count,
          s_shown[0], s_shown[1], menu_screen_name(s_menu.screen));
+}
+
+// --- the Wi-Fi setup network ----------------------------------------------------------------
+
+static void prov_event(prov_event_t ev, bool forced) {
+  switch (prov_step(&s_prov, ev, net_has_wifi(), forced, now_ms())) {
+    case PROV_ACT_START_AP:
+      ESP_LOGI(TAG, "PROV open (%s)", ev == PROV_EV_TICK ? "saved Wi-Fi unreachable for 3 min"
+                                      : ev == PROV_EV_OPEN ? "asked for"
+                                      : forced            ? "MENU+BACK at power-on"
+                                                          : "no Wi-Fi saved");
+      prov_start_ap();
+      break;
+    case PROV_ACT_STOP_AP:
+      ESP_LOGI(TAG, "PROV close (back on the saved Wi-Fi)");
+      prov_stop_ap();
+      break;
+    case PROV_ACT_REBOOT: {
+      const char *lines[] = {"WI-FI SAVED", "RESTARTING"};
+      display_text(lines, 2);
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      esp_restart();
+      break;
+    }
+    case PROV_ACT_NONE:
+      break;
+  }
+}
+
+static void show_hold(int held_ms) {
+  static int last = -1;
+  int stage = held_ms >= PROV_HOLD_RESET_MS ? 2 : held_ms >= PROV_HOLD_SETUP_MS ? 1 : 0;
+  if (stage == last) return;
+  last = stage;
+  static const char *text[3][2] = {{"KEEP HOLDING", "FOR WI-FI SETUP"},
+                                   {"RELEASE: WI-FI", "HOLD: RESET ALL"},
+                                   {"RELEASE NOW:", "FACTORY RESET"}};
+  display_text(text[stage], 2);
+  ESP_LOGI(TAG, "BOOT HOLD %d ms: %s %s", held_ms, text[stage][0], text[stage][1]);
+}
+
+/** MENU+BACK at power-on: 3 s = the setup network, 10 s = factory reset. Returns "forced". */
+static bool boot_keys(void) {
+  int held = input_boot_hold_ms(show_hold);
+  switch (prov_boot_hold(held)) {
+    case PROV_HOLD_RESET: {
+      ESP_LOGW(TAG, "FACTORY RESET (MENU+BACK held %d ms): erasing Wi-Fi, owner and keys", held);
+      const char *lines[] = {"FACTORY RESET", "RESTARTING"};
+      display_text(lines, 2);
+      nvs_flash_erase();
+      vTaskDelay(pdMS_TO_TICKS(1500));
+      esp_restart();
+      return false;
+    }
+    case PROV_HOLD_SETUP:
+      return true;
+    case PROV_HOLD_NONE:
+      return false;
+  }
+  return false;
 }
 
 // --- protocol ----------------------------------------------------------------------------
@@ -504,6 +576,7 @@ void app_main(void) {
 #else
   display_start(&display_epd_ssd1680);
 #endif
+  bool forced_setup = boot_keys();
   net_start();       // starts the radio: esp_fill_random is truly random from here on
   identity_init();   // loads or generates the device key
 #if CONFIG_OLP_AUDIO_TEST_DEVICE
@@ -514,6 +587,8 @@ void app_main(void) {
   media_init();
   input_start();
   console_start();
+  prov_init(&s_prov);
+  prov_event(PROV_EV_BOOT, forced_setup);
   render();
 
   bool started = false;
@@ -525,13 +600,21 @@ void app_main(void) {
         case EV_HOOK: on_hook(ev.a); break;
         case EV_JACK: break;  // nothing to switch: the mic is only read in a call anyway
         case EV_WIFI_UP:
+          prov_event(PROV_EV_STA_UP, false);
           if (!started) {
             started = true;
             open_socket();
           }
           break;
         case EV_WIFI_DOWN:
+          prov_event(PROV_EV_STA_DOWN, false);
           if (!s_ws_open) s_conn = CONN_OFFLINE;
+          break;
+        case EV_PROV_OPEN:
+          prov_event(PROV_EV_OPEN, false);
+          break;
+        case EV_PROV_SAVED:
+          prov_event(PROV_EV_SAVED, false);
           break;
         case EV_WS_OPEN: on_open(); break;
         case EV_WS_CLOSED: on_closed(ev.a); break;
@@ -571,6 +654,7 @@ void app_main(void) {
       }
     }
     tick();
+    prov_event(PROV_EV_TICK, false);
     sync_media();
     render();
   }

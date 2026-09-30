@@ -17,14 +17,20 @@
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "net.h"
+#include "prov.h"
 #include "sdkconfig.h"
 
 void app_print_status(void);  // main.c
 
 static int cmd_wifi(int argc, char **argv) {
   if (argc < 2) {
-    printf("usage: wifi <ssid> [password]\n");
+    printf("usage: wifi <ssid> [password] | wifi forget\n");
     return 1;
+  }
+  if (!strcmp(argv[1], "forget")) {
+    net_save_wifi("", "");  // an explicit "none": the Kconfig default isn't used either
+    printf("wifi forgotten: the setup network opens after `reboot`\n");
+    return 0;
   }
   net_set_wifi(argv[1], argc > 2 ? argv[2] : "");
   printf("wifi saved: %s\n", argv[1]);
@@ -157,6 +163,20 @@ static int cmd_ice(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_setup(int argc, char **argv) {
+  if (argc >= 2 && !strcmp(argv[1], "test")) {
+    prov_selftest(argc > 2 ? argv[2] : NULL, argc > 3 ? argv[3] : "");
+    return 0;
+  }
+  if (argc > 1) {
+    printf("usage: setup [test [ssid [password]]]\n");
+    return 1;
+  }
+  app_post(EV_PROV_OPEN, 0, NULL);
+  printf("opening the Wi-Fi setup network\n");
+  return 0;
+}
+
 static int cmd_reboot(int argc, char **argv) {
   esp_restart();
   return 0;
@@ -175,7 +195,7 @@ void console_start(void) {
   ESP_ERROR_CHECK(esp_console_new_repl_uart(&dev, &cfg, &repl));
 #endif
   const esp_console_cmd_t cmds[] = {
-      {.command = "wifi", .help = "wifi <ssid> [password]: save Wi-Fi and connect", .func = cmd_wifi},
+      {.command = "wifi", .help = "wifi <ssid> [password] | wifi forget: save (or forget) Wi-Fi", .func = cmd_wifi},
       {.command = "server", .help = "server [wss://host]: show or set the server", .func = cmd_server},
       {.command = "status", .help = "phone, connection and Wi-Fi state", .func = cmd_status},
       {.command = "key", .help = "key <0-9|menu|back>: press a key", .func = cmd_key},
@@ -189,6 +209,8 @@ void console_start(void) {
       {.command = "volume", .help = "volume [0-10]: earpiece volume (10 = the cap)", .func = cmd_volume},
       {.command = "rtc", .help = "rtc [log on|off]: call media (WebRTC) state", .func = cmd_rtc},
       {.command = "ice", .help = "ice [all|udp|tcp|tls]: which ICE servers the next call uses", .func = cmd_ice},
+      {.command = "setup", .help = "setup [test [ssid [pass]]]: open the Wi-Fi setup network (test: fetch/post its page from the phone)",
+       .func = cmd_setup},
       {.command = "reboot", .help = "restart", .func = cmd_reboot},
   };
   for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++)

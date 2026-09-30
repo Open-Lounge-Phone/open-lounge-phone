@@ -7,6 +7,8 @@ CONFIG_ETH_USE_OPENETH=y
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 # CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG is not set
 CONFIG_OLP_SERVER_URL="wss://l1.openloungephone.app"
+# "Saved Wi-Fi" so the phone doesn't open its setup network (the link is the Ethernet anyway)
+CONFIG_OLP_WIFI_SSID="qemu-ethernet"
 # QEMU's OpenCores Ethernet drops RX frames when its few DMA buffers fill (RTP bursts)
 CONFIG_ETH_OPENETH_DMA_RX_BUFFER_NUM=16
 CONFIG_ETH_OPENETH_DMA_TX_BUFFER_NUM=8

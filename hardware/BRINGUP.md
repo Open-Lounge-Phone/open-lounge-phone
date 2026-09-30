@@ -78,8 +78,23 @@ The earpiece plays only with the handset lifted; `audio tone` overrides that for
 7. Hang up with the hook: `call media off (mic off)` in the log; the companion shows the call
    ended.
 
-## 6. What to record
+## 6. Wi-Fi setup network
+
+1. `wifi forget`, `reboot`: the display shows `WI-FI SETUP: JOIN`, `OPENLOUNGEPHONE-XXXX`,
+   `PASSWORD dddddddd`, `OPEN 192.168.4.1`; the log shows `PROV AP UP`.
+2. From an iPhone and an Android phone: join the network with the displayed password. The OS
+   should open the setup page by itself (captive portal); if not, open http://192.168.4.1/.
+   Note which OS did what.
+3. The page lists nearby networks. Try a wrong-length password (refused on the page), then the
+   right one: "Saved", the phone restarts, joins, and pairs as usual.
+4. Hold MENU+BACK while plugging in USB: `KEEP HOLDING` → after 3 s `RELEASE: WI-FI` (release:
+   setup opens) → after 10 s `FACTORY RESET` (release: Wi-Fi, owner and keys erased; it asks for
+   Wi-Fi setup again).
+5. Turn the home router off for 3+ minutes: the setup network opens; turn it back on: it closes
+   and the phone reconnects.
+
+## 7. What to record
 
 Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the chosen cap,
 `miclevel` for speech and for silence, the PGA gain used, call setup time (`RTC CONNECTED … ms`),
-underruns per minute, and whether echo was heard.
+underruns per minute, whether echo was heard, and how each phone OS handled the setup page.

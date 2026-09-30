@@ -1,0 +1,22 @@
+# MENU+BACK held at power-on → the Wi-Fi setup network, then the phone checks its own setup page.
+# NOT RUN YET: written for firmware 0.3.0 while the Wokwi plan's CI minutes were used up (the
+# same flow runs in QEMU through the console, tests/e2e/live/firmware.test.ts step 10). Wokwi has
+# no Wi-Fi clients, so nothing can join the setup network here.
+#   wokwi-cli firmware/wokwi --scenario firmware/wokwi/setup.yaml --timeout 180000
+name: Open Lounge Phone Wi-Fi setup (MENU+BACK at power-on)
+version: 1
+author: Open Lounge Phone
+steps:
+  - set-control: { part-id: keymenu, control: pressed, value: 1 }
+  - set-control: { part-id: keyback, control: pressed, value: 1 }
+  - wait-serial: 'BOOT HOLD'
+  - wait-serial: 'RELEASE: WI-FI'
+  - set-control: { part-id: keymenu, control: pressed, value: 0 }
+  - set-control: { part-id: keyback, control: pressed, value: 0 }
+  - wait-serial: 'PROV open (MENU+BACK at power-on)'
+  - wait-serial: 'PROV AP UP ssid=OpenLoungePhone-'
+  - wait-serial: 'STRIP [WI-FI SETUP: JOIN|'
+  - wait-serial: 'olp>'
+  - write-serial: "setup test\n"
+  - wait-serial: 'PROV TEST GET / 200 form'
+  - wait-serial: 'PROV TEST POST bad 200 error-shown'

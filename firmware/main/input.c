@@ -61,6 +61,28 @@ static void task(void *arg) {
 
 bool input_hook_up(void) { return s_hook_up; }
 
+int input_boot_hold_ms(void (*progress)(int held_ms)) {
+#if CONFIG_OLP_QEMU
+  return 0;  // QEMU's GPIOs all read low: they'd look held
+#endif
+  const int pins[2] = {PIN_KEY_MENU, PIN_KEY_BACK};
+  gpio_config_t cfg = {
+      .pin_bit_mask = (1ULL << pins[0]) | (1ULL << pins[1]),
+      .mode = GPIO_MODE_INPUT,
+      .pull_up_en = GPIO_PULLUP_ENABLE,
+  };
+  gpio_config(&cfg);
+  vTaskDelay(pdMS_TO_TICKS(10));  // let the pull-ups settle
+  int held = 0;
+  // Both keys down (active low); stop counting when either is released, or after the reset time.
+  while (!gpio_get_level(pins[0]) && !gpio_get_level(pins[1]) && held < 12000) {
+    if (progress) progress(held);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    held += 50;
+  }
+  return held;
+}
+
 void input_start(void) {
   uint64_t mask = 0;
   for (int i = 0; i < N_PINS; i++) mask |= 1ULL << pin_at(i);

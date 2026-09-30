@@ -5,6 +5,12 @@
 void net_start(void);
 /** Store Wi-Fi credentials in NVS and reconnect. */
 void net_set_wifi(const char *ssid, const char *pass);
+/** Store Wi-Fi credentials without reconnecting (the setup page: the phone restarts). "" = none. */
+void net_save_wifi(const char *ssid, const char *pass);
+/** Saved Wi-Fi exists (NVS, else the Kconfig default). */
+bool net_has_wifi(void);
+/** While the setup network is up, retry the saved Wi-Fi only once a minute. */
+void net_slow_retry(bool slow);
 /** The server base URL (NVS, else Kconfig), e.g. wss://l1.openloungephone.app */
 void net_server_url(char *out, size_t len);
 void net_set_server(const char *url);

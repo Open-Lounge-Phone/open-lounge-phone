@@ -72,6 +72,12 @@ supply; the owner dropped them with the rest of that design on 2026-09-30.)
 - **Hub operators can see metadata** (who called whom, and when), never call audio. For full
   assurance, run your own server.
 
+- **Wi-Fi setup network** (**built**, firmware 0.3): WPA2 with a fresh random 8-digit password
+  shown only on the phone's display, so joining it needs someone at the phone. The setup page
+  answers only on that network (not on the home LAN), and only while setup is open; the Wi-Fi
+  password is stored like the device key (NVS)
+  and never logged.
+
 ## Trust signals people can see
 
 1. **Owner and mode:** the strip always shows them, e.g. "Kids · Smith home", "Lounge · free" or
