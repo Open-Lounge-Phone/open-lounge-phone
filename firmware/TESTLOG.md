@@ -17,3 +17,4 @@ companion in Chromium with a virtual passkey) or by `wokwi/smoke.yaml`. Newest l
 | 2026-09-30 | e2e r2 | 0-7 | PASS | all 8 steps in 236 s; test account deleted | — |
 | 2026-09-30 | e2e r2 | screen | FAIL | Some framebuffer dumps unreadable: another task's log line split a row | One `printf` per row — `76a9057` |
 | 2026-09-30 | e2e r3 | 1, 6 | FAIL (infra) | Wokwi stalled: simulation A stopped printing mid-reconnect for ~110 s; simulation B never got past the CLI banner. No firmware fault in the log | Re-run later |
+| 2026-09-30 | e2e r4 | 0-7 | PASS | all 8 steps (3.5 min), every framebuffer PNG readable (pairing, About words, idle, IN CALL, QUIET TIL 23:59 / MISSED MOM, new code after the wipe); test account deleted | — |
