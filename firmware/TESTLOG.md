@@ -12,7 +12,8 @@ companion in Chromium with a virtual passkey) or by `wokwi/smoke.yaml`. Newest l
 | 2026-09-30 | smoke | scenario | FAIL | Scenario bug: `wait-serial` only sees output after it starts, so waiting after releasing a key missed the log line | Wait while the key is held — `9e374aa` |
 | 2026-09-30 | smoke | all | PASS | boot, Wi-Fi, WebSocket, `pair.code`, hook, MENU → About, keys, screenshot (49 s) | — |
 | 2026-09-30 | e2e r1 | 0-3, 5-7 | PASS | sign-up, boot + code, pairing + P-256 auth + words match, outgoing call active, reconnect, quiet hours → voicemail → MISSED MOM, remove → wipe → new key + code | — |
-| 2026-09-30 | e2e r1 | 4 incoming | FAIL | Test bug: waited for the LED/buzzer log lines before the strip line, which is printed first | Wait for the strip first — (this commit) |
+| 2026-09-30 | e2e r1 | 4 incoming | FAIL | Test bug: waited for the LED/buzzer log lines before the strip line, which is printed first | Wait for the strip first — `76a9057` |
 | 2026-09-30 | e2e r1 | log | note | `WS closed0` when a socket closed without a code | `1bd1f45` |
 | 2026-09-30 | e2e r2 | 0-7 | PASS | all 8 steps in 236 s; test account deleted | — |
-| 2026-09-30 | e2e r2 | screen | FAIL | Some framebuffer dumps unreadable: another task's log line split a row | One `printf` per row — (this commit) |
+| 2026-09-30 | e2e r2 | screen | FAIL | Some framebuffer dumps unreadable: another task's log line split a row | One `printf` per row — `76a9057` |
+| 2026-09-30 | e2e r3 | 1, 6 | FAIL (infra) | Wokwi stalled: simulation A stopped printing mid-reconnect for ~110 s; simulation B never got past the CLI banner. No firmware fault in the log | Re-run later |

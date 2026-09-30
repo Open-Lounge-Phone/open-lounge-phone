@@ -35,7 +35,7 @@ The software works end to end today; the hardware is being designed in the open.
 | Lounge | QR takeover with a key-press proof, ephemeral sessions, "open to chat" | done (software) |
 | Security (software) | Four-word device fingerprint (phone MENU → About, pairing, the phone's page); phone page with last seen, software version and remove-and-wipe; retention defaults and transcription on/off per space | done (software) |
 | Recording (C2) | Opt-in per space (never with kids' phones), always announced to every party (spoken prompt, the phone's status light and `REC` on its display, a mark in the apps, other servers too), made by the recording side's own client and uploaded, in the timeline and call log, transcribed only where the space transcribes, expiring with history; other servers may refuse recorded calls | done (software) |
-| Device lifecycle | Modes at claim (kids, personal desk phone, Lounge); per-space Lounge session length (idle, end of day, until logout); optional house-line keys and "who's here" on idle Lounge phones (off by default); remove = the phone wipes itself | done (server, apps, browser phone); firmware later |
+| Device lifecycle | Modes at claim (kids, personal desk phone, Lounge); per-space Lounge session length (idle, end of day, until logout); optional house-line keys and "who's here" on idle Lounge phones (off by default); remove = the phone wipes itself | done (server, apps, browser phone); firmware: remove = wipe done, modes and factory reset later |
 | P1 / P1b | Accounts and handles (`name@server`), several households per account, open sign-up; spaces (home, team, organization); handles reserved 90 days | done |
 | P2 | Connections ("buddies"): knock, accept, decline, block — on one server and across servers (signed server-to-server requests) | done |
 | P3 | Calls across servers, voicemail, opt-in presence, Lounge guests from other servers | done |
@@ -46,7 +46,7 @@ The software works end to end today; the hardware is being designed in the open.
 | P3.5 | Rooms: party lines, phone rooms with addresses (`standup@host`, dialable from any phone's key), host mute/remove/lock, cross-server join; hold, instant 3-way (Add caller → Merge) and blind/attended transfer; a peer-to-peer mesh (≤ 4) or a relay (Cloudflare Realtime SFU, or LiveKit when self-hosting) with top-3 forwarding, idle drop and fair-use metering | done (software); relayed rooms are encrypted in transit, end-to-end (SFrame) planned |
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
-| Firmware | ESP32-S3 firmware, starting on dev boards | not started |
+| Firmware | ESP32-S3 firmware v0 (ESP-IDF, [firmware/](firmware/README.md)): keys, hook, ringer, status light, 2.9" e-paper strip; Wi-Fi and server from the console; pairing with a P-256 key, sign-in, `wipe`; calls ring, answer and hang up (signaling only); a Wokwi simulation and a live end-to-end test | v0 done in the simulator (2026-09-30), not yet on a board; next: call audio (esp-webrtc), SoftAP Wi-Fi setup, OTA, encrypted NVS |
 | Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | schematic done and checked (M1, 2026-09-30, 53 parts); placement and layout next (M2); product enclosure not designed yet |
 
 More: [architecture](docs/architecture.md), [federation](docs/federation.md) (and its
@@ -67,7 +67,7 @@ apps/server-cloudflare Worker + Durable Objects + D1 + R2, and the deploy script
 apps/cli             `npx openloungephone`: deploy, self-host setup, status, doctor
 apps/device-web      the phone in a browser (keys, LEDs, status strip, handset)
 apps/companion       companion PWA for guardians, grown-ups and operators
-firmware/            ESP32-S3 firmware (later)
+firmware/            ESP32-S3 firmware (ESP-IDF) and its Wokwi simulation
 hardware/            schematic, board layout and prototype box, all as code
 docs/                architecture, federation (+ spec), hub, privacy, generated protocol reference
 ```
