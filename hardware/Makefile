@@ -46,7 +46,8 @@ place: build tools
 
 # Placement review: DRC (build/review/main-drc.json), straight-line wiring length + crossings,
 # decoupling gaps and the owner image build/review/placement.png (lanes drawn in the image only).
-# Leaves the board unrouted: `make route` puts the copper back.
+# It re-places the board (unrouted) for the review, then runs `make route` so the committed
+# kicad/main/main.kicad_pcb always keeps its copper.
 placement: place
 	mkdir -p build/review
 	cd layout && $(KPY) dump_parts.py main ../build/review/placement.json
@@ -54,6 +55,7 @@ placement: place
 	  -o build/review/main-drc.json kicad/main/main.kicad_pcb >/dev/null
 	python3 layout/drcsum.py build/review/main-drc.json
 	$(PY) layout/review_placement.py
+	$(MAKE) route
 
 # M3 routing (layout/route.py): the placed board -> copper, GND fills, stitching, then the
 # route checks (build/review/route-metrics.txt) and KiCad DRC; fails on any DRC error or
