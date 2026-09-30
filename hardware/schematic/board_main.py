@@ -1,6 +1,6 @@
 """The minimal board (M1, owner decision 2026-09-30): core only plus one status LED.
 
-2 layers, ~160 x 88 mm (proposal, DESIGN.md §9). Blocks (one review page each):
+2 layers, 156 x 88 mm (M2 placement, DESIGN.md §9). Blocks (one review page each):
 
 - power:   USB-C receptacle (5 V sink, 2 x 5.1 k Rd, D+/D- to the ESP32 native USB through one
            USBLC6-2SC6), SGM2212-3.3 LDO (800 mA), bulk + decoupling per the module datasheet.
@@ -10,8 +10,9 @@
 - audio:   ES8311 codec (datasheet reference parts) + 3.5 mm TRRS handset jack (CTIA):
            earpiece on tip + ring 1, mic on sleeve with an RC-filtered bias, insertion detect
            on the tip's normally-closed contact.
-- ui:      1x8 header for a ready-made SPI display module, piezo ringer on one GPIO through an
-           NPN, one status LED, board marking (logo + name) and four M3 mounting holes.
+- ui:      2x4 socket + 2 standoff holes for the WeAct 2.9" e-paper module, piezo ringer on one
+           GPIO through an NPN, one reverse-mount status LED, board marking (logo + name) and
+           four M3 mounting holes.
 
 Not on this board (owner): NFC, battery/charger/fuel gauge, per-key LEDs, I/O expander, hall
 sensor, privacy-light circuits, mute switch, speaker/amp, accelerometer, radar, extra ESD
@@ -174,8 +175,8 @@ def audio(n, GND, V3V3):
 
 
 def ui(n, GND, VBUS, V3V3):
-    # display module header (Waveshare 2.9" e-Paper order)
-    h = make("DISPLAY_HDR", ref="J3", note="SPI display module")
+    # display module socket (WeAct 2.9" e-Paper 2x4 order; the module plugs in directly)
+    h = make("DISPLAY_HDR", ref="J3", note="SPI display module (WeAct 2.9\" plugs in)")
     h["VCC"] += V3V3
     h["GND"] += GND
     for pin, net in (("DIN", "EPD_DIN"), ("CLK", "EPD_CLK"), ("CS", "EPD_CS"), ("DC", "EPD_DC"),
@@ -195,14 +196,18 @@ def ui(n, GND, VBUS, V3V3):
     q["B"] += base
     series(n["BUZZER"], base, R("1k", note="base resistor"))
 
-    # status LED: GPIO44 -> 1k -> LED -> GND (~1.3 mA)
+    # status LED: GPIO -> 1k -> reverse-mount LED -> GND (~1.5 mA), seen through a board hole
     led, led_a = make("LED_RED", ref="D2", note="status"), Net("STATUS_LED_A")
     led["A"] += led_a
     led["K"] += GND
-    series(n["STATUS_LED"], led_a, R("1k", note="status LED current (~1.3 mA)"))
+    series(n["STATUS_LED"], led_a, R("1k", note="status LED current (~1.5 mA)"))
 
     # board marking and mounting holes (layout places them; no BOM line)
     graphic("OpenLoungePhone:openloungephone_logo_F", "signature logo")
     graphic("OpenLoungePhone:openloungephone_name_F", "Open Lounge Phone")
     for _ in range(4):
         graphic("MountingHole:MountingHole_3.2mm_M3", "M3 mounting hole", prefix="H")
+    # the display module's far end rests on two M3 standoffs (its own holes are M3, WeAct
+    # drawing: 86.2 x 31.9 mm hole pattern); the 2x4 socket J3 holds the other end
+    for _ in range(2):
+        graphic("MountingHole:MountingHole_3.2mm_M3", "M3 display standoff", prefix="H")

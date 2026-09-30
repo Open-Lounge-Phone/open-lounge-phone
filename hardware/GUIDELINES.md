@@ -10,7 +10,7 @@ differently, with the reason) or **rejected** (with the reason).
 | Rule | Status | How it's met |
 |---|---|---|
 | ESD protection on user-reachable conductors | **adapted** | One USB ESD part (USBLC6-2SC6) at the USB-C connector, the only port a user plugs things into often. The jack gets passive protection only (22 Ω earpiece series resistor, AC coupling, 1 kΩ on the detect line); the owner ruled out extra ESD networks. Revisit if EVT ESD tests fail. |
-| Series resistance between anything user-facing and a GPIO | **adapted** | Jack insertion contact: 1 kΩ to IO11. Keys and the hook go **straight** to GPIOs (owner decision): an MX switch's contacts sit inside its housing and are not user-reachable. USB D+/D- go to the native USB pins behind the ESD part (USB needs them direct). RESET and BOOT are internal pinhole buttons. |
+| Series resistance between anything user-facing and a GPIO | **adapted** | Jack insertion contact: 1 kΩ to IO4. Keys and the hook go **straight** to GPIOs (owner decision): an MX switch's contacts sit inside its housing and are not user-reachable. USB D+/D- go to the native USB pins behind the ESD part (USB needs them direct). RESET and BOOT are internal pinhole buttons. |
 | Overcurrent protection | **adapted** | No fuse: a compliant USB source limits VBUS, there is no battery, and the LDO current-limits and shuts down on over-temperature (DESIGN.md §2). |
 | Reverse-polarity protection | rejected | USB-C is keyed; VBUS and GND are on fixed pins. |
 | Toy-safety standards (ASTM F963, EN 71-1, EN IEC 62115) | adopted as a design input | No sharp edges, screws needed to open the base, **captive keycaps** (§4). |

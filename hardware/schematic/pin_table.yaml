@@ -12,40 +12,40 @@
 # Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: IO43 (TXD0, ROM log).
 gpio:
   0:  {net: BOOT, strap: true, note: "BOOT button to GND; internal weak pull-up = SPI boot (p13)"}
-  1:  {net: I2C_SDA, pull: up, note: "ES8311 only; 4.7k pull-up"}
-  2:  {net: I2C_SCL, pull: up}
-  3:  {net: KEY_9, rtc: true, strap: true, low_only: true, note: "JTAG-source strap, ignored unless EFUSE_STRAP_JTAG_SEL is burned (p15)"}
-  4:  {net: KEY_1, rtc: true}
-  5:  {net: KEY_2, rtc: true}
-  6:  {net: KEY_3, rtc: true}
-  7:  {net: KEY_4, rtc: true}
-  8:  {net: KEY_8, rtc: true}
-  9:  {net: KEY_BACK, rtc: true}
-  10: {net: HOOK, rtc: true, note: "MX switch under the hook plunger: low = handset on the hook"}
-  11: {net: JACK_DET, rtc: true, note: "jack TN via 1k: low = no plug, high = plug in (internal pull-up)"}
-  12: {net: I2S_MCLK}
-  13: {net: I2S_BCLK}
-  14: {net: I2S_WS}
-  15: {net: KEY_5, rtc: true}
-  16: {net: KEY_MENU, rtc: true}
-  17: {net: KEY_6, rtc: true}
-  18: {net: KEY_7, rtc: true}
+  1:  {net: STATUS_LED, note: "front side, far left: LED at the band's front-left"}
+  2:  {net: HOOK, rtc: true, note: "MX switch under the hook plunger: low = handset on the hook; RTC = deep-sleep wake"}
+  3:  {net: KEY_1, strap: true, low_only: true, note: "JTAG-source strap, ignored unless EFUSE_STRAP_JTAG_SEL is burned (p15)"}
+  4:  {net: JACK_DET, note: "jack TN via 1k: low = no plug, high = plug in (internal pull-up)"}
+  5:  {net: I2S_WS}
+  6:  {net: I2S_BCLK}
+  7:  {net: I2S_DIN, note: "from ES8311 ASDOUT (record)"}
+  8:  {net: BUZZER, note: "NPN base via 1k (piezo next to the USB-C)"}
+  9:  {net: KEY_3}
+  10: {net: KEY_4}
+  11: {net: KEY_5}
+  12: {net: KEY_MENU}
+  13: {net: EPD_CLK}
+  14: {net: EPD_DIN}
+  15: {net: I2S_DOUT, note: "to ES8311 DSDIN (playback)"}
+  16: {net: I2S_MCLK}
+  17: {net: I2C_SCL, pull: up}
+  18: {net: I2C_SDA, pull: up, note: "ES8311 only; 4.7k pull-up"}
   19: {net: USB_DN, note: "native USB D- (flashing + USB-Serial-JTAG console)"}
   20: {net: USB_DP, note: "native USB D+"}
-  21: {net: I2S_DOUT, note: "to ES8311 DSDIN (playback)"}
+  21: {net: EPD_DC}
   35: {net: null, note: "reserved: octal PSRAM"}
   36: {net: null, note: "reserved: octal PSRAM"}
   37: {net: null, note: "reserved: octal PSRAM"}
-  38: {net: EPD_DIN}
-  39: {net: EPD_CLK}
-  40: {net: EPD_CS}
-  41: {net: EPD_DC}
-  42: {net: EPD_RST}
-  43: {net: null, note: "free (TXD0: ROM boot log)"}
-  44: {net: STATUS_LED, note: "RXD0 (input at boot); LED + 1k to GND"}
-  45: {net: BUZZER, strap: true, low_only: true, note: "VDD_SPI strap (must be low: 3.3 V flash); a transistor base cannot pull it high"}
-  46: {net: KEY_0, strap: true, low_only: true, note: "boot-mode strap (default low); a key can only pull it low"}
-  47: {net: I2S_DIN, note: "from ES8311 ASDOUT (record)"}
+  38: {net: EPD_RST}
+  39: {net: KEY_BACK}
+  40: {net: KEY_0}
+  41: {net: KEY_9}
+  42: {net: KEY_8}
+  43: {net: KEY_6, note: "TXD0: the ROM boot log drives it for a moment after reset; a key held then only loses the log (burn EFUSE_UART_PRINT_CONTROL to silence it)"}
+  44: {net: KEY_7, note: "RXD0 (input at boot)"}
+  45: {net: null, note: "free (VDD_SPI strap: only low-only circuits may use it)"}
+  46: {net: KEY_2, strap: true, low_only: true, note: "boot-mode strap (default low); a key can only pull it low"}
+  47: {net: EPD_CS}
   48: {net: EPD_BUSY}
 
 # I2C devices (7-bit)

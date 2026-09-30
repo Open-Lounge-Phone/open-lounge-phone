@@ -137,7 +137,7 @@ def hotswap() -> str:
     s += rect(m * -8.6, -7.4, m * 7.4, -0.3, "F.CrtYd", 0.05)
     # MX switch body outline (top side; for reference only)
     s += rect(-7, -7, 7, 7, "B.Fab", 0.1)
-    s += line(m * -6.1, -4.0, m * -6.1, -0.9, "F.SilkS")
+    s += line(m * -5.45, -4.0, m * -5.45, -0.9, "F.SilkS")   # clear of pad 1 (5.81..8.36)
     s += line(m * 4.9, -7.1, m * 4.9, -6.4, "F.SilkS")
     s += text("${REFERENCE}", 0, -8.2, "F.Fab", 0.8)
     s += model("Kailh_CPG151101S11.wrl")

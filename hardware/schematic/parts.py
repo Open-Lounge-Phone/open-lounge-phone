@@ -131,14 +131,19 @@ spec(
 )
 
 spec(
-    # 1x8 2.54 mm male header for a ready-made SPI display module, Waveshare 2.9" e-Paper
-    # order: 1 VCC, 2 GND, 3 DIN, 4 CLK, 5 CS, 6 DC, 7 RST, 8 BUSY (DESIGN.md §6)
-    "DISPLAY_HDR", ref="J", mpn="HX PZ2.54-1x8P ZZ", manufacturer="HX (Hanxia)", lcsc="C32713274",
-    footprint="Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical",
-    desc="1x8 2.54 mm pin header: SPI display module (VCC GND DIN CLK CS DC RST BUSY)",
-    datasheet="https://datasheet.lcsc.com/datasheet/pdf/85243369e68f3858b37abf71bad9b29e.pdf",
-    pins=[(1, "VCC", "pas"), (2, "GND", "pas"), (3, "DIN", "pas"), (4, "CLK", "pas"),
-          (5, "CS", "pas"), (6, "DC", "pas"), (7, "RST", "pas"), (8, "BUSY", "pas")],
+    # 2x4 2.54 mm female socket: the WeAct Studio 2.9" e-Paper module (the standard display,
+    # owner M2 2026-09-30) plugs straight in with its 2x4 header, pin order from its drawing and
+    # schematic (WeActStudio.EpaperModule, Hardware/, P1): 1 BUSY, 2 RES, 3 D/C, 4 CS, 5 SCL
+    # (CLK), 6 SDA (DIN), 7 GND, 8 VDD (3.3-5 V; its own LDO). Two M3 standoffs at the far end
+    # hold the module (H5, H6). Other modules (Waveshare, OLED, TFT) use female-male jumpers.
+    "DISPLAY_HDR", ref="J", mpn="HX PM2.54-2x4P ZC", manufacturer="HX (Hanxia)", lcsc="C32713305",
+    footprint="Connector_PinSocket_2.54mm:PinSocket_2x04_P2.54mm_Vertical",
+    desc="2x4 2.54 mm female socket: WeAct 2.9\" e-Paper module (BUSY RES DC CS CLK DIN GND VCC)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/482b54eeb534f75792299da9df2c4b10.pdf",
+    verified="WeAct drawing and schematic give the header order; which end of the module's 2x4 "
+             "header is pin 1 (as seen from the panel side) is to be confirmed on a sample",
+    pins=[(1, "BUSY", "pas"), (2, "RST", "pas"), (3, "DC", "pas"), (4, "CS", "pas"),
+          (5, "CLK", "pas"), (6, "DIN", "pas"), (7, "GND", "pas"), (8, "VCC", "pas")],
 )
 
 spec(
@@ -160,11 +165,14 @@ spec(
 )
 
 spec(
-    # KENTO KT-0603R drawing p2: the green-marked end is the cathode (its pad "2"; "1" = +).
-    # Mapped to KiCad's LED_0603 pad numbering (pad 1 = K): the marked end goes on pad 1.
-    "LED_RED", ref="D", mpn="KT-0603R", manufacturer="Hubei KENTO", lcsc="C2286",
-    footprint="LED_SMD:LED_0603_1608Metric", desc="Red LED 0603 (status)",
-    datasheet="https://datasheet.lcsc.com/datasheet/pdf/011ec3e8cb1e825f6961d29bc4db4c7a.pdf",
+    # Lite-On LTST-C230KRKT: 1206 REVERSE-MOUNT red LED (p1): soldered on the bottom side like
+    # every SMD part, it shines up through the footprint's 1.8 x 2.4 mm board cut-out to the lid
+    # light hole. p1 marks the cathode end; KiCad's reverse-mount footprint has pad 1 = K.
+    # Vf 2.0 V typ at 20 mA (p3): ~1.5 mA through 1 k from 3V3.
+    "LED_RED", ref="D", mpn="LTST-C230KRKT", manufacturer="Lite-On", lcsc="C125107",
+    footprint="LED_SMD:LED_1206_3216Metric_ReverseMount_Hole1.8x2.4mm",
+    desc="Red LED 1206 reverse mount (status, seen through a board hole)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/cf37e35ae11a8ff066e5cc002dd1bf84.pdf",
     pins=[(1, "K", "pas"), (2, "A", "pas")],
 )
 

@@ -1,7 +1,7 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build review lcsc footprints sim proto tools freerouting clean
+.PHONY: all venv build review lcsc footprints sim proto tools freerouting place placement clean
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
@@ -36,6 +36,20 @@ footprints: venv
 # Regulator load-step bench (sim/README.md): ngspice from PATH or KiCad's libngspice
 sim: venv
 	$(PY) sim/run.py
+
+# M2 placement: kicad/main/main.kicad_pcb from the netlist (layout/place.py, KiCad's Python)
+place: build tools
+	cd layout && $(KPY) place.py
+
+# Placement review: DRC (build/review/main-drc.json), straight-line wiring length + crossings,
+# decoupling gaps and the owner image build/review/placement.png (lanes drawn in the image only)
+placement: place
+	mkdir -p build/review
+	cd layout && $(KPY) dump_parts.py main ../build/review/placement.json
+	$(KICAD_APP)/Contents/MacOS/kicad-cli pcb drc --format json --severity-all \
+	  -o build/review/main-drc.json kicad/main/main.kicad_pcb >/dev/null
+	python3 layout/drcsum.py build/review/main-drc.json
+	$(PY) layout/review_placement.py
 
 # Prototype box (code CAD in enclosure/; regenerated for the minimal board in M2)
 proto:

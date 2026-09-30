@@ -4,8 +4,9 @@
 
 Board frame: x right, y down from the board's top-left corner (the rear-left corner), mm.
 Per footprint: ref, side, position, courtyard bbox (or pad bbox when there is no courtyard),
-whether it has through-hole pads, and its 3D model (resolved path, offset, rotation, scale) so
-enclosure/proto_box.py can measure part heights from the STEP models.
+whether it has through-hole pads, its 3D model (resolved path, offset, rotation, scale) so
+enclosure/proto_box.py can measure part heights from the STEP models, and its pads (number,
+net, centre, size bbox, through-hole) for layout/review_placement.py.
 """
 
 from __future__ import annotations
@@ -55,6 +56,19 @@ def main() -> None:
                            "offset": [m.m_Offset.x, m.m_Offset.y, m.m_Offset.z],
                            "rot": [m.m_Rotation.x, m.m_Rotation.y, m.m_Rotation.z],
                            "scale": [m.m_Scale.x, m.m_Scale.y, m.m_Scale.z]})
+        pads = []
+        for p in f.Pads():
+            pb = p.GetBoundingBox()
+            pads.append({
+                "n": p.GetNumber(), "net": p.GetNetname(),
+                "at": [round(pcbnew.ToMM(p.GetPosition().x) - ox, 3),
+                       round(pcbnew.ToMM(p.GetPosition().y) - oy, 3)],
+                "bb": [round(pcbnew.ToMM(pb.GetX()) - ox, 3), round(pcbnew.ToMM(pb.GetY()) - oy, 3),
+                       round(pcbnew.ToMM(pb.GetRight()) - ox, 3),
+                       round(pcbnew.ToMM(pb.GetBottom()) - oy, 3)],
+                "hole": p.GetAttribute() in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH),
+                "drill": round(pcbnew.ToMM(p.GetDrillSize().x), 3),
+            })
         pos = f.GetPosition()
         parts.append({
             "ref": f.GetReference(), "fp": str(f.GetFPID().GetLibItemName()),
@@ -65,6 +79,8 @@ def main() -> None:
             "tht": any(p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH for p in f.Pads()),
             "dnp": bool(f.IsDNP()) if hasattr(f, "IsDNP") else False,
             "models": models,
+            "value": f.GetValue(),
+            "pads": pads,
         })
     size = [pcbnew.ToMM(edge.GetWidth()) - lw, pcbnew.ToMM(edge.GetHeight()) - lw]
     data = {"board": board, "size": [round(v, 3) for v in size], "parts": parts}

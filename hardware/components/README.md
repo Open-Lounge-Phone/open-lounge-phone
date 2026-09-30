@@ -17,9 +17,9 @@ data from `schematic/lcsc_cache.json` (checked 2026-09-29/30, `make lcsc` refres
 | [es8311.md](es8311.md) | ES8311 | U3 | codec: handset mic ADC, earpiece DAC | C962342 | ext |
 | [usb-c-type-c-31-m-12.md](usb-c-type-c-31-m-12.md) | TYPE-C-31-M-12 | J1 | USB-C: 5 V in + native USB | C165948 | ext |
 | [pj-31060.md](pj-31060.md) | PJ-31060 | J2 | 3.5 mm TRRS handset jack | C2939583 | ext |
-| [display-header.md](display-header.md) | HX PZ2.54-1x8P ZZ | J3 | 1x8 header for the display module | C32713274 | ext |
+| [display-header.md](display-header.md) | HX PM2.54-2x4P ZC | J3 | 2x4 socket for the display module | C32713305 | ext |
 | [usblc6-2sc6.md](usblc6-2sc6.md) | USBLC6-2SC6 | D1 | USB D+/D- ESD | C7519 | ext |
-| [kt-0603r.md](kt-0603r.md) | KT-0603R | D2 | status LED | C2286 | basic |
+| [ltst-c230krkt.md](ltst-c230krkt.md) | LTST-C230KRKT | D2 | status LED (reverse mount) | C125107 | ext |
 | [ps1240p02bt.md](ps1240p02bt.md) | PS1240P02BT | BZ1 | piezo ringer | C76871 | ext |
 | [mmbt3904.md](mmbt3904.md) | MMBT3904 | Q1 | ringer driver | C20526 | basic |
 | [kailh-cpg151101s11.md](kailh-cpg151101s11.md) | CPG151101S11-2 | SW3-SW15 | MX hot-swap sockets: 12 keys + hook | C49352235 | ext |

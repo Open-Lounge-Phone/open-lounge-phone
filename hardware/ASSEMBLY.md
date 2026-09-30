@@ -22,8 +22,9 @@ produce Gerber X2 + Excellon, IPC-2581, a generic BOM and pick-and-place.
   Espressif's certification antenna with gain ≤ 2.33 dBi stays inside the module's
   certification (DESIGN.md §3).
 - **Handset:** any analog handset or headset with a 3.5 mm **CTIA** plug (e.g. Opis 60s Micro).
-- **Display:** a WeAct or Waveshare 2.9" e-paper module on J3 (VCC GND DIN CLK CS DC RST BUSY);
-  other SPI modules with jumper wires (DESIGN.md §6).
+- **Display:** the WeAct 2.9" e-paper module plugs into J3 (2x4 socket; swap its right-angle
+  header for a straight 2x4 male header) and rests on two M3 × 11 mm standoffs in H5/H6; other
+  SPI modules with jumper wires (DESIGN.md §6).
 - **Flashing:** plug a computer into the USB-C port; the ESP32's native USB shows up as a
   serial/JTAG device. Hold BOOT and press RESET for download mode.
 - **First power-up:** a current-limited 5 V supply (300 mA) on USB-C; check 3V3 (3.25-3.35 V)

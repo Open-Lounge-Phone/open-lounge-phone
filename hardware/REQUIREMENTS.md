@@ -13,7 +13,7 @@ LEDs, 4-layer board) went with those parts; git history keeps it. IDs were renum
 |---|---|---|---|
 | HW-FUNC-01 | 12 MX-compatible keys in hot-swap sockets, two rows of six at 19.05 mm: `1 2 3 4 5 MENU` (rear), `6 7 8 9 0 BACK` (front); each on its own ESP32 GPIO to GND with the internal pull-up (no expander, no matrix). | S (`check_keys`) | ✓ |
 | HW-FUNC-02 | Hook state from one switch pressed by the hook rest (an MX switch in a 13th socket), on an RTC GPIO; low = on hook. | S, T | ✓ / △ plunger |
-| HW-FUNC-03 | A 1x8 2.54 mm header for a ready-made SPI display module, pin order VCC GND DIN CLK CS DC RST BUSY, 3.3 V. | I | ✓ |
+| HW-FUNC-03 | A 2x4 2.54 mm socket the WeAct 2.9" e-paper module plugs into (its header order BUSY RES DC CS CLK DIN GND VCC, 3.3 V) + two M3 standoff holes at its mounting holes. | I | ✓ |
 | HW-FUNC-04 | Handset on a 3.5 mm TRRS jack (CTIA): earpiece on T and R1, mic on S, R2 GND; ES8311 codec with its datasheet reference parts; insertion detect from the jack's normally-closed tip contact. | I, T | ✓ |
 | HW-FUNC-05 | Ringer: a piezo buzzer driven by one GPIO through a transistor. | I, T | ✓ / △ loudness |
 | HW-FUNC-06 | One status LED on a GPIO. | I | ✓ |

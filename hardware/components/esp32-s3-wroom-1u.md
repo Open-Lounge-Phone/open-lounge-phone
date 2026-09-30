@@ -26,8 +26,9 @@
 
 22 µF + 100 nF at pin 2, EN 10 kΩ / 1 µF + RESET (SW1), BOOT (SW2) on GPIO0 with the internal
 pull-up only. GPIO map: `schematic/pin_table.yaml` (checked by `make build`). Straps: keys on
-GPIO3 and GPIO46 and the buzzer transistor base on GPIO45 can only pull low, which is the
-required value (GPIO45 low = 3.3 V flash). IO43 (TXD0) is free.
+GPIO3 and GPIO46 can only pull low, which is the required value; GPIO45 (VDD_SPI, must be
+low = 3.3 V flash) is left free. IO43 (TXD0) carries key 6 and IO44 (RXD0) key 7. On the board
+the module sits on the bottom with its antenna end (U.FL) at the left edge (DESIGN.md §9).
 
 ## Open issues
 

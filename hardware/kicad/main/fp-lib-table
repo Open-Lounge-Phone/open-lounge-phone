@@ -1,0 +1,4 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "OpenLoungePhone")(type "KiCad")(uri "${KIPRJMOD}/../../layout/footprints/openloungephone.pretty")(options "")(descr "Open Lounge Phone project footprints"))
+)
