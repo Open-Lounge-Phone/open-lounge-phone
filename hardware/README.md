@@ -8,8 +8,9 @@ codec for an off-the-shelf analog handset, a piezo ringer and one status LED. 53
 lights.
 
 Status: **schematic done and checked (M1)**, **placement done (M2)**: 156 × 88 mm, all SMD on
-the bottom, DRC clean, image in `build/review/placement.png` (`make placement`). Routing is
-next. Nothing to buy yet.
+the bottom, DRC clean, image in `build/review/placement.png` (`make placement`); **routed
+(M3)**: 2 layers, DRC clean, `make fab` writes Gerbers, JLC BOM/CPL and previews to
+`build/main/fab/` (DESIGN.md §9a). Nothing ordered yet.
 
 - [DESIGN.md](DESIGN.md): the design, GPIO map, cost, what the board does and doesn't do, and
   the placement (§9) and the questions still open.

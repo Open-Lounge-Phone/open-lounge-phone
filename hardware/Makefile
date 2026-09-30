@@ -1,11 +1,14 @@
 # Open Lounge Phone hardware: schematic-as-code (SKiDL). See SCHEMATIC.md.
 PY := .venv/bin/python
 
-.PHONY: all venv build review lcsc footprints sim proto tools freerouting place placement clean
+.PHONY: all venv build review lcsc footprints sim proto tools freerouting place placement route fab clean
 
 # KiCad 10 (bundled Python has pcbnew); override KICAD_APP for a different install location
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
 KPY := $(KICAD_APP)/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3
+KICAD_CLI := $(KICAD_APP)/Contents/MacOS/kicad-cli
+# `make fab PREVIEWS=dir` also copies routed-top.png, routed-bottom.png and layers.pdf there
+PREVIEWS ?=
 FR_VERSION := 2.4.1
 JDK_ARCH := $(if $(filter arm64,$(shell uname -m)),aarch64,x64)
 
@@ -42,7 +45,8 @@ place: build tools
 	cd layout && $(KPY) place.py
 
 # Placement review: DRC (build/review/main-drc.json), straight-line wiring length + crossings,
-# decoupling gaps and the owner image build/review/placement.png (lanes drawn in the image only)
+# decoupling gaps and the owner image build/review/placement.png (lanes drawn in the image only).
+# Leaves the board unrouted: `make route` puts the copper back.
 placement: place
 	mkdir -p build/review
 	cd layout && $(KPY) dump_parts.py main ../build/review/placement.json
@@ -50,6 +54,25 @@ placement: place
 	  -o build/review/main-drc.json kicad/main/main.kicad_pcb >/dev/null
 	python3 layout/drcsum.py build/review/main-drc.json
 	$(PY) layout/review_placement.py
+
+# M3 routing (layout/route.py): the placed board -> copper, GND fills, stitching, then the
+# route checks (build/review/route-metrics.txt) and KiCad DRC; fails on any DRC error or
+# unconnected item. Deterministic: the same placement gives the same copper.
+route: place
+	cd layout && $(KPY) route.py
+	mkdir -p build/review
+	cd layout && $(KPY) route_metrics.py ../build/review/route-metrics.txt
+	$(KICAD_CLI) pcb drc --format json --severity-all \
+	  -o build/review/main-drc.json kicad/main/main.kicad_pcb >/dev/null
+	python3 layout/drcsum.py build/review/main-drc.json --strict
+
+# Fab + review outputs into build/main/fab/ (Gerbers, drill, JLC BOM/CPL, IPC-2581, STEP,
+# renders, layers PDF, routed images), the GPIO map for the firmware and a 5-board JLC quote
+fab: route
+	cd layout && $(KPY) export.py main $(if $(PREVIEWS),--previews $(abspath $(PREVIEWS)))
+	$(PY) layout/gpio_map.py
+	$(PY) schematic/cost.py --boards 5 > build/main/fab/jlc-order.txt
+	cat build/main/fab/jlc-order.txt
 
 # Prototype box (code CAD in enclosure/; regenerated for the minimal board in M2)
 proto:

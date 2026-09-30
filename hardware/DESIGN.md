@@ -6,8 +6,8 @@ switch, speaker amplifier) was rejected as over-engineered. This is the fresh st
 plus one status LED**, 53 parts on a 2-layer board. The old design is in git history
 (`hardware/` before this commit). License CERN-OHL-S-2.0.
 
-Status: **M1 schematic** (SKiDL, `make build` checks it) and **M2 placement** (`make placement`:
-KiCad board, DRC, wiring metrics and `build/review/placement.png`, §9). Routing is next.
+Status: **M1 schematic** (SKiDL, `make build` checks it), **M2 placement** (`make placement`,
+§9) and **M3 routing** (`make route`, `make fab`: §9a). Next: bring-up of the first boards.
 
 ## 1. What is on the board
 
@@ -235,6 +235,40 @@ of wiring and **1 crossing** (the USBLC6's VBUS pin sits between D+ and D−, as
 pass-through use of that part). Supply decoupling: every capacitor's pad is **≤ 1.12 mm**
 from its pin. DRC: **0 violations** (0 courtyard overlaps, 0 silkscreen errors), only the
 unconnected items of an unrouted board. Image: `build/review/placement.png`.
+
+## 9a. Routing (M3)
+
+`make route` (layout/route.py) rebuilds the copper from the placed board, deterministically;
+`make fab` writes the fab and review outputs to `build/main/fab/` (Gerbers + drill, JLC BOM
+and CPL, IPC-2581, STEP, renders, `layers.pdf`, `routed-*.png`), the firmware's GPIO map
+`build/main/gpio_map.json` and a 5-board JLC quote.
+
+- **Buses by script, on the bottom:** the six rear keys and six front keys run as parallel
+  0.2 mm tracks at 0.6 mm pitch in the planned lanes with nested 45° corners; the display's
+  five lines leave J3 as one 1.27 mm-pitch bundle with a single parallel 45° jog; the hook,
+  RST, BOOT and the LED go straight to their pins.
+- **USB:** J1 -> USBLC6 (flow-through: pins 1/6 and 3/4 are one node inside the part, declared
+  as jumper pad groups) -> IO19/IO20; D- joins its second receptacle pad over the pad row,
+  D+ under it. Signal paths 26.00 / 25.91 mm (0.10 mm apart). VBUS reaches the TVS's VBUS pin
+  through the gap between its pad rows, so nothing crosses the pair and the top plane under it
+  is unbroken.
+- **Power:** VBUS 0.6 mm to the LDO; 3V3 = a 217 mm2 bottom pour on the LDO tab (heat), a
+  top-layer trunk that passes under the module south of the USB pair's end to pin 2 and J3,
+  and short spurs to the codec, EN resistor and pull-ups; a top track along the rear edge feeds
+  the mic bias.
+- **Codec corner, by hand:** JACK_DET/WS/BCLK straight down to pins 4-6; DOUT and DIN change
+  order between codec and module, so each hops over on the top (2 vias each); MCLK/SCL/SDA fan
+  out at 0.4 mm pitch; the mic line (MIC1P -> C14 -> R9) stays on the bottom with an unbroken
+  top plane above it. Routing moved a few passives: R1 0.5 mm, C3 (22 uF) into the edge column
+  beside C4, C5 above them, C7 upright beside C6, C14 in line with pin 18, and VMID's and
+  MIC1N's caps (C9, C15) into the free spot above the codec, reached through a via pair each:
+  **~6 mm from their pins instead of the 2 mm of BR-15** (both are AC-grounded reference nodes;
+  the 0.4 mm pin pitch leaves no planar way out between the MIC1P and SDA lines).
+- **GND:** fills on both layers (islands removed; the top is one piece), a via at every SMD
+  ground pad, stitching every 6 mm in the electronics band, 9 mm elsewhere and along the edges.
+- **Checks** (`build/review/route-metrics.txt`, `main-drc.json`): DRC 0 errors / 0 warnings /
+  0 unconnected; every segment at 45° multiples, no acute junctions, no top copper under the
+  USB pair or the audio lines; 1.79 m of track, 17 signal vias.
 
 ## 10. Part count and cost
 

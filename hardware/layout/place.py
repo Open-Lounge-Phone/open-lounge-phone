@@ -85,7 +85,11 @@ FIXED = {
 PAIRS = {
     "C8": (8.2, 23.3, "down"), "C11": (11.0, 23.3, "down"), "C10": (12.7, 23.3, "down"),
     "C12": (9.6, 19.9, "down"), "R6": (9.6, 16.6, "down"),
-    "C9": (13.75, 25.85, "left"), "C15": (13.75, 27.45, "left"), "C14": (13.75, 29.05, "right"),
+    # MIC1P runs straight out of pin 18 into C14 and the mic line leaves C14 northward between
+    # C10 and Q1; VMID and MIC1N (AC-grounded reference nodes) reach their caps C9/C15 in the
+    # free spot above the codec through a via pair each (M3: the 0.4 mm pin pitch leaves no
+    # planar way out for them between the MIC1P and SDA lines)
+    "C14": (14.15, 27.0, "right"), "C9": (12.3, 18.95, "left"), "C15": (12.3, 20.95, "left"),
     # I2C pull-ups right above their module pins (IO17 SCL, IO18 SDA)
     "R5": (13.4, 32.4, "down"), "R4": (15.3, 32.4, "down"),
     # mic bias column between the jack and the USB-C: 1k, 10 uF, 2.2k to the sleeve; 22 R's
@@ -121,6 +125,13 @@ AUTO = [
     ("D2", [("2", "U1:=STATUS_LED")], (0.5, 57.0, 4.4, 66.0)),
     ("R13", [("1", "U1:=STATUS_LED"), ("2", "D2:2")], (0.5, 53.9, 4.4, 66.0)),
 ]
+# M3 routing adjustments, applied after the automatic placement: ref -> (x, y[, pad-1 side])
+# - R1 (CC1 5.1 k) 0.5 mm left so the D- track runs straight down from the receptacle
+# - the module's 22 uF (C3) stands in the edge column beside its 100 nF (C4), and the EN
+#   capacitor (C5) moves above them: the key-side lanes to module pins 3-5 open up
+# - the codec's second supply cap (C7) stands upright beside C6, off the I2S lanes
+MOVES = {"R1": (17.75, 10.525), "C3": (1.675, 32.125, "down"), "C4": (3.475, 32.525, "down"),
+         "C5": (3.15, 27.9, "right"), "C7": (8.4, 30.75, "up")}
 # planned bus lanes (review_placement.py draws them): small parts stay out
 LANES = [(20.8, 21.5, 37.0, 27.3), (20.8, 21.5, 27.3, 44.0),     # rear keys
          (20.8, 43.5, 44.0, 50.0),                                # display
@@ -200,8 +211,28 @@ def write_project(out: Path, net: nl.Netlist) -> None:
     shutil.copy(LAYOUT / "fab-common.kicad_dru", out / f"{BOARD}.kicad_dru")
 
 
+# pads joined inside the part (the Python API cannot set jumper pad groups): USBLC6-2SC6
+# I/O1 = pins 1 and 6, I/O2 = pins 3 and 4 (ST datasheet: flow-through, the USB lines are
+# routed through the package)
+JUMPER_GROUPS = {"D1": '(jumper_pad_groups ("1" "6") ("3" "4"))'}
+
+
+def mark_jumpers(path: Path) -> None:
+    text = path.read_text()
+    for ref, groups in JUMPER_GROUPS.items():
+        k = text.find(f'(property "Reference" "{ref}"')
+        start = text.rfind("\t(footprint ", 0, k)
+        end = text.find("\n\t(footprint ", k)
+        if "jumper_pad_groups" in text[start:end]:        # KiCad re-saves it in its own layout
+            continue
+        uuid_end = text.find("\n", text.find("(uuid", start)) + 1
+        text = text[:uuid_end] + "\t\t" + groups + "\n" + text[uuid_end:]
+    path.write_text(text)
+
+
 def save_board(board, path: Path) -> None:
     pcbnew.SaveBoard(str(path), board)
+    mark_jumpers(path)
     pro = path.with_suffix(".kicad_pro")
     d = json.loads(pro.read_text())
     d.setdefault("board", {}).setdefault("design_settings", {}).setdefault(
@@ -499,10 +530,19 @@ def build() -> Path:
         obstacles.append(crt_box(fps[ref]))
         obstacles += hole_boxes(fps[ref])
 
+    for ref, (x, y, *side) in MOVES.items():
+        if side:
+            place_pad1(fps[ref], x, y, side[0])
+        else:
+            fps[ref].SetPosition(P(x, y))
     tidy_refs(fps)
     marking(board)
     pcb = out / f"{BOARD}.kicad_pcb"
     save_board(board, pcb)
+    # route.py starts from this untouched copy (removing copper through the Python API
+    # corrupts SWIG's object table in KiCad 10)
+    (out / "route").mkdir(exist_ok=True)
+    shutil.copy(pcb, out / "route" / "placed.kicad_pcb")
     print(f"placed {len(fps)} footprints -> {pcb.relative_to(KICAD_OUT.parent)}")
     return pcb
 
@@ -553,12 +593,32 @@ def tidy_refs(fps) -> None:
                 item.SetLayer(fab)
 
 
+REV = "rev A (M3)"
+# J3 = the WeAct module's header order (DESIGN.md §6): odd pins in the outer column
+J3_NAMES = {"1": "BUSY", "2": "RES", "3": "DC", "4": "CS", "5": "SCL", "6": "SDA", "7": "GND",
+            "8": "VCC"}
+
+
 def marking(board) -> None:
-    text(board, pcbnew.F_SilkS, "CERN-OHL-S-2.0  rev M2 placement", 84.0, 58.5, 0.9, 0.15)
+    F, Bk = pcbnew.F_SilkS, pcbnew.B_SilkS
+    text(board, F, f"CERN-OHL-S-2.0  {REV}", 84.0, 58.5, 0.9, 0.15)
     for i, legend in enumerate(KEY_ORDER):
         x, y = COLS[i % 6], (YR if i < 6 else YF)
-        text(board, pcbnew.F_SilkS, legend, x, y + (8.2 if i < 6 else -8.2), 1.0, 0.15)
-    text(board, pcbnew.F_SilkS, "HOOK", HOOK[0], HOOK[1] - 8.2, 1.0, 0.15)
+        text(board, F, legend, x, y + (8.2 if i < 6 else -8.2), 1.0, 0.15)
+    text(board, F, "HOOK", HOOK[0], HOOK[1] - 8.2, 1.0, 0.15)
+    # connectors: the USB-C and the handset jack sit under the rear edge (bottom side)
+    text(board, F, "USB-C 5V", FIXED["J1"][0], 1.35, 0.8, 0.15)
+    text(board, F, "HANDSET", FIXED["J2"][0], 1.35, 0.8, 0.15)
+    # display socket: name + pin order beside each column
+    jx, jy = J3_PIN1
+    text(board, F, "J3 DISPLAY", jx + 1.27, jy - 3 * 2.54 - 2.3, 0.8, 0.15)
+    for k in range(4):
+        y = jy - k * 2.54
+        text(board, F, f"{J3_NAMES[str(2 * k + 1)]} {2 * k + 1}", jx - 4.1, y, 0.8, 0.15)
+        text(board, F, f"{2 * k + 2} {J3_NAMES[str(2 * k + 2)]}", jx + 2.54 + 4.1, y, 0.8, 0.15)
+    # pinhole buttons (bottom side, read from below)
+    text(board, Bk, "RESET", 3.3, 18.3, 0.8, 0.15, mirror=True)
+    text(board, Bk, "BOOT", FIXED["SW2"][0], 57.4, 0.8, 0.15, mirror=True)
 
 
 if __name__ == "__main__":

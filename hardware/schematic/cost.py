@@ -130,5 +130,41 @@ def main() -> str:
             "(build/main/cost.txt)\n")
 
 
+def order(boards: int) -> str:
+    """One JLCPCB order of `boards` assembled boards (<= 5: the 5-piece PCB minimum, the small
+    order's shipping); the same price ladders and EST fees as main()."""
+    cache = load_cache()
+    m = yaml.safe_load((HERE / "cost_model.yaml").read_text())
+    rows, asm = bom_rows(), m["assembly"]
+    if boards > m["pcb"]["min_order"]:
+        raise SystemExit(f"order() models up to {m['pcb']['min_order']} boards")
+    n_smd, n_tht = joints(asm["tht_refs_prefix"])
+    ext = sorted({r["MPN"] or r["LCSC"] for r in rows
+                  if (cache.get(r["LCSC"]) or {}).get("jlc_library") == "expand"})
+    built = max(boards, asm["min_boards"])
+    parts = sum((unit_price(cache.get(r["LCSC"]) or {}, r["Qty"] * built)[0] or 0.0) * r["Qty"]
+                for r in rows)
+    fees = {"PCB (5 pcs, 2 layers)": m["pcb"]["order_usd"][1], "shipping": m["shipping_usd"][1],
+            "PCBA setup + stencil": asm["setup_usd"] + asm["stencil_usd"],
+            f"extended-part fees ({len(ext)} x {asm['extended_fee_usd']:.2f})": asm["extended_fee_usd"] * len(ext),
+            "THT soldering setup (J3, BZ1)": asm["tht_setup_usd"]}
+    joints_usd = n_smd * asm["per_joint_usd"] + n_tht * asm["tht_per_joint_usd"]
+    total = sum(fees.values()) + (parts + joints_usd) * built
+    out = [f"JLCPCB reference quote: {built} assembled boards in one order (EST, cost_model.yaml "
+           f"{m['date']}; parts from lcsc_cache.json)"]
+    out += [f"  {k:34} {v:8.2f}" for k, v in fees.items()]
+    out.append(f"  {'parts per board':34} {parts:8.2f}  x {built}")
+    out.append(f"  {'joints per board':34} {joints_usd:8.2f}  x {built}")
+    out.append(f"  {'ORDER TOTAL':34} {total:8.2f}")
+    out.append(f"  {'PER BOARD':34} {total / built:8.2f}")
+    out.append("Not included: MX switches, keycaps, display module, antenna, handset (off-board).")
+    return "\n".join(out) + "\n"
+
+
 if __name__ == "__main__":
-    print(main(), end="")
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--boards", type=int, help="quote one order of N assembled boards (N <= 5)")
+    a = ap.parse_args()
+    print(order(a.boards) if a.boards else main(), end="")
