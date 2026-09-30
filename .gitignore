@@ -29,3 +29,6 @@ apps/server-cloudflare/instances/
 
 # logs
 *.log
+
+# Wokwi CI token (owner secret)
+firmware/.wokwi-token
