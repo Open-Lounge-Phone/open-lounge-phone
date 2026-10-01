@@ -4,14 +4,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#2f6f5e" />
-    <meta name="description" content="Manage and call your Open Lounge Phone phone." />
+    <meta name="description" content="An Open Lounge Phone server: a screen-light, open-source phone for kids, homes and lounges. Sign in to call your people and manage your phones." />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <title>Open Lounge Phone</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Readable without JavaScript (search engines, AI agents, text browsers). The app replaces it. -->
+      <main style="max-width: 40rem; margin: 2rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; line-height: 1.5">
+        <h1>Open Lounge Phone</h1>
+        <p>This is an <strong>Open Lounge Phone server</strong>. Open Lounge Phone is a screen-light,
+          open-source phone for kids, homes and lounges: real keys and a handset, calls only between
+          people who accepted each other, quiet hours and voicemail.</p>
+        <p>People with an account here sign in with a passkey to call, manage their phones and
+          see voicemail. Any old phone, tablet or laptop can be the phone at <a href="/device/">/device/</a>.
+          Servers connect to each other, so people on different servers can reach each other by
+          address (<code>name@server</code>).</p>
+        <p>This page needs JavaScript to run the app.</p>
+        <ul>
+          <li><a href="https://openloungephone.app/">About the project and how it works</a></li>
+          <li><a href="https://openloungephone.app/getting-started/">Getting started</a> and <a href="https://openloungephone.app/how-to/self-host/">running your own server</a></li>
+          <li><a href="https://github.com/Open-Lounge-Phone/open-lounge-phone">Source code</a> (AGPL-3.0; hardware CERN-OHL-S-2.0)</li>
+          <li>Server details for other servers: <a href="/.well-known/openloungephone">/.well-known/openloungephone</a></li>
+        </ul>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

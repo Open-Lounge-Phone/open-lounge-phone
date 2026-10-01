@@ -1,0 +1,8 @@
+# Open Lounge Phone server. The welcome page is public; everything else is the signed-in app.
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Allow: /$
+Allow: /.well-known/openloungephone
+Disallow: /api/
+Disallow: /ws/
+Disallow: /fed/
