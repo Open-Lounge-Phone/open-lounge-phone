@@ -1,0 +1,94 @@
+{
+  "about": "`.well-known/openloungephone` documents (spec §2, §9): an 0.1 server's, a 0.2 server's, and a newer server's with fields and versions a v1 receiver doesn't know. All must parse; `offer` is what a receiver reads from each.",
+  "examples": [
+    {
+      "name": "0.1 server",
+      "json": {
+        "version": 1,
+        "server_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "federation": "/fed/v1",
+        "software": "openloungephone/0.1"
+      },
+      "offer": {
+        "versions": {
+          "1": "/fed/v1"
+        },
+        "legacyFeatures": true,
+        "negotiated": 1
+      }
+    },
+    {
+      "name": "0.2 server",
+      "json": {
+        "version": 1,
+        "server_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "federation": "/fed/v1",
+        "software": "openloungephone/0.2.0",
+        "versions": {
+          "1": "/fed/v1"
+        },
+        "features": [
+          "rooms",
+          "recording-flag",
+          "lounge-guests",
+          "key-rotation",
+          "voicemail-greeting",
+          "presence-batch",
+          "transfer"
+        ]
+      },
+      "offer": {
+        "versions": {
+          "1": "/fed/v1"
+        },
+        "legacyFeatures": false,
+        "negotiated": 1
+      }
+    },
+    {
+      "name": "newer server (speaks 1 and 2, unknown fields and features)",
+      "json": {
+        "version": 2,
+        "server_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "federation": "/fed/v1",
+        "software": "openloungephone/3.0.0",
+        "versions": {
+          "1": "/fed/v1",
+          "2": "/fed/v2"
+        },
+        "features": ["rooms", "video"],
+        "motd": "hello",
+        "policy": {
+          "retention": "30d"
+        }
+      },
+      "offer": {
+        "versions": {
+          "1": "/fed/v1",
+          "2": "/fed/v2"
+        },
+        "legacyFeatures": false,
+        "negotiated": 1
+      }
+    },
+    {
+      "name": "v2-only server (no common version with v1)",
+      "json": {
+        "version": 2,
+        "server_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "federation": "/fed/v1",
+        "versions": {
+          "2": "/fed/v2"
+        },
+        "features": []
+      },
+      "offer": {
+        "versions": {
+          "2": "/fed/v2"
+        },
+        "legacyFeatures": false,
+        "negotiated": null
+      }
+    }
+  ]
+}

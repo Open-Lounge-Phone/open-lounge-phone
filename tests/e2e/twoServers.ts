@@ -18,6 +18,8 @@ export interface Person {
   token: string;
   householdId: string;
   address: string;
+  /** Display name (the scenarios' defaults are Jesse and Bob). */
+  name?: string;
 }
 
 const json = { "content-type": "application/json" };
@@ -52,6 +54,7 @@ export async function signUp(server: ServerTarget, handle: string, name: string)
     token: done.json.token,
     householdId: done.json.household.id,
     address: done.json.account.address,
+    name,
   };
 }
 
@@ -156,7 +159,12 @@ export async function voicemailAcross(jesse: Person, bob: Person) {
   const [bobsRow] = await connections(bob);
   const put = await api(bob, `/devices/${deviceId}/remote-contacts/${bobsRow?.id}`, {
     method: "PUT",
-    body: { label: "Jesse", canCallDevice: true, deviceCanCall: true, bypassQuietHours: false },
+    body: {
+      label: jesse.name ?? "Jesse",
+      canCallDevice: true,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    },
   });
   expect(put.status).toBe(200);
   const allDay = [{ days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "23:59" }];
@@ -176,7 +184,7 @@ export async function voicemailAcross(jesse: Person, bob: Person) {
   const recording = new Uint8Array(2048).map((_, i) => i % 199);
   const vm = await leaveMessage(jesse.server, ticket, recording, 1500);
   expect(vm.status).toBe(201);
-  expect(await bApp.next("voicemail.new")).toMatchObject({ deviceId, from: "Jesse" });
+  expect(await bApp.next("voicemail.new")).toMatchObject({ deviceId, from: jesse.name ?? "Jesse" });
   const list = (await api(bob, "/voicemails")).json as { id: string }[];
   const audio = await fetch(`${bob.server.base}/api/voicemails/${list[0]?.id}/audio`, {
     headers: { authorization: `Bearer ${bob.token}` },
@@ -235,7 +243,7 @@ export async function noAnswerAcross(jesse: Person, bob: Person) {
   const ended = await endedState(jApp);
   expect(ended.reason).toBe("timeout");
   const offer = ended.voicemail as { ticket: string; name: string };
-  expect(offer.name).toBe("Bob");
+  expect(offer.name).toBe(bob.name ?? "Bob");
   const greeting = await fetch(
     `${jesse.server.base}/api/vm/greeting?ticket=${encodeURIComponent(offer.ticket)}`,
   );
@@ -244,9 +252,9 @@ export async function noAnswerAcross(jesse: Person, bob: Person) {
   expect(new Uint8Array(await greeting.arrayBuffer())).toEqual(name);
   const message = new Uint8Array(1500).map((_, i) => i % 97);
   expect((await leaveMessage(jesse.server, offer.ticket, message, 4000)).status).toBe(201);
-  expect(await bApp.next("voicemail.inbox")).toMatchObject({ from: "Jesse" });
+  expect(await bApp.next("voicemail.inbox")).toMatchObject({ from: jesse.name ?? "Jesse" });
   const inbox = (await api(bob, "/voicemails")).json as { toUser: string; fromLabel: string }[];
-  expect(inbox[0]).toMatchObject({ fromLabel: "Jesse", deviceId: null });
+  expect(inbox[0]).toMatchObject({ fromLabel: jesse.name ?? "Jesse", deviceId: null });
   expect(inbox[0]?.toUser).toBeTruthy();
   jApp.ws.close();
   bApp.ws.close();

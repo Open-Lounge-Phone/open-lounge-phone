@@ -5,7 +5,7 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["e2e", "*.test.ts"],
+  "include": ["e2e", "conformance", "*.test.ts"],
   "references": [
     {
       "path": "../packages/protocol"

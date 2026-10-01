@@ -1,0 +1,17 @@
+{
+  "about": "RFC 9530 Content-Digest (sha-256, standard base64 between colons) of the UTF-8 body.",
+  "vectors": [
+    {
+      "body": "",
+      "digest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"
+    },
+    {
+      "body": "{\"hello\":\"world\"}",
+      "digest": "sha-256=:k6I5cakU5erL8KjSUVTNownDwccvu5kU1Hxg88toFYg=:"
+    },
+    {
+      "body": "héllo ✓",
+      "digest": "sha-256=:VlfN74qFpYTg6WHm+CR89dP47SFJbtb9vP1Dp2HpQkU=:"
+    }
+  ]
+}

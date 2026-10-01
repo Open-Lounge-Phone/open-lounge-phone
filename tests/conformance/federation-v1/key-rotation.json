@@ -1,0 +1,81 @@
+{
+  "about": "Key rotation (spec §3.2): key `a` hands over to key `b` for host a.example. `wellKnown` is the document published during the overlap; `checks` are what a receiver that pinned `a` decides at `now` (Unix seconds).",
+  "keys": {
+    "a": {
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "d": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+      },
+      "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    },
+    "b": {
+      "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+    }
+  },
+  "statement": "openloungephone-key-rotation-v2\na.example\n11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\nPUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw\n1790000000\n1790604800",
+  "sig": "4huxViPT2lNCP8vtq2oqfl3Cd3P-_n-6EReKiGazcVHxnB5SGMweTkkYict7VVMofx1licdDvaprypxjnHZ1AQ",
+  "legacy": {
+    "statement": "openloungephone-key-rotation:PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+    "sig": "vFGaCSz3yUKKE6ed0XEySgxUc1uL-AoFK92dEByXKn5SrxUeISuOzNBq1mxVloQJj4YCfxx9lyku78ZZj73iDQ"
+  },
+  "wellKnown": {
+    "version": 1,
+    "server_key": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+    "federation": "/fed/v1",
+    "software": "openloungephone/0.2.0",
+    "versions": {
+      "1": "/fed/v1"
+    },
+    "features": ["key-rotation"],
+    "previous_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+    "rotation_sig": "vFGaCSz3yUKKE6ed0XEySgxUc1uL-AoFK92dEByXKn5SrxUeISuOzNBq1mxVloQJj4YCfxx9lyku78ZZj73iDQ",
+    "rotation": {
+      "previous_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "created": 1790000000,
+      "expires": 1790604800,
+      "sig": "4huxViPT2lNCP8vtq2oqfl3Cd3P-_n-6EReKiGazcVHxnB5SGMweTkkYict7VVMofx1licdDvaprypxjnHZ1AQ"
+    }
+  },
+  "checks": [
+    {
+      "now": 1790000000,
+      "host": "a.example",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "now": 1790604799,
+      "host": "a.example",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "now": 1790604800,
+      "host": "a.example",
+      "result": {
+        "ok": false,
+        "reason": "expired"
+      }
+    },
+    {
+      "now": 1789999699,
+      "host": "a.example",
+      "result": {
+        "ok": false,
+        "reason": "window"
+      }
+    },
+    {
+      "now": 1790000000,
+      "host": "c.example",
+      "result": {
+        "ok": false,
+        "reason": "bad_signature"
+      }
+    }
+  ]
+}

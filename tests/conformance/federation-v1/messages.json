@@ -1,0 +1,384 @@
+{
+  "about": "Example /fed/v1 bodies, results, queries and stream frames (spec §6.3, §7), by schema. Each must parse, and still parse to the same value with unknown fields added.",
+  "examples": [
+    {
+      "schema": "KnockBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": "bob",
+        "note": "It's Jesse from the band"
+      }
+    },
+    {
+      "schema": "KnockBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": "bob"
+      }
+    },
+    {
+      "schema": "AcceptBody",
+      "json": {
+        "from": {
+          "handle": "bob",
+          "id": "acc_9",
+          "name": "Bob"
+        },
+        "to": "jesse"
+      }
+    },
+    {
+      "schema": "RemoveBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": "bob"
+      }
+    },
+    {
+      "schema": "Accepted",
+      "json": {
+        "ok": true
+      }
+    },
+    {
+      "schema": "FedErrorBody",
+      "json": {
+        "error": "signature: replay"
+      }
+    },
+    {
+      "schema": "CallBody",
+      "json": {
+        "callId": "call_7f3a",
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": {
+          "kind": "person",
+          "handle": "bob"
+        }
+      }
+    },
+    {
+      "schema": "CallBody",
+      "json": {
+        "callId": "call_7f3a",
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": {
+          "kind": "phone",
+          "deviceId": "dev_kid1"
+        },
+        "viaPhone": {
+          "label": "Kid phone"
+        },
+        "recording": false
+      }
+    },
+    {
+      "schema": "CallBody",
+      "json": {
+        "callId": "call_7f3a",
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": {
+          "kind": "guest",
+          "deviceId": "dev_lounge"
+        },
+        "guestOf": "c.example",
+        "ringLabel": "Lounge",
+        "recording": true
+      }
+    },
+    {
+      "schema": "CallResult",
+      "json": {
+        "state": "ringing"
+      }
+    },
+    {
+      "schema": "CallResult",
+      "json": {
+        "state": "ended",
+        "reason": "denied",
+        "note": "This server doesn't take recorded calls"
+      }
+    },
+    {
+      "schema": "CallResult",
+      "json": {
+        "state": "ended",
+        "reason": "timeout",
+        "voicemail": {
+          "ticket": "vmt_0123456789abcdef",
+          "name": "Bob",
+          "maxMs": 120000,
+          "prompts": ["name", "vm.cant_take", "vm.leave_message", "vm.tone"]
+        }
+      }
+    },
+    {
+      "schema": "PresenceBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": ["bob", "carol"],
+        "online": true,
+        "available": false
+      }
+    },
+    {
+      "schema": "PhonesBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": "bob",
+        "phones": [
+          {
+            "id": "dev_kid1",
+            "label": "Kid phone"
+          }
+        ]
+      }
+    },
+    {
+      "schema": "GreetingBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": {
+          "kind": "person",
+          "handle": "bob"
+        }
+      }
+    },
+    {
+      "schema": "GreetingBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "to": {
+          "kind": "phone",
+          "deviceId": "dev_kid1"
+        }
+      }
+    },
+    {
+      "schema": "VoicemailQuery",
+      "json": {
+        "to": "bob",
+        "kind": "person",
+        "from": "jesse",
+        "fromId": "acc_1",
+        "name": "Jesse",
+        "durationMs": "4000"
+      }
+    },
+    {
+      "schema": "VoicemailQuery",
+      "json": {
+        "to": "dev_kid1",
+        "from": "jesse",
+        "fromId": "acc_1",
+        "name": "Jesse",
+        "durationMs": "1500"
+      }
+    },
+    {
+      "schema": "LoungeClaimBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "deviceId": "dev_lounge",
+        "nonce": "bG91bmdlLW5vbmNlLTAwMQ",
+        "directory": [
+          {
+            "address": "bob@b.example",
+            "name": "Bob"
+          }
+        ]
+      }
+    },
+    {
+      "schema": "LoungeClaimResult",
+      "json": {
+        "step": "press_key",
+        "expiresAt": 1790000030000
+      }
+    },
+    {
+      "schema": "LoungeClaimResult",
+      "json": {
+        "step": "failed",
+        "reason": "busy"
+      }
+    },
+    {
+      "schema": "LoungeProgressBody",
+      "json": {
+        "to": "jesse",
+        "deviceId": "dev_lounge",
+        "step": "started"
+      }
+    },
+    {
+      "schema": "LoungeDialBody",
+      "json": {
+        "callId": "call_7f3a",
+        "for": "jesse",
+        "deviceId": "dev_lounge",
+        "deviceLabel": "Lounge",
+        "to": "bob@b.example"
+      }
+    },
+    {
+      "schema": "LoungeLeaveBody",
+      "json": {
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "deviceId": "dev_lounge"
+      }
+    },
+    {
+      "schema": "RoomJoinBody",
+      "json": {
+        "leg": "leg_1",
+        "from": {
+          "handle": "jesse",
+          "id": "acc_1",
+          "name": "Jesse"
+        },
+        "room": "standup"
+      }
+    },
+    {
+      "schema": "RoomJoinResult",
+      "json": {
+        "ok": true,
+        "roomId": "room_1",
+        "name": "Standup"
+      }
+    },
+    {
+      "schema": "RoomJoinResult",
+      "json": {
+        "ok": false,
+        "reason": "locked"
+      }
+    },
+    {
+      "schema": "StreamQuery",
+      "json": {
+        "from": "a.example"
+      }
+    },
+    {
+      "schema": "StreamSignal",
+      "json": {
+        "t": "signal",
+        "msg": {
+          "t": "call.state",
+          "callId": "call_7f3a",
+          "state": "ringing"
+        }
+      }
+    },
+    {
+      "schema": "StreamSignal",
+      "json": {
+        "t": "signal",
+        "msg": {
+          "t": "call.state",
+          "callId": "call_7f3a",
+          "state": "ended",
+          "reason": "hangup"
+        }
+      }
+    },
+    {
+      "schema": "StreamSignal",
+      "json": {
+        "t": "signal",
+        "msg": {
+          "t": "rtc.sdp",
+          "callId": "call_7f3a",
+          "type": "offer",
+          "sdp": "v=0\r\n"
+        }
+      }
+    },
+    {
+      "schema": "StreamSignal",
+      "json": {
+        "t": "signal",
+        "msg": {
+          "t": "rtc.ice",
+          "callId": "call_7f3a",
+          "candidate": "candidate:1 1 udp 1 192.0.2.1 9 typ host",
+          "sdpMid": "0",
+          "sdpMLineIndex": 0
+        }
+      }
+    },
+    {
+      "schema": "StreamSignal",
+      "json": {
+        "t": "signal",
+        "msg": {
+          "t": "room.signal",
+          "callId": "leg_1",
+          "msg": {
+            "t": "room.leave",
+            "roomId": "room_1"
+          }
+        }
+      }
+    },
+    {
+      "schema": "StreamUnsupported",
+      "json": {
+        "t": "unsupported",
+        "type": "signal:call.video",
+        "callId": "call_7f3a"
+      }
+    }
+  ]
+}

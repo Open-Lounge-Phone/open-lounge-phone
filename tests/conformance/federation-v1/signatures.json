@@ -1,0 +1,59 @@
+{
+  "about": "RFC 9421 request signatures in the /fed/v1 profile (spec §4). `base` is the signature base; `headers` are exactly what the sender sends. Ed25519 is deterministic, so signing `base` with key `a` gives `headers.signature`.",
+  "keys": {
+    "a": {
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "d": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+      },
+      "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    }
+  },
+  "vectors": [
+    {
+      "name": "knock (POST with a JSON body)",
+      "method": "POST",
+      "url": "https://b.example/fed/v1/knock",
+      "body": "{\"from\":{\"handle\":\"jesse\",\"id\":\"acc_1\",\"name\":\"Jesse\"},\"to\":\"bob\",\"note\":\"hi\"}",
+      "created": 1790000000,
+      "nonce": "Zm9vYmFyYmF6cXV4MTIzNA",
+      "keyId": "a.example",
+      "base": "\"@method\": POST\n\"@target-uri\": https://b.example/fed/v1/knock\n\"content-digest\": sha-256=:sMYCKscDgDVrQIk5DNj2uF4Rs28CbGqk4t6Xgq351YI=:\n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\");created=1790000000;keyid=\"a.example\";alg=\"ed25519\";nonce=\"Zm9vYmFyYmF6cXV4MTIzNA\"",
+      "headers": {
+        "signature-input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\");created=1790000000;keyid=\"a.example\";alg=\"ed25519\";nonce=\"Zm9vYmFyYmF6cXV4MTIzNA\"",
+        "signature": "sig1=:mA8oMvvUcm+LLLgC+L7HU46Em5cFSDY9wOHhnLwuhBtPMeVgmzxfLNXkchEpw0bzaAORkhmOiMpS4rYdx7ydDg==:",
+        "content-digest": "sha-256=:sMYCKscDgDVrQIk5DNj2uF4Rs28CbGqk4t6Xgq351YI=:"
+      }
+    },
+    {
+      "name": "voicemail (POST with a query and a binary body)",
+      "method": "POST",
+      "url": "https://b.example/fed/v1/voicemail?to=dev_1&from=jesse&fromId=acc_1&name=Jesse&durationMs=1500",
+      "bodyBase64": "ACVKb5S53gMoTXKXvOEGK1B1mr/kCS5TeJ3C5wwxVnugxeoPNFl+o8jtEjdcgabL8BU6X4SpzvMYPWKHrNH2Gw==",
+      "created": 1790000300,
+      "nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "keyId": "a.example",
+      "base": "\"@method\": POST\n\"@target-uri\": https://b.example/fed/v1/voicemail?to=dev_1&from=jesse&fromId=acc_1&name=Jesse&durationMs=1500\n\"content-digest\": sha-256=:F/82FcjyKFtHDuVp4Vs3UD6uSeNogrY8zBrOsFXX8II=:\n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\");created=1790000300;keyid=\"a.example\";alg=\"ed25519\";nonce=\"AAECAwQFBgcICQoLDA0ODw\"",
+      "headers": {
+        "signature-input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\");created=1790000300;keyid=\"a.example\";alg=\"ed25519\";nonce=\"AAECAwQFBgcICQoLDA0ODw\"",
+        "signature": "sig1=:fNSX7CcGlSK3lnFB4fFLrHHOcU1NkTa1oONFL5yDrww6MUA6v1X8uHaAJ7ykpjITjUwpJrR2wieMmrgv4i6GCg==:",
+        "content-digest": "sha-256=:F/82FcjyKFtHDuVp4Vs3UD6uSeNogrY8zBrOsFXX8II=:"
+      }
+    },
+    {
+      "name": "a request without a body (no content-digest)",
+      "method": "POST",
+      "url": "https://b.example:8443/fed/v1/connections/remove",
+      "created": 1790000600,
+      "nonce": "bm9uY2Utd2l0aG91dC1ib2R5",
+      "keyId": "a.example",
+      "base": "\"@method\": POST\n\"@target-uri\": https://b.example:8443/fed/v1/connections/remove\n\"@signature-params\": (\"@method\" \"@target-uri\");created=1790000600;keyid=\"a.example\";alg=\"ed25519\";nonce=\"bm9uY2Utd2l0aG91dC1ib2R5\"",
+      "headers": {
+        "signature-input": "sig1=(\"@method\" \"@target-uri\");created=1790000600;keyid=\"a.example\";alg=\"ed25519\";nonce=\"bm9uY2Utd2l0aG91dC1ib2R5\"",
+        "signature": "sig1=:Oj8flQVW0N4Dq0Bs/nxp/qr67hQKqfGq7LhXhHe6VROjO71pCgRZd6YE2tfSHbUO3mt/qfoxPcJLGQL0jSVHCA==:"
+      }
+    }
+  ]
+}

@@ -1,0 +1,302 @@
+{
+  "about": "Example device and app messages (protocol.md), by direction. Each must decode, and still decode to the same value with unknown fields added.",
+  "examples": [
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "hello",
+        "proto": 1,
+        "model": "esp32s3",
+        "fw": "0.7.0",
+        "buttons": 10,
+        "display": "eink"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "hello",
+        "proto": 1,
+        "deviceId": "dev_1",
+        "model": "web-emulator",
+        "fw": "web",
+        "buttons": 4,
+        "display": "none"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "pair.begin",
+        "publicKey": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "pair.begin",
+        "alg": "ed25519",
+        "kind": "kids",
+        "publicKey": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "auth.proof",
+        "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "hook",
+        "state": "up"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "button",
+        "index": 0
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "call.answer",
+        "callId": "call_7f3a"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "call.hangup",
+        "callId": "call_7f3a"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "rtc.sdp",
+        "callId": "call_7f3a",
+        "type": "answer",
+        "sdp": "v=0\r\n"
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "rtc.ice",
+        "callId": "call_7f3a",
+        "candidate": null
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "status",
+        "rssi": -61,
+        "uptimeS": 3600
+      }
+    },
+    {
+      "dir": "DeviceToServer",
+      "json": {
+        "t": "ping"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "auth.challenge",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "pair.code",
+        "code": "123456",
+        "expiresAt": 1790000600000
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "pair.done",
+        "deviceId": "dev_1",
+        "householdId": "hh_1"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "config",
+        "buttons": [
+          {
+            "index": 0,
+            "label": "Mom"
+          }
+        ],
+        "quiet": false
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "config",
+        "buttons": [
+          {
+            "index": 0,
+            "label": "Mom"
+          }
+        ],
+        "quiet": true,
+        "quietUntil": "07:00",
+        "utcOffsetMin": 120,
+        "missed": [
+          {
+            "from": "Grandma"
+          }
+        ],
+        "greeting": {
+          "kind": "default",
+          "canRecord": true
+        },
+        "owner": {
+          "mode": "kids",
+          "space": "Smith home"
+        },
+        "server": {
+          "software": "openloungephone/0.2.0",
+          "protocol": {
+            "min": 1,
+            "max": 1
+          },
+          "features": ["call-control", "rooms"]
+        }
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "config",
+        "buttons": [],
+        "quiet": false,
+        "update": {
+          "minProtocol": 2,
+          "message": "UPDATE NEEDED"
+        }
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "call.ringing",
+        "callId": "call_7f3a",
+        "from": {
+          "label": "Grandma"
+        }
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "call.state",
+        "callId": "call_7f3a",
+        "state": "connecting"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "call.state",
+        "callId": "call_7f3a",
+        "state": "ended",
+        "reason": "voicemail",
+        "note": "Quiet hours"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "rtc.config",
+        "callId": "call_7f3a",
+        "iceServers": [
+          {
+            "urls": "stun:stun.example:3478"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "error",
+        "code": "bad_message",
+        "message": "not supported: x",
+        "unsupported": "x"
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "error",
+        "code": "unsupported_version",
+        "message": "Update needed",
+        "server": {
+          "software": "openloungephone/0.2.0",
+          "protocol": {
+            "min": 1,
+            "max": 1
+          },
+          "features": []
+        }
+      }
+    },
+    {
+      "dir": "ServerToDevice",
+      "json": {
+        "t": "pong"
+      }
+    },
+    {
+      "dir": "AppToServer",
+      "json": {
+        "t": "app.hello",
+        "proto": 1,
+        "token": "tok_0123456789abcdef"
+      }
+    },
+    {
+      "dir": "AppToServer",
+      "json": {
+        "t": "call.connection",
+        "connectionId": "c_1"
+      }
+    },
+    {
+      "dir": "ServerToApp",
+      "json": {
+        "t": "app.ready",
+        "userId": "usr_1"
+      }
+    },
+    {
+      "dir": "ServerToApp",
+      "json": {
+        "t": "app.ready",
+        "userId": "usr_1",
+        "server": {
+          "software": "openloungephone/0.2.0",
+          "protocol": {
+            "min": 1,
+            "max": 1
+          },
+          "features": ["rooms"]
+        }
+      }
+    }
+  ]
+}

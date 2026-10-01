@@ -1,0 +1,29 @@
+{
+  "about": "The server-pair stream handshake (spec §6.1): a.example (key `a`) dials b.example (key `b`); `hello.ok` echoes the dialer's nonce. `statement` is what each side signs.",
+  "keys": {
+    "a": {
+      "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    },
+    "b": {
+      "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+    }
+  },
+  "hello": {
+    "t": "hello",
+    "from": "a.example",
+    "to": "b.example",
+    "created": 1790000000,
+    "nonce": "c3RyZWFtLW5vbmNlLTAwMQ",
+    "statement": "olp-stream-v1\na.example\nb.example\n1790000000\nc3RyZWFtLW5vbmNlLTAwMQ",
+    "sig": "yvgoZULD-RwTp2fu9OaDOXvxPj8skpJ4xARneiM_smUdOtYYvbz5ixpB--3t7i1dpQKeDTnaJKAB-tEKsGMuCA"
+  },
+  "helloOk": {
+    "t": "hello.ok",
+    "from": "b.example",
+    "to": "a.example",
+    "created": 1790000001,
+    "nonce": "c3RyZWFtLW5vbmNlLTAwMQ",
+    "statement": "olp-stream-v1\nb.example\na.example\n1790000001\nc3RyZWFtLW5vbmNlLTAwMQ",
+    "sig": "pwX99e666r3Fui-o-3EI4o5KSbLXPJ2Kg3xdAuScLsFzZwWBlmwRSFZqHBx5-UsKpqMC_8eXNpR3IEtyh9oaCg"
+  }
+}

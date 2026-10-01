@@ -1,6 +1,7 @@
 # Federation interop: two independent servers on different host names run the full scenario
 # (sign-up on each, knock, accept, calls, voicemail, rooms, transfer, block). One job for the
-# self-hosted Node server, one for two local Cloudflare Workers under `wrangler dev`.
+# self-hosted Node server, one for two local Cloudflare Workers under `wrangler dev`, and one
+# that runs this server against the previous release (both directions).
 #
 # No secrets and no Cloudflare account: everything runs locally on the runner (local D1, R2 and
 # Durable Objects; Workers AI, TURN and the SFU are off). Starting a server and waiting for the
@@ -23,6 +24,9 @@ concurrency:
 env:
   OLP_E2E_LOG_DIR: e2e-logs
   WRANGLER_SEND_METRICS: "false"
+  # The previous released server (tags `server-vX.Y.Z`, see CONTRIBUTING.md "Releases"). After
+  # tagging a new release, pin it here.
+  OLP_BASELINE_REF: server-v0.1.0
 
 jobs:
   selfhost:
@@ -53,6 +57,56 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: selfhost-interop-logs
+          path: e2e-logs
+          if-no-files-found: ignore
+
+  crossversion:
+    name: Interop (this server ↔ the previous release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check out the previous release (${{ env.OLP_BASELINE_REF }})
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.OLP_BASELINE_REF }}
+          path: baseline
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore node_modules
+        id: modules
+        uses: actions/cache@v5
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Restore the release's node_modules
+        id: baseline-modules
+        uses: actions/cache@v5
+        with:
+          path: |
+            baseline/node_modules
+            baseline/apps/*/node_modules
+            baseline/packages/*/node_modules
+          key: baseline-modules-${{ runner.os }}-node22-${{ env.OLP_BASELINE_REF }}-${{ hashFiles('baseline/package-lock.json') }}
+      - if: steps.baseline-modules.outputs.cache-hit != 'true'
+        working-directory: baseline
+        run: npm ci
+      - name: old ↔ new (self-host, both directions)
+        env:
+          OLP_BASELINE_DIR: ${{ github.workspace }}/baseline
+        run: npx vitest run tests/e2e/crossVersion.test.ts --reporter=verbose
+      - name: Server logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: crossversion-interop-logs
           path: e2e-logs
           if-no-files-found: ignore
 
