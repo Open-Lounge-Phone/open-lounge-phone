@@ -49,6 +49,8 @@ import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
 import { federates } from "./ownKey.ts";
+import { peerSupports } from "./peers.ts";
+import { SUPPORTED_VERSIONS } from "./version.ts";
 import {
   depositVoicemail,
   type Greeting,
@@ -431,7 +433,7 @@ export class Connections {
       try {
         if (host === LOCAL_HOST) {
           await this.receivePresence({ ...from, host }, handles, online, available);
-        } else {
+        } else if (await peerSupports(this.env, host, "presence-batch")) {
           await fedFetch(this.env, host, "/presence", {
             json: { from, to: handles.slice(0, 200), online, available },
           });
@@ -821,6 +823,26 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (r instanceof Response) return r;
     const g = await greetingForPeer(env, { ...r.body.from, host: r.host }, r.body.to);
     return g ? greetingResponse(g) : c.json({ error: "not allowed" }, 403);
+  });
+
+  // Anything else under /fed: an endpoint of a newer server (`not supported`, so the sender
+  // degrades), or a federation version this server doesn't speak (says which ones it does).
+  app.all("/fed/*", (c) => {
+    const version = /^\/fed\/v(\d+)(\/|$)/.exec(new URL(c.req.url).pathname)?.[1];
+    if (version !== undefined && !SUPPORTED_VERSIONS.includes(Number(version))) {
+      env.log("warn", "federation: request for an unsupported version", {
+        version,
+        path: new URL(c.req.url).pathname,
+      });
+      const ours = SUPPORTED_VERSIONS.join(", ");
+      return c.json(
+        {
+          error: `federation version ${version} isn't supported here; this server speaks ${ours}`,
+        },
+        404,
+      );
+    }
+    return c.json({ error: "not supported" }, 404);
   });
 
   return app;

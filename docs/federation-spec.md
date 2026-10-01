@@ -1,6 +1,7 @@
 # Open Lounge Phone federation protocol, version 1 (`/fed/v1`)
 
-Status: **normative**, version 1 as implemented by Open Lounge Phone 0.1. The readable overview,
+Status: **normative**, version 1 as implemented by Open Lounge Phone 0.1 and later (0.2 adds
+version and feature advertisement, §9, within version 1). The readable overview,
 with the reasons behind the design, is [federation.md](federation.md); where the two differ,
 this document wins. The endpoint reference (§7) and the stream frames (§6.3) are generated from
 the zod schemas in `packages/federation` (`npm run docs:federation`; CI fails when they drift).
@@ -52,24 +53,34 @@ used for development and interop tests):
 
 ```json
 { "version": 1, "server_key": "<Ed25519 public key, base64url, 43 chars>",
-  "federation": "/fed/v1", "software": "openloungephone/0.1" }
+  "federation": "/fed/v1", "software": "openloungephone/0.2.0",
+  "versions": { "1": "/fed/v1" },
+  "features": ["rooms", "recording-flag", "lounge-guests", "key-rotation",
+               "voicemail-greeting", "presence-batch", "transfer"] }
 ```
 
 - `version` is the highest federation version the server speaks; `federation` is the base path
-  of version 1. See §9 for how later versions are advertised.
+  of version 1. `versions` maps every version it speaks to its base path, and `features` lists
+  the optional capabilities it supports; both are negotiated as in §9. A document without them
+  is from an 0.1 server (§9.2).
+- `software` is informational (implementation and version); receivers MUST NOT change behaviour
+  because of it — that is what `versions` and `features` are for.
 - `server_key` is the raw 32-byte Ed25519 public key, base64url without padding.
 - `rotation` (and the 0.1 pair `previous_key`/`rotation_sig`) is present only during a key
   rotation's overlap window (§3.2):
 
   ```json
   { "version": 1, "server_key": "<new key>", "federation": "/fed/v1",
-    "software": "openloungephone/0.1",
+    "software": "openloungephone/0.2.0", "versions": { "1": "/fed/v1" }, "features": ["…"],
     "previous_key": "<old key>", "rotation_sig": "<0.1 hand-over, see §3.2>",
     "rotation": { "previous_key": "<old key>", "created": 1790000000,
                   "expires": 1790604800, "sig": "<base64url Ed25519 signature>" } }
   ```
 - A server that does not federate answers `404`. The document MAY be cached for up to 300 s
-  (`Cache-Control: public, max-age=300`).
+  (`Cache-Control: public, max-age=300`); §9.1 says when peers fetch it again.
+- Receivers MUST accept a document whose optional fields they can't read (too long, wrong
+  type, unknown shape) by ignoring those fields: only `version`, `server_key` and `federation`
+  are required for the key to be usable.
 
 ## 3. Server keys and pinning
 
@@ -257,8 +268,14 @@ the caller needs answer `200` with a result object (calls, room joins, Lounge cl
   `busy` rather than retrying while it rings.
 - MUST NOT retry other `4xx` unchanged. MAY retry network errors and `5xx` with exponential
   backoff, re-signing each attempt (fresh `created` and `nonce`).
-- SHOULD treat a peer's `404` on an endpoint newer than the peer's advertised version as
-  "not supported" (§9).
+- MUST treat a peer's `404` on an endpoint as "not supported" (a feature or endpoint the peer
+  doesn't have), not as a failure of the whole connection, and SHOULD fetch its `.well-known`
+  again before the next request (§9.1).
+- MUST NOT send a request that uses an optional feature the peer doesn't advertise (§9.2).
+
+Receivers answer requests for a path they don't have under `/fed/` with `404` and
+`{"error": "not supported"}`, and requests for a federation version they don't speak (e.g.
+`/fed/v2/…`) with `404` and an `error` that names the versions they do speak.
 
 **Budgets** are fair defaults, the same for every sending server (the public hub gets no
 special treatment); operators MAY change them. Per-account limits also apply and are silent
@@ -304,6 +321,10 @@ Call and room signaling between two servers travels over one WebSocket per serve
   room leg under the same id) or `transfer` (the other side may still answer that it won't
   follow) — and with `room.signal` carrying `room.ended` or `room.leave`.
 - Malformed signal frames are ignored (logged); they don't close the stream.
+- A frame of a type the receiver doesn't know, or a `signal` whose `msg.t` (or a room signal's
+  inner `msg.t`) it doesn't know, is answered with `{t: "unsupported", type, callId?}` on the
+  same socket and otherwise ignored; the stream stays open. `unsupported` is never answered, so
+  two servers can't loop. Unknown fields inside known frames are dropped (§9.3).
 
 ### 6.3 Frames
 
@@ -322,6 +343,14 @@ Call and room signaling between two servers travels over one WebSocket per serve
 **Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
 
 **Room signals** — `msg` of a `room.signal` is one of `room.state`, `room.media`, `room.idle`, `room.ended`, `room.leave`, `room.mute`, `room.remove`, `room.lock`, `room.talk`, `room.here`, `rtc.sdp`, `rtc.ice`.
+
+**Not supported** — the answer to a frame, or a signal's `msg`, of a type the receiver doesn't know (the stream stays open; never answered itself):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `t` | `"unsupported"` | yes |  |
+| `type` | string (len ≤64) | yes | The frame's `t`, or `signal:<msg.t>` for a signal. |
+| `callId` | string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) |  | The signal's `callId`, when it had one. |
 
 **Timing constants** — signature and `hello` freshness ±300 s; nonces remembered 11 minutes.
 <!-- END GENERATED: stream -->
@@ -370,7 +399,7 @@ Not signed.
 
 | Status | Body | Meaning |
 |---|---|---|
-| 200 | { version: integer, server_key: string (`^[A-Za-z0-9_-]{43}$`), federation: string, software?: string (len ≤64), previous_key?: string (`^[A-Za-z0-9_-]{43}$`), rotation_sig?: string (len ≤128), rotation?: { previous_key: string (`^[A-Za-z0-9_-]{43}$`), created: integer, expires: integer, sig: string (len ≤128) } } | Cacheable for up to 300 s. |
+| 200 | { version: integer, server_key: string (`^[A-Za-z0-9_-]{43}$`), federation: string, software?: string (len ≤64), versions?: object, features?: string (len ≤32)[] (0–64), previous_key?: string (`^[A-Za-z0-9_-]{43}$`), rotation_sig?: string (len ≤128), rotation?: { previous_key: string (`^[A-Za-z0-9_-]{43}$`), created: integer, expires: integer, sig: string (len ≤128) } } | Cacheable for up to 300 s. |
 | 404 | — | The server does not federate. |
 
 **Receiver rules**
@@ -928,27 +957,125 @@ L learns the guest's address and name only. H stays the authority for who the gu
 
 ## 9. Versioning and compatibility
 
-- The federation version is an integer, advertised as `version` in `.well-known`, and the base
-  path carries it: version 1 is `/fed/v1`, the stream statement is prefixed `olp-stream-v1`.
+A **version** is wire compatibility: the paths, the signature profile (§4), the stream
+handshake (§6.1) and every field's meaning. A **feature** is an optional capability *within* a
+version. Both are advertised in `.well-known` (§2) and negotiated per peer; neither is ever
+assumed from `software`.
+
+### 9.1 Negotiation
+
+1. Before its first request to a peer, a server fetches the peer's `.well-known` and caches it
+   for the response's `max-age` (the reference server clamps it to 1 minute … 1 hour, default
+   5 minutes). It fetches it again when the cache is stale, when a signature from the peer
+   fails with the pinned key (§3.1, the same fetch), and after the peer answers a request with
+   a `4xx` (e.g. a `404` for an endpoint it no longer has). If a fetch fails, a stale copy is
+   used and retried a minute later; with no copy at all the peer is treated as an 0.1 server
+   (version 1, the 0.1 features) and the request itself decides.
+2. The peer's versions are `versions` when present, else `{1: federation}`. A base path is used
+   only if it is a plain absolute path (`^(/[A-Za-z0-9_-]+)+$`, at most 64 characters); any
+   other value counts as not offered.
+3. The server uses the **highest version both sides speak**, at the peer's base path for it,
+   for every request and for the stream (`<base>/stream`, statement `olp-stream-v<N>`).
+4. **No common version:** nothing is sent. The person who asked gets a plain error (a knock
+   fails with it, a call ends `unreachable` with it as `note`, e.g. "b.example only speaks a
+   newer federation version (2); this server needs an update to talk to it"), the server logs
+   it, and nothing else is affected. The other side, if it tries, gets the `404` described in
+   §5 naming the versions this server speaks.
+
+Because `@target-uri` is signed (§4), a request signed for one version can't be replayed
+against another. Keys and pins are shared across versions.
+
+### 9.2 Features
+
+A server lists in `features` exactly the optional capabilities it implements. A sender MUST use
+an optional feature with a peer only if the peer lists it, and otherwise degrades with a clear
+outcome for the person, never a silent failure:
+
+- no `rooms`: joining a room on that server or merging a call with someone there is refused
+  with "Rooms aren't available with that server yet";
+- no `recording-flag`: a call that would be recorded is never placed to that server (ended
+  `denied` with a note), a recorded call from it is ended rather than recorded unannounced, and
+  people from it can't join a recorded space's rooms;
+- no `lounge-guests`: signing in to that server's Lounge phone is refused in plain words;
+- no `transfer`: transferring someone from that server is refused in plain words;
+- no `voicemail-greeting`: the caller hears the spoken default greeting;
+- no `presence-batch`: availability isn't sent to that server;
+- no `key-rotation`: the peer can't follow a rotation on its own; the rotating server's operator
+  is told which peers will need their operators to re-trust the new key (§3.4).
+
+**Absent `features` means an 0.1 server**, which implements every feature marked below, so
+0.1 peers keep everything they had. Receivers MUST ignore feature names they don't know. A
+registered name never changes meaning; a capability that needs a different meaning gets a new
+name.
+
+<!-- BEGIN GENERATED: features (npm run docs:federation) -->
+This implementation speaks federation version 1 (`/fed/v1`).
+
+| Feature | Implied when `features` is absent (0.1) | What it covers |
+|---|---|---|
+| `rooms` | yes | Phone rooms across servers: `POST /fed/v1/rooms/join`, `room.signal` stream frames, and 3-way merges that turn a call into a room leg (`call.state.merged`). |
+| `recording-flag` | yes | Recorded calls: `CallBody.recording`, the `call.state.recording` notice, and refusing recorded calls with `denied` + `note`. A server never places or keeps a recorded call with a peer that doesn't list it. |
+| `lounge-guests` | yes | Guests at another server's Lounge phone: `/fed/v1/lounge/{claim,progress,dial,leave}`, the `guest` call target, `CallBody.guestOf`/`ringLabel`. |
+| `key-rotation` | yes | Publishes and verifies the timed key hand-over (`.well-known.rotation`, statement `openloungephone-key-rotation-v2`, §3.2). |
+| `voicemail-greeting` | yes | `POST /fed/v1/greeting`: the callee's greeting for a caller whose call went to voicemail. Without it the caller hears the spoken default greeting. |
+| `presence-batch` | yes | `POST /fed/v1/presence` with `to` listing all of the sender's connections on the receiving server in one request. |
+| `transfer` | yes | Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces). |
+<!-- END GENERATED: features -->
+
+New features are added to this registry (and to `FEATURES` in `packages/federation`) in the
+same change that implements them.
+
+### 9.3 Tolerance
+
+- Receivers MUST ignore unknown JSON fields in every body, query, response, stream frame and
+  `.well-known` (the reference implementation's schemas strip them; none is strict). Limits on
+  size (§5, §6.2) still apply.
+- Unknown endpoints and versions are answered `404` "not supported" (§5); unknown stream frames
+  and signal types are answered `unsupported` (§6.2). Neither closes a connection.
+- Closed enums (call end reasons, room-join reasons, Lounge steps, call target kinds) are
+  validated strictly by v1 receivers. A new value is allowed within version 1 only **behind a
+  feature**: a sender uses it only with peers that advertise that feature. Anything else that
+  needs a new value needs a new version.
+
+### 9.4 Additive and breaking changes
+
 - **Additive changes keep the version:** new optional request or response fields, new
-  endpoints, new optional headers, new `.well-known` fields. Therefore receivers and senders
-  MUST ignore unknown object fields, and senders MUST handle `404` on an endpoint a peer doesn't
-  have (treat it as "not supported", not as a failure of the whole connection).
-- **Everything else is breaking** and needs version 2: removing or renaming a field, making an
-  optional field required, changing a field's meaning, type or limits in a narrowing way, new
-  values in a closed enum (e.g. call end reasons, room-join reasons, Lounge steps — v1
-  implementations validate these strictly), a different signature profile, or a different
-  stream handshake.
-- **How v2 would coexist:** a server that speaks v2 serves `/fed/v2/*` and keeps `/fed/v1/*`
-  unchanged for at least 12 months. Its `.well-known` keeps `"federation": "/fed/v1"` (for v1
-  peers) and adds `"version": 2` plus `"versions": {"1": "/fed/v1", "2": "/fed/v2"}`. A peer
-  uses the highest version both advertise, per request; a v1-only peer ignores the unknown
-  fields and keeps talking v1. The server-pair stream is per version (`/fed/v2/stream`,
-  `olp-stream-v2`). Because `@target-uri` is signed, a request signed for one version can't be
-  replayed against the other. Keys and pins are shared across versions.
-- Device and app messages carried inside signals (`call.state`, `rtc.*`, `room.*`) follow the
-  device protocol's own versioning ([protocol.md](protocol.md), `PROTOCOL_VERSION`); additive
-  fields there are additive here.
+  endpoints, new stream frames and signal types, new `.well-known` fields, new features (and
+  enum values behind them).
+- **Everything else is breaking** and needs a new version: removing or renaming a field, making
+  an optional field required (or a required one optional), changing a field's meaning, type or
+  limits (in either direction: a v1 receiver rejects a longer value it doesn't allow), a new
+  enum value outside a feature, a different signature profile, or a different stream
+  handshake.
+- **Golden vectors freeze the wire.** `tests/conformance/` holds the v1 conformance vectors:
+  RFC 9421 signature bases and signatures for fixed keys and requests, `Content-Digest` values,
+  key-rotation statements and their verification, stream `hello` statements, example bodies and
+  frames for every endpoint, and a snapshot of every v1 schema. Their tests must pass forever:
+  a v1 vector is never edited (a breaking change needs v2 and new vectors), and the schema
+  snapshot test fails if a field is removed, renamed, made required, or has its type or limits
+  changed. The same directory freezes the device protocol (`protocol.md`).
+
+### 9.5 Deprecation and the support window
+
+- A server speaks **the current federation version and the previous one**. When version N+1
+  ships, the reference server keeps serving `/fed/vN` unchanged for at least **12 months** and
+  advertises both in `versions` (keeping `"federation": "/fed/v1"` for 0.1 peers as long as it
+  speaks v1).
+- A version is dropped only in a release that says so in its notes, after its 12 months, by
+  removing it from `versions`. Peers that speak only the dropped version then get the "no common
+  version" outcome (§9.1) with words saying which side needs an update.
+- Features are not deprecated within a version: a server that stops supporting one stops
+  listing it, and peers degrade as in §9.2.
+- Interop is tested release to release: CI runs the current server against the previous
+  released server (git tag `server-v*`, pinned in `.github/workflows/interop.yml`) in both
+  directions, and against a simulated newer server that advertises extra versions and features
+  and sends unknown fields.
+
+### 9.6 Inside signals
+
+Device and app messages carried inside signals (`call.state`, `rtc.*`, `room.*`) follow the
+device protocol's own versioning ([protocol.md](protocol.md), `PROTOCOL_VERSION`); additive
+fields there are additive here.
 
 ## 10. Security considerations
 
@@ -1018,12 +1145,15 @@ Voicemail tickets are bearer tokens: single use, 10 minutes, forwarded only to t
 
 - **Reference implementation:** `packages/federation` (signatures, keys, schemas, this spec's
   generated parts) and `packages/server-app` (`federation.ts`, `fedStream.ts`, `fedCalls.ts`,
-  `connections.ts`). Interop tests: `tests/e2e/twoServers.test.ts` (two self-hosted servers)
-  and `tests/e2e/cloudflare.test.ts` (two Workers), both run in CI.
+  `connections.ts`, `peers.ts` for negotiation). Interop tests: `tests/e2e/twoServers.test.ts`
+  (two self-hosted servers), `tests/e2e/cloudflare.test.ts` (two Workers) and
+  `tests/e2e/crossVersion.test.ts` (this server against the previous release, both ways), all in
+  CI; conformance vectors in `tests/conformance/`.
 - **Key rotation:** operators rotate from the companion's Operator view ("Rotate key") or with
   `npx openloungephone federation rotate-key --url <server>` (their session in
   `OLP_SESSION_TOKEN`); both call `POST /api/admin/federation/rotate-key`. The Operator view
-  lists pinned keys (host, fingerprint, first seen, pinned / key change refused) with
+  lists pinned keys (host, fingerprint, first seen, pinned / key change refused, and what the
+  peer last advertised: software, versions, features) with
   "Re-trust…" and "Block server…"; every such action, and every automatic re-pin or refusal,
   goes into the server-wide operator audit trail (`GET /api/admin/audit`). These `/api/admin`
   routes are the reference server's own, not part of this protocol.

@@ -1,5 +1,6 @@
 {
   "name": "openloungephone",
+  "version": "0.2.0",
   "private": true,
   "description": "Open-source, screen-free intercom phone: device emulator, companion app, and pluggable edge/self-hosted backend.",
   "license": "AGPL-3.0-or-later",

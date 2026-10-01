@@ -66,6 +66,29 @@ beforeEach(async () => {
 });
 
 describe("rotating this server's key", () => {
+  it("tells the operator which peers can't follow by themselves (no `key-rotation`)", async () => {
+    // a knocked on b, so a knows what b advertises.
+    expect((await rotate(a, opA)).json.cannotFollow).toBeUndefined();
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "key-rotation"),
+    }));
+    expectStatus(await knock(a, jesse, "dan@b.test"), 202);
+    const r = await rotate(a, opA, true);
+    expectStatus(r, 200);
+    expect(r.json.cannotFollow).toEqual(["b.test"]);
+    // b's operator sees what a advertises; a's sees b without it.
+    const view = (await a.http("/admin/federation", { token: opA.token })).json;
+    expect(view.peers).toEqual([]);
+    const bView = (await b.http("/admin/federation", { token: opB.token })).json;
+    expect(bView.peers[0]).toMatchObject({
+      host: "a.test",
+      software: expect.stringMatching(/^openloungephone\//),
+      versions: [1],
+      missing: [],
+    });
+  });
+
   it("publishes both keys with a signed hand-over, signs with the new key, and peers follow", async () => {
     const before = await wellKnown(a);
     expect(before.rotation).toBeUndefined();
@@ -136,6 +159,8 @@ describe("rotating this server's key", () => {
       server_key: fresh,
       federation: "/fed/v1",
       software: expect.any(String),
+      versions: { "1": "/fed/v1" },
+      features: expect.any(Array),
     });
     // b last saw the old key and missed the whole overlap: the change is refused.
     expectStatus(await knock(a, jesse, "dan@b.test"), 502);

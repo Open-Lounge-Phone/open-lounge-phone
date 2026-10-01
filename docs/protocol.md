@@ -4,7 +4,8 @@
 Devices and companion apps hold one WebSocket to the backend. Every frame is a UTF-8 JSON object
 of at most 16384 bytes with a string discriminator `t`. Any message may carry an
 optional `id` (URL-safe, ≤64 chars); an `error` reply echoes it as `ref`. Unknown fields are
-ignored; unknown `t` values are rejected with `bad_message`.
+ignored; a message of an unknown `t` is answered with `error` `bad_message` naming it in
+`unsupported`, and the connection stays open.
 
 **Device connection:** `hello` → (unpaired) `pair.begin` → `pair.code` … `pair.done`, then reconnect;
 (paired) `auth.challenge` → `auth.proof` → `config`. After that, call control and signaling.
@@ -16,6 +17,32 @@ once paired; apps connect to `/ws/app?household=<householdId>`. Hints only route
 the household's Durable Object on Cloudflare; the self-hosted server ignores them) — every
 connection is still authenticated by the handshake. Keep-alive `{"t":"ping"}` must be sent
 byte-for-byte as shown so hibernating servers can answer it without waking.
+
+## Versions and compatibility
+
+- **Protocol version.** `PROTOCOL_VERSION` (now 1) changes only for breaking
+  changes. Additive changes keep it: new optional fields, new message types, new values behind a
+  server feature. Removing or renaming a field, making one required (or a required one optional),
+  changing a field's type, meaning or limits, or a new value in a closed enum is breaking.
+- **What a client says.** `hello` carries `proto` (the protocol version the phone speaks) and
+  `fw` (its firmware version; semver on hardware, e.g. `0.6.0`); `app.hello` carries `proto`.
+- **What the server says.** It accepts protocol version 1
+  (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
+  version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
+  client the range, the software version and the optional features it offers
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`), so a client can leave out what a server
+  doesn't offer; clients ignore names they don't know.
+- **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
+  with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
+  then `error` `unsupported_version` with `server`, and the connection closes (4400). A client
+  newer than the server gets the same `error` (the message says the server is older) and may
+  reconnect speaking a version in `server.protocol` if it can.
+- **Tolerance, both ways.** Receivers ignore unknown fields (the schemas strip them; size limits
+  still apply) and never disconnect for an unknown message type. Clients drop unknown server
+  messages and optional fields they can't read; firmware ignores both.
+- **Frozen vectors.** `tests/conformance/protocol-v1/` holds example messages (`hello`, pairing,
+  `auth.proof`, `config`, calls) and a snapshot of every v1 schema; their tests must keep passing
+  for v1 (see CONTRIBUTING.md).
 
 ## Device → server
 
@@ -344,6 +371,8 @@ Sent after authentication and whenever guardians change settings.
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 | `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |
+| `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | What the server speaks (protocol range, features), so a phone can leave out what it doesn't offer. |
+| `update` | { minProtocol: integer, message: string (len ≤32) } |  | The phone's protocol is older than the server accepts: show `message`, don't treat the phone as signed in, and retry rarely (the server closes the connection next). Sent before authentication, with no other settings. |
 
 ### `lounge.idle`
 
@@ -540,6 +569,8 @@ Request failed. Connection stays open unless `code` is `unauthorized`.
 | `code` | `"bad_message"` \| `"unsupported_version"` \| `"unauthorized"` \| `"not_found"` \| `"rate_limited"` \| `"internal"` | yes |  |
 | `message` | string (len ≤256) | yes |  |
 | `ref` | string (len ≤64) |  | `id` of the message that caused the error. |
+| `unsupported` | string (len ≤64) |  | With `bad_message`: the message type the server doesn't know (a newer client's message). The connection stays open. |
+| `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | With `unsupported_version`: the versions the server accepts. |
 
 ### `pong`
 
@@ -809,6 +840,7 @@ Companion app authenticated.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `userId` | string (len ≤64) | yes |  |
+| `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | What the server speaks (protocol range, features). |
 
 ### `connections.changed`
 
@@ -1014,6 +1046,8 @@ Request failed. Connection stays open unless `code` is `unauthorized`.
 | `code` | `"bad_message"` \| `"unsupported_version"` \| `"unauthorized"` \| `"not_found"` \| `"rate_limited"` \| `"internal"` | yes |  |
 | `message` | string (len ≤256) | yes |  |
 | `ref` | string (len ≤64) |  | `id` of the message that caused the error. |
+| `unsupported` | string (len ≤64) |  | With `bad_message`: the message type the server doesn't know (a newer client's message). The connection stays open. |
+| `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | With `unsupported_version`: the versions the server accepts. |
 
 ### `pong`
 

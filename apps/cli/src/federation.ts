@@ -107,5 +107,9 @@ export async function rotateKey(
   io.out(`  old key      ${String(r.json.from)}`);
   io.out(`  new key      ${String(r.json.to)}`);
   io.out(`  hand-over published until ${day(Number(r.json.overlapUntil))} UTC`);
+  const cannot = Array.isArray(r.json.cannotFollow) ? (r.json.cannotFollow as string[]) : [];
+  if (cannot.length) {
+    io.out(`  can't follow by themselves (ask their operators to re-trust): ${cannot.join(", ")}`);
+  }
   return 0;
 }

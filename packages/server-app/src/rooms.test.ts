@@ -559,6 +559,64 @@ describe("rooms across servers", () => {
     expect(await bApp.next("room.ended")).toMatchObject({ reason: "denied" });
   });
 
+  it("doesn't merge with someone whose server has no rooms, and says why", async () => {
+    const connId = await connectPeople();
+    const amy = await a.store.createUser(
+      { householdId: jesse.household.id, name: "Amy", role: "contact" },
+      net.timers.now,
+    );
+    const amyApp = await a.connectApp(await a.store.createSession(amy.id, net.timers.now));
+    const jApp = await a.connectApp(jesse.token);
+    const bApp = await b.connectApp(bob.token);
+    jApp.write({ t: "call.connection", connectionId: connId });
+    const ring = await bApp.next("call.ringing");
+    bApp.write({ t: "call.answer", callId: ring.callId });
+    await jApp.nextState("connecting");
+    jApp.write({ t: "rtc.sdp", callId: ring.callId, type: "offer", sdp: "o" });
+    await bApp.next("rtc.sdp");
+    bApp.write({ t: "rtc.sdp", callId: ring.callId, type: "answer", sdp: "a" });
+    await jApp.nextState("active");
+    jApp.write({ t: "call.hold", callId: ring.callId, hold: true });
+    jApp.write({ t: "call.user", userId: amy.id });
+    const r2 = await amyApp.next("call.ringing");
+    amyApp.write({ t: "call.answer", callId: r2.callId });
+    await jApp.nextState("connecting");
+    jApp.write({ t: "rtc.sdp", callId: r2.callId, type: "offer", sdp: "o" });
+    amyApp.write({ t: "rtc.sdp", callId: r2.callId, type: "answer", sdp: "a" });
+    await vi.waitFor(() =>
+      expect(
+        jApp.all("call.state").some((m) => m.callId === r2.callId && m.state === "active"),
+      ).toBe(true),
+    );
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "rooms"),
+    }));
+    jApp.write({ t: "call.merge", callId: ring.callId, with: r2.callId });
+    expect((await jApp.next("error")).message).toBe("Rooms aren't available with that server yet");
+    // Both calls are still there: Bob on hold, Amy talking.
+    expect(bApp.all("call.state").some((m) => m.state === "ended")).toBe(false);
+    expect(amyApp.all("call.state").some((m) => m.state === "ended")).toBe(false);
+  });
+
+  it("doesn't ask a server without rooms to let someone into one", async () => {
+    await makeRoom(a, jesse.token, {
+      kind: "phone",
+      name: "Standup",
+      handle: "standup",
+      access: "connections",
+    });
+    await connectPeople();
+    await net.advertise("a.test", (d) => ({ ...d, features: [] }));
+    const bApp = await b.connectApp(bob.token);
+    bApp.write({ t: "room.join", address: "standup@a.test" });
+    expect(await bApp.next("room.ended")).toMatchObject({
+      reason: "unreachable",
+      note: "Rooms aren't available with that server yet",
+    });
+    expect(net.requests.filter((r) => r.url.endsWith("/fed/v1/rooms/join"))).toEqual([]);
+  });
+
   it("merges a call with someone on another server into a 3-way room", async () => {
     const connId = await connectPeople();
     const amy = await a.store.createUser(

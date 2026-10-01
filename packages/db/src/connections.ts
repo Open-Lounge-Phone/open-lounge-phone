@@ -515,6 +515,49 @@ export class ConnectionStore {
     return (await this.pinnedKeys()).find((k) => k.host === host);
   }
 
+  // --- what other servers advertise (cached .well-known; see migration 0020) ---------------
+
+  /** A peer's cached `.well-known` (raw JSON), even when expired; the caller decides. */
+  async serverInfo(
+    host: string,
+  ): Promise<{ doc: string; fetchedAt: number; expiresAt: number } | undefined> {
+    const r = await this.sql.first<{ doc: string; fetched_at: number; expires_at: number }>(
+      "SELECT doc, fetched_at, expires_at FROM server_info WHERE host = ?",
+      host,
+    );
+    return r ? { doc: r.doc, fetchedAt: r.fetched_at, expiresAt: r.expires_at } : undefined;
+  }
+
+  async saveServerInfo(host: string, doc: string, fetchedAt: number, expiresAt: number) {
+    await this.sql.run(
+      `INSERT INTO server_info (host, doc, fetched_at, expires_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(host) DO UPDATE SET doc = excluded.doc, fetched_at = excluded.fetched_at,
+         expires_at = excluded.expires_at`,
+      host,
+      doc,
+      fetchedAt,
+      expiresAt,
+    );
+  }
+
+  /** Marks a peer's cached document stale, so the next use fetches it again. */
+  async expireServerInfo(host: string, now: number): Promise<void> {
+    await this.sql.run(
+      "UPDATE server_info SET expires_at = ? WHERE host = ? AND expires_at > ?",
+      now,
+      host,
+      now,
+    );
+  }
+
+  /** Every cached peer document (the operator's view). */
+  async serverInfos(): Promise<{ host: string; doc: string; fetchedAt: number }[]> {
+    const rows = await this.sql.all<{ host: string; doc: string; fetched_at: number }>(
+      "SELECT host, doc, fetched_at FROM server_info ORDER BY host",
+    );
+    return rows.map((r) => ({ host: r.host, doc: r.doc, fetchedAt: r.fetched_at }));
+  }
+
   // --- this server's own key after a rotation (Cloudflare: D1; see migration 0019) ----------
 
   async ownKey(): Promise<OwnKeyRow | undefined> {

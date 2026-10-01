@@ -92,7 +92,9 @@ import {
 } from "./fedCalls.ts";
 import { ownHost } from "./federation.ts";
 import { type LiveRoom, LiveRooms, type RoomInbound } from "./liveRooms.ts";
+import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { SWEEP_EVERY_MS, sweepSpace } from "./timeline.ts";
+import { SERVER_INFO } from "./version.ts";
 import {
   issueGreetingTicket,
   issueVoicemailOffer,
@@ -557,7 +559,7 @@ export class HouseholdHub {
       this.apps.set(user.id, set);
       set.add(peer);
       this.remember(peer);
-      conn.send({ t: "app.ready", userId: user.id });
+      conn.send({ t: "app.ready", userId: user.id, server: SERVER_INFO });
       // Everyone's presence for this session, then tell the others this person is online.
       const available = await this.env.store.availability(this.householdId);
       for (const [userId, avail] of available) {
@@ -1541,6 +1543,7 @@ export class HouseholdHub {
           ...(await this.idleLoungeConfig(peer)),
           quiet: false,
           ...(owner ? { owner } : {}),
+          server: SERVER_INFO,
         });
         return;
       }
@@ -1552,6 +1555,7 @@ export class HouseholdHub {
         quiet: false,
         ...(owner ? { owner } : {}),
         ...(extensions ? { extensions: true } : {}),
+        server: SERVER_INFO,
       });
       return;
     }
@@ -1599,6 +1603,7 @@ export class HouseholdHub {
           }
         : {}),
       ...(extensions ? { extensions: true } : {}),
+      server: SERVER_INFO,
     });
   }
 
@@ -3230,6 +3235,16 @@ export class HouseholdHub {
     if (!parties.some((p) => p.kind !== "remote")) return;
     const by = await this.recordingBy(parties);
     if (!by || this.rooms.get(room.id) !== room) return;
+    // Everyone is told a call is recorded. A party whose server can't pass that on (no
+    // `recording-flag`) can't be told, so the call ends instead of being recorded unannounced.
+    for (const p of parties) {
+      if (p.kind === "remote" && !(await peerSupports(this.env, p.host, "recording-flag"))) {
+        if (this.rooms.get(room.id) !== room) return;
+        room.endNote = UNAVAILABLE["recording-flag"];
+        return this.apply(room, { type: "end", reason: "denied" });
+      }
+    }
+    if (this.rooms.get(room.id) !== room) return;
     room.recording = { by, ours: true };
     this.roomsDirty = true;
     const recorderId = pickRecorder(
@@ -3410,6 +3425,18 @@ export class HouseholdHub {
     if (!b || !c) return this.refuseControl(peer, "no such call");
     if (!(await this.kidsMayMeet([peer, b, c]))) {
       return this.refuseControl(peer, "a kids' phone can only be with people on its list");
+    }
+    // A merge turns a call with another server into a room leg there: only with servers that
+    // have rooms (and, if this space records, that can announce it).
+    const recorded = (await this.recordingBy([peer, b, c])) !== undefined;
+    for (const other of [b, c]) {
+      if (other.kind !== "remote") continue;
+      if (!(await peerSupports(this.env, other.host, "rooms"))) {
+        return this.refuseControl(peer, UNAVAILABLE.rooms);
+      }
+      if (recorded && !(await peerSupports(this.env, other.host, "recording-flag"))) {
+        return this.refuseControl(peer, RECORDED_ROOM_UNAVAILABLE);
+      }
     }
     const payer = (await this.allowance(peer)).payer;
     const room = this.conf.openCall("3-way call");
@@ -3614,6 +3641,9 @@ export class HouseholdHub {
   ): Promise<void> {
     const calls = this.env.calls;
     if (!calls || !(await this.isWorkplace())) return this.refuseControl(peer, REMOTE_TRANSFER);
+    if (!(await peerSupports(this.env, other.host, "transfer"))) {
+      return this.refuseControl(peer, UNAVAILABLE.transfer);
+    }
     const target = await this.spaceTarget(peer, to);
     const self = await this.callingAs(peer);
     if (!target || ("userId" in target && target.userId === self?.id)) {
@@ -4066,6 +4096,13 @@ export class HouseholdHub {
         { inSpace, connected },
       );
       if (!decision.ok) return { ok: false, reason: decision.reason };
+      // A recorded room is announced to everyone in it: never with a server that can't.
+      if (
+        (await store.recordings.enabled(this.householdId)) &&
+        !(await peerSupports(this.env, req.host, "recording-flag"))
+      ) {
+        return { ok: false, reason: "denied", note: RECORDED_ROOM_UNAVAILABLE };
+      }
       const payer = req.host !== LOCAL_HOST ? (stored.ownerAccount ?? undefined) : undefined;
       const note = await fairUseProblem(this.env, payer, "room");
       if (note) return { ok: false, reason: "denied", note: note.slice(0, 200) };
@@ -4115,6 +4152,8 @@ const REMOTE_TRANSFER =
   "someone from another household or server can only be transferred inside a team or org space";
 const REMOTE_TARGET =
   "transfer refused: only to people, phones, ring groups and extensions of this space";
+const RECORDED_ROOM_UNAVAILABLE =
+  "This space records its calls, and that server can't announce recordings yet";
 
 /** Whom a transfer (or a dial as someone) reaches. */
 type DialTarget =

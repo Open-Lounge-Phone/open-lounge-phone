@@ -4,13 +4,13 @@ import {
   baseUrlFor,
   checkRotation,
   FEDERATION_PATH,
-  FEDERATION_VERSION,
   HOST_RE,
   isFederatableHost,
   keyFingerprint,
   MAX_FED_BODY_BYTES,
   type ServerKey,
   signRequest,
+  VERSION_PATHS,
   verifyRequest,
   WELL_KNOWN_PATH,
   WellKnown,
@@ -18,8 +18,10 @@ import {
 import type { ServerEnv } from "./env.ts";
 import { limitsOf } from "./limits.ts";
 import { federates, operatorAudit, ownKeys } from "./ownKey.ts";
+import { forgetPeer, peerBase, rememberPeer, WELL_KNOWN_MAX_AGE_S } from "./peers.ts";
+import { OWN_FEATURES, SOFTWARE, SUPPORTED_VERSIONS } from "./version.ts";
 
-export const SOFTWARE = "openloungephone/0.1";
+export { SOFTWARE } from "./version.ts";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -64,10 +66,14 @@ export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefine
   if (!keys) return undefined;
   const r = keys.rotation;
   return {
-    version: FEDERATION_VERSION,
+    version: Math.max(...SUPPORTED_VERSIONS),
     server_key: keys.current.publicKey,
     federation: FEDERATION_PATH,
     software: SOFTWARE,
+    versions: Object.fromEntries(
+      SUPPORTED_VERSIONS.map((v) => [String(v), VERSION_PATHS[v] as string]),
+    ),
+    features: [...OWN_FEATURES],
     ...(r
       ? {
           previous_key: r.previous_key,
@@ -83,15 +89,30 @@ export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefine
   };
 }
 
-/** Fetches a server's published key. */
-async function fetchKey(env: ServerEnv, host: string): Promise<WellKnown | undefined> {
+/** `max-age` of a `Cache-Control` header, clamped to 1 minute … 1 hour (default 5 minutes). */
+function maxAgeOf(res: Response): number {
+  const m = /max-age=(\d+)/.exec(res.headers.get("cache-control") ?? "");
+  const s = m ? Number(m[1]) : WELL_KNOWN_MAX_AGE_S;
+  return Math.min(3600, Math.max(60, s));
+}
+
+/**
+ * Fetches a server's `.well-known` (its key, versions and features) and refreshes the cached
+ * copy that version negotiation uses (`peers.ts`).
+ */
+export async function fetchWellKnown(env: ServerEnv, host: string): Promise<WellKnown | undefined> {
   try {
     const res = await outbound(env)(new Request(`${baseUrlFor(host)}${WELL_KNOWN_PATH}`));
     if (!res.ok) return undefined;
     const doc = WellKnown.safeParse(await res.json());
-    return doc.success ? doc.data : undefined;
+    if (!doc.success) {
+      env.log("warn", "federation: unreadable .well-known", { host });
+      return undefined;
+    }
+    await rememberPeer(env, host, doc.data, maxAgeOf(res));
+    return doc.data;
   } catch (e) {
-    env.log("warn", "federation: key fetch failed", { host, error: String(e) });
+    env.log("warn", "federation: .well-known fetch failed", { host, error: String(e) });
     return undefined;
   }
 }
@@ -109,7 +130,7 @@ export async function resolveServerKey(
   const store = env.store.connections;
   const pinned = await store.pinnedKey(host);
   if (pinned && !retry) return pinned;
-  const doc = await fetchKey(env, host);
+  const doc = await fetchWellKnown(env, host);
   const now = env.now();
   if (!doc) return pinned;
   if (!pinned) {
@@ -139,10 +160,21 @@ export async function resolveServerKey(
 
 export class FederationError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** Why, when the caller words it for people: no common version, or a missing endpoint. */
+  readonly code: "no_common_version" | "not_supported" | undefined;
+  constructor(status: number, message: string, code?: "no_common_version" | "not_supported") {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+/** A note for people when a request to another server failed for version reasons, if it did. */
+export function versionNote(e: unknown): string | undefined {
+  if (!(e instanceof FederationError)) return undefined;
+  if (e.code === "no_common_version") return e.message;
+  if (e.code === "not_supported") return "That server doesn't support this yet";
+  return undefined;
 }
 
 /** Sends a signed request to another server. Throws FederationError on failure. */
@@ -162,8 +194,10 @@ export async function fedFetch(
   if (await env.store.connections.serverBlocked(host)) {
     throw new FederationError(403, "this server doesn't talk to that server");
   }
+  const base = await peerBase(env, host);
+  if (!base.ok) throw new FederationError(502, base.message, "no_common_version");
   const method = init.method ?? "POST";
-  const url = `${baseUrlFor(host)}${FEDERATION_PATH}${path}`;
+  const url = `${baseUrlFor(host)}${base.base}${path}`;
   const body =
     init.body ??
     (init.json !== undefined ? new TextEncoder().encode(JSON.stringify(init.json)) : undefined);
@@ -192,7 +226,14 @@ export async function fedFetch(
     throw new FederationError(502, `couldn't reach ${host}`);
   }
   if (res.status === 429) throw new FederationError(429, `${host} is busy; try again later`);
+  if (res.status === 404) {
+    // An endpoint the peer doesn't have (older software), or it stopped federating: look at its
+    // `.well-known` again next time instead of trusting the cached copy.
+    await forgetPeer(env, host);
+    throw new FederationError(502, `${host} doesn't support this yet`, "not_supported");
+  }
   if (!res.ok) {
+    if (res.status >= 400 && res.status < 500) await forgetPeer(env, host);
     throw new FederationError(502, `${host} refused the request (${res.status})`);
   }
   return res;

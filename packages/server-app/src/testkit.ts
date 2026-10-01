@@ -262,6 +262,19 @@ export class Network {
   readonly requests: { from: string | undefined; url: string; status: number }[] = [];
   /** Lets a test rewrite a request in flight (e.g. to replay or tamper with it). */
   tap?: (req: Request) => Request | Promise<Request>;
+  /** Rewrites of servers' `.well-known` documents (an older or newer server's), by host. */
+  private readonly advertised = new Map<string, (doc: Record<string, unknown>) => object>();
+
+  /**
+   * Makes `host` advertise something else in its `.well-known` (e.g. fewer features, other
+   * versions), and makes every server look at it again.
+   */
+  async advertise(host: string, rewrite: (doc: Record<string, unknown>) => object) {
+    this.advertised.set(host, rewrite);
+    for (const s of this.servers.values()) {
+      await s.store.connections.expireServerInfo(host, this.timers.now);
+    }
+  }
 
   async server(host: string, opts: { env?: Partial<ServerEnv> } = {}): Promise<TestServer> {
     const key = await generateServerKey();
@@ -320,7 +333,14 @@ export class Network {
     const target = this.servers.get(url.host);
     if (!target || this.down.has(url.host)) throw new TypeError(`fetch failed: ${url.host}`);
     const sent = this.tap ? await this.tap(req.clone()) : req;
-    const res = await target.root.fetch(sent);
+    let res = await target.root.fetch(sent);
+    const rewrite = this.advertised.get(url.host);
+    if (rewrite && url.pathname === "/.well-known/openloungephone" && res.ok) {
+      const cache = res.headers.get("cache-control");
+      res = Response.json(rewrite(await res.json()), {
+        ...(cache ? { headers: { "cache-control": cache } } : {}),
+      });
+    }
     const keyid = /keyid="([^"]+)"/.exec(req.headers.get("signature-input") ?? "")?.[1];
     this.requests.push({ from: keyid, url: req.url, status: res.status });
     return res;

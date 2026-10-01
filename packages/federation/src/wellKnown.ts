@@ -28,16 +28,58 @@ export const KeyRotation = z.object({
 });
 export type KeyRotation = z.infer<typeof KeyRotation>;
 
-/** `GET /.well-known/openloungephone`. */
+/**
+ * `GET /.well-known/openloungephone`. Only `version`, `server_key` and `federation` must be valid
+ * for the document to be usable; an optional field a receiver can't read is dropped (`.catch`), so
+ * a newer server's richer document never stops an older one from verifying its key.
+ */
 export const WellKnown = z.object({
-  version: z.number().int().positive(),
-  server_key: Key,
-  federation: z.string(),
-  software: z.string().max(64).optional(),
+  version: z
+    .number()
+    .int()
+    .positive()
+    .describe("The highest federation version the server speaks."),
+  server_key: Key.describe("Raw 32-byte Ed25519 public key, base64url."),
+  federation: z.string().describe("Base path of version 1 (`/fed/v1`)."),
+  software: z
+    .string()
+    .max(64)
+    .optional()
+    .catch(undefined)
+    .describe("Implementation and its version, e.g. `openloungephone/0.2.0`. Informational."),
+  versions: z
+    // Lenient on purpose: an entry this server can't read is skipped, not fatal.
+    .preprocess((v) => {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+      const ok = Object.entries(v)
+        .filter(([k, p]) => /^[1-9]\d{0,3}$/.test(k) && typeof p === "string")
+        .slice(0, 16);
+      // Nothing readable: as if absent (version 1 at `federation`).
+      return ok.length ? Object.fromEntries(ok) : undefined;
+    }, z.record(z.string().regex(/^[1-9]\d{0,3}$/), z.string().max(64)).optional())
+    .optional()
+    .catch(undefined)
+    .describe(
+      'Every federation version the server speaks → its base path, e.g. `{"1": "/fed/v1"}` (§9). Absent: version 1 at `federation`.',
+    ),
+  features: z
+    // Lenient on purpose: names this server can't hold are skipped, not fatal.
+    .preprocess(
+      (v) =>
+        Array.isArray(v)
+          ? v.filter((x) => typeof x === "string" && x.length <= 32).slice(0, 64)
+          : v,
+      z.array(z.string().max(32)).max(64),
+    )
+    .optional()
+    .catch(undefined)
+    .describe(
+      "Optional capabilities the server supports (§9.2). Unknown names are ignored. Absent: the 0.1 set.",
+    ),
   /** 0.1 form of a rotation, published alongside `rotation` for 0.1 peers during the overlap. */
-  previous_key: Key.optional(),
-  rotation_sig: z.string().max(128).optional(),
-  rotation: KeyRotation.optional(),
+  previous_key: Key.optional().catch(undefined),
+  rotation_sig: z.string().max(128).optional().catch(undefined),
+  rotation: KeyRotation.optional().catch(undefined),
 });
 export type WellKnown = z.infer<typeof WellKnown>;
 

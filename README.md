@@ -48,6 +48,7 @@ The software works end to end today. The hardware has its first **early dev boar
 | P3.5 | Rooms: party lines, phone rooms with addresses (`standup@host`, dialable from any phone's key), host mute/remove/lock, cross-server join; hold, instant 3-way (Add caller → Merge) and blind/attended transfer; a peer-to-peer mesh (≤ 4) or a relay (Cloudflare Realtime SFU, or LiveKit when self-hosting) with top-3 forwarding, idle drop and fair-use metering | done (software); relayed rooms are encrypted in transit, end-to-end (SFrame) planned |
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
+| Versions | Servers advertise their software, federation versions and features and negotiate per peer (degrading in plain words); phones and servers exchange protocol ranges (`UPDATE NEEDED` on a too-old phone); v1 frozen by conformance vectors (`tests/conformance/`); CI runs this server against the previous release (`server-v*`) both ways | done |
 | Firmware | ESP32-S3 firmware v0 (ESP-IDF, [firmware/](firmware/README.md)): keys, hook, ringer, status light, 2.9" e-paper strip; Wi-Fi and server from the console; pairing with a P-256 key, sign-in, `wipe`; calls ring, answer and hang up (signaling only); a Wokwi simulation and a live end-to-end test | v0 done in the simulator (2026-09-30), not yet on a board; next: call audio (esp-webrtc), SoftAP Wi-Fi setup, OTA, encrypted NVS |
 | Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | **v0.1 early dev board prototype** ([`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1), rev A): designed, routed (DRC clean) and first boards ordered 2026-09-30; bring-up pending; product enclosure not designed yet (a prototype box exists) |
 
@@ -110,8 +111,9 @@ npm run docs:federation   # regenerate docs/federation-spec.md after changing pa
 OLP_E2E_CLOUDFLARE=1 npx vitest run tests/e2e/cloudflare.test.ts   # two local Workers (after npm run build)
 ```
 
-CI runs `npm run check`, both docs drift checks, and the `Interop` workflow (two self-hosted
-servers, and two Workers under `wrangler dev`, federating with each other).
+CI runs `npm run check` (including the v1 conformance vectors), both docs drift checks, and the
+`Interop` workflow (two self-hosted servers, two Workers under `wrangler dev`, and this server
+against the previous release in both directions, federating with each other).
 
 ## License
 

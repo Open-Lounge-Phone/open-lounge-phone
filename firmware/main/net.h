@@ -17,6 +17,8 @@ void net_set_server(const char *url);
 /** Open (or reopen) the WebSocket to `url` (full URL incl. path). */
 void net_ws_open(const char *url);
 void net_ws_close(void);
+/** Stops the client for good (no automatic reconnects) until `net_ws_open`. */
+void net_ws_stop(void);
 bool net_ws_send(const char *text);
 bool net_wifi_up(void);
 /** Wi-Fi status for MENU and the console: SSID, RSSI (dBm) and IP. */

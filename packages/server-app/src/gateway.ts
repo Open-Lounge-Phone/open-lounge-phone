@@ -2,11 +2,14 @@ import type { Device } from "@openloungephone/db";
 import type { FedSignal, RoomJoinResult } from "@openloungephone/federation";
 import {
   type AppToServer,
+  type DecodeResult,
   type DeviceToServer,
   decodeAppToServer,
   decodeDeviceToServer,
+  MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   type ServerToApp,
+  type ServerToDevice,
   toBase64Url,
 } from "@openloungephone/protocol";
 import { verifyDeviceSignature } from "./deviceAuth.ts";
@@ -23,6 +26,58 @@ import {
 } from "./env.ts";
 import type { RelayDial, RemoteRing, RemoteRoomJoin } from "./fedCalls.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
+import { SERVER_INFO } from "./version.ts";
+
+/** What a phone shows when its protocol is older than this server accepts. */
+export const UPDATE_NEEDED = "UPDATE NEEDED";
+
+/**
+ * The answer to a message that didn't decode. One of an unknown type (a newer client's) is "not
+ * supported", naming the type; the connection stays open either way.
+ */
+function decodeError(decoded: Extract<DecodeResult<unknown>, { ok: false }>): ServerToDevice {
+  return {
+    t: "error",
+    code: "bad_message",
+    message: decoded.detail.slice(0, 256),
+    ...(decoded.error === "unsupported" ? { unsupported: decoded.type } : {}),
+  };
+}
+
+/**
+ * Whether a client's protocol version is one this server serves; if not, tells it why (a phone
+ * that is too old also gets a `config` with `update`, which firmware shows on its display).
+ */
+export function protocolAccepted(
+  conn: Pick<Conn, "send">,
+  proto: number,
+  device: boolean,
+  accepts = { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
+): boolean {
+  const { min, max } = accepts;
+  if (proto >= min && proto <= max) return true;
+  const range = min === max ? `${max}` : `${min}–${max}`;
+  const tooOld = proto < min;
+  const server = { ...SERVER_INFO, protocol: { min, max } };
+  if (tooOld && device) {
+    conn.send({
+      t: "config",
+      buttons: [],
+      quiet: false,
+      update: { minProtocol: min, message: UPDATE_NEEDED },
+      server,
+    });
+  }
+  conn.send({
+    t: "error",
+    code: "unsupported_version",
+    message: tooOld
+      ? `Update needed: this server accepts protocol ${range}; this ${device ? "phone" : "app"} speaks ${proto}`
+      : `This server is older: it accepts protocol ${range}; this ${device ? "phone" : "app"} speaks ${proto}`,
+    server,
+  });
+  return false;
+}
 
 /** What a transport (Node `ws`, Workers WebSocket) drives for each socket. */
 export interface ConnectionHandler {
@@ -304,11 +359,11 @@ export class Gateway implements Coordinator {
           return phase.hub.handleDevice(phase.peer, msg);
         case "hello": {
           if (msg.t !== "hello") return fail(CloseCode.badHandshake, "expected hello");
-          if (msg.proto !== PROTOCOL_VERSION) {
-            conn.send({
-              t: "error",
-              code: "unsupported_version",
-              message: `server speaks protocol ${PROTOCOL_VERSION}`,
+          if (!protocolAccepted(conn, msg.proto, true)) {
+            this.env.log("info", "device refused: protocol version", {
+              proto: msg.proto,
+              fw: msg.fw,
+              model: msg.model,
             });
             return fail(CloseCode.badHandshake, "unsupported protocol version");
           }
@@ -388,7 +443,7 @@ export class Gateway implements Coordinator {
       message: (raw) => {
         const decoded = decodeDeviceToServer(raw);
         if (!decoded.ok) {
-          conn.send({ t: "error", code: "bad_message", message: decoded.detail });
+          conn.send(decodeError(decoded));
           return;
         }
         chain = chain
@@ -434,8 +489,7 @@ export class Gateway implements Coordinator {
       if (phase.kind === "closed") return;
       if (phase.kind === "ready") return phase.hub.handleApp(phase.peer, msg);
       if (msg.t !== "app.hello") return refuse(CloseCode.badHandshake, "expected app.hello");
-      if (msg.proto !== PROTOCOL_VERSION) {
-        conn.send({ t: "error", code: "unsupported_version", message: "please reload the app" });
+      if (!protocolAccepted(conn, msg.proto, false)) {
         return refuse(CloseCode.badHandshake, "unsupported protocol version");
       }
       // The household comes from the hello, else the object's own household (Cloudflare routes
@@ -462,7 +516,7 @@ export class Gateway implements Coordinator {
       message: (raw) => {
         const decoded = decodeAppToServer(raw);
         if (!decoded.ok) {
-          conn.send({ t: "error", code: "bad_message", message: decoded.detail });
+          conn.send(decodeError(decoded));
           return;
         }
         chain = chain

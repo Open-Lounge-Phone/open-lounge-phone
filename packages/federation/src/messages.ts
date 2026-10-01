@@ -340,3 +340,14 @@ export type RoomJoinResult = z.infer<typeof RoomJoinResult>;
 export const FedSignal = z.discriminatedUnion("t", [CallStateMsg, RtcSdp, RtcIce, RoomSignal]);
 export type FedSignal = z.infer<typeof FedSignal>;
 export const StreamSignal = z.object({ t: z.literal("signal"), msg: FedSignal });
+
+/**
+ * The answer to a frame (or a `signal` whose `msg.t`) the receiver doesn't know: the stream stays
+ * open. Never answered itself, so two servers can't loop.
+ */
+export const StreamUnsupported = z.object({
+  t: z.literal("unsupported"),
+  type: z.string().max(64).describe("The frame's `t`, or `signal:<msg.t>` for a signal."),
+  callId: Id.optional().describe("The signal's `callId`, when it had one."),
+});
+export type StreamUnsupported = z.infer<typeof StreamUnsupported>;

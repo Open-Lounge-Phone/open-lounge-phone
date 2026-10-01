@@ -85,7 +85,13 @@ export function Admin({
     if (!window.confirm(text)) return;
     void run(async () => {
       const r = await api.adminRotateKey(during);
-      setNotice(`Rotated. New key ${r.to}; hand-over published until ${day(r.overlapUntil)}.`);
+      setNotice(
+        `Rotated. New key ${r.to}; hand-over published until ${day(r.overlapUntil)}.` +
+          (r.cannotFollow?.length
+            ? ` These servers can't follow a rotation by themselves; ask their operators to ` +
+              `re-trust you: ${r.cannotFollow.join(", ")}.`
+            : ""),
+      );
     });
   };
 
@@ -279,6 +285,13 @@ export function Admin({
                   <br />
                   first seen {day(p.firstSeen)}
                   {p.keySince !== p.firstSeen ? `, this key since ${day(p.keySince)}` : ""}
+                  {p.software ? (
+                    <>
+                      <br />
+                      {p.software}, federation {p.versions?.join(", ") ?? "1"}
+                      {p.missing?.length ? `; without ${p.missing.join(", ")}` : ""}
+                    </>
+                  ) : null}
                 </div>
                 {p.rejected && (
                   <div className="small">

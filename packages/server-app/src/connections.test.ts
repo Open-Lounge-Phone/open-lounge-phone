@@ -346,7 +346,8 @@ describe("knocks across servers", () => {
   it("rejects replayed, stale and tampered requests", async () => {
     let captured: Request | undefined;
     net.tap = (req) => {
-      captured ??= req.clone();
+      // The knock itself (not a's look at b's .well-known before it).
+      if (req.method === "POST") captured ??= req.clone();
       return req;
     };
     await knock(a, jesse, "bob@b.test");

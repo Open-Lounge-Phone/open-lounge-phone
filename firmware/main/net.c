@@ -273,6 +273,13 @@ void net_ws_close(void) {
   if (s_ws) esp_websocket_client_close(s_ws, pdMS_TO_TICKS(2000));
 }
 
+void net_ws_stop(void) {
+  if (!s_ws) return;
+  // Connected or waiting to reconnect, the client stops: no quick reconnects until opened again.
+  if (esp_websocket_client_is_connected(s_ws)) esp_websocket_client_close(s_ws, pdMS_TO_TICKS(2000));
+  else esp_websocket_client_stop(s_ws);
+}
+
 bool net_ws_send(const char *text) {
   if (!s_ws || !esp_websocket_client_is_connected(s_ws)) return false;
   return esp_websocket_client_send_text(s_ws, text, strlen(text), pdMS_TO_TICKS(5000)) >= 0;

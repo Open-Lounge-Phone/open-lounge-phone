@@ -19,6 +19,7 @@ import { fairUseProblem } from "./fairUse.ts";
 import { FederationError, fedFetch, outbound } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import type { Vars } from "./httpUtil.ts";
+import { peerSupports } from "./peers.ts";
 import {
   depositVoicemail,
   greetingOf,
@@ -169,6 +170,10 @@ async function targetGreeting(env: ServerEnv, t: VmTarget): Promise<Response> {
   if (conn.peerHost === LOCAL_HOST) {
     const g = await greetingForPeer(env, { ...partyOf(me), host: LOCAL_HOST }, to);
     return greetingResponse(g ?? { kind: "default" });
+  }
+  // A server without greetings: the caller hears the spoken default one.
+  if (!(await peerSupports(env, conn.peerHost, "voicemail-greeting"))) {
+    return greetingResponse({ kind: "default" });
   }
   try {
     const res = await fedFetch(env, conn.peerHost, "/greeting", {

@@ -604,6 +604,8 @@ app.get("/fed/v1/stream", async (c) => {
   return c.env.FEDERATION.getByName(from).fetch(c.req.raw);
 });
 app.all("/fed/v1/*", (c) => federation(c));
+// Other versions and paths: a JSON "not supported" from the federation app, never the companion.
+app.all("/fed/*", (c) => federation(c));
 
 app.all("/api/*", (c) => {
   const api = new Hono().route(

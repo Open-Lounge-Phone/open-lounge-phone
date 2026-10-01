@@ -39,6 +39,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { federates } from "./ownKey.ts";
+import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
 import { publicRecordingRoutes, recordingRoutes } from "./recordings.ts";
 import { roomRoutes } from "./roomsApi.ts";
@@ -728,6 +729,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
         address: `${x.peerHandle}@${x.peerHost || host}`,
         name: (x.peerName || x.peerHandle).slice(0, 64),
       }));
+    if (!(await peerSupports(env, b.host, "lounge-guests"))) {
+      return c.json({ error: UNAVAILABLE["lounge-guests"] }, 409);
+    }
     await store.startLoungeAway(account.id, b.host, b.deviceId, now);
     try {
       const res = await fedFetch(env, b.host, "/lounge/claim", {
@@ -742,7 +746,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       const result = (await res.json()) as { step: string; reason?: string; expiresAt?: number };
       return c.json({ ...result, deviceId: b.deviceId, host: b.host });
     } catch (e) {
-      if (e instanceof FederationError) return c.json({ error: e.message }, e.status as 400);
+      if (e instanceof FederationError) {
+        const error = e.code === "not_supported" ? UNAVAILABLE["lounge-guests"] : e.message;
+        return c.json({ error }, e.status as 400);
+      }
       throw e;
     }
   });

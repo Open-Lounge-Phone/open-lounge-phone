@@ -587,6 +587,22 @@ describe("transfer across servers (team/org spaces only)", () => {
     expect(await ben.next("rtc.sdp")).toMatchObject({ callId: benMoved?.callId, sdp: "v=0 z" });
   });
 
+  it("refused in plain words when the other server can't take transfers", async () => {
+    await group(a, t.ada.token, { name: "Support", extension: "300", members: [t.cy.user.id] });
+    const { olga, aCall, bApp } = await bobCallsOlga();
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "transfer"),
+    }));
+    olga.write({ t: "call.transfer", callId: aCall, to: { extension: "300" } });
+    expect((await olga.next("error")).message).toBe(
+      "Transfers aren't available with that server yet",
+    );
+    // The call simply goes on.
+    olga.write({ t: "call.hangup", callId: aCall });
+    expect(await bApp.nextState("ended")).toMatchObject({ reason: "hangup" });
+  });
+
   it("refused outside the space: to a connection, or from a home", async () => {
     const { olga, aCall } = await bobCallsOlga();
     olga.write({ t: "call.transfer", callId: aCall, to: { connectionId: "c_x" } });

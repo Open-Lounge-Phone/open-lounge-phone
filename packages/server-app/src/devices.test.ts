@@ -3,6 +3,7 @@
 import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectStatus, type FakeConn, hello, newKey, TestServer } from "./testkit.ts";
+import { SERVER_INFO } from "./version.ts";
 
 let s: TestServer;
 beforeEach(() => {
@@ -177,6 +178,7 @@ describe("Lounge phones: session length and idle options", () => {
       buttons: [],
       quiet: false,
       owner: { mode: "lounge", space: "Mom's home" },
+      server: SERVER_INFO,
     });
     conn.write({ t: "hook", state: "up" });
     conn.write({ t: "button", index: 0 });

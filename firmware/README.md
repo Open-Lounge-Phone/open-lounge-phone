@@ -4,7 +4,9 @@ ESP32-S3 firmware for the **minimal board** (`hardware/DESIGN.md`), in C on **ES
 It speaks [protocol v1](../docs/protocol.md) and mirrors the browser phone (`apps/device-web`):
 the handset state machine (`packages/core/src/device.ts` → `main/phone.c`), the status strip
 (`strip.ts` → `strip.c`), the status light (`leds.ts` → `render()` in `main.c`) and a first
-part of the menu (`menu.ts` → `menu.c`).
+part of the menu (`menu.ts` → `menu.c`). With a server it can't talk to (protocol versions,
+`compat.c`) it shows `UPDATE NEEDED` or `SERVER TOO OLD` and retries hourly; unknown fields and
+messages from a newer server are ignored.
 
 **Status: sets up its Wi-Fi, pairs, signs in, and makes and takes calls with two-way audio (WebRTC, G.711).** Call
 audio is verified end to end in the QEMU simulator with a test tone; the codec path (ES8311) needs a

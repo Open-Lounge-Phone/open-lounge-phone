@@ -24,6 +24,7 @@
 #include "ota.h"
 #include "ota_core.h"
 #include "phone.h"
+#include "compat.h"
 #include "proto.h"
 #include "prov.h"
 #include "prov_core.h"
@@ -66,6 +67,9 @@ static int64_t s_next_ota_check = -1, s_idle_since = -1, s_ota_msg_until;
 static bool s_ota_restart, s_ota_manual;
 static char s_ota_msg[2][25];
 #define OTA_CHECK_EVERY_MS (6LL * 60 * 60 * 1000)
+// The server can't talk to this phone (protocol versions): what to show, and retry rarely.
+static compat_t s_compat = COMPAT_OK;
+#define COMPAT_RETRY_MS (60LL * 60 * 1000)
 static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
@@ -217,6 +221,10 @@ static void render(void) {
     snprintf(lines[2], 25, "PASSWORD %s", prov_password());
     snprintf(lines[3], 25, "OPEN 192.168.4.1");
     n = 4;
+  }
+  if (n == 0 && s_compat != COMPAT_OK && !busy) {
+    compat_lines(s_compat, lines);
+    n = 2;
   }
   if (n == 0 && s_no_server && !busy) {
     snprintf(lines[0], 25, "SET UP:");
@@ -428,6 +436,18 @@ static void on_config(const cJSON *m) {
   }
   const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
   if (cJSON_IsNumber(off)) ota_set_utc_offset(off->valueint);
+  if (first) {
+    // What the server speaks (additive `config.server`; older servers don't send it).
+    const cJSON *server = cJSON_GetObjectItemCaseSensitive(m, "server");
+    const cJSON *range = cJSON_GetObjectItemCaseSensitive(server, "protocol");
+    const cJSON *lo = cJSON_GetObjectItemCaseSensitive(range, "min");
+    const cJSON *hi = cJSON_GetObjectItemCaseSensitive(range, "max");
+    if (cJSON_IsObject(server))
+      ESP_LOGI(TAG, "SERVER %s protocol %d-%d (this phone: %d)", or_q(jstr(server, "software")),
+               cJSON_IsNumber(lo) ? lo->valueint : 0, cJSON_IsNumber(hi) ? hi->valueint : 0,
+               PROTOCOL_VERSION);
+  }
+  s_compat = COMPAT_OK;
   s_authed = true;
   s_conn = CONN_ONLINE;
   s_unauthorized = 0;
@@ -446,6 +466,18 @@ static void on_message(char *text) {
   }
   const char *t = jstr(m, "t");
   if (!t) goto done;
+  compat_t compat = compat_from_message(m, PROTOCOL_VERSION);
+  if (compat != COMPAT_OK) {
+    // The server can't talk to this phone: say which side needs an update, stop the client's
+    // quick reconnects, and look again in an hour (either side may have been updated by then).
+    ESP_LOGW(TAG, "%s: %s", compat == COMPAT_UPDATE_NEEDED ? "UPDATE NEEDED" : "SERVER TOO OLD",
+             or_q(jstr(m, "message")));
+    s_compat = compat;
+    s_authed = false;
+    net_ws_stop();
+    s_reopen_at = now_ms() + COMPAT_RETRY_MS;
+    goto done;
+  }
   if (!strcmp(t, "rtc.config")) {
     // Never log TURN credentials: the call id and the server count only.
     ESP_LOGI("proto", "<- {\"t\":\"rtc.config\",\"callId\":\"%s\",…} (%d ICE servers; credentials not logged)",

@@ -11,17 +11,20 @@
 import {
   baseUrlFor,
   FEDERATION_PATH,
-  type FedSignal,
+  FedSignal,
   MAX_SKEW_S,
+  RoomSignalMsg,
   randomNonce,
   StreamHello,
   StreamSignal,
+  StreamUnsupported,
   signBytes,
   streamStatement,
   verifyBytes,
 } from "@openloungephone/federation";
 import type { ServerEnv } from "./env.ts";
 import { federatable, ownHost, resolveServerKey, serverKey } from "./federation.ts";
+import { peerBase } from "./peers.ts";
 
 /** Close an idle dialed stream this long after the last call or signal. */
 export const STREAM_IDLE_MS = 60_000;
@@ -138,7 +141,13 @@ export class ServerLink {
       if (!key) throw new Error("federation is not configured");
       if (!federatable(this.env, this.host)) throw new Error(`refused: ${this.host}`);
       const me = ownHost(this.env);
-      const url = `${baseUrlFor(this.host).replace(/^http/, "ws")}${STREAM_PATH}?from=${encodeURIComponent(me)}`;
+      // The stream of the highest federation version both servers speak (v1: /fed/v1/stream).
+      const base = await peerBase(this.env, this.host);
+      if (!base.ok) {
+        this.outbox = [];
+        throw new Error(base.message);
+      }
+      const url = `${baseUrlFor(this.host).replace(/^http/, "ws")}${base.base}/stream?from=${encodeURIComponent(me)}`;
       let socket: LinkSocket;
       try {
         socket = await this.platform.dial(url, this);
@@ -196,7 +205,20 @@ export class ServerLink {
     if (!state.authed) return this.handshake(socket, state, json);
     const parsed = StreamSignal.safeParse(json);
     if (!parsed.success) {
-      this.env.log("warn", "stream: bad message", { host: this.host });
+      const unknown = unsupportedType(json);
+      if (unknown) {
+        // A newer server's frame or signal: say so (the sender degrades) and keep the stream.
+        this.env.log("info", "stream: not supported", { host: this.host, type: unknown.type });
+        socket.send(JSON.stringify(unknown satisfies StreamUnsupported));
+      } else if ((json as { t?: unknown } | null)?.t === "unsupported") {
+        const u = StreamUnsupported.safeParse(json);
+        this.env.log("warn", "stream: the other server doesn't support a frame we sent", {
+          host: this.host,
+          ...(u.success ? { type: u.data.type } : {}),
+        });
+      } else {
+        this.env.log("warn", "stream: bad message", { host: this.host });
+      }
       return;
     }
     const msg = parsed.data.msg;
@@ -313,6 +335,39 @@ export class ServerLink {
     this.scheduleIdle();
     return this.open;
   }
+}
+
+const typesOf = (union: { options: readonly unknown[] }) =>
+  new Set(union.options.map((o) => (o as { shape: { t: { value: string } } }).shape.t.value));
+/** Frame, signal and room-signal types this server knows (anything else is "not supported"). */
+const FRAME_TYPES = new Set(["hello", "hello.ok", "signal", "unsupported"]);
+const SIGNAL_TYPES = typesOf(FedSignal);
+const ROOM_SIGNAL_TYPES = typesOf(RoomSignalMsg);
+
+/**
+ * The `unsupported` answer for a frame of a type this server doesn't know, or a signal (or room
+ * signal) whose `msg.t` it doesn't know; undefined for anything else (malformed known frames are
+ * only logged, and `unsupported` itself is never answered).
+ */
+export function unsupportedType(json: unknown): StreamUnsupported | undefined {
+  const o = json as { t?: unknown; msg?: { t?: unknown; callId?: unknown; msg?: { t?: unknown } } };
+  if (typeof o?.t !== "string") return undefined;
+  const callId = (id: unknown) =>
+    typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? { callId: id } : {};
+  if (!FRAME_TYPES.has(o.t)) return { t: "unsupported", type: o.t.slice(0, 64) };
+  if (o.t !== "signal" || typeof o.msg?.t !== "string") return undefined;
+  if (!SIGNAL_TYPES.has(o.msg.t)) {
+    return { t: "unsupported", type: `signal:${o.msg.t}`.slice(0, 64), ...callId(o.msg.callId) };
+  }
+  const inner = o.msg.msg?.t;
+  if (o.msg.t === "room.signal" && typeof inner === "string" && !ROOM_SIGNAL_TYPES.has(inner)) {
+    return {
+      t: "unsupported",
+      type: `signal:room.signal:${inner}`.slice(0, 64),
+      ...callId(o.msg.callId),
+    };
+  }
+  return undefined;
 }
 
 /**

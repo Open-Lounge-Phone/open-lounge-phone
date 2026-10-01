@@ -3,6 +3,8 @@ import { migrate, openSqlite } from "@openloungephone/db/node";
 import {
   encode,
   fromBase64Url,
+  MIN_PROTOCOL_VERSION,
+  PROTOCOL_VERSION,
   type ServerToApp,
   type ServerToDevice,
   toBase64Url,
@@ -18,8 +20,9 @@ import {
   type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
-import { type ConnectionHandler, Gateway } from "./gateway.ts";
+import { type ConnectionHandler, Gateway, protocolAccepted } from "./gateway.ts";
 import { createApi, ensureSetupToken } from "./http.ts";
+import { SERVER_INFO, SOFTWARE } from "./version.ts";
 
 type Msg = ServerToDevice | ServerToApp;
 
@@ -275,6 +278,8 @@ describe("pairing and device auth", () => {
       owner: { mode: "kids", space: "Home" },
       // The space's UTC offset (the test household's time zone is UTC).
       utcOffsetMin: 0,
+      // What the server speaks: protocol range and features.
+      server: SERVER_INFO,
     });
   });
 
@@ -302,6 +307,64 @@ describe("pairing and device auth", () => {
     const rude = openDevice();
     rude.write({ t: "button", index: 0 });
     await vi.waitFor(() => expect(rude.closed?.code).toBe(CloseCode.badHandshake));
+  });
+
+  it("serves protocol versions in its range and tells clients outside it what it accepts", async () => {
+    const newer = openDevice();
+    newer.write({ ...hello(), proto: PROTOCOL_VERSION + 1 });
+    const err = await newer.next("error");
+    expect(err).toMatchObject({
+      code: "unsupported_version",
+      server: {
+        software: SOFTWARE,
+        protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
+      },
+    });
+    expect(err.message).toMatch(/older/);
+    expect(newer.sent.filter((m) => m.t === "config")).toEqual([]);
+    await vi.waitFor(() => expect(newer.closed?.code).toBe(CloseCode.badHandshake));
+
+    // A phone older than the server accepts gets a plain "update needed" before the refusal.
+    const sent: unknown[] = [];
+    const tooOld = { send: (m: unknown) => void sent.push(m) };
+    expect(protocolAccepted(tooOld as never, 1, true, { min: 2, max: 3 })).toBe(false);
+    expect(sent).toEqual([
+      {
+        t: "config",
+        buttons: [],
+        quiet: false,
+        update: { minProtocol: 2, message: "UPDATE NEEDED" },
+        server: { ...SERVER_INFO, protocol: { min: 2, max: 3 } },
+      },
+      expect.objectContaining({ t: "error", code: "unsupported_version" }),
+    ]);
+    expect((sent[1] as { message: string }).message).toMatch(/^Update needed/);
+    // Apps get only the error; every version inside the range is served.
+    sent.length = 0;
+    expect(protocolAccepted(tooOld as never, 1, false, { min: 2, max: 3 })).toBe(false);
+    expect(sent).toHaveLength(1);
+    expect(protocolAccepted(tooOld as never, 2, true, { min: 2, max: 3 })).toBe(true);
+    expect(protocolAccepted(tooOld as never, 3, true, { min: 2, max: 3 })).toBe(true);
+  });
+
+  it("ignores unknown fields and answers unknown message types without hanging up", async () => {
+    const g = await setup();
+    const { deviceId, key } = await pairDevice(g.token);
+    const conn = openDevice();
+    conn.write({ ...hello(deviceId), protoMin: 1, sensors: ["light"] });
+    const { nonce } = await conn.next("auth.challenge");
+    const sig = await crypto.subtle.sign("Ed25519", key.pair.privateKey, fromBase64Url(nonce));
+    conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)), hw: "rev B" });
+    const config = await conn.next("config");
+    expect(config.server).toEqual(SERVER_INFO);
+    conn.write({ t: "screen.brightness", level: 3 });
+    expect(await conn.next("error")).toMatchObject({
+      code: "bad_message",
+      unsupported: "screen.brightness",
+    });
+    conn.write({ t: "ping" });
+    await conn.next("pong");
+    expect(conn.closed).toBeUndefined();
   });
 
   it("drops sockets that never say hello", async () => {

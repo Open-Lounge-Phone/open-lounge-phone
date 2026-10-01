@@ -257,6 +257,47 @@ describe("recording across servers", () => {
     expect(notices(bApp)).toEqual([]);
   });
 
+  it("a server without `recording-flag`: never placed, and ended rather than recorded unannounced", async () => {
+    await setup(false);
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "recording-flag"),
+    }));
+    const oApp = await a.connectApp(t.olga.token);
+    oApp.write({ t: "call.connection", connectionId: aSide });
+    expect(await oApp.nextState("ended")).toMatchObject({
+      reason: "denied",
+      note: "This call would be recorded, and that server can't announce recordings yet, so it wasn't placed",
+    });
+    expect(net.requests.filter((r) => r.url.endsWith("/fed/v1/calls"))).toEqual([]);
+    // Bob calls Olga: it would be recorded on her side, and his server can't be told: it ends.
+    const { bApp, oApp: olga } = await bobCallsOlga();
+    expect(await bApp.nextState("ended")).toMatchObject({ reason: "denied" });
+    await settle();
+    // Nobody was told it's recorded, and Olga's app got no ticket to record it.
+    expect(notices(bApp)).toEqual([]);
+    expect(notices(olga)).toEqual([]);
+  });
+
+  it("a recording space's rooms refuse people whose server can't announce it", async () => {
+    await setup(false);
+    const room = await a.http("/rooms", {
+      token: t.olga.token,
+      body: { kind: "phone", name: "Standup", handle: "standup", access: "connections" },
+    });
+    expectStatus(room, 201);
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "recording-flag"),
+    }));
+    const bApp = await b.connectApp(bob.token);
+    bApp.write({ t: "room.join", address: "standup@a.test" });
+    expect(await bApp.next("room.ended")).toMatchObject({
+      reason: "denied",
+      note: "This space records its calls, and that server can't announce recordings yet",
+    });
+  });
+
   it("a kids' phone on the other server is never recorded", async () => {
     await setup(false);
     const paired = await b.pairDevice(bob.token, "Kid");

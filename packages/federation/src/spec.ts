@@ -15,8 +15,10 @@ import {
   Party,
   RoomSignalMsg,
   StreamHello,
+  StreamUnsupported,
 } from "./messages.ts";
 import { MAX_SKEW_S, NONCE_TTL_MS } from "./signature.ts";
+import { FEATURES, LEGACY_FEATURES, SUPPORTED_VERSIONS, VERSION_PATHS } from "./versions.ts";
 import { FEDERATION_PATH, FEDERATION_VERSION } from "./wellKnown.ts";
 
 type JsonSchema = {
@@ -174,8 +176,27 @@ export function renderStream(): string {
     "",
     `**Room signals** — \`msg\` of a \`room.signal\` is one of ${kinds(RoomSignalMsg)}.`,
     "",
+    "**Not supported** — the answer to a frame, or a signal's `msg`, of a type the receiver doesn't know (the stream stays open; never answered itself):",
+    "",
+    ...fields(StreamUnsupported),
+    "",
     `**Timing constants** — signature and \`hello\` freshness ±${MAX_SKEW_S} s; nonces remembered ${NONCE_TTL_MS / 60_000} minutes.`,
   ].join("\n");
+}
+
+/** The features registry and the versions this implementation speaks (§9). */
+export function renderFeatures(): string {
+  const legacy = new Set<string>(LEGACY_FEATURES);
+  const out = [
+    `This implementation speaks federation version${SUPPORTED_VERSIONS.length > 1 ? "s" : ""} ${SUPPORTED_VERSIONS.map((v) => `${v} (\`${VERSION_PATHS[v]}\`)`).join(", ")}.`,
+    "",
+    "| Feature | Implied when `features` is absent (0.1) | What it covers |",
+    "|---|---|---|",
+  ];
+  for (const [name, what] of Object.entries(FEATURES)) {
+    out.push(`| \`${name}\` | ${legacy.has(name) ? "yes" : "no"} | ${cell(what)} |`);
+  }
+  return out.join("\n");
 }
 
 /** Replaces each `<!-- BEGIN GENERATED: name -->…<!-- END GENERATED: name -->` block. */
@@ -184,6 +205,7 @@ export function fillSpec(doc: string): string {
     endpoints: renderEndpoints,
     types: renderTypes,
     stream: renderStream,
+    features: renderFeatures,
   };
   let out = doc;
   for (const [name, render] of Object.entries(blocks)) {

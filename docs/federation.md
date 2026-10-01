@@ -102,8 +102,10 @@ simply expires) or **Block**. Knocking back someone who knocked you connects you
 - Every server publishes **`https://<host>/.well-known/openloungephone`**:
   ```json
   { "version": 1, "server_key": "<Ed25519 public key, base64url>",
-    "federation": "/fed/v1", "software": "openloungephone/<version>" }
+    "federation": "/fed/v1", "software": "openloungephone/<version>",
+    "versions": { "1": "/fed/v1" }, "features": ["rooms", "recording-flag", "…"] }
   ```
+  `versions` and `features` say what it speaks; see **Different versions** below.
 - **Server authentication:** every server-to-server request is signed with the server's
   Ed25519 key using HTTP Message Signatures (RFC 9421) and a `keyid` of the host. The receiver
   fetches the key over HTTPS from `.well-known`, pins it on first contact, and alerts on change
@@ -198,6 +200,37 @@ change). The endpoints:
 | `POST /fed/v1/rooms/join` | `{leg, from, room: handle}` — `from` wants into the phone room `handle@<receiver>` | `{ok: true, roomId, name}` or `{ok: false, reason}` (`denied`, `locked`, `full`, …) |
 
 Budgets per sending server (defaults): 300 requests a minute, 500 knocks a day.
+
+### Different versions (implemented)
+
+Servers are updated by different people at different times, so every server has to work with
+older and newer ones. In plain terms:
+
+- **A version number means "speaks the same wire".** Today every server speaks version 1. A
+  change that would confuse an older server (removing or renaming a field, a new signature
+  format) needs version 2, and a server that speaks 2 keeps speaking 1 next to it for at least
+  a year. Two servers always use the highest version they both speak.
+- **Features are extras within a version** (rooms, recorded calls, Lounge guests, transfers,
+  greetings, batched availability, key rotation). Each server lists its own, and a server only
+  uses an extra with another server that lists it. If it doesn't, people get a clear answer
+  instead of a silent failure, e.g. "Rooms aren't available with that server yet", and a call
+  that would be recorded is never placed to a server that can't announce the recording.
+- **Servers from before this existed** (0.1) don't list anything; they are treated as having
+  every extra they actually have, so nothing they did before stops working.
+- **No common version:** nothing is sent, and the person sees which side needs an update ("…
+  only speaks a newer federation version (2); this server needs an update"). The server logs
+  it and carries on with everyone else.
+- **Unknown things are ignored, not fatal.** Fields a server doesn't know are dropped, unknown
+  endpoints get "not supported", unknown messages on the server-pair stream get an
+  `unsupported` reply, and the connection stays up.
+- **Phones too.** A phone says which protocol version it speaks and its firmware version; the
+  server says which versions it accepts and what it offers. A phone that's too old shows
+  `UPDATE NEEDED`; firmware ignores what it doesn't understand from a newer server.
+- **Frozen and tested.** The exact bytes of version 1 (signatures, digests, key-rotation and
+  stream statements, example messages, every schema) are golden test vectors in
+  `tests/conformance/` that must pass forever, and CI runs every change against the previous
+  release in both directions and against a simulated newer server. The rules are in
+  [federation-spec.md §9](federation-spec.md#9-versioning-and-compatibility).
 
 ## Presence (opt-in, implemented)
 
@@ -333,7 +366,7 @@ address. Calls *to* the guest ring the Lounge phone they're at as well as their 
 | **F1** ✔ | Knocks and connections (locally, then across servers), server keys, `.well-known`, signed requests, disconnect, block | Done (plan phase P2); two-server e2e in `tests/e2e/twoServers.test.ts` |
 | **F2** ✔ | Federated **calls** (person ↔ person, person ↔ allowed phone, phone → connection), signaling over the on-demand server-pair stream, cross-server voicemail, opt-in presence, Lounge guests | Done (plan phase P3). Cloudflare: `FederationObject` per remote host |
 | **F3** | Phone ↔ phone calls (cousins/friends), approved by both families' guardians | Planned; needs phone-to-phone calling locally first |
-| **F4** ✔ | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Done (plan phase P5): the `Interop` workflow runs two self-hosted servers and two Workers (`wrangler dev`) against each other on every push; [federation-spec.md](federation-spec.md) is the versioned spec |
+| **F4** ✔ | Interop tests between two independent deployments in CI, a protocol spec document, versioning | Done (plan phase P5): the `Interop` workflow runs two self-hosted servers and two Workers (`wrangler dev`) against each other on every push, and this server against the previous release (`server-v*`) both ways; versions and features are advertised and negotiated, and v1 is frozen by conformance vectors; [federation-spec.md](federation-spec.md) is the versioned spec |
 
 ## Open questions
 

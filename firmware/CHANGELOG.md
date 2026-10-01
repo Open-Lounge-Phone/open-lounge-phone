@@ -1,5 +1,16 @@
 # Firmware changelog
 
+## 0.7.0 — 2026-10-01: versions and compatibility
+
+- **Says which side needs an update.** A server that no longer accepts this phone's protocol
+  version (a `config` with `update`, or `error` `unsupported_version`) puts `UPDATE NEEDED / FOR
+  THIS SERVER` on the display; a server older than the phone puts `SERVER TOO OLD / ASK ITS
+  OWNER`. Either way the phone stops reconnecting every few seconds and tries again hourly
+  (`compat.c`, host-tested).
+- Logs what the server speaks (`config.server`: software and protocol range) once per sign-in.
+- Unchanged and now tested: unknown fields and unknown message types from a newer server are
+  ignored. Protocol version still 1 (docs/protocol.md "Versions and compatibility").
+
 ## 0.6.0 — 2026-09-30: your keys, your server
 
 - **No server by default.** `CONFIG_OLP_SERVER_URL` is empty: a phone built from source connects

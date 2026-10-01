@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { Base64Url, CallState, EndReason, EpochMs, ErrorCode, IceServer, Id } from "./common.ts";
+import {
+  Base64Url,
+  CallState,
+  EndReason,
+  EpochMs,
+  ErrorCode,
+  IceServer,
+  Id,
+  ServerInfo,
+} from "./common.ts";
 
 // Every message is a flat JSON object discriminated by `t`. An optional `id` lets a sender
 // correlate an `error` reply with the message that caused it.
@@ -637,6 +646,25 @@ export const Config = z
       .describe(
         "The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`).",
       ),
+    server: ServerInfo.optional()
+      .catch(undefined)
+      .describe(
+        "What the server speaks (protocol range, features), so a phone can leave out what it doesn't offer.",
+      ),
+    update: z
+      .object({
+        minProtocol: z
+          .number()
+          .int()
+          .positive()
+          .describe("The oldest protocol the server accepts."),
+        message: z.string().min(1).max(32).describe("What to show, e.g. `UPDATE NEEDED`."),
+      })
+      .optional()
+      .catch(undefined)
+      .describe(
+        "The phone's protocol is older than the server accepts: show `message`, don't treat the phone as signed in, and retry rarely (the server closes the connection next). Sent before authentication, with no other settings.",
+      ),
   })
   .describe("Sent after authentication and whenever guardians change settings.");
 
@@ -707,6 +735,17 @@ export const ErrorMsg = z
     code: ErrorCode,
     message: z.string().max(256),
     ref: Id.optional().describe("`id` of the message that caused the error."),
+    unsupported: z
+      .string()
+      .max(64)
+      .optional()
+      .catch(undefined)
+      .describe(
+        "With `bad_message`: the message type the server doesn't know (a newer client's message). The connection stays open.",
+      ),
+    server: ServerInfo.optional()
+      .catch(undefined)
+      .describe("With `unsupported_version`: the versions the server accepts."),
   })
   .describe("Request failed. Connection stays open unless `code` is `unauthorized`.");
 
@@ -904,7 +943,14 @@ export const AppToServer = z.discriminatedUnion("t", [
 export type AppToServer = z.infer<typeof AppToServer>;
 
 export const AppReady = z
-  .object({ t: z.literal("app.ready"), ...Ref, userId: Id })
+  .object({
+    t: z.literal("app.ready"),
+    ...Ref,
+    userId: Id,
+    server: ServerInfo.optional()
+      .catch(undefined)
+      .describe("What the server speaks (protocol range, features)."),
+  })
   .describe("Companion app authenticated.");
 
 export const DeviceStatus = z

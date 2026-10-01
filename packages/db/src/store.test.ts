@@ -791,3 +791,32 @@ describe("0019_key_rotation", () => {
     old.db.close();
   });
 });
+
+describe("0020_server_info", () => {
+  it("adds the peer cache over existing data; saves, replaces and expires entries", async () => {
+    const old = openBefore("0020");
+    const s = new Store(old.sql);
+    old.db.exec(`
+      INSERT INTO server_keys (host, public_key, first_seen, last_seen) VALUES ('a.example', 'K1', 1, 2);
+    `);
+    expect(migrate(old.db)).toEqual(["0020_server_info.sql"]);
+    expect(await s.connections.pinnedKey("a.example")).toBe("K1");
+    expect(await s.connections.serverInfo("a.example")).toBeUndefined();
+    await s.connections.saveServerInfo("a.example", '{"version":1}', 10, 310);
+    await s.connections.saveServerInfo("a.example", '{"version":2}', 20, 320);
+    expect(await s.connections.serverInfo("a.example")).toEqual({
+      doc: '{"version":2}',
+      fetchedAt: 20,
+      expiresAt: 320,
+    });
+    await s.connections.expireServerInfo("a.example", 30);
+    expect((await s.connections.serverInfo("a.example"))?.expiresAt).toBe(30);
+    // Expiring never pushes an already-expired entry's time forward.
+    await s.connections.expireServerInfo("a.example", 40);
+    expect((await s.connections.serverInfo("a.example"))?.expiresAt).toBe(30);
+    expect(await s.connections.serverInfos()).toEqual([
+      { host: "a.example", doc: '{"version":2}', fetchedAt: 20 },
+    ]);
+    old.db.close();
+  });
+});

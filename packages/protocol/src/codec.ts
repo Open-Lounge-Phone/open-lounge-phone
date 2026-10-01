@@ -4,7 +4,15 @@ import { AppToServer, DeviceToServer, ServerToApp, ServerToDevice } from "./mess
 
 export type DecodeResult<T> =
   | { ok: true; msg: T }
-  | { ok: false; error: "too_large" | "not_json" | "invalid"; detail: string };
+  | { ok: false; error: "too_large" | "not_json" | "invalid"; detail: string }
+  /** A well-formed message of a type this side doesn't know (from a newer peer). */
+  | { ok: false; error: "unsupported"; detail: string; type: string };
+
+/** The `t` values a union of messages accepts. */
+function typesOf(union: z.ZodType): ReadonlySet<string> {
+  const options = (union as unknown as { options: { shape: { t: { value: string } } }[] }).options;
+  return new Set(options.map((o) => o.shape.t.value));
+}
 
 function exceedsLimit(s: string): boolean {
   // A UTF-16 code unit encodes to at most 3 UTF-8 bytes, so short strings skip the count.
@@ -18,7 +26,11 @@ function exceedsLimit(s: string): boolean {
   return bytes > MAX_MESSAGE_BYTES;
 }
 
-function decodeWith<S extends z.ZodType>(schema: S, raw: string): DecodeResult<z.infer<S>> {
+function decodeWith<S extends z.ZodType>(
+  schema: S,
+  types: ReadonlySet<string>,
+  raw: string,
+): DecodeResult<z.infer<S>> {
   if (exceedsLimit(raw)) {
     return { ok: false, error: "too_large", detail: `message exceeds ${MAX_MESSAGE_BYTES} bytes` };
   }
@@ -27,6 +39,10 @@ function decodeWith<S extends z.ZodType>(schema: S, raw: string): DecodeResult<z
     json = JSON.parse(raw);
   } catch (e) {
     return { ok: false, error: "not_json", detail: (e as Error).message };
+  }
+  const t = (json as { t?: unknown } | null)?.t;
+  if (typeof t === "string" && t.length <= 64 && !types.has(t)) {
+    return { ok: false, error: "unsupported", detail: `not supported: ${t}`, type: t };
   }
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
@@ -37,10 +53,19 @@ function decodeWith<S extends z.ZodType>(schema: S, raw: string): DecodeResult<z
   return { ok: true, msg: parsed.data };
 }
 
-export const decodeDeviceToServer = (raw: string) => decodeWith(DeviceToServer, raw);
-export const decodeServerToDevice = (raw: string) => decodeWith(ServerToDevice, raw);
-export const decodeAppToServer = (raw: string) => decodeWith(AppToServer, raw);
-export const decodeServerToApp = (raw: string) => decodeWith(ServerToApp, raw);
+const DEVICE_TO_SERVER = typesOf(DeviceToServer);
+const SERVER_TO_DEVICE = typesOf(ServerToDevice);
+const APP_TO_SERVER = typesOf(AppToServer);
+const SERVER_TO_APP = typesOf(ServerToApp);
+
+// Receivers are tolerant: unknown fields are dropped (zod objects strip them), and a message of
+// an unknown type decodes to `unsupported` so the receiver can say so and carry on.
+export const decodeDeviceToServer = (raw: string) =>
+  decodeWith(DeviceToServer, DEVICE_TO_SERVER, raw);
+export const decodeServerToDevice = (raw: string) =>
+  decodeWith(ServerToDevice, SERVER_TO_DEVICE, raw);
+export const decodeAppToServer = (raw: string) => decodeWith(AppToServer, APP_TO_SERVER, raw);
+export const decodeServerToApp = (raw: string) => decodeWith(ServerToApp, SERVER_TO_APP, raw);
 
 /** Encode an outgoing message. Senders are trusted to build well-typed messages. */
 export function encode<T extends { t: string }>(msg: T): string {

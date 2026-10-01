@@ -8,7 +8,7 @@ if(DEFINED ENV{IDF_PATH} AND EXISTS "$ENV{IDF_PATH}/tools/cmake/version.cmake")
                         "(see firmware/README.md: v5.5.5)")
   endif()
 endif()
-set(PROJECT_VER "0.6.0")
+set(PROJECT_VER "0.7.0")
 # Test builds (the OTA test) set their own version; releases use the line above.
 if(DEFINED ENV{OLP_FW_VERSION})
   set(PROJECT_VER "$ENV{OLP_FW_VERSION}")

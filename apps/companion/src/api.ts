@@ -475,6 +475,12 @@ export interface AdminFederation {
     status: "pinned" | "rejected_change";
     rejected: { fingerprint: string; at: number } | null;
     blocked: boolean;
+    /** What the server last advertised (empty until it was looked at). */
+    software?: string | null;
+    versions?: number[];
+    features?: string[];
+    /** Features this server has that it doesn't advertise: those degrade with it. */
+    missing?: string[];
   }[];
 }
 
@@ -682,11 +688,14 @@ export function createApi(opts: ApiOptions) {
     adminUnblockServer: (host: string) => request<void>("DELETE", `/admin/servers/${enc(host)}`),
     adminFederation: () => request<AdminFederation>("GET", "/admin/federation"),
     adminRotateKey: (force = false) =>
-      request<{ from: string; to: string; overlapUntil: number; forced?: boolean }>(
-        "POST",
-        "/admin/federation/rotate-key",
-        force ? { force } : {},
-      ),
+      request<{
+        from: string;
+        to: string;
+        overlapUntil: number;
+        forced?: boolean;
+        /** Servers that don't advertise `key-rotation`: their operators must re-trust. */
+        cannotFollow?: string[];
+      }>("POST", "/admin/federation/rotate-key", force ? { force } : {}),
     /** Replaces a server's pin with the key it now presents; `from`/`to` as shown. */
     adminRetrust: (host: string, from: string, to: string) =>
       request<void>("POST", `/admin/federation/peers/${enc(host)}/retrust`, { from, to }),

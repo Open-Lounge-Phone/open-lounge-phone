@@ -105,19 +105,64 @@ describe("round trip", () => {
   });
 });
 
+describe("tolerance (a newer peer)", () => {
+  it("drops unknown fields instead of rejecting the message", () => {
+    const raw = JSON.stringify({ t: "call.answer", callId: "c1", video: true, extra: { a: 1 } });
+    expect(decodeDeviceToServer(raw)).toEqual({
+      ok: true,
+      msg: { t: "call.answer", callId: "c1" },
+    });
+    const cfg = JSON.stringify({
+      t: "config",
+      buttons: [{ index: 0, label: "Mom", color: 3 }],
+      quiet: false,
+      newSetting: 1,
+    });
+    expect(decodeServerToDevice(cfg)).toEqual({
+      ok: true,
+      msg: { t: "config", buttons: [{ index: 0, label: "Mom" }], quiet: false },
+    });
+  });
+
+  it("keeps a message whose optional server info it can't read, without that info", () => {
+    const ready = { t: "app.ready", userId: "u1", server: { software: 7 } };
+    expect(decodeServerToApp(JSON.stringify(ready))).toEqual({
+      ok: true,
+      msg: { t: "app.ready", userId: "u1" },
+    });
+    const many = Array.from({ length: 40 }, (_, i) => `f${i}`);
+    const info = { software: "x/9", protocol: { min: 1, max: 3 }, features: [...many, 5] };
+    const res = decodeServerToApp(JSON.stringify({ t: "app.ready", userId: "u1", server: info }));
+    expect(res.ok && res.msg.t === "app.ready" && res.msg.server?.features).toEqual(
+      many.slice(0, 32),
+    );
+  });
+});
+
 describe("rejection", () => {
   it("rejects non-JSON", () => {
     expect(decodeDeviceToServer("{nope")).toMatchObject({ ok: false, error: "not_json" });
   });
 
-  it("rejects unknown message types", () => {
-    expect(decodeDeviceToServer('{"t":"reboot"}')).toMatchObject({ ok: false, error: "invalid" });
+  it("reports unknown message types as unsupported (a newer peer's), naming the type", () => {
+    expect(decodeDeviceToServer('{"t":"reboot"}')).toEqual({
+      ok: false,
+      error: "unsupported",
+      detail: "not supported: reboot",
+      type: "reboot",
+    });
+    expect(decodeServerToApp('{"t":"future.thing","x":1}')).toMatchObject({
+      error: "unsupported",
+      type: "future.thing",
+    });
+    // A missing or non-string `t` is just invalid.
+    expect(decodeDeviceToServer('{"t":7}')).toMatchObject({ ok: false, error: "invalid" });
   });
 
   it("rejects messages from the wrong direction", () => {
     // A device must not be able to send server-only messages such as pair.done.
     const raw = encode({ t: "pair.done", deviceId: "d", householdId: "h" });
-    expect(decodeDeviceToServer(raw)).toMatchObject({ ok: false, error: "invalid" });
+    expect(decodeDeviceToServer(raw)).toMatchObject({ ok: false, error: "unsupported" });
     // Apps cannot pretend to be devices.
     expect(decodeAppToServer(encode({ t: "button", index: 0 }))).toMatchObject({ ok: false });
   });

@@ -2,7 +2,14 @@
 // operator's minimal admin view (suspend or exempt an account, block a server).
 import { fundingSummary } from "@openloungephone/core";
 import { monthEnds } from "@openloungephone/db";
-import { generateServerKey, HOST_RE, keyFingerprint } from "@openloungephone/federation";
+import {
+  FEATURE_NAMES,
+  FEATURES,
+  generateServerKey,
+  HOST_RE,
+  keyFingerprint,
+  type PeerOffer,
+} from "@openloungephone/federation";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { isOperator } from "./accounts.ts";
@@ -11,6 +18,7 @@ import { resetsOn } from "./fairUse.ts";
 import { ownHost } from "./federation.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { operatorAudit, ownKeys, rotateOwnKey } from "./ownKey.ts";
+import { knownOffers } from "./peers.ts";
 
 /** Public: what this server asks of its users and how it's funded (hubs only). */
 export function publicHubRoutes(api: Hono<Vars>, env: ServerEnv): void {
@@ -138,14 +146,28 @@ export function hubRoutes(api: Hono<Vars>, env: ServerEnv): void {
 
   // --- federation keys: ours (rotation) and other servers' pins -----------------------------
 
+  /** What a peer last advertised: software, federation versions, features (absent: unknown). */
+  const offerView = (o: PeerOffer | undefined) =>
+    o
+      ? {
+          software: o.software ?? null,
+          versions: Object.keys(o.versions).map(Number),
+          features: [...o.features].filter((f) => f in FEATURES),
+          /** Features this server has and the peer doesn't advertise (they degrade). */
+          missing: FEATURE_NAMES.filter((f) => !o.features.has(f)),
+        }
+      : { software: null, versions: [], features: [], missing: [] };
+
   /** This server's key (fingerprints only) and every other server's pinned key. */
   api.get("/admin/federation", async (c) => {
     if (!(await operator(c))) return refused();
     const keys = await ownKeys(env);
     const blocked = new Set((await store.connections.blockedServers()).map((b) => b.host));
     const fp = keyFingerprint;
+    const offers = await knownOffers(env);
     const peers = await Promise.all(
       (await store.connections.pinnedKeys()).map(async (k) => ({
+        ...offerView(offers.get(k.host)),
         host: k.host,
         fingerprint: await fp(k.publicKey),
         firstSeen: k.firstSeen,
@@ -204,7 +226,12 @@ export function hubRoutes(api: Hono<Vars>, env: ServerEnv): void {
     };
     env.log("info", "federation: rotated this server's key", detail);
     await operatorAudit(env, c.get("account"), "fedkey.rotate", detail);
-    return c.json(detail);
+    // Servers that don't advertise `key-rotation` can't follow the hand-over on their own: their
+    // operators will see a refused key change and must re-trust it.
+    const cannotFollow = [...(await knownOffers(env))]
+      .filter(([, o]) => !o.features.has("key-rotation"))
+      .map(([host]) => host);
+    return c.json({ ...detail, ...(cannotFollow.length ? { cannotFollow } : {}) });
   });
 
   /**

@@ -6,6 +6,7 @@ import { isRemoteContactId, LOCAL_HOST } from "@openloungephone/db";
 import {
   type CallBody,
   CallResult,
+  type Feature,
   type FedSignal,
   type LoungeDialBody,
   type LoungeProgressBody,
@@ -15,8 +16,9 @@ import {
   RoomJoinResult,
 } from "@openloungephone/federation";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
-import { FederationError, fedFetch, ownHost } from "./federation.ts";
+import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
+import { peerSupports, UNAVAILABLE } from "./peers.ts";
 
 /** A call to ring here on behalf of someone elsewhere (see `HouseholdHub.remoteRing`). */
 export interface RemoteRing {
@@ -162,16 +164,31 @@ export class FedCalls implements CallLinks {
     });
   }
 
-  /** Asks the far end to ring. `callerHousehold` routes a local callee's signals back. */
+  /**
+   * Asks the far end to ring. `callerHousehold` routes a local callee's signals back. Uses an
+   * optional feature only with a server that advertises it: a recorded call is never placed with
+   * one that can't announce it, and a guest's Lounge phone needs `lounge-guests`.
+   */
   async place(host: string, body: CallBody, callerHousehold: string): Promise<RingResult> {
     if (host === LOCAL_HOST) return this.receive(LOCAL_HOST, body, callerHousehold);
+    const needs: Feature[] = [
+      ...(body.recording ? (["recording-flag"] as const) : []),
+      ...(body.to.kind === "guest" ? (["lounge-guests"] as const) : []),
+    ];
+    for (const feature of needs) {
+      if (!(await peerSupports(this.env, host, feature))) {
+        this.env.log("info", "federation: call not placed (feature)", { host, feature });
+        return { state: "ended", reason: "denied", note: UNAVAILABLE[feature] };
+      }
+    }
     try {
       const res = await fedFetch(this.env, host, "/calls", { json: body });
       const parsed = CallResult.safeParse(await res.json());
       return parsed.success ? parsed.data : { state: "ended", reason: "error" };
     } catch (e) {
       const reason = e instanceof FederationError && e.status === 429 ? "busy" : "unreachable";
-      return { state: "ended", reason };
+      const note = versionNote(e);
+      return { state: "ended", reason, ...(note ? { note } : {}) };
     }
   }
 
@@ -206,13 +223,24 @@ export class FedCalls implements CallLinks {
     callerHousehold: string,
   ): Promise<RoomJoinResult> {
     if (host === LOCAL_HOST) return this.receiveRoomJoin(LOCAL_HOST, body, callerHousehold);
+    if (!(await peerSupports(this.env, host, "rooms"))) {
+      return { ok: false, reason: "unreachable", note: UNAVAILABLE.rooms };
+    }
     try {
       const res = await fedFetch(this.env, host, "/rooms/join", { json: body });
       const parsed = RoomJoinResult.safeParse(await res.json());
       return parsed.success ? parsed.data : { ok: false, reason: "error" };
     } catch (e) {
       const status = e instanceof FederationError ? e.status : 0;
-      return { ok: false, reason: status === 429 ? "busy" : "unreachable" };
+      const note =
+        e instanceof FederationError && e.code === "not_supported"
+          ? UNAVAILABLE.rooms
+          : versionNote(e);
+      return {
+        ok: false,
+        reason: status === 429 ? "busy" : "unreachable",
+        ...(note ? { note } : {}),
+      };
     }
   }
 
@@ -240,8 +268,9 @@ export async function placeGuestDial(
     const res = await fedFetch(env, host, "/lounge/dial", { json: body });
     const parsed = CallResult.safeParse(await res.json());
     return parsed.success ? parsed.data : { state: "ended", reason: "error" };
-  } catch {
-    return { state: "ended", reason: "unreachable" };
+  } catch (e) {
+    const note = versionNote(e);
+    return { state: "ended", reason: "unreachable", ...(note ? { note } : {}) };
   }
 }
 
