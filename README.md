@@ -19,8 +19,9 @@ browser, no games, no strangers.
   <img src="docs/images/emulator-ringing.png" alt="The browser phone emulator ringing, with its developer panel" width="640">
 </p>
 
-Run it on **your own Cloudflare account** or **self-host it with Docker**, or join the free
-public hub at [hub.openloungephone.app](https://hub.openloungephone.app). Servers connect to each other, so everyone can reach everyone: you
+Run it on **your own Cloudflare account** or **self-host it with Docker**; to just try it, use the
+free public hub at [hub.openloungephone.app](https://hub.openloungephone.app). Your keys and your
+server are yours: nothing depends on this project ([security model](docs/security-model.md)). Servers connect to each other, so everyone can reach everyone: you
 knock on someone's address (`name@server`), and once they accept you can call. Nobody —
 including this project — sits in the middle of your calls, and there is no bridge to the phone
 network, ever.

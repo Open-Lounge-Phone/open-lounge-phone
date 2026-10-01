@@ -38,7 +38,7 @@ server-pair streams differ between Cloudflare and self-host.
 ## Key flows
 
 **Accounts, households and memberships.** A person has one **account** per server, with a
-unique, changeable **handle**; their address is `handle@host` (e.g. `jesse@l1.openloungephone.app`).
+unique, changeable **handle**; their address is `handle@host` (e.g. `jesse@phone.example.com`).
 A **household** holds phones, quiet hours and an allow-list per phone. A **membership** (a
 `users` row with `account_id`) is the account's role in one household (guardian or contact), and
 one account can belong to several households (co-parents, grandparents). Passkeys and sessions

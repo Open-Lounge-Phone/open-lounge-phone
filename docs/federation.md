@@ -96,7 +96,7 @@ simply expires) or **Block**. Knocking back someone who knocked you connects you
 
 ## Identities and discovery
 
-- A person's address is **`name@host`**, e.g. `jesse@l1.openloungephone.app`. `name` is a
+- A person's address is **`name@host`**, e.g. `jesse@phone.example.com`. `name` is a
   per-server handle, unique on that server and changeable (the stable id stays internal). A
   household phone gets an address only when a guardian decides to share it.
 - Every server publishes **`https://<host>/.well-known/openloungephone`**:

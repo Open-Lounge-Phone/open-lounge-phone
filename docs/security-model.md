@@ -5,6 +5,31 @@ Status: 2026-09-30 design (hardware re-based on the **minimal board**, owner dec
 page, remove and wipe, retention defaults and transcription per space, and — batch C2 — call
 recording as designed below). Items marked *(planned)* are not built yet.
 
+## Your keys, your server
+
+Nothing depends on the project. Every key belongs to whoever runs that part:
+
+| Key | Where it is made and kept | Who holds it |
+|---|---|---|
+| **Device key** (P-256) | made on the phone at first boot; never leaves it (encrypted storage in release builds) | the phone; servers know only its public half |
+| **Server federation key** (Ed25519) | made on each server when it is deployed; published at `/.well-known/openloungephone` | whoever runs that server |
+| **Update key** (RSA-3072, optional) | made with `firmware/tools/release.sh keygen` on the builder's machine (gitignored) | the builder, if they turn updates on |
+| **Storage key** (eFuse HMAC, release builds) | burned into each chip at its first boot; software can use it, never read it | the phone |
+| **TURN / SFU / Turnstile keys** (optional) | the deployer's own Cloudflare account, or their own coturn/LiveKit | the deployer |
+
+- **A phone built from source connects to no server** until someone chooses one on its setup
+  page: their own, or the public hub (`hub.openloungephone.app`) to try it. The choice can be
+  changed any time (MENU → 4, or the console); a new server means pairing again.
+- **A phone built from source checks for no updates.** It embeds no update key and no update
+  URL. Builders who want updates make their own key and run their own channel.
+- **Official firmware releases** (`fw-v*`) are the one place the project's key is used: they
+  embed the project's public key and its `fw-stable` channel, so a phone flashed with an official
+  binary takes the project's updates. Choosing that binary is the opt-in. The project's private
+  release key is kept offline by the maintainer, never in the repo.
+- **Secure Boot** (when a builder turns it on) burns the digest of **their** update key.
+- **Servers** run on the deployer's account or machine (Cloudflare or self-hosted). Federation has
+  no central directory: any server talks to any other, and the hub is one server among them.
+
 ## What the hardware does and doesn't guarantee
 
 **The board has no microphone of its own.** The phone's only microphone is the one in the
@@ -38,8 +63,9 @@ supply; the owner dropped them with the rest of that design on 2026-09-30.)
 
 What the firmware does today (firmware/README.md has the details) and what is still planned:
 
-- **Signed updates** (**built**, firmware 0.4): a phone installs an update only from a manifest
-  signed by the project's release key (RSA-3072; the private key stays offline with the owner),
+- **Signed updates** (**built**, firmware 0.4; off in source builds from 0.6): a phone installs an
+  update only from a manifest signed by the update key built into it (official releases: the
+  project's release key, RSA-3072, private half kept offline by the maintainer; your builds: yours),
   for its own board, newer than what it runs, with the image's SHA-256 checked while it is written.
   Release builds also check the image's own Secure Boot V2 signature before switching to it. Updates
   install only while the phone is hung up and idle (overnight by default, or MENU → 9), and a new

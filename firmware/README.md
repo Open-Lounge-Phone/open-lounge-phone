@@ -14,13 +14,13 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 |---|---|
 | 12 keys + hook + jack detect (interrupts + debounce), piezo ring and beeps, status LED patterns (idle, pairing, offline, ringing, missed) | Voice prompts (the pairing code read out), AEC if the handset echoes; TURN over TCP/TLS (broken in `esp_peer` 1.5.6) |
 | 2.9" e-paper (SSD1680) behind a small display interface; the protocol's strip model (≤ 2 lines × 16 chars, large type) | Partial refresh uses the controller's built-in mode (`0x22 0xFC`): check on a real panel |
-| **Wi-Fi setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server from NVS (`server`) or Kconfig (default `wss://l1.openloungephone.app`) | Bluetooth setup from the companion; the QR sticker |
-| WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
+| **Setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page (Wi-Fi **and** server: your own, or the public hub to try it) when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server also from the console (`server`), MENU → 4, or Kconfig (**default: none**, see "Your keys, your server") | Bluetooth setup from the companion; the QR sticker |
+| WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below; off in source builds): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
 | `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Flash encryption and hardware secure boot (eFuses; planned for production phones) |
 | `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
 | **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
 | `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
-| MENU → 1 Volume, 3 Wi-Fi status (→ 1 set up Wi-Fi), 9 Update now, 0 About (firmware version + the four fingerprint words) | |
+| MENU → 1 Volume, 3 Wi-Fi status (→ 1 setup), 4 Server (→ 1 change: re-opens setup), 9 Update now, 0 About (firmware version + the four fingerprint words) | |
 
 ## Build and flash
 
@@ -44,9 +44,44 @@ idf.py -p <port> flash monitor      # e.g. /dev/cu.usbmodem1101; Ctrl-] quits th
 
 Flashing and the console use the board's USB-C (native USB, USB-Serial-JTAG). If the board
 doesn't show up, hold BOOT, press RESET, release BOOT. `idf.py menuconfig` → *Open Lounge Phone*
-sets the default server and Wi-Fi, and *Call audio* the earpiece cap, mic gain and ICE options. CI
+can bake in a default server and Wi-Fi (both empty by default), *Updates* turns updates on with
+your key, and *Call audio* sets the earpiece cap, mic gain and ICE options. CI
 builds the board, Wokwi and QEMU targets with the `espressif/idf:v5.5.5` image and runs the host
 unit tests (`make -C firmware/test/host`: G.711, tones, meters, ICE server choice).
+
+## Your keys, your server
+
+Nothing in a phone you build depends on the project. A phone built from this repo with the
+defaults connects to **no server** and checks for **no updates** until you say so.
+
+| Key | Where it lives | Who holds it |
+|---|---|---|
+| **Device key** (P-256): signs the phone in | made on the phone at first boot, in its (encrypted) NVS | the phone; the server only knows the public half |
+| **Server federation key** (Ed25519): signs server-to-server requests | made on your server when you deploy it | whoever runs that server |
+| **Update key** (RSA-3072, optional): signs firmware updates | `firmware/keys/` on the machine that builds releases (gitignored) | you, if you turn updates on |
+| **Storage key** (eFuse HMAC, release builds) | burned into the chip at first boot, unreadable | the phone |
+
+**Server.** The setup page asks for one: **My own server** (its address, e.g.
+`phone.example.com`) or **Public hub** (`hub.openloungephone.app`, free, to try it). Change it
+later with MENU → 4 → 1 (re-opens setup) or the console (`server <address>`, `server hub`,
+`server none`); another server means pairing again. Until one is chosen the display says
+`SET UP: CHOOSE A SERVER`. To bake your own into your builds, set `CONFIG_OLP_SERVER_URL`.
+Servers talk to each other either way (federation): the server you pick decides nothing about
+who you can call.
+
+**Updates.** Source builds embed **no update key and no update URL**, so they never check. To
+update your own phones: `tools/release.sh keygen` (your key pair in `keys/`, gitignored; back up
+the private half offline), then `tools/release.sh build --repo you/your-repo` and `publish`
+(your key, your `fw-stable` channel), or turn on `CONFIG_OLP_OTA` in menuconfig with your own
+manifest URL (or set it later with `ota url`). The build stops with that instruction if updates
+are on and no key exists. **Official firmware releases** (`fw-v*`, built with
+`sdkconfig.release` by `tools/release.sh build`) are the only builds that embed the project's
+public key (`main/ota_signing_pub.pem`) and the official `fw-stable` channel: flashing an official
+binary is how you opt in to the project's updates. CI checks all of this
+(`tools/check_release_scheme.py`).
+
+**Secure Boot.** If you turn on hardware Secure Boot V2, its digest is **your** update key's,
+burned into your phones' eFuses; the project has no say in it.
 
 **Pin map.** `main/board.h` is generated from `hardware/build/main/gpio_map.json`:
 `make -C hardware build`, then `python3 firmware/tools/gen_board.py` (it also copies the
@@ -60,10 +95,10 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 |---|---|
 | `wifi <ssid> [password]` | save Wi-Fi in NVS and connect |
 | `wifi forget` | forget the saved Wi-Fi (the setup network opens after `reboot`) |
-| `setup` | open the Wi-Fi setup network now |
-| `ota [check\|now\|url <url>\|url default]` | updates: status, check, install now, the channel URL |
+| `setup` | open the setup network now (Wi-Fi and server) |
+| `ota [check\|now\|url <url>\|url default]` | updates: status, check, install now, the channel URL (only in builds with an update key) |
 | `setup test [ssid [pass]]` | fetch the setup page from the phone itself and post a bad form (and, with an ssid, a real one): bring-up and Wokwi |
-| `server [wss://host]` | show or set the server (reconnects) |
+| `server [<address>\|hub\|none]` | show or set the server (`phone.example.com`, `wss://…`, `ws://…` for a local test server); another server means pairing again |
 | `status` | phone state, connection, device id, Wi-Fi, the four words, the strip |
 | `key <0-9\|menu\|back>`, `hook <up\|down>` | press a key or move the hook, as the real switches do |
 | `drop [wifi]` | drop the WebSocket (or Wi-Fi) to test reconnects |
@@ -89,14 +124,16 @@ board, rev A); firmware releases are `fw-vX.Y.Z` (the signed image and its manif
 `--latest=false`. Phones **never use `/releases/latest`** (that is whatever release is newest, a
 hardware one included): they read one fixed channel, the `fw-stable` release's
 `firmware-manifest.json` (`CONFIG_OLP_OTA_MANIFEST_URL`), which `tools/release.sh publish
---release` replaces. CI checks this scheme (`tools/check_release_scheme.py`).
+--release` replaces. CI checks this scheme (`tools/check_release_scheme.py`). Updates are **off**
+in source builds (no key, no URL: "Your keys, your server"); official releases use the project's
+channel, your own releases yours (`--repo`).
 
 **The manifest** (`firmware-manifest.json`):
 `{"board","version","url","size","sha256","signature"}`, the signature being RSA-PSS/SHA-256 by the
 release key over `olp-ota-v1\n<board>\n<version>\n<url>\n<sha256>\n<size>\n`
 (`tools/ota_manifest.py` makes and verifies it; `main/ota_core.c` parses it, host-tested). The
-phone installs only a manifest that (1) is signed by the release key built into it
-(`main/ota_signing_pub.pem`), (2) names its board (`CONFIG_OLP_BOARD_ID`, `minimal-revA`), and
+phone installs only a manifest that (1) is signed by the update key built into it
+(`main/ota_signing_pub.pem` in official releases, yours in your builds), (2) names its board (`CONFIG_OLP_BOARD_ID`, `minimal-revA`), and
 (3) is newer than what runs. It then downloads the image over HTTPS (certificate bundle; GitHub's
 redirects followed), hashes it while writing the other slot, refuses a size or SHA-256 that differs
 from the manifest, and lets `esp_ota_end` check the image; in release builds that includes the
@@ -128,15 +165,16 @@ production phones, together with flash encryption; **(c)** dev builds (`sdkconfi
 image signature check (it would abort an unsigned running image), but the manifest signature and
 SHA-256 still authenticate every update, so a dev board only installs release-key-signed images.
 
-**Keys and releases.** `tools/release.sh keygen` made the release key in `firmware/keys/`
-(gitignored, never committed or printed: **back it up offline**; losing it means every phone needs
-a USB flash to trust a new key); the public half is `main/ota_signing_pub.pem`.
-`tools/release.sh build` signs a build of `PROJECT_VER` and writes `build-release/dist/`;
+**Keys and releases.** The project's release key lives with the maintainer, outside the repo
+(only its public half, `main/ota_signing_pub.pem`, is committed). `tools/release.sh keygen` makes
+**your** key in `firmware/keys/` (gitignored, never committed or printed: **back it up offline**;
+losing it means every phone needs a USB flash to trust a new key). `tools/release.sh build
+[--repo you/your-repo]` signs a build of `PROJECT_VER` and writes `build-release/dist/`;
 `publish --draft` (the default) makes a draft `fw-vX.Y.Z` that no phone sees; `publish --release`
-asks for confirmation, publishes, and updates `fw-stable`.
+asks for confirmation, publishes, and updates `fw-stable` in that repo.
 
 **Tested in simulation (QEMU e2e step 11):** against a test pre-release (deleted after the run),
-with throwaway keys: a manifest signed by another key, one for another board, a wrong SHA-256, an
+with throwaway keys (the test builds turn updates on with their own key): a manifest signed by another key, one for another board, a wrong SHA-256, an
 image signed by another key (refused by `esp_ota_end`), an older version: all refused; a signed image
 that crashes at boot: installed, tried, rolled back to the old slot; a good image: trial boot, kept
 after reaching the server, still running after a restart. **QEMU caveat:** Espressif's QEMU
@@ -188,6 +226,10 @@ fails (mutation-tested). **Needs the real board:** `espefuse.py summary` after t
 
 ## Wi-Fi setup network
 
+The setup page asks two things: the **Wi-Fi** and the **server** ("My own server" with its
+address, or "Public hub (free, to try it)"; nothing is pre-selected on a new phone). Opened again
+later, it keeps the saved Wi-Fi unless you pick another, and shows the saved server.
+
 With no Wi-Fi saved (a new phone, or after a factory reset) the phone opens **"OpenLoungePhone-XXXX"**
 (the last MAC bytes) and shows the steps on its display: the network name, its **8-digit password**
 (WPA2, fresh each time, shown only there: joining needs someone at the phone) and
@@ -198,7 +240,7 @@ and a password (checked: 8-63 characters or 64 hex); **Save and restart** stores
 restarts onto it. The page answers only on the setup network, never on the home LAN.
 
 It also opens when the saved Wi-Fi has been unreachable for 3 minutes (it closes again if the
-saved one comes back), from MENU → 3 Wi-Fi → 1, from the console (`setup`), and with **MENU+BACK
+saved one comes back), from MENU → 3 Wi-Fi → 1 or MENU → 4 Server → 1, from the console (`setup`), and with **MENU+BACK
 held at power-on**: release after 3 s for setup, keep holding to 10 s for a factory reset (the
 display says which). While it is open the phone retries its saved Wi-Fi only once a minute (a
 station scanning for a missing network hops channels and drops the setup network's clients).
@@ -268,8 +310,8 @@ quality over real Wi-Fi: [`hardware/BRINGUP.md`](../hardware/BRINGUP.md).
 
 ## Pairing a phone
 
-1. Power it. A new phone opens its Wi-Fi setup network first (above); once online it shows
-   `PAIR 123 456` on the strip (and prints `PAIRING CODE:`).
+1. Power it. A new phone opens its setup network first (above): choose its Wi-Fi and its server.
+   Once online it shows `PAIR 123 456` on the strip (and prints `PAIRING CODE:`).
 2. In the companion app: Home → **+ Pair a phone**, type the code, pick the mode and name.
 3. The phone reconnects, signs the challenge and shows `READY` with its owner line. MENU → 0
    shows its four words; the app shows the same four for that phone.
@@ -288,30 +330,34 @@ the framebuffer) and no keys (use the console's `key` and `hook`).
 brew install libgcrypt
 firmware/tools/qemu.sh run        # build, fresh flash + eFuse files, console on this terminal
 firmware/tools/qemu.sh resume     # run again on the same flash (NVS, OTA state kept)
-python3 firmware/tools/qemu_smoke.py   # the CI boot smoke test
+python3 firmware/tools/qemu_smoke.py   # the CI boot smoke test (a default build: no server)
 ```
 
-The e2e test uses QEMU by default (`OLP_SIM=qemu`; `OLP_SIM=wokwi` for Wokwi).
+The smoke test boots a default build (no `OLP_SIM_SERVER`): it checks `SET UP: CHOOSE A SERVER`,
+MENU → 4, that updates are off, and, from a packet capture of QEMU's network (`QEMU_PCAP`), that
+the phone sent nothing but DHCP: no DNS, no TCP, no UDP to anyone. `OLP_SIM_SERVER=wss://host`
+builds for a server (the e2e tests use their own). The e2e test uses QEMU by default (`OLP_SIM=qemu`; `OLP_SIM=wokwi` for Wokwi).
 
 ## Wokwi simulator
 
 `wokwi/diagram.json` is an ESP32-S3 devkit with 12 key buttons, the hook button (held = on the
 hook), the status LED, the buzzer and a display. The simulator build (`sdkconfig.sim`) joins
-`Wokwi-GUEST`, connects to the owner's server `wss://l1.openloungephone.app`, prints the console
+`Wokwi-GUEST`, connects to the server you build it for (`OLP_SIM_SERVER=wss://your-test-server`;
+none otherwise), prints the console
 on UART0 (so keys 6 and 7 move from IO43/IO44 to IO35/IO36) and has no PSRAM.
 
 ```sh
 curl -L https://wokwi.com/ci/install.sh | sh      # or the release binary into ~/.local/bin
 echo "<token>" > firmware/.wokwi-token            # gitignored; never commit it
-firmware/tools/sim.sh smoke        # build + wokwi/smoke.yaml → build-sim/serial.log, *.png
+OLP_SIM_SERVER=wss://your-test-server firmware/tools/sim.sh smoke  # build + wokwi/smoke.yaml → build-sim/serial.log, *.png
 firmware/tools/sim.sh interactive  # the console on your terminal (hook, keys, status…)
 ```
 
 `smoke.yaml` boots, joins Wi-Fi, opens the WebSocket, waits for `pair.code` and the strip, moves
 the hook, walks MENU → About → BACK, presses keys, and saves `build-sim/screenshot.png` (the
 simulated display) and `build-sim/display.png` (the firmware's own framebuffer). To finish
-pairing live, run `sim.sh interactive` and type the printed code into the companion on l1
-(Home → + Pair a phone). Another server: `server wss://host` at the `olp>` prompt.
+pairing live, run `sim.sh interactive` and type the printed code into the companion on that
+server (Home → + Pair a phone). Another server: `server <address>` at the `olp>` prompt.
 
 Simulator notes (all only in the sim build):
 - **Display stand-in:** Wokwi has no supported 2.9" e-paper part. The community chip

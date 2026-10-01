@@ -22,7 +22,7 @@ and, later, for **moving an account** to another server while keeping its connec
   },
   "connections": [
     {
-      "address": "bob@l1.openloungephone.app",
+      "address": "bob@phone.example.org",
       "peerId": "acc_…",
       "name": "Bob",
       "state": "active",
@@ -44,7 +44,7 @@ and, later, for **moving an account** to another server while keeping its connec
   ],
   "calls": [
     {
-      "peer": "bob@l1.openloungephone.app",
+      "peer": "bob@phone.example.org",
       "peerLabel": "Bob",
       "direction": "out",
       "startedAt": "2026-09-12T17:00:00.000Z",
@@ -53,7 +53,7 @@ and, later, for **moving an account** to another server while keeping its connec
       "endReason": "hangup"
     },
     {
-      "peer": "bob@l1.openloungephone.app",
+      "peer": "bob@phone.example.org",
       "peerLabel": "Bob",
       "direction": "in",
       "startedAt": "2026-09-13T08:00:00.000Z",

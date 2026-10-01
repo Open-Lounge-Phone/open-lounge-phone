@@ -1,5 +1,21 @@
 # Firmware changelog
 
+## 0.6.0 — 2026-09-30: your keys, your server
+
+- **No server by default.** `CONFIG_OLP_SERVER_URL` is empty: a phone built from source connects
+  to nothing and shows `SET UP: CHOOSE A SERVER` until one is chosen. The setup page now asks for
+  the server too: "My own server" (an address) or "Public hub (free, to try it)". Also MENU → 4
+  (→ 1 re-opens setup) and the console `server <address> | hub | none`. Another server means
+  pairing again. The simulator configs no longer name a server (`OLP_SIM_SERVER`).
+- **Updates off in source builds.** New `CONFIG_OLP_OTA` (off): no update key and no update URL
+  are embedded, there are no update checks and no SNTP; MENU → 9 says `UPDATES / NOT SET UP`.
+  Only official release builds (`sdkconfig.release`) embed the project's public key and the
+  `fw-stable` channel. Builders turn updates on with their own key (`tools/release.sh keygen`,
+  then `build --repo you/your-repo`); with updates on and no key the build stops and says how.
+- CI: the QEMU smoke test boots a default build and checks from a packet capture that it sends
+  nothing but DHCP; `check_release_scheme.py` checks the defaults, the release config and (with
+  `--default-build` / `--release-build`) the built images.
+
 ## 0.5.0 — 2026-09-30: encrypted storage
 
 - `CONFIG_OLP_STORAGE_ENCRYPTED` (on in `sdkconfig.release`, off for development and the

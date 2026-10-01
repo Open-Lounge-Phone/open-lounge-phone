@@ -53,6 +53,7 @@ Hardware designs in this directory are licensed under the
 Hardware releases are tagged `hw-vX.Y`; firmware releases are tagged `fw-vX.Y.Z`. A board revision
 gets a new `hw-` tag and a new silkscreen rev letter, and the fab files for a tag come from that
 tag's release, not from a fresh `make fab` (the router isn't byte-for-byte deterministic yet).
-Phones never follow GitHub's "latest release" (which can be a hardware release): firmware
-updates come from the fixed `fw-stable` release's `firmware-manifest.json`, signed and naming the
-board it is for (`minimal-revA` = `hw-v0.1`); see `firmware/README.md` "Updates".
+Phones never follow GitHub's "latest release" (which can be a hardware release): official
+firmware takes updates from the fixed `fw-stable` release's `firmware-manifest.json`, signed and
+naming the board it is for (`minimal-revA` = `hw-v0.1`); firmware built from source has updates
+off until you add your own key. See `firmware/README.md` "Updates" and "Your keys, your server".

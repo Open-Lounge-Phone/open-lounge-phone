@@ -57,3 +57,7 @@ r1-r4 and a*/q* used the disposable server `t1.openloungephone.app`. Host unit t
 | 2026-09-30 | e2e m1 (QEMU) | 6 mutation | FAIL as expected | With the old wipe (erase the identity namespace only) step 6 fails: `the old device id is still in the NVS flash` | Restored |
 | 2026-09-30 | build 0.5 | release build | PASS | `tools/release.sh build` with `CONFIG_OLP_STORAGE_ENCRYPTED=y`, KEY5, signed app; manifest verified | — |
 | 2026-09-30 | e2e f1 (QEMU) | 0-7, 10-12 | PASS | Final regression with 0.5.0: calls with audio both ways (relayed setup 4.6 s, direct 1.3 s), reconnect, quiet hours, remove → wipe (old id erased from the flash), setup network, encrypted storage, OTA. Pre-release and test account deleted | — |
+| 2026-09-30 | 0.6 host | prov server choice | PASS | address forms, own/hub/keep, the page's pre-selection; a mutation (an empty choice falling back to the hub) fails 2 checks | — |
+| 2026-09-30 | 0.6 qemu smoke | default build | PASS | `SET UP: CHOOSE A SERVER`, MENU → 4, `server: none`, `ota now` → `OTA OFF`, `ota url` refused; pcap: 10 frames, nothing but DHCP | — |
+| 2026-09-30 | 0.6 qemu pcap | negative check | PASS | a throwaway build for `ws://10.0.2.2:9`: the capture check reports its TCP connection attempts | — |
+| 2026-09-30 | 0.6 builds | default / release / OTA without key | PASS | default image: no key, no URL, no server; `release.sh build`: official key + fw-stable embedded; `CONFIG_OLP_OTA=y` without a key: the build stops with the keygen instruction | — |
