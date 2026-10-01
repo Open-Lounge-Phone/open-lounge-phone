@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 void prov_init(prov_t *p) { *p = (prov_t){.down_since = -1}; }
 
@@ -194,4 +195,96 @@ size_t prov_dns_answer(const uint8_t *q, size_t qlen, uint8_t *out, size_t outle
     memcpy(a + 12, &ip, 4);  // already in network byte order
   }
   return len;
+}
+
+// --- the server -------------------------------------------------------------------------------
+
+static bool starts_ci(const char *s, const char *prefix) {
+  return strncasecmp(s, prefix, strlen(prefix)) == 0;
+}
+
+const char *prov_server_url(const char *typed, char *out, size_t n) {
+  if (n) out[0] = '\0';
+  while (*typed == ' ' || *typed == '\t') typed++;
+  size_t len = strlen(typed);
+  while (len && (typed[len - 1] == ' ' || typed[len - 1] == '\t' || typed[len - 1] == '/')) len--;
+  if (len == 0) return "Type your server's address.";
+  const char *scheme = "wss://";
+  size_t skip = 0;
+  const char *sep = strstr(typed, "://");
+  if (sep && (size_t)(sep - typed) < len) {
+    size_t sl = (size_t)(sep - typed);
+    if ((sl == 3 && starts_ci(typed, "wss")) || (sl == 5 && starts_ci(typed, "https"))) {
+      scheme = "wss://";
+    } else if ((sl == 2 && starts_ci(typed, "ws")) || (sl == 4 && starts_ci(typed, "http"))) {
+      scheme = "ws://";  // a server on the local network, without TLS
+    } else {
+      return "Use your server's address, like phone.example.com.";
+    }
+    skip = sl + 3;
+  }
+  const char *rest = typed + skip;
+  size_t rlen = len > skip ? len - skip : 0;
+  if (rlen == 0) return "Type your server's address.";
+  if (strlen(scheme) + rlen + 1 > n || strlen(scheme) + rlen + 1 > PROV_SERVER_MAX)
+    return "That address is too long.";
+  bool in_host = true, host_chars = false;
+  char *o = out + strlen(strcpy(out, scheme));
+  for (size_t i = 0; i < rlen; i++) {
+    char c = rest[i];
+    if (c == '/') in_host = false;
+    bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+    bool ok = alnum || c == '.' || c == '-' || (in_host ? (c == ':' || c == '[' || c == ']')
+                                                         : (c == '/' || c == '_' || c == '~' || c == '%'));
+    if (!ok) {
+      out[0] = '\0';
+      return "That address doesn't look right. Check it and try again.";
+    }
+    if (in_host && alnum) host_chars = true;
+    *o++ = in_host && c >= 'A' && c <= 'Z' ? (char)(c - 'A' + 'a') : c;
+  }
+  *o = '\0';
+  if (!host_chars) {
+    out[0] = '\0';
+    return "That address doesn't look right. Check it and try again.";
+  }
+  return NULL;
+}
+
+const char *prov_server_choice(const char *choice, const char *addr, const char *current,
+                               char *out, size_t n) {
+  if (!strcmp(choice, "hub")) {
+    snprintf(out, n, "%s", PROV_HUB_URL);
+    return NULL;
+  }
+  if (!strcmp(choice, "own")) return prov_server_url(addr, out, n);
+  snprintf(out, n, "%s", current);
+  return current[0] ? NULL : "Choose a server.";
+}
+
+void prov_server_host(const char *url, char *out, size_t n) {
+  const char *h = strstr(url, "://");
+  h = h ? h + 3 : url;
+  size_t len = strcspn(h, "/");
+  snprintf(out, n, "%.*s", (int)len, h);
+}
+
+size_t prov_server_form(const char *current, char *out, size_t n) {
+  bool hub = !strcmp(current, PROV_HUB_URL), own = current[0] && !hub;
+  char shown[PROV_SERVER_MAX] = "", esc[PROV_SERVER_MAX * 6];
+  if (own) {
+    // Show it the way people type it: the host (and path) without wss://.
+    const char *h = strncmp(current, "wss://", 6) ? current : current + 6;
+    snprintf(shown, sizeof shown, "%s", h);
+  }
+  prov_html_escape(shown, esc, sizeof esc);
+  int w = snprintf(out, n,
+                   "<h2>Server</h2><label class=net><input type=radio name=srv value=own%s> My own "
+                   "server<input type=text name=addr maxlength=120 autocapitalize=none "
+                   "autocorrect=off placeholder=phone.example.com value=\"%s\"></label>"
+                   "<label class=net><input type=radio name=srv value=hub%s> Public hub "
+                   "<small>(free, to try it)</small></label>",
+                   own ? " checked" : "", esc, hub ? " checked" : "");
+  if (w < 0) return 0;
+  return (size_t)w < n ? (size_t)w : (n ? n - 1 : 0);
 }

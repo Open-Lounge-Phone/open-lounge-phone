@@ -11,3 +11,4 @@ keys/
 build-release/
 build-ota-*/
 build-qemu-enc*
+build-*/

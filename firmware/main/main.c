@@ -90,11 +90,23 @@ static void socket_url(char *out, size_t len) {
   else snprintf(out, len, "%s/ws/device", base);
 }
 
+/** No server chosen yet (a fresh phone): it connects to nothing until one is. */
+static bool s_no_server;
+
 static void open_socket(void) {
-  char url[200];
-  socket_url(url, sizeof url);
+  char base[PROV_SERVER_MAX];
+  net_server_url(base, sizeof base);
   s_ws_open = s_authed = false;
   s_conn = CONN_CONNECTING;
+  s_code[0] = '\0';
+  s_no_server = base[0] == '\0';
+  if (s_no_server) {
+    net_ws_close();
+    ESP_LOGI(TAG, "NO SERVER: not connecting (choose one on the setup page, MENU 4 or `server`)");
+    return;
+  }
+  char url[200];
+  socket_url(url, sizeof url);
   net_ws_open(url);
 }
 
@@ -205,6 +217,12 @@ static void render(void) {
     snprintf(lines[2], 25, "PASSWORD %s", prov_password());
     snprintf(lines[3], 25, "OPEN 192.168.4.1");
     n = 4;
+  }
+  if (n == 0 && s_no_server && !busy) {
+    snprintf(lines[0], 25, "SET UP:");
+    snprintf(lines[1], 25, "CHOOSE A SERVER");
+    snprintf(lines[2], 25, "PRESS MENU 4");
+    n = 3;
   }
   if (n == 0) {
     char strip[2][STATUS_WIDTH + 1];
@@ -564,7 +582,7 @@ static void ota_tick(int64_t now) {
   }
   if (s_next_ota_check >= 0 && now >= s_next_ota_check && ota_state() == OTA_IDLE) {
     s_next_ota_check = now + OTA_CHECK_EVERY_MS;
-    ota_check(false);
+    if (ota_enabled()) ota_check(false);  // off (the default for source builds): no calls at all
   }
   ota_ctx_t ctx = {
       .on_hook = !s_hook_up,
@@ -661,7 +679,7 @@ void app_main(void) {
         case EV_JACK: break;  // nothing to switch: the mic is only read in a call anyway
         case EV_WIFI_UP:
           prov_event(PROV_EV_STA_UP, false);
-          ota_time_start();
+          if (ota_enabled()) ota_time_start();  // the clock is only for the update window
           if (s_next_ota_check < 0) s_next_ota_check = now_ms() + 60 * 1000;  // first check
           if (!started) {
             started = true;
@@ -682,11 +700,13 @@ void app_main(void) {
           break;
         case EV_OTA_DONE:
           if (ev.a == 2) s_ota_restart = true;
+          if (ev.a == OTA_RESULT_OFF) s_ota_manual = true;  // MENU 9 or `ota now`: say so
           if (s_ota_manual && ev.a != 2) {
             static const char *msg[][2] = {{"UPDATE FAILED", "TRY LATER"},
                                            {"UP TO DATE", ""},
-                                           {"UPDATE FOUND", ""}};
-            int i = ev.a < 0 ? 0 : ev.a == 0 ? 1 : 2;
+                                           {"UPDATE FOUND", ""},
+                                           {"UPDATES", "NOT SET UP"}};
+            int i = ev.a == OTA_RESULT_OFF ? 3 : ev.a < 0 ? 0 : ev.a == 0 ? 1 : 2;
             snprintf(s_ota_msg[0], 25, "%s", msg[i][0]);
             snprintf(s_ota_msg[1], 25, "%s", msg[i][1]);
             s_ota_msg_until = now_ms() + 5000;

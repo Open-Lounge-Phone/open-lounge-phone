@@ -8,12 +8,13 @@
 #include "audio.h"
 #include "identity.h"
 #include "net.h"
+#include "prov_core.h"
 
 /** Digit key index (protocol order: 1-9 → 0-8, 0 → 9) to the digit it shows. */
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
-  static const char *names[] = {"closed", "root", "about", "wifi", "volume"};
+  static const char *names[] = {"closed", "root", "about", "wifi", "volume", "server"};
   return names[s];
 }
 
@@ -39,9 +40,10 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     } else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 3) m->screen = MENU_WIFI;
-  } else if (m->screen == MENU_WIFI) {
+    else if (d == 4) m->screen = MENU_SERVER;
+  } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
     if (digit_of(key) == 1) {
-      app_post(EV_PROV_OPEN, 0, NULL);  // 1 = set up Wi-Fi (the setup network)
+      app_post(EV_PROV_OPEN, 0, NULL);  // 1 = the setup page (Wi-Fi and server)
       m->screen = MENU_CLOSED;
     }
   } else if (m->screen == MENU_VOLUME) {
@@ -66,8 +68,9 @@ int menu_lines(const menu_t *m, char out[4][25]) {
     case MENU_ROOT:
       snprintf(out[0], 25, "MENU");
       snprintf(out[1], 25, "1 VOLUME 3 WI-FI");
-      snprintf(out[2], 25, "9 UPDATE 0 ABOUT");
-      return 3;
+      snprintf(out[2], 25, "4 SERVER 9 UPDATE");
+      snprintf(out[3], 25, "0 ABOUT");
+      return 4;
     case MENU_VOLUME:
       snprintf(out[0], 25, "VOLUME %d/%d", audio_volume(), VOLUME_MAX);
       snprintf(out[1], 25, "1 LOWER 2 LOUDER");
@@ -98,6 +101,17 @@ int menu_lines(const menu_t *m, char out[4][25]) {
       snprintf(out[2], 25, "%s", ip);
       snprintf(out[3], 25, "1 SET UP WI-FI");
       return 4;
+    }
+    case MENU_SERVER: {
+      char url[PROV_SERVER_MAX];
+      net_server_url(url, sizeof url);
+      snprintf(out[0], 25, "SERVER");
+      if (!strcmp(url, PROV_HUB_URL)) snprintf(out[1], 25, "PUBLIC HUB");
+      else if (url[0]) prov_server_host(url, out[1], 25);
+      else snprintf(out[1], 25, "NOT SET");
+      upper(out[1]);
+      snprintf(out[2], 25, "1 CHANGE");
+      return 3;
     }
     default:
       return 0;

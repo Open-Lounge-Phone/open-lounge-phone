@@ -67,6 +67,32 @@ int prov_scan_tidy(prov_ap_t *aps, int n);
 /** Escapes text for HTML (& < > " '). Returns the length written (truncates safely). */
 size_t prov_html_escape(const char *in, char *out, size_t n);
 
+// --- the server (the setup page's second question) -------------------------------------------
+
+/** The public hub: one choice on the setup page, for trying the phone out. Never a default. */
+#define PROV_HUB_URL "wss://hub.openloungephone.app"
+#define PROV_SERVER_MAX 128  // the stored URL, with its NUL
+
+/**
+ * A server address as someone types it ("phone.example.com", "https://phone.example.com/",
+ * "wss://…", "http://192.168.1.5:8787" for a local test server) → the URL the phone stores
+ * (wss:// or ws://, lowercase host, no trailing slash). NULL if fine, else why not (for the page).
+ */
+const char *prov_server_url(const char *typed, char *out, size_t n);
+
+/**
+ * The page's choice: `choice` "own" (with `addr`) or "hub"; empty = keep `current` (the saved
+ * server, "" = none). Writes the server to save into `out`. NULL if fine, else why not.
+ */
+const char *prov_server_choice(const char *choice, const char *addr, const char *current,
+                               char *out, size_t n);
+
+/** The page's server question, with `current` ("" = none) pre-selected. Returns the length. */
+size_t prov_server_form(const char *current, char *out, size_t n);
+
+/** "phone.example.com" for showing a saved server URL (scheme and path dropped). */
+void prov_server_host(const char *url, char *out, size_t n);
+
 // --- the captive portal's DNS -----------------------------------------------------------------
 
 /**

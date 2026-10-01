@@ -340,7 +340,7 @@ async function provisioning(phone: WokwiPhone, b: Browser): Promise<string> {
   await phone.waitFor(/olp> /, 60_000, "console after the reboot");
   // The phone checks its own site (the way the Wokwi run can).
   phone.send("setup test");
-  await phone.waitFor(/PROV TEST GET \/ 200 form/, 30_000, "self-test page");
+  await phone.waitFor(/PROV TEST GET \/ 200 form server-choice/, 30_000, "self-test page");
   await phone.waitFor(/PROV TEST GET \/generate_204 302/, 30_000, "self-test captive redirect");
   await phone.waitFor(/PROV TEST POST bad 200 error-shown/, 30_000, "self-test bad input");
   if (!qemu) return `${ap[1]}; self-test only (no port forwarding in Wokwi)`;
@@ -355,6 +355,10 @@ async function provisioning(phone: WokwiPhone, b: Browser): Promise<string> {
   try {
     await page.goto(`${base}/`);
     await page.getByRole("heading", { name: "Set up your phone" }).waitFor({ timeout: 20_000 });
+    // The server question: the phone's server (this build's) is pre-selected as "My own server";
+    // the public hub is only a choice.
+    assert(await page.getByRole("radio", { name: /My own server/ }).isChecked(), "own server");
+    assert(!(await page.getByRole("radio", { name: /Public hub/ }).isChecked()), "hub checked");
     await page.getByLabel("Or type its name").fill("Home Wi-Fi & Co");
     await page.getByLabel("Password").fill("short");
     await page.getByRole("button", { name: "Save and restart" }).click();
@@ -369,7 +373,13 @@ async function provisioning(phone: WokwiPhone, b: Browser): Promise<string> {
   } finally {
     await page.close();
   }
-  await phone.waitFor(/PROV SAVED ssid=Home Wi-Fi & Co \(restarting\)/, 20_000);
+  await phone.waitFor(
+    new RegExp(
+      `PROV SAVED ssid=Home Wi-Fi & Co server=${WSS.replace(/[.]/g, "\\.")} \\(restarting\\)`,
+    ),
+    20_000,
+    "saved with the same server",
+  );
   await phone.waitFor(/Open Lounge Phone firmware/, 60_000, "restart");
   await phone.waitFor(/saved Wi-Fi: Home Wi-Fi & Co/, 30_000, "the network was saved");
   await phone.waitFor(/WIFI connected/, 60_000);

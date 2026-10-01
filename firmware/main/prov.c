@@ -15,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
+#include "identity.h"
 #include "net.h"
 #include "prov_core.h"
 #include "sdkconfig.h"
@@ -104,7 +105,8 @@ static const char HEAD[] =
     "<meta name=viewport content='width=device-width,initial-scale=1'>"
     "<title>Open Lounge Phone setup</title><style>"
     "body{font:18px/1.4 system-ui,sans-serif;max-width:26em;margin:0 auto;padding:16px;"
-    "color:#222;background:#fbf8f1}h1{font-size:1.4em}label{display:block;margin:.4em 0}"
+    "color:#222;background:#fbf8f1}h1{font-size:1.4em}h2{font-size:1.1em;margin-top:1.2em}"
+    "label{display:block;margin:.4em 0}"
     ".net{padding:.5em;border:1px solid #ccc;border-radius:8px;background:#fff}"
     "input[type=text],input[type=password]{width:100%;box-sizing:border-box;font-size:1em;"
     "padding:.5em}button{font-size:1.1em;padding:.6em 1.2em;margin-top:.8em}"
@@ -114,7 +116,7 @@ static void send_page(httpd_req_t *req, const char *error) {
   httpd_resp_set_type(req, "text/html; charset=utf-8");
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
   httpd_resp_sendstr_chunk(req, HEAD);
-  httpd_resp_sendstr_chunk(req, "<h1>Set up your phone</h1><p>Choose the Wi-Fi this phone uses.</p>");
+  httpd_resp_sendstr_chunk(req, "<h1>Set up your phone</h1><p>Choose its Wi-Fi and its server.</p>");
   if (error) {
     char esc[200];
     prov_html_escape(error, esc, sizeof esc);
@@ -122,15 +124,26 @@ static void send_page(httpd_req_t *req, const char *error) {
     httpd_resp_sendstr_chunk(req, esc);
     httpd_resp_sendstr_chunk(req, "</p>");
   }
-  httpd_resp_sendstr_chunk(req, "<form method=post action=/save>");
+  httpd_resp_sendstr_chunk(req, "<form method=post action=/save><h2>Wi-Fi</h2>");
   char line[512], esc[200];
+  char saved[33] = "", ip[16];
+  int rssi;
+  net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
+  bool keep = saved[0] && net_has_wifi();
+  if (keep) {
+    // Changing only the server: the saved Wi-Fi stays unless another network is picked.
+    prov_html_escape(saved, esc, sizeof esc);
+    snprintf(line, sizeof line,
+             "<label class=net><input type=radio name=ssid value=\"\" checked> Keep %s</label>", esc);
+    httpd_resp_sendstr_chunk(req, line);
+  }
   for (int i = 0; i < s_naps; i++) {
     prov_html_escape(s_aps[i].ssid, esc, sizeof esc);
     int bars = s_aps[i].rssi > -55 ? 4 : s_aps[i].rssi > -67 ? 3 : s_aps[i].rssi > -78 ? 2 : 1;
     snprintf(line, sizeof line,
              "<label class=net><input type=radio name=ssid value=\"%s\"%s> %s "
              "<small>%.*s%s</small></label>",
-             esc, i == 0 ? " checked" : "", esc, bars, "||||", s_aps[i].secure ? "" : " open");
+             esc, i == 0 && !keep ? " checked" : "", esc, bars, "||||", s_aps[i].secure ? "" : " open");
     httpd_resp_sendstr_chunk(req, line);
   }
   if (s_naps == 0) httpd_resp_sendstr_chunk(req, "<p>No networks found.</p>");
@@ -138,7 +151,14 @@ static void send_page(httpd_req_t *req, const char *error) {
       req,
       "<label>Or type its name<input type=text name=other maxlength=32 autocapitalize=none "
       "autocorrect=off></label><label>Password<input type=password name=pass maxlength=64>"
-      "</label><button>Save and restart</button></form><p><a href='/?scan=1'>Scan again</a>"
+      "</label>");
+  char current[PROV_SERVER_MAX], form[1024];
+  net_server_url(current, sizeof current);
+  prov_server_form(current, form, sizeof form);
+  httpd_resp_sendstr_chunk(req, form);
+  httpd_resp_sendstr_chunk(
+      req,
+      "<button>Save and restart</button></form><p><a href='/?scan=1'>Scan again</a>"
       "</p><p><small>Open Lounge Phone</small></p></body></html>");
   httpd_resp_sendstr_chunk(req, NULL);
 }
@@ -168,19 +188,33 @@ static esp_err_t post_save(httpd_req_t *req) {
     got += r;
   }
   body[got] = '\0';
-  char ssid[65] = "", other[65] = "", pass[80] = "";
+  char ssid[65] = "", other[65] = "", pass[80] = "", srv[8] = "", addr[160] = "";
   prov_form_get(body, "ssid", ssid, sizeof ssid);
   prov_form_get(body, "other", other, sizeof other);
   if (prov_form_get(body, "pass", pass, sizeof pass) < 0) pass[0] = '\0';
+  prov_form_get(body, "srv", srv, sizeof srv);
+  prov_form_get(body, "addr", addr, sizeof addr);
   const char *name = other[0] ? other : ssid;
-  const char *err = prov_check(name, pass);
+  char saved[33] = "", ip[16];
+  int rssi;
+  net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
+  bool keep_wifi = !name[0] && saved[0] && net_has_wifi();
+  const char *err = keep_wifi ? NULL : prov_check(name, pass);
+  char current[PROV_SERVER_MAX], server[PROV_SERVER_MAX];
+  net_server_url(current, sizeof current);
+  if (!err) err = prov_server_choice(srv, addr, current, server, sizeof server);
   if (err) {
     ESP_LOGW(TAG, "setup page: %s", err);
     send_page(req, err);
     return ESP_OK;
   }
-  net_save_wifi(name, pass);
-  ESP_LOGI(TAG, "PROV SAVED ssid=%s (restarting)", name);
+  if (!keep_wifi) net_save_wifi(name, pass);
+  if (strcmp(server, current)) {
+    net_set_server(server);
+    identity_set_device_id("");  // another server: the phone pairs there again
+  }
+  ESP_LOGI(TAG, "PROV SAVED ssid=%s server=%s (restarting)", keep_wifi ? saved : name, server);
+  if (keep_wifi) name = saved;
   char esc[200], line[512];
   prov_html_escape(name, esc, sizeof esc);
   httpd_resp_set_type(req, "text/html; charset=utf-8");
@@ -336,11 +370,14 @@ void prov_selftest(const char *save_ssid, const char *save_pass) {
   char *buf = malloc(4096);
   if (!buf) return;
   int st = http("/", NULL, buf, 4096);
-  printf("PROV TEST GET / %d %s networks=%d\n", st,
-         strstr(buf, "action=/save") ? "form" : "NO-FORM", s_naps);
+  printf("PROV TEST GET / %d %s %s networks=%d\n", st,
+         strstr(buf, "action=/save") ? "form" : "NO-FORM",
+         strstr(buf, "name=srv value=own") && strstr(buf, "name=srv value=hub") ? "server-choice"
+                                                                               : "NO-SERVER-CHOICE",
+         s_naps);
   st = http("/generate_204", NULL, buf, 4096);
   printf("PROV TEST GET /generate_204 %d (captive redirect)\n", st);
-  st = http("/save", "ssid=&pass=short", buf, 4096);
+  st = http("/save", "ssid=x&pass=short", buf, 4096);  // too short: refused, nothing saved
   printf("PROV TEST POST bad %d %s\n", st, strstr(buf, "class=err") ? "error-shown" : "NO-ERROR");
   if (save_ssid) {
     char body[200], ssid_enc[100] = "", pass_enc[100] = "";
@@ -359,7 +396,7 @@ void prov_selftest(const char *save_ssid, const char *save_pass) {
       snprintf(e, sizeof e, "%%%02X", (unsigned char)*s);
       strlcat(pass_enc, e, sizeof pass_enc);
     }
-    snprintf(body, sizeof body, "ssid=%s&other=&pass=%s", ssid_enc, pass_enc);
+    snprintf(body, sizeof body, "ssid=%s&other=&pass=%s&srv=&addr=", ssid_enc, pass_enc);  // keeps the server
     st = http("/save", body, buf, 4096);
     printf("PROV TEST POST save %d %s\n", st, strstr(buf, "<h1>Saved</h1>") ? "saved" : "NOT-SAVED");
   }

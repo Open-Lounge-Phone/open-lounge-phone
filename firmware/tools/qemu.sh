@@ -5,11 +5,12 @@
 #   firmware/tools/qemu.sh run          image + run with the console on this terminal (Ctrl-A X quits)
 #   firmware/tools/qemu.sh fresh        a fresh flash image and eFuse file from the last build
 #   firmware/tools/qemu.sh resume       run the existing flash/eFuse files again (keeps NVS, OTA state)
-# OLP_SIM_SERVER=wss://host builds for another server (default: sdkconfig.qemu, the owner's l1).
+# OLP_SIM_SERVER=wss://host builds for that server; without it the phone has no server (the default).
 # QEMU: $OLP_QEMU, else ~/.local/qemu-esp/bin/qemu-system-xtensa, else on PATH. Espressif's
 # x86_64 macOS build esp-develop-9.2.2-20250817 works on macOS 13 (needs `brew install libgcrypt`);
 # the newer 20260417 "x86_64" archive actually holds an arm64 binary.
 # QEMU_HOSTFWD="tcp::8080-:80" forwards host ports to the phone (e.g. the setup page).
+# QEMU_PCAP=file.pcap records the phone's network traffic.
 set -euo pipefail
 FW="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$FW"
@@ -64,6 +65,11 @@ run() {
   local fwd=()
   [ -n "${QEMU_HOSTFWD:-}" ] && fwd=(-nic "user,model=open_eth,hostfwd=${QEMU_HOSTFWD}")
   [ ${#fwd[@]} -eq 0 ] && fwd=(-nic user,model=open_eth)
+  if [ -n "${QEMU_PCAP:-}" ]; then
+    # Every frame on the phone's network into a pcap file (the smoke test reads it).
+    fwd=(-netdev "user,id=n0${QEMU_HOSTFWD:+,hostfwd=${QEMU_HOSTFWD}}" -net nic,model=open_eth,netdev=n0
+      -object "filter-dump,id=dump0,netdev=n0,file=${QEMU_PCAP}")
+  fi
   exec "$QEMU" -M esp32s3 -m 8M \
     -drive "file=$B/qemu_flash.bin,if=mtd,format=raw" \
     -drive "file=$B/qemu_efuse.bin,if=none,format=raw,id=efuse" \

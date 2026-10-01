@@ -36,7 +36,7 @@ jobs:
         run: python3 firmware/tools/gen_board.py --check
       - name: Host unit tests (pure modules)
         run: make -C firmware/test/host
-      - name: Release scheme (fw-v* tags, the fw-stable channel, never /releases/latest)
+      - name: Release scheme (no keys or servers in source builds; official key + fw-stable in releases)
         run: python3 firmware/tools/check_release_scheme.py
       - name: Build (board)
         working-directory: firmware
@@ -44,6 +44,8 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py build
           idf.py size
+          # The image from the defaults: no server, no update key, no update URL.
+          python3 tools/check_release_scheme.py --default-build build
       - name: Build (Wokwi simulator)
         working-directory: firmware
         run: |
@@ -54,6 +56,7 @@ jobs:
         working-directory: firmware
         run: |
           . "$IDF_PATH/export.sh"
-          # A server that refuses at once (the guest itself): the smoke test contacts nobody.
-          OLP_SIM_SERVER=ws://127.0.0.1:9 tools/qemu.sh build
+          # The defaults (no server, updates off): it boots to "choose a server" and the packet
+          # capture shows it contacts nobody.
+          tools/qemu.sh build
           python3 tools/qemu_smoke.py

@@ -1,5 +1,5 @@
 // The serial console (USB-Serial-JTAG on the board, UART0 in the simulator):
-//   wifi <ssid> [pass]   server <url>   status   key <0-9|menu|back>   hook <up|down>
+//   wifi <ssid> [pass]   server [<address>|hub|none]   status   key <0-9|menu|back>   hook <up|down>
 //   drop [wifi]   wipe   screen   reboot   audio   volume   rtc   ice
 // `key` and `hook` act like the real switches (for tests and bring-up).
 #include <stdio.h>
@@ -16,7 +16,9 @@
 #include "ice.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "identity.h"
 #include "net.h"
+#include "prov_core.h"
 #include "prov.h"
 #include "ota.h"
 #include "sdkconfig.h"
@@ -39,18 +41,28 @@ static int cmd_wifi(int argc, char **argv) {
 }
 
 static int cmd_server(int argc, char **argv) {
-  char url[128];
+  char url[PROV_SERVER_MAX], next[PROV_SERVER_MAX];
+  net_server_url(url, sizeof url);
   if (argc < 2) {
-    net_server_url(url, sizeof url);
-    printf("server: %s\n", url);
+    printf("server: %s\n", url[0] ? url : "none (choose one: server <address> | server hub)");
     return 0;
   }
-  if (strncmp(argv[1], "wss://", 6) && strncmp(argv[1], "ws://", 5)) {
-    printf("the server URL starts with wss:// (or ws:// for a local test server)\n");
-    return 1;
+  if (!strcmp(argv[1], "none")) {
+    next[0] = '\0';
+  } else if (!strcmp(argv[1], "hub")) {
+    snprintf(next, sizeof next, "%s", PROV_HUB_URL);
+  } else {
+    const char *err = prov_server_url(argv[1], next, sizeof next);
+    if (err) {
+      printf("%s\n", err);
+      return 1;
+    }
   }
-  net_set_server(argv[1]);
-  printf("server saved: %s\n", argv[1]);
+  if (strcmp(next, url)) {
+    net_set_server(next);
+    identity_set_device_id("");  // another server: the phone pairs there again
+  }
+  printf("server saved: %s\n", next[0] ? next : "none");
   app_post(EV_RECONNECT, 0, NULL);
   return 0;
 }
@@ -184,6 +196,10 @@ static int cmd_ota(int argc, char **argv) {
   } else if (argc >= 2 && !strcmp(argv[1], "now")) {
     app_post(EV_OTA_NOW, 0, NULL);
   } else if (argc >= 3 && !strcmp(argv[1], "url")) {
+    if (!ota_built_in()) {
+      printf("updates are off in this build: no update key (README \"Your keys, your server\")\n");
+      return 1;
+    }
     ota_set_manifest_url(strcmp(argv[2], "default") ? argv[2] : NULL);
   } else if (argc > 1) {
     printf("usage: ota [check | now | url <https://…/manifest.json> | url default]\n");
@@ -212,7 +228,7 @@ void console_start(void) {
 #endif
   const esp_console_cmd_t cmds[] = {
       {.command = "wifi", .help = "wifi <ssid> [password] | wifi forget: save (or forget) Wi-Fi", .func = cmd_wifi},
-      {.command = "server", .help = "server [wss://host]: show or set the server", .func = cmd_server},
+      {.command = "server", .help = "server [<address> | hub | none]: show or set the server", .func = cmd_server},
       {.command = "status", .help = "phone, connection and Wi-Fi state", .func = cmd_status},
       {.command = "key", .help = "key <0-9|menu|back>: press a key", .func = cmd_key},
       {.command = "hook", .help = "hook <up|down>: lift or hang up the handset", .func = cmd_hook},

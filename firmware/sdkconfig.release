@@ -1,6 +1,14 @@
-# Release builds (layered on sdkconfig.defaults by tools/release.sh). Signed images: the Secure
-# Boot V2 signature scheme (RSA-3072) without burning secure boot eFuses: the running firmware only
-# accepts updates signed with the key that signed it (esp_ota_end checks). Real Secure Boot V2
+# Official release builds (layered on sdkconfig.defaults by tools/release.sh build). Only these
+# embed the project's update key and channel: phones flashed with an official binary update from
+# the project's fw-stable channel. Source builds have no key and no URL (updates off); your own
+# release (`release.sh build --repo you/repo`) swaps in your key and channel (README "Your keys,
+# your server").
+CONFIG_OLP_OTA=y
+CONFIG_OLP_OTA_PUBKEY="main/ota_signing_pub.pem"
+CONFIG_OLP_OTA_MANIFEST_URL="https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/download/fw-stable/firmware-manifest.json"
+# Signed images: the Secure Boot V2 signature scheme (RSA-3072) without burning secure boot
+# eFuses: the running firmware only accepts updates signed with the key that signed it
+# (esp_ota_end checks). Real Secure Boot V2
 # (the bootloader checks every boot, eFuses burned once) can use the same key: README "Updates".
 CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
 CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y

@@ -30,7 +30,12 @@ static const char *TAG = "ota";
 #define MANIFEST_MAX 2048
 #define CHUNK 4096
 
+#if CONFIG_OLP_OTA
 extern const char pubkey_start[] asm("_binary_ota_pubkey_pem_start");
+#define DEFAULT_URL CONFIG_OLP_OTA_MANIFEST_URL
+#else
+#define DEFAULT_URL ""  // no update key in this build: updates are off
+#endif
 
 static QueueHandle_t s_cmds;
 static volatile ota_state_t s_state = OTA_IDLE;
@@ -46,6 +51,10 @@ int ota_progress(void) { return s_progress; }
 const char *ota_available(void) { return s_available; }
 
 void ota_manifest_url(char *out, int len) {
+  out[0] = '\0';
+#if !CONFIG_OLP_OTA
+  return;  // nothing could verify an update: no URL either
+#endif
   nvs_handle_t h;
   size_t l = (size_t)len;
   if (nvs_open(NS, NVS_READONLY, &h) == ESP_OK) {
@@ -53,7 +62,21 @@ void ota_manifest_url(char *out, int len) {
     nvs_close(h);
     if (err == ESP_OK && out[0]) return;
   }
-  snprintf(out, len, "%s", CONFIG_OLP_OTA_MANIFEST_URL);
+  snprintf(out, len, "%s", DEFAULT_URL);
+}
+
+bool ota_built_in(void) {
+#if CONFIG_OLP_OTA
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool ota_enabled(void) {
+  char url[OTA_URL_LEN];
+  ota_manifest_url(url, sizeof url);
+  return url[0] != '\0';
 }
 
 void ota_set_manifest_url(const char *url) {
@@ -173,6 +196,9 @@ static const char *fetch_manifest(const char *url, ota_manifest_t *m) {
 }
 
 static bool signature_ok(const ota_manifest_t *m) {
+#if !CONFIG_OLP_OTA
+  return false;
+#else
   char text[512];
   int n = ota_manifest_signed_text(m, text, sizeof text);
   uint8_t hash[32], sig[512];
@@ -192,6 +218,7 @@ static bool signature_ok(const ota_manifest_t *m) {
   }
   mbedtls_pk_free(&pk);
   return ok;
+#endif
 }
 
 /** Download, hash and flash. NULL on success (the new slot boots next), else why not. */
@@ -268,6 +295,12 @@ static const char *install(const ota_manifest_t *m) {
 static void run(bool do_install) {
   char url[OTA_URL_LEN];
   ota_manifest_url(url, sizeof url);
+  if (!url[0]) {
+    // No update key in this build, or no channel set: no network calls at all.
+    ESP_LOGI(TAG, "OTA OFF: updates not set up");
+    app_post(EV_OTA_DONE, OTA_RESULT_OFF, NULL);
+    return;
+  }
   s_state = OTA_CHECKING;
   s_progress = 0;
   ESP_LOGI(TAG, "OTA CHECK %s", url);
@@ -309,6 +342,12 @@ static void task(void *arg) {
 }
 
 void ota_check(bool install_now) {
+  if (!ota_enabled()) {
+    ESP_LOGI(TAG, "OTA OFF: updates not set up");
+    app_post(EV_OTA_DONE, OTA_RESULT_OFF, NULL);
+    return;
+  }
+  ota_time_start();  // the overnight window's clock (only ever started with updates on)
   if (!s_cmds) {
     s_cmds = xQueueCreate(4, sizeof(bool));
     xTaskCreate(task, "ota", 10240, NULL, 4, NULL);
@@ -323,7 +362,10 @@ void ota_print_status(void) {
   ota_manifest_url(url, sizeof url);
   static const char *names[] = {"idle", "checking", "downloading", "restarting"};
   const esp_partition_t *run = esp_ota_get_running_partition();
-  printf("OTA running=%s slot=%s state=%s progress=%d available=%s trial=%d local_minute=%d url=%s\n",
-         esp_app_get_description()->version, run ? run->label : "?", names[s_state], s_progress,
-         s_available[0] ? s_available : "-", s_trial, ota_local_minute(), url);
+  printf("OTA running=%s slot=%s updates=%s state=%s progress=%d available=%s trial=%d "
+         "local_minute=%d url=%s\n",
+         esp_app_get_description()->version, run ? run->label : "?",
+         !ota_built_in() ? "off (no update key in this build)" : url[0] ? "on" : "off (no url)",
+         names[s_state], s_progress, s_available[0] ? s_available : "-", s_trial,
+         ota_local_minute(), url[0] ? url : "-");
 }

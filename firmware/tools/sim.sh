@@ -3,7 +3,8 @@
 #   firmware/tools/sim.sh build        build into firmware/build-sim
 #   firmware/tools/sim.sh smoke        build + run wokwi/smoke.yaml; log + display PNG in build-sim/
 #   firmware/tools/sim.sh interactive  build + run with the console on stdin (type `help`)
-# OLP_SIM_SERVER=wss://host builds for another server (default: sdkconfig.sim, the owner's l1).
+# OLP_SIM_SERVER=wss://host builds for that server (your test server); without it the phone has
+# no server and shows "SET UP: CHOOSE A SERVER" (smoke needs one: it pairs).
 # Needs ESP-IDF (IDF_PATH or ~/esp/esp-idf), wokwi-cli, and a token in firmware/.wokwi-token
 # (or WOKWI_CLI_TOKEN). The token is never printed.
 set -euo pipefail
@@ -44,6 +45,8 @@ token() {
 case "${1:-smoke}" in
   build) mkdir -p build-sim && build ;;
   smoke)
+    [ -n "${OLP_SIM_SERVER:-}" ] ||
+      { echo "smoke pairs with a server: set OLP_SIM_SERVER=wss://your-test-server" >&2; exit 1; }
     mkdir -p build-sim && build && token
     "$WOKWI" wokwi --scenario "$FW/wokwi/smoke.yaml" --timeout "${TIMEOUT:-240000}" \
       --serial-log-file "$FW/build-sim/serial.log"

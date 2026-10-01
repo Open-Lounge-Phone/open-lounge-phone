@@ -11,7 +11,7 @@ void net_save_wifi(const char *ssid, const char *pass);
 bool net_has_wifi(void);
 /** While the setup network is up, retry the saved Wi-Fi only once a minute. */
 void net_slow_retry(bool slow);
-/** The server base URL (NVS, else Kconfig), e.g. wss://l1.openloungephone.app */
+/** The server base URL (NVS, else Kconfig; "" = none chosen yet), e.g. wss://phone.example.com */
 void net_server_url(char *out, size_t len);
 void net_set_server(const char *url);
 /** Open (or reopen) the WebSocket to `url` (full URL incl. path). */

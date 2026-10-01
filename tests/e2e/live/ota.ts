@@ -1,7 +1,8 @@
 // The OTA test's assets: throwaway keys, three QEMU test builds (base 0.4.0, a good 0.4.1-test and
 // a 0.4.2-test that crashes at boot), an image signed with the wrong key, and signed manifests,
-// some deliberately wrong. They are hosted on a GitHub PRE-RELEASE marked "TEST ONLY" (phones read
-// /releases/latest/, which never returns pre-releases) that the test deletes afterwards.
+// some deliberately wrong. They are hosted on a GitHub PRE-RELEASE marked "TEST ONLY" (no phone
+// reads it: official builds read the fw-stable channel) that the test deletes afterwards. The test
+// builds turn updates on (CONFIG_OLP_OTA) with test key A and set the URL with `ota url`.
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -55,6 +56,8 @@ export function buildOtaAssets(server: string, run: string): OtaAssets {
   writeFileSync(
     defaults,
     [
+      // Updates on, with this test's own throwaway key (source builds have none).
+      "CONFIG_OLP_OTA=y",
       "CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y",
       "CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y",
       "CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y",

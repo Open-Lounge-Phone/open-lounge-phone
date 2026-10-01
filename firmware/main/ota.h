@@ -32,7 +32,13 @@ void ota_check(bool install);
 const char *ota_available(void);
 ota_state_t ota_state(void);
 int ota_progress(void);  // percent while downloading
-/** Manifest URL (NVS override, else Kconfig). */
+/** EV_OTA_DONE results: -1 failed, 0 up to date, 1 found, 2 installed, OTA_RESULT_OFF not set up. */
+#define OTA_RESULT_OFF (-2)
+/** This build has an update key (CONFIG_OLP_OTA). */
+bool ota_built_in(void);
+/** Updates are on: an update key in this build and a manifest URL (Kconfig or `ota url`). */
+bool ota_enabled(void);
+/** Manifest URL (NVS override, else Kconfig; "" = updates off). */
 void ota_manifest_url(char *out, int len);
 void ota_set_manifest_url(const char *url);  // NULL/"" = back to the default
 void ota_print_status(void);

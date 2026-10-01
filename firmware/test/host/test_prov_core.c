@@ -192,3 +192,84 @@ TEST(prov_boot_hold_thresholds) {
   CHECK(prov_boot_hold(10000) == PROV_HOLD_RESET);
   CHECK(prov_boot_hold(60000) == PROV_HOLD_RESET);
 }
+
+TEST(prov_server_address_forms) {
+  char u[PROV_SERVER_MAX];
+  CHECK(prov_server_url("phone.example.com", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://phone.example.com");
+  CHECK(prov_server_url("  https://Phone.Example.com/  ", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://phone.example.com");
+  CHECK(prov_server_url("WSS://phone.example.com:8443/olp/", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://phone.example.com:8443/olp");
+  CHECK(prov_server_url("http://192.168.1.5:8787", u, sizeof u) == NULL);  // a local test server
+  CHECK_STR(u, "ws://192.168.1.5:8787");
+  CHECK(prov_server_url("ws://localhost:8787", u, sizeof u) == NULL);
+  CHECK_STR(u, "ws://localhost:8787");
+  // Refused, with a reason for the page; nothing is written.
+  CHECK(prov_server_url("", u, sizeof u) != NULL);
+  CHECK_STR(u, "");
+  CHECK(prov_server_url("   /", u, sizeof u) != NULL);
+  CHECK(prov_server_url("https://", u, sizeof u) != NULL);
+  CHECK(prov_server_url("ftp://phone.example.com", u, sizeof u) != NULL);
+  CHECK(prov_server_url("phone example.com", u, sizeof u) != NULL);
+  CHECK_STR(u, "");
+  CHECK(prov_server_url("phone.example.com/?x=\"<b>", u, sizeof u) != NULL);
+  CHECK(prov_server_url("user@phone.example.com", u, sizeof u) != NULL);
+  CHECK(prov_server_url("...", u, sizeof u) != NULL);
+  char longest[200];
+  memset(longest, 'a', sizeof longest - 1);
+  longest[sizeof longest - 1] = '\0';
+  CHECK(prov_server_url(longest, u, sizeof u) != NULL);
+}
+
+TEST(prov_server_choice_own_hub_or_keep) {
+  char u[PROV_SERVER_MAX];
+  // A fresh phone has no server: something must be chosen.
+  CHECK(prov_server_choice("", "", "", u, sizeof u) != NULL);
+  CHECK(prov_server_choice("own", "", "", u, sizeof u) != NULL);
+  CHECK(prov_server_choice("own", "phone.example.com", "", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://phone.example.com");
+  // The hub is one choice, never a fallback.
+  CHECK(prov_server_choice("hub", "phone.example.com", "", u, sizeof u) == NULL);
+  CHECK_STR(u, PROV_HUB_URL);
+  CHECK_STR(PROV_HUB_URL, "wss://hub.openloungephone.app");
+  // Saving only Wi-Fi keeps the server.
+  CHECK(prov_server_choice("", "", "wss://mine.example.org", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://mine.example.org");
+  CHECK(prov_server_choice("own", "bad address", "wss://mine.example.org", u, sizeof u) != NULL);
+}
+
+TEST(prov_server_form_preselects) {
+  char html[1024];
+  // Nothing saved: neither choice is made for the person.
+  prov_server_form("", html, sizeof html);
+  CHECK(strstr(html, "name=srv value=own>") != NULL);
+  CHECK(strstr(html, "name=srv value=hub>") != NULL);
+  CHECK(strstr(html, "checked") == NULL);
+  CHECK(strstr(html, "My own server") != NULL);
+  CHECK(strstr(html, "Public hub") != NULL);
+  CHECK(strstr(html, "free, to try it") != NULL);
+  prov_server_form(PROV_HUB_URL, html, sizeof html);
+  CHECK(strstr(html, "value=hub checked") != NULL);
+  CHECK(strstr(html, "value=own checked") == NULL);
+  CHECK(strstr(html, "value=\"\"") != NULL);
+  prov_server_form("wss://mine.example.org/olp", html, sizeof html);
+  CHECK(strstr(html, "value=own checked") != NULL);
+  CHECK(strstr(html, "value=\"mine.example.org/olp\"") != NULL);
+  // A local server keeps its ws:// so saving it again doesn't turn it into wss://.
+  prov_server_form("ws://192.168.1.5:8787", html, sizeof html);
+  CHECK(strstr(html, "value=\"ws://192.168.1.5:8787\"") != NULL);
+  // Escaped, and never overflows.
+  prov_server_form("wss://a\"b", html, sizeof html);
+  CHECK(strstr(html, "a&quot;b") != NULL);
+  char tiny[16];
+  CHECK(prov_server_form("", tiny, sizeof tiny) == sizeof tiny - 1);
+}
+
+TEST(prov_server_host_for_display) {
+  char h[64];
+  prov_server_host("wss://phone.example.com:8443/olp", h, sizeof h);
+  CHECK_STR(h, "phone.example.com:8443");
+  prov_server_host("ws://192.168.1.5", h, sizeof h);
+  CHECK_STR(h, "192.168.1.5");
+}

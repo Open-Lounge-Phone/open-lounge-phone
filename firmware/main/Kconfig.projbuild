@@ -1,11 +1,13 @@
 menu "Open Lounge Phone"
 
 config OLP_SERVER_URL
-    string "Server (WebSocket base URL)"
-    default "wss://l1.openloungephone.app"
+    string "Server (WebSocket base URL; empty = none, chosen on the setup page)"
+    default ""
     help
         Base URL of the Open Lounge Phone server; the phone connects to <url>/ws/device.
-        The console command `server <url>` overrides it (stored in NVS).
+        Empty (the default): the phone connects to nothing until someone chooses a server on the
+        setup page (your own, or the public hub to try it), with MENU -> 4 or the console
+        `server` command (both stored in NVS). Set it to bake your own server into your builds.
 
 config OLP_WIFI_SSID
     string "Default Wi-Fi SSID"
@@ -52,24 +54,40 @@ config OLP_BOARD_ID
         The board this firmware runs on (hardware release hw-v0.1 = the minimal board, rev A).
         A signed manifest for another board is refused.
 
-config OLP_OTA_MANIFEST_URL
-    string "Firmware update channel (manifest URL)"
-    default "https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/download/fw-stable/firmware-manifest.json"
+config OLP_OTA
+    bool "Firmware updates over the air (needs your own update key)"
+    default n
     help
-        The fw-stable release holds only firmware-manifest.json; tools/release.sh replaces it when
-        a firmware release (tag fw-vX.Y.Z) is published. Never /releases/latest: that is whatever
-        release is newest, a hardware release (hw-v*) included. The console `ota url <url>`
-        overrides it (NVS).
+        Off by default: a phone built from source never checks for updates. Turn it on to update
+        your phones from your own channel: `tools/release.sh keygen` makes your key pair in
+        keys/ (gitignored), and the manifest URL below (or `ota url`) says where to look.
+        Official release builds (sdkconfig.release) turn it on with the project's release key
+        and channel. README "Your keys, your server".
+
+config OLP_OTA_MANIFEST_URL
+    string "Firmware update channel (manifest URL; empty = set later with `ota url`)"
+    depends on OLP_OTA
+    default ""
+    help
+        A fixed URL whose signed manifest names the newest firmware, e.g. your fork's
+        https://github.com/<you>/<repo>/releases/download/fw-stable/firmware-manifest.json
+        (tools/release.sh publish --repo <you>/<repo> keeps it current). Never /releases/latest:
+        that is whatever release is newest, a hardware release (hw-v*) included. The console
+        `ota url <url>` overrides it (NVS).
 
 config OLP_OTA_PUBKEY
-    string "Release public key (PEM, relative to firmware/)"
-    default "main/ota_signing_pub.pem"
+    string "Update public key (PEM, relative to firmware/)"
+    depends on OLP_OTA
+    default "keys/ota_signing_pub.pem"
     help
         The key whose signature a manifest must carry (RSA-3072, RSA-PSS/SHA-256; the same key
-        signs release images for Secure Boot V2). tools/release.sh makes it; tests use their own.
+        signs release images). `tools/release.sh keygen` writes yours here. Official release
+        builds use the project's key, main/ota_signing_pub.pem. The build stops if the file is
+        missing.
 
 config OLP_OTA_NIGHT_ONLY
     bool "Install automatic updates only at night (02:00-05:00 local)"
+    depends on OLP_OTA
     default y
     help
         Updates install only while the phone is hung up and idle (10 min) either way. Local time
