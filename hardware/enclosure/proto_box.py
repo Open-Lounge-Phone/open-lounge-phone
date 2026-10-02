@@ -385,6 +385,7 @@ def main() -> int:
     print("\n".join(lines))
     if a.render:
         render(shapes)
+        render_assembled(shapes)
     return 1 if any(s == "FAIL" for s, _, _ in R) else 0
 
 
@@ -451,6 +452,77 @@ def render(shapes) -> None:
     ]
     draw(items, OUT / "proto.png", elev=30, azim=-58, zoom=0.95,
          title="Open Lounge Phone proto box (lid lifted 18 mm, bezel 30 mm)")
+
+
+def raster(items, path, elev=35, azim=-60, width=2400, ss=2, light=(0.35, -0.8, 0.9)) -> None:
+    """Orthographic z-buffer render to a transparent PNG (correct hidden surfaces, Lambert shading)."""
+    import numpy as np
+    from PIL import Image
+
+    a, e = math.radians(azim), math.radians(elev)
+    to_cam = np.array([math.cos(e) * math.sin(a) * -1, math.cos(e) * math.cos(a) * -1, math.sin(e)])
+    right = np.array([math.cos(a), -math.sin(a), 0.0])
+    up = np.cross(to_cam, right)
+    L = np.array(light, dtype=float)
+    L /= np.linalg.norm(L)
+    tris, cols = [], []
+    for V, F, col in items:
+        t = V[F]
+        n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+        n /= np.where(np.linalg.norm(n, axis=1, keepdims=True) == 0, 1, np.linalg.norm(n, axis=1, keepdims=True))
+        sh = 0.35 + 0.65 * np.clip(np.abs(n @ L), 0, 1) ** 1.1
+        base = np.array([int(col.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)])
+        tris.append(t)
+        cols.append(np.clip(base[None] * sh[:, None], 0, 1))
+    T, C = np.concatenate(tris), np.concatenate(cols)
+    sx, sy, sz = T @ right, T @ up, T @ to_cam
+    x0, x1, y0, y1 = sx.min(), sx.max(), sy.min(), sy.max()
+    W = int(width * ss)
+    k = (W - 20 * ss) / (x1 - x0)
+    H = (int((y1 - y0) * k) + 20 * ss) // ss * ss
+    px, py = (sx - x0) * k + 10 * ss, (y1 - sy) * k + 10 * ss
+    zbuf = np.full((H, W), -1e9)
+    img = np.zeros((H, W, 4))
+    for i in range(len(T)):
+        X, Y, Z = px[i], py[i], sz[i]
+        xa, xb = max(int(X.min()), 0), min(int(X.max()) + 1, W - 1)
+        ya, yb = max(int(Y.min()), 0), min(int(Y.max()) + 1, H - 1)
+        if xb < xa or yb < ya:
+            continue
+        d = (Y[1] - Y[2]) * (X[0] - X[2]) + (X[2] - X[1]) * (Y[0] - Y[2])
+        if abs(d) < 1e-9:
+            continue
+        gx, gy = np.meshgrid(np.arange(xa, xb + 1) + 0.5, np.arange(ya, yb + 1) + 0.5)
+        l0 = ((Y[1] - Y[2]) * (gx - X[2]) + (X[2] - X[1]) * (gy - Y[2])) / d
+        l1 = ((Y[2] - Y[0]) * (gx - X[2]) + (X[0] - X[2]) * (gy - Y[2])) / d
+        l2 = 1 - l0 - l1
+        inside = (l0 >= -1e-6) & (l1 >= -1e-6) & (l2 >= -1e-6)
+        z = l0 * Z[0] + l1 * Z[1] + l2 * Z[2]
+        sub = zbuf[ya:yb + 1, xa:xb + 1]
+        m = inside & (z > sub)
+        sub[m] = z[m]
+        img[ya:yb + 1, xa:xb + 1][m] = (*C[i], 1.0)
+    img = img.reshape(H // ss, ss, W // ss, ss, 4).mean((1, 3))
+    rgb = np.where(img[..., 3:] > 0, img[..., :3] / np.maximum(img[..., 3:], 1e-6), 0)
+    Image.fromarray((np.dstack([rgb, img[..., 3:]]) * 255).astype("uint8"), "RGBA").save(path)
+
+
+def render_assembled(shapes) -> None:
+    """The finished prototype: closed box, board, keycaps, display module and bezel."""
+    dx, dy = bx2x(DISP_X0 + DISP_W / 2), by2y(DISP_Y0 + DISP_H / 2)
+    cap = Box(KEYCAP, KEYCAP, 8.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    cap = fillet(cap.edges().group_by(Axis.Z)[-1], 1.8)
+    items = [
+        (*mesh_of(shapes["tray"]), "#d8d2c4"),
+        (*mesh_of(shapes["lid"]), "#ece6d6"),
+        (*mesh_of(rrect(dx, dy, DISP_W, DISP_H, 1.0, Z_DISP, Z_DISP + 1.2)), "#2f6b3a"),
+        (*mesh_of(rrect(dx, dy, 66.9, 29.1, 0.5, Z_DISP + 1.2, Z_DISP + DISP_T)), "#f2f0ea"),
+        (*mesh_of(Pos(dx, dy, Z_LT) * shapes["bezel"]), "#3a3d3c"),
+    ]
+    for bx, by, label in keys():
+        z = Z_LT + (1.0 if label != "HOOK" else 3.0)
+        items.append((*mesh_of(Pos(bx2x(bx), by2y(by), z) * cap), "#3d4744"))
+    raster(items, OUT / "assembled.png", elev=36, azim=-18)
 
 
 if __name__ == "__main__":
