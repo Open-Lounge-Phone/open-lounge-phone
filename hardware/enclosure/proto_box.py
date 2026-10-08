@@ -51,6 +51,7 @@ BUTTONS = [(3.345, 23.045, "RESET SW1"), (35.0, 52.8, "BOOT SW2")]   # bottom si
 
 # ---------------------------------------------------------------- box parameters (mm)
 GAP, WALL, FLOOR = 1.0, 2.5, 2.0
+LEDGE = 1.0                    # tray wall steps in at the lid underside: the lid drops in and sits on it
 OUT_W, OUT_H = BOARD_W + 2 * (GAP + WALL), BOARD_H + 2 * (GAP + WALL)    # 163 x 95
 OUT_R, EDGE_FILLET = 6.0, 1.0
 FIT = 0.1                      # clearance per side where printed parts mate (industrial print)
@@ -62,7 +63,7 @@ Z_BT = Z_BB + BOARD_T          # board top 9.6
 PLATE_ABOVE_PCB = 5.0          # MX: plate top = PCB top + 5.0
 LID_T = 2.0
 Z_LT = Z_BT + PLATE_ABOVE_PCB  # lid (plate) top 14.6
-Z_LU = Z_LT - LID_T            # lid underside = tray wall top 12.6
+Z_LU = Z_LT - LID_T            # lid underside = the tray's ledge 12.6 (flat: the lid prints on it)
 TOP_CLEAR = Z_LU - Z_BT        # 3.0 above the board top under the flat lid
 BOT_CLEAR = Z_BB - Z_FLOOR     # 6.0 below the board bottom
 
@@ -79,8 +80,8 @@ VIEW = (68.0, 30.0)            # window over the 66.9 x 29.1 active area (centre
 J3_CUT = (J3_BODY[0] + 1.0, J3_BODY[1] + 1.0)
 STANDOFF_HOLE = 7.0            # lid clearance round the hex standoffs
 
-# hook: the MX switch clips into the lid like a key; a square collar guides the handset rest's
-# plunger (or a plain keycap) straight onto the switch stem
+# hook: the MX switch clips into the lid like a key; a square collar shrouds its keycap, which
+# the handset cradle's foot rests on
 HOOK_COLLAR_IN, HOOK_COLLAR_WALL, HOOK_COLLAR_H = 18.6, 1.6, 6.0
 MX_PRETRAVEL, MX_TRAVEL = 2.0, 4.0
 
@@ -107,7 +108,8 @@ Z_PIEZO_TOP = Z_BT + BZ1_H
 SOUND_D, SOUND_N = 1.5, 7      # one centre hole + a ring of six
 LED_HOLE = 3.0
 
-# fastening: 4 screws clamp lid + board + tray (M3 x 12 countersunk into heat-set inserts)
+# fastening: 4 screws clamp lid + spacer + board + tray (M3 x 12 countersunk into heat-set inserts)
+SPACER_L, SPACER_OD = TOP_CLEAR, 6.0   # off-the-shelf M3 nylon spacer between lid and board
 BOLTS = HOLES
 BOSS_D = 7.0
 SCREW_CLEAR, CSK_D = 3.3, 6.0
@@ -275,10 +277,12 @@ def rear_cutters():
 
 
 def tray() -> Part:
-    shell = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, 0, Z_LU)
-    shell = fillet(shell.edges().group_by(Axis.Z)[0], EDGE_FILLET)
+    shell = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, 0, Z_LT)
+    shell = fillet(shell.edges().group_by(Axis.Z)[0] + shell.edges().group_by(Axis.Z)[-1], EDGE_FILLET)
     t = shell - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * WALL, OUT_H - 2 * WALL,
-                      OUT_R - WALL, Z_FLOOR, Z_LU + 1)
+                      OUT_R - WALL, Z_FLOOR, Z_LU + 0.01)
+    up = WALL - LEDGE              # the wall above the ledge, round the dropped-in lid
+    t = t - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * up, OUT_H - 2 * up, OUT_R - up, Z_LU, Z_LT + 1)
     t = t + union([cyl(bx2x(bx), by2y(by), Z_FLOOR - 0.01, Z_BB, BOSS_D) for bx, by in BOLTS])
     cut = []
     for bx, by in BOLTS:
@@ -297,14 +301,10 @@ def tray() -> Part:
 
 
 def lid() -> Part:
-    plate = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, Z_LU, Z_LT)
-    plate = fillet(plate.edges().group_by(Axis.Z)[-1], EDGE_FILLET)
+    up = WALL - LEDGE
+    plate = rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * (up + FIT), OUT_H - 2 * (up + FIT),
+                  OUT_R - up - FIT, Z_LU, Z_LT)
     add = []
-    iw, ih, ir = OUT_W - 2 * WALL - 2 * FIT, OUT_H - 2 * WALL - 2 * FIT, OUT_R - WALL
-    add.append(rrect(OUT_W / 2, OUT_H / 2, iw, ih, ir, Z_LU - 1.5, Z_LU + 0.01)
-               - rrect(OUT_W / 2, OUT_H / 2, iw - 2.4, ih - 2.4, ir - 1.2, Z_LU - 2, Z_LU + 1))
-    for bx, by in BOLTS:         # clamp spacers: lid underside -> board top
-        add.append(cyl(bx2x(bx), by2y(by), Z_BT, Z_LU + 0.01, BOSS_D))
     hx, hy = bx2x(HOOK[0]), by2y(HOOK[1])
     o = HOOK_COLLAR_IN + 2 * HOOK_COLLAR_WALL
     add.append(box(hx - o / 2, hx + o / 2, hy - o / 2, hy + o / 2, Z_LT - 0.01, Z_LT + HOOK_COLLAR_H)
@@ -372,6 +372,12 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
             f"{bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm (bed {BED:.0f})")
     add(WALL >= 2 and FLOOR >= 2 and LID_T >= 2, "walls",
         f"wall {WALL}, floor {FLOOR}, lid {LID_T}; key clip ledge {LID_T - KEY_POCKET_D}")
+    lb = shapes["lid"].bounding_box()
+    add(abs(lb.min.Z - Z_LU) < 1e-6, "lid prints flat",
+        f"nothing below the lid underside (z {lb.min.Z:.2f}); the tray's {LEDGE} mm ledge and "
+        f"{WALL - LEDGE} mm wall above it locate the lid")
+    add(SPACER_OD <= BOSS_D and abs(SPACER_L - (Z_LU - Z_BT)) < 1e-6, "spacers",
+        f"M3 nylon spacer {SPACER_L:.1f} mm long, OD {SPACER_OD} (lid underside -> board top)")
     add(abs(Z_LT - (Z_BT + 5.0)) < 1e-6, "MX stack",
         f"board top z {Z_BT:.1f}, plate top z {Z_LT:.1f} (+{Z_LT - Z_BT:.1f}), "
         f"space under the lid {TOP_CLEAR:.1f}, under the board {BOT_CLEAR:.1f}")
@@ -416,7 +422,7 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
         math.dist(by_ref[h]["at"], s) < 0.05 for h, s in zip(("H5", "H6"), STANDOFFS))
     add(ok, "display mount", f"J3 pin 1 {pin1} (drawing {J3_PIN1[0]:.2f}, {J3_PIN1[1]:.2f}); "
         f"standoffs H5/H6 at {STANDOFFS[0]}, {STANDOFFS[1]} = module holes 86.2 x 31.9")
-    # bosses vs parts (tray boss below, lid spacer above)
+    # bosses vs parts (tray boss below, nylon spacer above)
     bad = []
     for bx, by in BOLTS:
         for p in parts:
