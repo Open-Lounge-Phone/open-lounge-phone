@@ -25,8 +25,9 @@ make parts     # build/proto/board_parts.json from the placed board (KiCad 10)
 make proto     # STL + STEP + fit checks (make render also writes proto.png)
 ```
 
-Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `bezel`, `cradle` as STL + STEP
-(print one of each),
+Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `bezel` and the four cradle
+styles `cradle-v`, `cradle-claw`, `cradle-balls`, `cradle-fork` as STL + STEP (print one of each
+part, and one cradle in the style you like),
 `checks.txt` (fit checks; exit 1 on FAIL) and, with `make render`, `proto.png`. The board
 geometry in `proto_box.py` mirrors `layout/place.py`; the checks compare it with the placed
 board, so a moved part shows up as a FAIL. Without `board_parts.json` the part checks are
@@ -45,7 +46,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | Stack (z from the table) | floor top 2.0 → board bottom 8.0 (6 mm under the board: the jack, 4 mm, is the tallest part there) → board top 9.6 → lid top 14.6 = board top + 5.0 (MX plate height) |
 | Lid = switch plate | 2.0 mm; **13** × 14.0 mm cutouts (12 keys + the hook switch) with a 15.2 × 0.5 mm underside pocket; 6.1 × 11.2 mm cut-out for the display socket J3; Ø7 holes for the two display standoffs; Ø3 hole over the status LED. Flat underside with only cut-outs in it, so it prints face down on it; 0.1 mm clearance to the tray walls |
 | Hook | the 13th MX switch (SW15, band front-left) clips into the lid like a key and carries a plain 1u keycap; an 18.6 mm square, 6 mm tall collar on the lid shrouds it. Travel: actuation at 2 mm, hard stop at 4 mm (the switch itself). Pressed = on the hook |
-| Cradle | one arm along the left end, hinged on two ears on the lid (rear-left, in front of the piezo dome) with an M3 screw as the pin. Its round front foot rests on the hook keycap; the handset lies front to back in two 90° V rests (52 mm opening, handles up to about 50 mm wide), so the keys and display stay clear. 56 % of the handset's weight presses the switch (a handset of 121 g or more for 1.5× a 45 gf linear switch); the 27 g arm puts 15 g on the cap, so the switch's spring lifts it when the handset comes off. The handle sits 70 mm above the table so the cups clear the keycaps and the table. Handset numbers in `proto_box.py` (`HANDSET_*`, `HANDLE_W`, `CUP_DROP`): the Opis 60s Micro's listed 21 × 7 × 6 cm, with the handle width and cup drop estimated: measure your handset |
+| Cradle | one arm along the left end, hinged on two ears on the lid (rear-left, in front of the piezo dome) with an M3 screw as the pin. Its round front foot rests on the hook keycap; the handset lies front to back in two rests ("hands"), so the keys and display stay clear. Four interchangeable hand styles share the same arm, hinge and foot and hold the handle at the same height, so any of them swaps on the pin: **V** (90°, 52 mm opening), **claw** (two crescents, thick at the bottom with horns curving up and in, about 60 mm between the tips), **balls** (two Ø14 balls 36 mm apart that the handle sits between) and **fork** (a flat seat between two round-topped tines, 52 mm apart). All take handles up to about 50 mm wide. 56 % of the handset's weight presses the switch (a handset of 121 g or more for 1.5× a 45 gf linear switch); each arm (18-27 g, by style) puts at most 15 g on the cap, so the switch's spring lifts it when the handset comes off. The handle sits 70 mm above the table so the cups clear the keycaps and the table. Handset numbers in `proto_box.py` (`HANDSET_*`, `HANDLE_W`, `CUP_DROP`): the Opis 60s Micro's listed 21 × 7 × 6 cm, with the handle width and cup drop estimated: measure your handset |
 | Piezo | BZ1 (6.5 mm tall) pokes 1.5 mm through the plate: a Ø16 dome on the lid covers it, with a Ø12.8 bore and seven Ø1.5 sound holes on top |
 | Display | the WeAct 2.9" module plugs into J3 and rests on two M3 × 11 mm standoffs (H5, H6); its underside is at z 20.6, 6 mm above the plate. The **bezel** (separate print) sits on the plate round the module: 1.2 mm walls, 1.2 mm lip, 68 × 30 mm window (centred on the module; the panel's active area is 66.9 × 29.1, position EST). 1.45 mm is left between the bezel and each keycap row |
 | Rear wall | USB-C J1 (bottom side, hanging under the board): 12.8 × 7.2 R3.4 opening at board x 19.5, z 6.4; 3.5 mm jack J2 (bottom side): Ø8 opening at board x 6.5 on the plug axis (≈ 2 mm below the board, UNVERIFIED until a PJ-31060 sample is measured) |
@@ -89,7 +90,7 @@ vs the 6 mm under the board, top parts taller than the 3 mm under the plate (onl
 each with its opening), J3 pin 1 and H5/H6 where the WeAct drawing puts them, Ø7 bosses vs
 part courtyards, the piezo dome over BZ1, the LED hole over D2, the pinholes under SW1/SW2 and
 the 13 switch sockets vs the lid cutouts, and the cradle: both handset cups clear of the keycaps,
-piezo dome and table, the V rests ≥ 15 mm above the keycaps, the hook load (handset share and the
-arm's own weight on the cap), the hinge ears vs the H4 countersink and the piezo dome, and the arm's
+piezo dome and table, and for every cradle style the hands ≥ 15 mm above the keycaps and the arm's
+own weight on the cap; the handset's share of the hook load, the hinge ears vs the H4 countersink and the piezo dome, and the arm's
 swing. Part heights come from a table in `proto_box.py`
 (datasheet values where known, otherwise conservative estimates). Last run 2026-10-08: all checks pass.

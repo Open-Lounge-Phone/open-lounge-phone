@@ -1,5 +1,5 @@
 # Open Lounge Phone core shell (code CAD, build123d). See PROTO_BOX.md.
-#   make        -> build/proto/{tray,lid,bezel}.{stl,step} + checks.txt (fails on FAIL)
+#   make        -> build/proto/{tray,lid,bezel,cradle-*}.{stl,step} + checks.txt (fails on FAIL)
 #   make render -> the same plus build/proto/proto.png
 #   make parts  -> build/proto/board_parts.json from the placed board (needs KiCad 10); without
 #                  it the part-fit checks against the board are skipped

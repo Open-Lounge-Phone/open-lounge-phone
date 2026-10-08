@@ -97,6 +97,10 @@ HINGE_Y = 60.0                 # world y of the pin (rear-left, in front of the 
 EAR_T, EAR_GAP, PIN_HOLE, ARM_HOLE = 3.5, 0.3, 3.2, 3.4
 REST_Y = (20.0, 52.0)          # world y of the two V rests
 V_OPEN, V_WALL, V_T = 52.0, 4.0, 8.0     # V opening (fits handles up to ~50 mm), 90 degrees
+CRADLE_STYLES = ("v", "claw", "balls", "fork")  # interchangeable hands on the same arm
+CLAW_RO, CLAW_RI, CLAW_E, CLAW_TIP = 34.0, 30.0, 8.0, 9.0   # crescent radii, offset, horn tip height
+BALL_D, BALL_SPREAD = 14.0, 18.0
+FORK_D, FORK_H = 8.0, 20.0
 CUP_CLEAR = 3.0
 MX_ACTUATE_GF = 45.0           # typical linear MX switch at 2 mm; a lighter switch is fine
 PA12_DENSITY = 1.01            # g/cm3, industrial nylon print
@@ -178,23 +182,60 @@ def hinge_ears() -> list[Part]:
     return out
 
 
-def cradle() -> Part:
-    """The arm: hinge at the rear, foot on the hook keycap, two V rests for the handset."""
-    g = cradle_geom()
-    lx, fy, zb0, hz, apex = g["lx"], g["fy"], g["zb0"], g["hz"], g["apex"]
-    x0, x1 = lx - ARM_W / 2, lx + ARM_W / 2
+def ycyl(x, y0, y1, z, d) -> Part:
     from build123d import Rot
+    return Pos(x, y0, z) * Rot(-90, 0, 0) * Cylinder(d / 2, y1 - y0,
+                                                      align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+
+def rest(style: str, y: float, g: dict) -> tuple[Part, float]:
+    """One handset rest ("hand") centred on the arm at world y; returns (shape, its lowest z).
+    Every style holds the handle's underside at the same height, so the checks hold for all."""
+    from build123d import Rot, Sphere
+    lx, hb, apex = g["lx"], g["hb"], g["apex"]
+    y0, y1 = y - V_T / 2, y + V_T / 2
+    if style == "v":             # 90 degree V
+        w, depth = V_OPEN + 2 * V_WALL, V_OPEN / 2
+        block = box(lx - w / 2, lx + w / 2, y0, y1, apex - V_WALL, apex + depth)
+        side = 2 * depth         # diamond with its bottom corner on the V apex
+        v = Pos(lx, y, apex + side / math.sqrt(2)) * Rot(0, 45, 0) * Box(side, V_T + 2, side)
+        return block - v, apex - V_WALL
+    if style == "claw":          # crescent: thick at the bottom, two horns curving up and in
+        ro, ri, e = CLAW_RO, CLAW_RI, CLAW_E
+        cz = hb + ri - e         # the handle sits on the inner circle's lowest point
+        c = ycyl(lx, y0, y1, cz, 2 * ro) - ycyl(lx, y0 - 1, y1 + 1, cz + e, 2 * ri)
+        c = c - box(lx - ro - 1, lx + ro + 1, y0 - 1, y1 + 1, cz + CLAW_TIP, cz + ro + 1)
+        return c, cz - ro
+    if style == "balls":         # two balls the handle sits between
+        r, hr = BALL_D / 2, HANDLE_W / 2
+        zc = hb + hr - math.sqrt((hr + r) ** 2 - BALL_SPREAD ** 2)
+        bar0 = zc - 15
+        parts = [box(lx - BALL_SPREAD - 3, lx + BALL_SPREAD + 3, y0, y1, bar0, bar0 + 6)]
+        for sx in (-1, 1):
+            x = lx + sx * BALL_SPREAD
+            parts += [cyl(x, y, bar0 + 5, zc, 6.0), Pos(x, y, zc) * Sphere(r)]
+        return union(parts), bar0
+    if style == "fork":          # flat seat between two round-topped tines
+        tx = V_OPEN / 2 + FORK_D / 2
+        parts = [box(lx - tx, lx + tx, y0, y1, hb - 6, hb)]
+        for sx in (-1, 1):
+            x = lx + sx * tx
+            parts += [cyl(x, y, hb - 6, hb + FORK_H, FORK_D), Pos(x, y, hb + FORK_H) * Sphere(FORK_D / 2)]
+        return union(parts), hb - 6
+    raise ValueError(style)
+
+
+def cradle(style: str = "v") -> Part:
+    """The arm: hinge at the rear, foot on the hook keycap, two rests ("hands") for the handset."""
+    g = cradle_geom()
+    lx, fy, zb0, hz = g["lx"], g["fy"], g["zb0"], g["hz"]
+    x0, x1 = lx - ARM_W / 2, lx + ARM_W / 2
     arm = box(x0, x1, fy - FOOT_D / 2, HINGE_Y + 6, zb0, zb0 + ARM_H)
     arm = arm + xcyl(x0, x1, fy, g["z_cap"] + FOOT_D / 2, FOOT_D)     # round foot on the cap
     arm = arm + xcyl(x0, x1, HINGE_Y, hz, 12.0)
     for y in REST_Y:
-        w = V_OPEN + 2 * V_WALL
-        depth = V_OPEN / 2
-        arm = arm + box(x0, x1, y - V_T / 2, y + V_T / 2, zb0 + ARM_H - 0.01, apex - V_WALL + 0.01)
-        block = box(lx - w / 2, lx + w / 2, y - V_T / 2, y + V_T / 2, apex - V_WALL, apex + depth)
-        side = 2 * depth          # diamond with its bottom corner on the V apex
-        v = Pos(lx, y, apex + side / math.sqrt(2)) * Rot(0, 45, 0) * Box(side, V_T + 2, side)
-        arm = arm + (block - v)
+        hand, bottom = rest(style, y, g)
+        arm = arm + box(x0, x1, y - V_T / 2, y + V_T / 2, zb0 + ARM_H - 0.01, bottom + 0.5) + hand
     return arm - xcyl(x0 - 1, x1 + 1, HINGE_Y, hz, ARM_HOLE)
 
 
@@ -486,20 +527,21 @@ def cradle_checks(shapes) -> list[tuple[str, str, str]]:
         gaps.append(f"{name} cup {hb - CUP_DROP - top:.1f} mm over {what}")
         ok = hb - CUP_DROP - top >= CUP_CLEAR - 1e-6
         add(ok, f"handset {name} cup", gaps[-1])
-    rest_bottom = g["apex"] - V_WALL
     under = max(Z_LT + CAP_TOP, Z_DISP + DISP_T + BEZEL_TOP)
-    add(rest_bottom - under >= 15, "rests vs keys",
-        f"V rests start {rest_bottom - under:.1f} mm above the keycap tops (fingers fit under)")
-    cr = shapes["cradle"]
-    grams = cr.volume / 1000 * PA12_DENSITY
     arm_len = HINGE_Y - fy
-    self_share = (HINGE_Y - cr.center().Y) / arm_len
     share = (HINGE_Y - yc) / arm_len
     need = MX_ACTUATE_GF * 1.5 / share
-    add(grams * self_share < 0.5 * MX_ACTUATE_GF and 0.3 < share <= 1.0, "hook load",
-        f"arm {grams:.0f} g puts {grams * self_share:.0f} g on the hook cap (switch lifts it); "
+    add(0.3 < share <= 1.0, "hook share",
         f"{share * 100:.0f} % of the handset's weight presses the switch: handset >= {need:.0f} g "
-        f"for 1.5x a {MX_ACTUATE_GF:.0f} gf switch")
+        f"for 1.5x a {MX_ACTUATE_GF:.0f} gf switch (every style)")
+    for st in CRADLE_STYLES:
+        lowest = min(rest(st, y, g)[1] for y in REST_Y)
+        cr = shapes[f"cradle-{st}"]
+        grams = cr.volume / 1000 * PA12_DENSITY
+        on_cap = grams * (HINGE_Y - cr.center().Y) / arm_len
+        add(lowest - under >= 15 and on_cap < 0.5 * MX_ACTUATE_GF, f"cradle {st}",
+            f"hands start {lowest - under:.1f} mm above the keycap tops; arm {grams:.0f} g puts "
+            f"{on_cap:.0f} g on the hook cap (the switch lifts it)")
     csk = bx2x(HOLES[3][0]) - CSK_D / 2
     ear_out = lx + ARM_W / 2 + EAR_GAP + EAR_T
     dome_y = by2y(BZ1_C[1]) - PIEZO_BORE / 2 - 1.6
@@ -520,7 +562,8 @@ def main() -> int:
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     parts = load_parts(Path(a.parts))
-    shapes = {"tray": tray(), "lid": lid(), "bezel": bezel(), "cradle": cradle()}
+    shapes = {"tray": tray(), "lid": lid(), "bezel": bezel()}
+    shapes.update({f"cradle-{st}": cradle(st) for st in CRADLE_STYLES})
     for name, s in shapes.items():
         export_stl(s, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
         export_step(s, str(OUT / f"{name}.step"))
