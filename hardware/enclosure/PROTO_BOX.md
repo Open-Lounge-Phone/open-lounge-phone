@@ -64,20 +64,24 @@ and writes `build/hands/cradle-<name>.stl`, `checks.txt`, `hands.png` (a contact
 
 | Catch | Model (author) | License | Handle rides |
 |---|---|---|---|
-| `tentacles` | [Octopus Tentacles](https://www.printables.com/model/751736) (Unicorn Dasher), a curling pair | CC0 | +20 mm |
-| `allosaurus` | [Allosaurus fragilis Claw](https://www.printables.com/model/1556040) (cjs_3dp), Smithsonian scan, a pair | CC0 | +23 mm |
+| `tentacles` | [Octopus Tentacles](https://www.printables.com/model/751736) (Unicorn Dasher), two curling up round the handle | CC0 | +11 mm |
+| `allosaurus` | [Allosaurus fragilis Claw](https://www.printables.com/model/1556040) (cjs_3dp), Smithsonian scan, a pair curving in | CC0 | +7 mm |
 | `cyberhand` | [Cybernetic Hand Sculpture](https://www.printables.com/model/1280802) (Sueg), two hands in a V | CC0 | +9 mm |
-| `antlers` | [Deer Antler, hi resolution scan](https://www.printables.com/model/356636) (billyd), one per rest, handle in the fork | CC-BY | +25 mm |
-| `healinghands` | [Healing Hands Sculpture](https://www.printables.com/model/131178) (The Next Layer), base removed | CC-BY | +21 mm |
-| `lobster` | [Articulated Lobster](https://www.printables.com/model/750316) (AdrianM.), its claws standing up | CC-BY | +19 mm |
-| `lowpolyhand` | [Low Poly Hand Phone Stand](https://www.printables.com/model/947403) (RyGuy Design), two hands in a V | CC-BY-SA | +7 mm |
-| `raptor` | [Raptor Claw](https://www.printables.com/model/613627) (Protopasta), a pair | CC-BY-SA | +25 mm |
+| `antlers` | [Deer Antler, hi resolution scan](https://www.printables.com/model/356636) (billyd), a pair, stems trimmed | CC-BY | +14 mm |
+| `healinghands` | [Healing Hands Sculpture](https://www.printables.com/model/131178) (The Next Layer), one hand and its mirror, palms in | CC-BY | +18 mm |
+| `lobster` | [Articulated Lobster](https://www.printables.com/model/750316) (AdrianM.), its claws standing up either side | CC-BY | +3 mm |
+| `lowpolyhand` | [Low Poly Hand Phone Stand](https://www.printables.com/model/947403) (RyGuy Design), two hands, palms in | CC-BY-SA | +11 mm |
+| `raptor` | [Raptor Claw](https://www.printables.com/model/613627) (Protopasta), a pair curving in | CC-BY-SA | +13 mm |
+
+Each catch is a pair: the piece and its mirror image either side of the handle. The script turns
+each piece so its curve opens toward the handle, then spreads the pair until a 40 mm handle sits
+down between them with both sides rising at least 16 mm up its sides (`CUP_DEPTH`).
 
 "Handle rides" is how much higher than on the plain cradles the catch holds the handle: a sculpture
 needs room under the handle, and the cups only clear the keys and table better. The script allows
 up to 25 mm (`RAISE_MAX`) and shrinks a model that would need more. Checks for every catch: a 40 mm
-handle touches both sides (or rests on the bar between a pair) and lifts straight out; 50 and
-30 mm handles fit and lift out too; the bar is at least 15 mm above the keycaps and above the
+handle touches both sides (or rests on the bar between a pair), both sides rise at least 16 mm up
+it, and it lifts straight out; 50 and 30 mm handles fit and lift out too; the bar is at least 15 mm above the keycaps and above the
 arm; the catch stays between the handset's cups; and the cradle's weight leaves the switch able to
 lift it. Scans that aren't closed solids are written as overlapping shells, which slicers and
 print services merge; their weight is a voxel estimate.
@@ -86,8 +90,8 @@ print services merge; their weight is a voxel estimate.
 lines); a CC-BY-SA remix (`lowpolyhand`, `raptor`) stays CC-BY-SA. CC0 needs nothing.
 
 **Adding one:** add an entry to `hands.yaml` with the Printables model id, the file name, author and
-license, then `mode` (`pair` or `single`), `rot` to stand it up, `trim` / `select` / `drop_small`
-to clean it up and `height` or `width`; run `make hands` and look at `build/hands/hands.png`.
+license, then `mode` (`pair`, or `single` for one piece the handle sits in), `rot` to stand
+it up, `trim` / `select` / `drop_small` to clean it up and `height` or `width`; run `make hands` and look at `build/hands/hands.png`.
 
 ## Fasteners and other parts (per box)
 

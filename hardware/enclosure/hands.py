@@ -28,6 +28,7 @@ R_SEAT, R_MAX, R_MIN = P.HANDLE_W / 2, 25.0, 15.0
 MAX_Y_PER_REST = 28.0    # a catch this short (along the handle) goes on each rest, else one long one
 MAX_Y_LONG = 64.0        # handle between the cups
 BAR_H = 6.0
+CUP_DEPTH = 16.0        # both sides rise at least this far above the handle's underside
 RAISE_MAX = 25.0        # how much higher than the plain cradles a sculpted catch may hold the handle
 
 
@@ -112,6 +113,26 @@ def lean_x(m: trimesh.Trimesh) -> float:
     return m.vertices[z >= hi, 0].mean() - m.vertices[z <= lo, 0].mean()
 
 
+def concave_in(m: trimesh.Trimesh) -> float:
+    """How much the piece's inner (low-x) edge bows away from the handle: > 0 means its curve
+    opens toward the handle, the way a cupping claw should face when it is the right-hand piece."""
+    z = m.vertices[:, 2]
+    qs = np.quantile(z, np.linspace(0.1, 0.9, 9))
+    xin = [m.vertices[(z >= a) & (z < b), 0].min() for a, b in zip(qs[:-1], qs[1:])
+           if ((z >= a) & (z < b)).any()]
+    return float(np.mean(xin[2:-2]) - (xin[0] + xin[-1]) / 2) if len(xin) >= 5 else 0.0
+
+
+def cup(pts: np.ndarray, cx: float, zc: float, r: float) -> float:
+    """How far both sides rise above the handle's underside right next to it."""
+    near = np.abs(pts[:, 0] - cx) < r + 12
+    left = pts[near & (pts[:, 0] < cx - r / 2), 1]
+    right = pts[near & (pts[:, 0] > cx + r / 2), 1]
+    if not len(left) or not len(right):
+        return 0.0
+    return float(min(left.max(), right.max()) - (zc - r))
+
+
 def seat(pts: np.ndarray, cx: float, r: float) -> tuple[float, bool]:
     """Lowest centre height of a handle (circle of radius r, centred at x = cx) resting on the
     points (x, z); and whether it lifts straight out (nothing above it within its width)."""
@@ -137,8 +158,11 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
     lx, hb = g["lx"], g["hb"]
     piece = load_piece(key, m)
     if m["mode"] == "pair":
-        want = -1 if m.get("lean", "in") == "in" else 1        # the right-hand piece's lean
-        if lean_x(piece) * want < 0:
+        if "lean" in m:                                         # hands: lean set by hand
+            want = -1 if m["lean"] == "in" else 1
+            if lean_x(piece) * want < 0:
+                piece = mirror_x(piece)
+        elif concave_in(mirror_x(piece)) > concave_in(piece):   # curve opening toward the handle
             piece = mirror_x(piece)
         if m.get("splay"):                                      # tilt the right piece outward
             c = piece.bounds.mean(0)
@@ -148,27 +172,36 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
     arm_top = g["zb0"] + P.ARM_H
     under = max(P.Z_LT + P.CAP_TOP, P.Z_DISP + P.DISP_T + P.BEZEL_TOP)
     floor = max(arm_top, under + 15) + BAR_H / 2       # lowest bar centre
+    rng = np.random.default_rng(0)
+
+    def with_bar(v, x0, x1):
+        return np.vstack([v, np.c_[np.linspace(x0, x1, 200), np.full(200, BAR_H / 2)]])
 
     def arrange(scale: float):
         """The catch at this scale, its bottom on z = 0, a 40 mm handle centred on x = lx.
-        Returns (pieces, gap, seat bottom above the catch bottom)."""
+        Returns (pieces, gap, seat bottom above the catch bottom, cup depth)."""
         pc = piece.copy()
         pc.apply_scale(scale)
-        rng = np.random.default_rng(0)
+        sub = rng.choice(len(pc.vertices), min(len(pc.vertices), 6000), replace=False)
         if m["mode"] == "pair":
-            def place(gap):
-                right = pc.copy()
-                right.apply_translation([lx + gap / 2, -right.extents[1] / 2, 0])
-                return [right, mirror_x_about(right, lx)]
-            sub = rng.choice(len(pc.vertices), min(len(pc.vertices), 6000), replace=False)
-            gap = 90.0
-            for gp in np.arange(0.0, 90.0, 1.0):     # narrowest gap a 50 mm handle lifts out of
+            w = pc.extents[0]
+            best = None
+            for gp in np.arange(0.0, 121.0, 1.0):     # spread the pair until the handle sits in it
                 v = pc.vertices[sub][:, [0, 2]] + [lx + gp / 2, 0]
-                pts = np.vstack([v, np.c_[2 * lx - v[:, 0], v[:, 1]]])
-                if seat(pts, lx, R_MAX)[1]:
-                    gap = float(gp)
+                pts = with_bar(np.vstack([v, np.c_[2 * lx - v[:, 0], v[:, 1]]]),
+                               lx - gp / 2 - w, lx + gp / 2 + w)
+                zc, free = seat(pts, lx, R_SEAT)
+                ok = free and seat(pts, lx, R_MAX)[1]
+                d = cup(pts, lx, zc, R_SEAT)
+                if ok and d >= CUP_DEPTH:
+                    best = (gp, d)
                     break
-            pieces = place(gap)
+                if ok and (best is None or d > best[1] + 0.5):
+                    best = (gp, d)
+            gap = float(best[0]) if best else 90.0
+            right = pc.copy()
+            right.apply_translation([lx + gap / 2, -right.extents[1] / 2, 0])
+            pieces = [right, mirror_x_about(right, lx)]
         else:
             pc.apply_translation([-pc.extents[0] / 2, -pc.extents[1] / 2, 0])
             pts = pc.vertices[:, [0, 2]]
@@ -176,32 +209,37 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
             for sx in np.linspace(-pc.extents[0] / 3, pc.extents[0] / 3, 61):   # find the crotch
                 zc, free = seat(pts, sx, R_SEAT)
                 both = all(contacts(pts, sx, zc, R_SEAT))
-                rank = (not (free and both), not free, zc)
+                d = cup(pts, sx, zc, R_SEAT)
+                rank = (not (free and both), -min(d, CUP_DEPTH), zc)
                 if best is None or rank < best[0]:
                     best = (rank, sx)
             pc.apply_translation([lx - best[1], 0, 0])
             pieces, gap = [pc], None
         cat = trimesh.util.concatenate(pieces)
-        x0, x1 = cat.bounds[0][0], cat.bounds[1][0]
-        pts = np.vstack([cat.vertices[:, [0, 2]], np.c_[np.linspace(x0, x1, 200), np.full(200, BAR_H / 2)]])
+        pts = with_bar(cat.vertices[:, [0, 2]], cat.bounds[0][0], cat.bounds[1][0])
         zc, _ = seat(pts, lx, R_SEAT)
-        return pieces, gap, zc - R_SEAT
+        return pieces, gap, zc - R_SEAT, cup(pts, lx, zc, R_SEAT)
 
     # the catch's bottom sits on the bar (>= floor); the handle may ride up to RAISE_MAX higher
-    # than on the plain cradles (its cups only clear more); shrink the catch if that's not enough
-    s_hi = 1.0
-    pieces, gap, rel = arrange(s_hi)
-    scale_used = 1.0
-    if floor + rel > hb + RAISE_MAX:
-        s_lo = 0.05
-        for _ in range(22):
-            s_mid = (s_lo + s_hi) / 2
-            if floor + arrange(s_mid)[2] > hb + RAISE_MAX:
-                s_hi = s_mid
-            else:
-                s_lo = s_mid
-        pieces, gap, rel = arrange(s_lo)
-        scale_used = s_lo
+    # than on the plain cradles (its cups only clear more)
+    fits = lambda r: floor + r[2] <= hb + RAISE_MAX
+    if m["mode"] == "single":     # size it until the handle sits down in it, as small as works
+        tries = [(sc, arrange(sc)) for sc in np.geomspace(0.6, 2.5, 13)]
+        good = [t for t in tries if fits(t[1])]
+        deep = [t for t in good if t[1][3] >= CUP_DEPTH]
+        scale_used, res = deep[0] if deep else max(good or tries, key=lambda t: t[1][3])
+    else:
+        scale_used, res = 1.0, arrange(1.0)
+        if not fits(res):         # shrink to fit
+            s_lo, s_hi = 0.05, 1.0
+            for _ in range(22):
+                s_mid = (s_lo + s_hi) / 2
+                if fits(arrange(s_mid)):
+                    s_lo = s_mid
+                else:
+                    s_hi = s_mid
+            scale_used, res = s_lo, arrange(s_lo)
+    pieces, gap, rel, depth = res
     h = max(hb, floor + rel)                           # this catch's handle underside height
     catch = trimesh.util.concatenate(pieces)
     ylen = catch.extents[1]
@@ -239,6 +277,8 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
         + ("on the bar between the pieces" if on_bar else
            f"touching {'both sides' if left and right else 'one side only'}")
         + (", lifts straight out" if free else ", something above it"))
+    add(depth >= CUP_DEPTH - 0.5, "cups the handle",
+        f"both sides rise {depth:.1f} mm above the handle's underside (>= {CUP_DEPTH:.0f})")
     z50, free50 = seat(allpts, lx, R_MAX)
     z30, free30 = seat(allpts, lx, R_MIN)
     add(free50 and free30, "50 / 30 mm handles",
@@ -263,7 +303,7 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
         "separate shells that overlap: slicers and print services merge them")
     size = catch.extents
     add(True, "size", f"catch {size[0]:.0f} x {size[1]:.0f} x {size[2]:.0f} mm"
-        + (f" (shrunk to {scale_used * 100:.0f} % of hands.yaml to fit above the arm)" if scale_used < 1 else "")
+        + (f" ({scale_used * 100:.0f} % of the hands.yaml size)" if abs(scale_used - 1) > 0.01 else "")
         + (f", pieces {gap:.0f} mm apart" if gap is not None else ""))
     info = dict(gap=gap, ys=ys, grams=grams, solid=solid, h=h)
     return merged, R, info

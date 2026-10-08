@@ -2,9 +2,10 @@
 # Nothing here is committed but these settings: `make hands` downloads each model into
 # build/hands/src/ and fuses its catch onto the standard arm (hands.py). Licenses as published;
 # CC-BY needs the credit in build/hands/CREDITS.txt; CC-BY-SA remixes stay CC-BY-SA.
-#   mode: pair = the piece and its mirror image either side of the handle (lean: in or out; splay:
-#         degrees each piece tilts outward); single = one piece the handle sits in (the script finds
-#         its crotch)
+#   mode: pair = the piece and its mirror image either side of the handle, turned so its curve opens
+#         toward the handle and spread until the handle sits down in them (lean: in / out and splay:
+#         degrees outward override the turning, for hands); single = one piece the handle sits in
+#         (the script finds its crotch and sizes it until the handle sits down in it)
 #   rot: degrees about x, y, z applied to the raw model; select: keep only the bodies whose centre is
 #   inside [x0, x1, y0, y1] of the raw model (0..1); trim: cut off the bottom fraction (stands, stems);
 #   drop_small: drop loose bits smaller than this share of the biggest; height / width: size in mm
@@ -44,21 +45,22 @@ antlers:
   file: Antler_lo.stl
   author: billyd
   license: CC-BY
-  mode: single
+  mode: pair
   rot: [0, 0, 90]
   trim: 0.3
-  width: 60
+  height: 50
 healinghands:
   title: Healing hands
   id: 131178
   file: Healing_Hands_Sculpture.stl
   author: The Next Layer
   license: CC-BY
-  mode: single
+  mode: pair
+  select: [0.0, 1.0, 0.0, 0.45]
   rot: [0, 0, 90]
   trim: 0.07
   drop_small: 0.02
-  width: 50
+  height: 55
 lobster:
   title: Lobster claws
   id: 750316
@@ -76,8 +78,6 @@ lowpolyhand:
   author: RyGuy Design
   license: CC-BY-SA
   mode: pair
-  lean: out
-  splay: 20
   trim: 0.06
   height: 48
 raptor:
