@@ -8,6 +8,7 @@
 #         (the script finds its crotch and sizes it until the handle sits down in it)
 #   rot: degrees about x, y, z applied to the raw model; select: keep only the bodies whose centre is
 #   inside [x0, x1, y0, y1] of the raw model (0..1); trim: cut off the bottom fraction (stands, stems);
+#   flip: mirror each piece when the automatic turn faces its curve the wrong way
 #   drop_small: drop loose bits smaller than this share of the biggest; height / width: size in mm
 #   (the script shrinks it if the handle would ride more than RAISE_MAX above the plain cradles)
 tentacles:
@@ -27,6 +28,7 @@ allosaurus:
   license: CC0
   mode: pair
   rot: [0, -90, 0]
+  flip: true
   height: 44
   drop_small: 0.02
 cyberhand:
@@ -87,4 +89,5 @@ raptor:
   author: Protopasta
   license: CC-BY-SA
   mode: pair
+  flip: true
   height: 50

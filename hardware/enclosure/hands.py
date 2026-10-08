@@ -164,6 +164,8 @@ def build(key: str, m: dict, g: dict) -> tuple[trimesh.Trimesh, list[tuple[str, 
                 piece = mirror_x(piece)
         elif concave_in(mirror_x(piece)) > concave_in(piece):   # curve opening toward the handle
             piece = mirror_x(piece)
+        if m.get("flip"):                                       # the guess above got it backwards
+            piece = mirror_x(piece)
         if m.get("splay"):                                      # tilt the right piece outward
             c = piece.bounds.mean(0)
             piece.apply_transform(trimesh.transformations.rotation_matrix(
