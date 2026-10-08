@@ -1,9 +1,7 @@
 # Simulation (ngspice)
 
-One bench for the minimal board (M1, 2026-09-30): the only circuit on it whose margins are worth
-simulating is the 3.3 V supply. The old eleven benches (charger, buck, analog LDO, handset
-privacy chain, speaker amp, NFC coil, LED rail, battery, hook magnet) went with the parts they
-tested; git history keeps them. License CERN-OHL-S-2.0 like the rest of `hardware/`.
+One bench for the minimal board: the only circuit on it whose margins are worth simulating is
+the 3.3 V supply. License CERN-OHL-S-2.0 like the rest of `hardware/`.
 
 ```sh
 cd hardware

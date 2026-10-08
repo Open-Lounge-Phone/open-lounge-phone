@@ -56,9 +56,6 @@ hook switch, a display module, a piezo ringer and one status LED. That means:
   does not go anywhere with you.
 - **Open hardware** (CERN-OHL-S): the schematic, layout and parts list are public.
 
-(An earlier board revision had a hardware mute switch and mic lights powered by the mic's own
-supply; the owner dropped them with the rest of that design on 2026-09-30.)
-
 ## Firmware guarantees
 
 What the firmware does today (firmware/README.md has the details) and what is still planned:

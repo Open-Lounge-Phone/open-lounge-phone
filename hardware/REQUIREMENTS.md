@@ -1,8 +1,6 @@
 # Open Lounge Phone hardware requirements (minimal board)
 
-Numbered requirements for the minimal board (owner decision 2026-09-30, [DESIGN.md](DESIGN.md)).
-The earlier requirement set (charger, battery, NFC, hardware privacy chain, speaker, per-key
-LEDs, 4-layer board) went with those parts; git history keeps it. IDs were renumbered.
+Numbered requirements for the minimal board ([DESIGN.md](DESIGN.md)).
 
 **Verification:** A = analysis, I = inspection, T = test (EVT), S = `make build` check or
 `make sim` bench. **Status:** ✓ met in the schematic, △ depends on layout/enclosure/test, ✗ open.

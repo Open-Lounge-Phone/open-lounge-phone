@@ -1,10 +1,7 @@
 # Open Lounge Phone hardware design: the minimal board (M1 schematic, M2 placement)
 
-**Owner decision 2026-09-30:** the earlier 220-part board (charger, fuel gauge, I/O expander,
-13 RGB LEDs, e-ink FPC with its boost, NFC, hall hook sensor, hardware privacy chain, mute
-switch, speaker amplifier) was rejected as over-engineered. This is the fresh start: **core only
-plus one status LED**, 53 parts on a 2-layer board. The old design is in git history
-(`hardware/` before this commit). License CERN-OHL-S-2.0.
+The board is **core only plus one status LED**: 53 parts on a 2-layer board. License
+CERN-OHL-S-2.0.
 
 Status: **M1 schematic** (SKiDL, `make build` checks it), **M2 placement** (`make placement`,
 §9) and **M3 routing** (`make route`, `make fab`: §9a). Next: bring-up of the first boards.
@@ -300,7 +297,7 @@ it is hung up and only captures audio in a call.
 **Power (owner):** the phone is **mains/USB-powered like a landline**: no battery by design; it
 is not a mobile device.
 
-Doesn't (by owner decision): no **hardware mute switch**, no **mic lights wired to the mic's
+Doesn't, by design: no **hardware mute switch**, no **mic lights wired to the mic's
 power** and no separate recording light (the mic bias is on while powered; firmware decides
 when audio is captured). No **NFC** (claiming uses the QR code or the pairing code), no
 **battery**, no **per-key LEDs** (the display and voice prompts carry state; the emulator still

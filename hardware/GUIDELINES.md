@@ -1,8 +1,7 @@
 # Hardware design guidelines (child-safe, rugged, KISS)
 
-Rules the schematic and layout follow, updated for the minimal board (owner decision
-2026-09-30: core only, 2 layers). They combine the owner-supplied "toy hardware" guidance
-(2026-09-27) with current practice. Each rule says **adopted**, **adapted** (right idea, applied
+Rules the schematic and layout follow for the minimal board (core only, 2 layers). They combine
+"toy hardware" guidance with current practice. Each rule says **adopted**, **adapted** (right idea, applied
 differently, with the reason) or **rejected** (with the reason).
 
 ## 1. Safety and protection

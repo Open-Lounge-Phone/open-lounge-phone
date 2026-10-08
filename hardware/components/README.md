@@ -1,9 +1,7 @@
 # Component files (minimal board, M1)
 
 One file per distinct part of the minimal board (passives grouped by type): what it does here,
-the datasheet and page each choice rests on, sourcing, and what is still unverified. The old
-board's part files (charger, fuel gauge, expander, LEDs, NFC, radar, speaker amp, ...) were
-removed on 2026-09-30 with the parts; git history keeps them.
+the datasheet and page each choice rests on, sourcing, and what is still unverified.
 
 Conventions: datasheet page numbers are PDF pages (`[p12]`); stock and prices are LCSC/JLCPCB
 data from `schematic/lcsc_cache.json` (checked 2026-09-29/30, `make lcsc` refreshes them);
