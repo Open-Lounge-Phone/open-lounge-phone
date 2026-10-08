@@ -84,6 +84,22 @@ STANDOFF_HOLE = 7.0            # lid clearance round the hex standoffs
 HOOK_COLLAR_IN, HOOK_COLLAR_WALL, HOOK_COLLAR_H = 18.6, 1.6, 6.0
 MX_PRETRAVEL, MX_TRAVEL = 2.0, 4.0
 
+# handset cradle: one printed arm hinged on two ears at the lid's rear-left (an M3 screw is the
+# pin); its front foot rests on a 1u keycap on the hook switch, and the switch's own spring lifts
+# it when the handset comes off. The handset lies front to back in two V rests on the arm, which
+# fit most banana-style handsets. Handset sizes: Opis 60s Micro (21 x 7 x 6 cm listed); handle
+# width and how far the cups hang below the handle are estimates: measure yours.
+HANDSET_L, CUP_D, HANDLE_W, CUP_DROP, HANDSET_H = 210.0, 70.0, 40.0, 35.0, 60.0
+CAP_TOP = 17.0                 # plate top -> top of a 1u XDA cap on an MX switch [est]
+ARM_W, ARM_H, FOOT_D = 12.0, 8.0, 8.0
+HINGE_Y = 60.0                 # world y of the pin (rear-left, in front of the piezo dome)
+EAR_T, EAR_GAP, PIN_HOLE, ARM_HOLE = 3.5, 0.3, 3.2, 3.4
+REST_Y = (20.0, 52.0)          # world y of the two V rests
+V_OPEN, V_WALL, V_T = 52.0, 4.0, 8.0     # V opening (fits handles up to ~50 mm), 90 degrees
+CUP_CLEAR = 3.0
+MX_ACTUATE_GF = 45.0           # typical linear MX switch at 2 mm; a lighter switch is fine
+PA12_DENSITY = 1.01            # g/cm3, industrial nylon print
+
 # piezo: the 6.5 mm body pokes 1.5 mm through the 5 mm plate: a dome on the lid covers it and
 # carries the sound holes
 PIEZO_BORE, PIEZO_ROOF = BZ1_D + 2 * 0.3, 1.2
@@ -127,6 +143,67 @@ def bx2x(bx):
 
 def by2y(by):
     return GAP + WALL + (BOARD_H - by)
+
+
+def cradle_geom():
+    """World positions for the cradle (y grows toward the rear, z up from the table)."""
+    lx, fy = bx2x(HOOK[0]), by2y(HOOK[1])
+    z_cap = Z_LT + CAP_TOP
+    zb0 = z_cap + FOOT_D / 2 - 1.0            # arm bottom; the foot hangs below it to the cap
+    hz = zb0 + ARM_H / 2
+    rear_row_cap = Z_LT + CAP_TOP
+    handle_bottom = math.ceil(max(rear_row_cap, Z_PIEZO_TOP + 0.5 + PIEZO_ROOF) + CUP_DROP + CUP_CLEAR)
+    apex = handle_bottom - (HANDLE_W / 2) * (math.sqrt(2) - 1)   # a round handle in a 90 deg V
+    yc = sum(REST_Y) / 2
+    return dict(lx=lx, fy=fy, z_cap=z_cap, zb0=zb0, hz=hz, apex=apex, hb=handle_bottom, yc=yc)
+
+
+def xcyl(x0, x1, y, z, d) -> Part:
+    from build123d import Rot
+    return Pos(x0, y, z) * Rot(0, 90, 0) * Cylinder(d / 2, x1 - x0,
+                                                     align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+
+def hinge_ears() -> list[Part]:
+    g = cradle_geom()
+    lx, hz = g["lx"], g["hz"]
+    out = []
+    for sx in (-1, 1):
+        x_in = lx + sx * (ARM_W / 2 + EAR_GAP)
+        x0, x1 = sorted((x_in, x_in + sx * EAR_T))
+        out.append(box(x0, x1, HINGE_Y - 6, HINGE_Y + 6, Z_LT - 0.01, hz + 6)
+                   - xcyl(x0 - 1, x1 + 1, HINGE_Y, hz, PIN_HOLE))
+    return out
+
+
+def cradle() -> Part:
+    """The arm: hinge at the rear, foot on the hook keycap, two V rests for the handset."""
+    g = cradle_geom()
+    lx, fy, zb0, hz, apex = g["lx"], g["fy"], g["zb0"], g["hz"], g["apex"]
+    x0, x1 = lx - ARM_W / 2, lx + ARM_W / 2
+    from build123d import Rot
+    arm = box(x0, x1, fy - FOOT_D / 2, HINGE_Y + 6, zb0, zb0 + ARM_H)
+    arm = arm + xcyl(x0, x1, fy, g["z_cap"] + FOOT_D / 2, FOOT_D)     # round foot on the cap
+    arm = arm + xcyl(x0, x1, HINGE_Y, hz, 12.0)
+    for y in REST_Y:
+        w = V_OPEN + 2 * V_WALL
+        depth = V_OPEN / 2
+        arm = arm + box(x0, x1, y - V_T / 2, y + V_T / 2, zb0 + ARM_H - 0.01, apex - V_WALL + 0.01)
+        block = box(lx - w / 2, lx + w / 2, y - V_T / 2, y + V_T / 2, apex - V_WALL, apex + depth)
+        side = 2 * depth          # diamond with its bottom corner on the V apex
+        v = Pos(lx, y, apex + side / math.sqrt(2)) * Rot(0, 45, 0) * Box(side, V_T + 2, side)
+        arm = arm + (block - v)
+    return arm - xcyl(x0 - 1, x1 + 1, HINGE_Y, hz, ARM_HOLE)
+
+
+def handset_ghost() -> Part:
+    """Rough handset envelope for the render and the clearance checks (not printed)."""
+    g = cradle_geom()
+    lx, yc, hb = g["lx"], g["yc"], g["hb"]
+    pitch = HANDSET_L / 2 - CUP_D / 2
+    handle = box(lx - HANDLE_W / 2, lx + HANDLE_W / 2, yc - pitch, yc + pitch, hb, hb + HANDSET_H - CUP_DROP)
+    cups = [cyl(lx, yc + s * pitch, hb - CUP_DROP, hb + HANDSET_H - CUP_DROP, CUP_D) for s in (-1, 1)]
+    return union([handle] + cups)
 
 
 def keys():
@@ -235,6 +312,7 @@ def lid() -> Part:
                      hy + HOOK_COLLAR_IN / 2, Z_LT - 1, Z_LT + HOOK_COLLAR_H + 1))
     px, py = bx2x(BZ1_C[0]), by2y(BZ1_C[1])
     add.append(cyl(px, py, Z_LT - 0.01, Z_PIEZO_TOP + 0.5 + PIEZO_ROOF, PIEZO_BORE + 2 * 1.6))
+    add += hinge_ears()
     body = plate + union(add)
     cut = []
     for bx, by, _ in keys():
@@ -364,6 +442,67 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
     got = sorted((round(p["at"][0], 2), round(p["at"][1], 2)) for p in sw)
     add(len(sw) == 13 and all(math.dist(a, b) < 0.3 for a, b in zip(want, got)), "key grid",
         f"{len(sw)} switch sockets (12 keys + hook) vs lid cut-outs")
+    R += cradle_checks(shapes)
+    return R
+
+
+def cradle_checks(shapes) -> list[tuple[str, str, str]]:
+    R = []
+
+    def add(ok, name, msg):
+        R.append(("PASS" if ok else "FAIL", name, msg))
+
+    g = cradle_geom()
+    lx, fy, yc, hb = g["lx"], g["fy"], g["yc"], g["hb"]
+    pitch = HANDSET_L / 2 - CUP_D / 2
+    caps = [(bx2x(bx), by2y(by)) for bx, by, _ in keys()]
+    half = KEYCAP / 2
+
+    def highest_under(cx, cy, r):
+        top, what = Z_LT, "lid"
+        for x, y in caps:
+            if circle_rect_dist(x, y, r, (cx - half, cy - half, cx + half, cy + half)) < 0 \
+                    or circle_rect_dist(cx, cy, r, (x - half, y - half, x + half, y + half)) < 0:
+                if Z_LT + CAP_TOP > top:
+                    top, what = Z_LT + CAP_TOP, "a keycap"
+        if math.dist((cx, cy), (bx2x(BZ1_C[0]), by2y(BZ1_C[1]))) < r + PIEZO_BORE / 2 + 1.6:
+            dome = Z_PIEZO_TOP + 0.5 + PIEZO_ROOF
+            if dome > top:
+                top, what = dome, "the piezo dome"
+        if not (-r < cy < OUT_H + r and -r < cx < OUT_W + r):
+            return 0.0, "the table"
+        return top, what
+
+    gaps = []
+    for sgn, name in ((-1, "front"), (1, "rear")):
+        cy = yc + sgn * pitch
+        top, what = highest_under(lx, cy, CUP_D / 2)
+        gaps.append(f"{name} cup {hb - CUP_DROP - top:.1f} mm over {what}")
+        ok = hb - CUP_DROP - top >= CUP_CLEAR - 1e-6
+        add(ok, f"handset {name} cup", gaps[-1])
+    rest_bottom = g["apex"] - V_WALL
+    under = max(Z_LT + CAP_TOP, Z_DISP + DISP_T + BEZEL_TOP)
+    add(rest_bottom - under >= 15, "rests vs keys",
+        f"V rests start {rest_bottom - under:.1f} mm above the keycap tops (fingers fit under)")
+    cr = shapes["cradle"]
+    grams = cr.volume / 1000 * PA12_DENSITY
+    arm_len = HINGE_Y - fy
+    self_share = (HINGE_Y - cr.center().Y) / arm_len
+    share = (HINGE_Y - yc) / arm_len
+    need = MX_ACTUATE_GF * 1.5 / share
+    add(grams * self_share < 0.5 * MX_ACTUATE_GF and 0.3 < share <= 1.0, "hook load",
+        f"arm {grams:.0f} g puts {grams * self_share:.0f} g on the hook cap (switch lifts it); "
+        f"{share * 100:.0f} % of the handset's weight presses the switch: handset >= {need:.0f} g "
+        f"for 1.5x a {MX_ACTUATE_GF:.0f} gf switch")
+    csk = bx2x(HOLES[3][0]) - CSK_D / 2
+    ear_out = lx + ARM_W / 2 + EAR_GAP + EAR_T
+    dome_y = by2y(BZ1_C[1]) - PIEZO_BORE / 2 - 1.6
+    add(ear_out < csk - 1 and HINGE_Y + 6 < dome_y - 1, "hinge ears",
+        f"ears x {lx - ear_out + lx:.1f}-{ear_out:.1f} clear of the H4 countersink (x {csk:.1f}) and "
+        f"the piezo dome (y {dome_y:.1f}); pin = M3 x {math.ceil((ear_out - lx) * 2 + 4)}+ screw + nylock nut")
+    deg = math.degrees(math.atan(MX_TRAVEL / arm_len))
+    add(deg < 10, "arm travel", f"{MX_TRAVEL} mm at the foot = {deg:.1f} deg about the pin, "
+        f"{arm_len:.1f} mm away")
     return R
 
 
@@ -375,7 +514,7 @@ def main() -> int:
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     parts = load_parts(Path(a.parts))
-    shapes = {"tray": tray(), "lid": lid(), "bezel": bezel()}
+    shapes = {"tray": tray(), "lid": lid(), "bezel": bezel(), "cradle": cradle()}
     for name, s in shapes.items():
         export_stl(s, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
         export_step(s, str(OUT / f"{name}.step"))

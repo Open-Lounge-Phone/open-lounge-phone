@@ -13,7 +13,7 @@ Status: **M1 schematic** (SKiDL, `make build` checks it), **M2 placement** (`mak
 | MCU | ESP32-S3-WROOM-1U-N16R8 (U.FL antenna), EN RC reset, RESET and BOOT buttons | U1, SW1, SW2 |
 | Power | USB-C receptacle (5 V + native USB), 2 × 5.1 kΩ CC, one USB ESD part, one 3.3 V LDO | J1, D1, U2 |
 | Keys | 12 MX switches in Kailh-style hot-swap sockets, each on its own GPIO | SW3-SW14 |
-| Hook | one more MX switch in a hot-swap socket, pressed by the hook plunger | SW15 |
+| Hook | one more MX switch in a hot-swap socket, pressed by the handset cradle | SW15 |
 | Display | 2x4 socket for the WeAct 2.9" e-paper module (plugs in) + 2 M3 standoff holes | J3, H5, H6 |
 | Handset | 3.5 mm TRRS jack (CTIA) + ES8311 codec with its reference parts | J2, U3 |
 | Ringer | piezo buzzer on one GPIO through an NPN | BZ1, Q1 |
@@ -112,12 +112,14 @@ log drives that pin for a moment after reset, so a key held during boot only los
   CPG151101S11 land) connects its GPIO to GND; the GPIO's internal pull-up and firmware
   debounce do the rest. No expander, no matrix, no diodes, no series resistors (the switch
   contacts are inside the switch housing, not user-reachable).
-- **Hook:** a 13th MX switch in the same socket, under the hook rest's plunger. The handset's
-  weight presses it (on hook = HOOK low). One more of a part already on the board, 4 mm travel
-  with actuation at ~2 mm, millions of cycles, and replaceable. The plunger must travel ≥ 2 mm
-  and stop within 4 mm (enclosure, M2). A heavier switch (60-80 gf) returns the plunger
-  briskly. Alternative if the rest cannot host an MX switch: a lever microswitch on the same
-  two nets (e.g. Omron SS-5GL, C93981).
+- **Hook:** a 13th MX switch in the same socket, with a plain keycap, under the foot of the
+  handset cradle (a hinged arm, [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md)). The handset's
+  weight presses it (on hook = HOOK low) and the switch's own spring lifts the arm. One more of a
+  part already on the board, 4 mm travel with actuation at ~2 mm, millions of cycles, and
+  replaceable; the switch's bottom-out is the stop. Use a light linear switch (~45 gf): the cradle
+  puts 56 % of the handset's weight on it, so a 45 gf switch needs a handset of about 121 g or more
+  and an 80 gf one about 215 g. Alternative if a design cannot host an MX
+  switch: a lever microswitch on the same two nets (e.g. Omron SS-5GL, C93981).
 
 ## 6. Display: a module on a socket
 
@@ -191,8 +193,8 @@ sample (the socket is placed for pin 1 at the module's outer column, lower row).
    switches, J3 and the piezo (hand- or wave-soldered THT). The hot-swap sockets are on the
    bottom as usual.
 3. **Hook = the 13th MX switch** (SW15) in a hot-swap socket at the board's **left end**, in
-   line with the front row but outside the key rows; the lid gives it a square collar that
-   guides the handset rest's plunger (or a plain keycap). Left rather than right because the
+   line with the front row but outside the key rows; the lid gives it a square collar round its
+   keycap, and the handset cradle's foot rests on that keycap. Left rather than right because the
    electronics band is on the left (below): its wire to IO2 is 20 mm instead of 140 mm.
 4. **USB-C J1 and the 3.5 mm jack J2 on the rear edge** (bottom side, mouths flush with the
    edge). The ESP32 module's **U.FL connector is at the left edge**: the antenna end of the
@@ -320,7 +322,8 @@ Still open:
 2. **Antenna part:** the exact 2.4 GHz U.FL antenna that ships (≤ 2.33 dBi, §3).
 3. **Display header pin 1:** confirm on a WeAct sample which end of its 2x4 header is pin 1
    (J3 is placed for the outer column, lower row, seen from the panel side).
-4. **Hook post / handset rest:** the rest that presses SW15 (the proto box has a collar only).
+4. **Handset cradle:** check the cradle against a real Opis 60s Micro: handle width, how far the
+   cups hang below the handle, and its weight (≥ 121 g for a 45 gf hook switch).
 5. The earlier questions that still stand: base envelope and toy classification (Kids).
 
 ## 13. Sources

@@ -10,7 +10,7 @@ Numbered requirements for the minimal board ([DESIGN.md](DESIGN.md)).
 | ID | Requirement | Verif. | Status |
 |---|---|---|---|
 | HW-FUNC-01 | 12 MX-compatible keys in hot-swap sockets, two rows of six at 19.05 mm: `1 2 3 4 5 MENU` (rear), `6 7 8 9 0 BACK` (front); each on its own ESP32 GPIO to GND with the internal pull-up (no expander, no matrix). | S (`check_keys`) | ✓ |
-| HW-FUNC-02 | Hook state from one switch pressed by the hook rest (an MX switch in a 13th socket), on an RTC GPIO; low = on hook. | S, T | ✓ / △ plunger |
+| HW-FUNC-02 | Hook state from one switch pressed by the handset cradle (an MX switch in a 13th socket), on an RTC GPIO; low = on hook. | S, T | ✓ / △ cradle untested |
 | HW-FUNC-03 | A 2x4 2.54 mm socket the WeAct 2.9" e-paper module plugs into (its header order BUSY RES DC CS CLK DIN GND VCC, 3.3 V) + two M3 standoff holes at its mounting holes. | I | ✓ |
 | HW-FUNC-04 | Handset on a 3.5 mm TRRS jack (CTIA): earpiece on T and R1, mic on S, R2 GND; ES8311 codec with its datasheet reference parts; insertion detect from the jack's normally-closed tip contact. | I, T | ✓ |
 | HW-FUNC-05 | Ringer: a piezo buzzer driven by one GPIO through a transistor. | I, T | ✓ / △ loudness |
@@ -48,7 +48,7 @@ Numbered requirements for the minimal board ([DESIGN.md](DESIGN.md)).
 | HW-MECH-01 | 2-layer board, proposed 160 × 88 mm, 1.6 mm; four M3 mounting holes. | I | △ M2 |
 | HW-MECH-02 | The board carries the owner's signature logo, "Open Lounge Phone", "CERN-OHL-S-2.0" and its revision in a clear silkscreen area. | I | ✓ (G1, G2 in the netlist) / △ placement |
 | HW-MECH-03 | Keys: sockets on the bottom, switch pitch 19.05 mm; the enclosure's switch plate takes keystroke force. | I | △ M2 |
-| HW-MECH-04 | Hook plunger: ≥ 2 mm and ≤ 4 mm travel onto the hook switch, captive. | I | △ enclosure |
+| HW-MECH-04 | Handset cradle: presses the hook switch ≥ 2 mm with the handset on, stops at the switch's 4 mm bottom-out, held by its hinge pin. | I | △ checked in CAD, not printed |
 
 ## 5. Environmental (HW-ENV)
 
