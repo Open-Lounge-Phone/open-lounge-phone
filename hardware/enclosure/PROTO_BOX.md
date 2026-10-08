@@ -56,7 +56,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
    standoffs; put the bezel over it.
 5. Stick the antenna to the left wall, plug it onto the U.FL; drop board + lid into the tray
    (lid lip locates it) and fit the four M3 × 12 screws.
-6. Keycaps on. Plug the handset (3.5 mm TRRS, CTIA) and power into the rear wall.
+6. Keycaps on: clear, blank, double-layer XDA-profile 1u caps for MX switches (about 18.2 mm square, 9 mm tall); the printed key label goes between the two layers. Plug the handset (3.5 mm TRRS, CTIA) and power into the rear wall.
 
 ## Checks (`build/proto/checks.txt`)
 

@@ -68,7 +68,7 @@ BOT_CLEAR = Z_BB - Z_FLOOR     # 6.0 below the board bottom
 
 KEY_CUT = 14.0                 # MX nominal; for hobby FDM use ~14.1
 KEY_POCKET, KEY_POCKET_D = 15.2, 0.5
-KEYCAP = 18.0                  # 1u keycap footprint (for bezel clearance)
+KEYCAP, KEYCAP_H = 18.2, 9.0   # clear XDA-profile 1u cap, nominal (measure yours)
 
 # display: J3 (8.5) + the module's male pins (2.5 plastic) = 11.0 = M3 standoff length
 STANDOFF_L, STANDOFF_HEX = 11.0, 5.5
@@ -510,7 +510,7 @@ def raster(items, path, elev=35, azim=-60, width=2400, ss=2, light=(0.35, -0.8, 
 def render_assembled(shapes) -> None:
     """The finished prototype: closed box, board, keycaps, display module and bezel."""
     dx, dy = bx2x(DISP_X0 + DISP_W / 2), by2y(DISP_Y0 + DISP_H / 2)
-    cap = Box(KEYCAP, KEYCAP, 8.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    cap = Box(KEYCAP, KEYCAP, KEYCAP_H, align=(Align.CENTER, Align.CENTER, Align.MIN))
     cap = fillet(cap.edges().group_by(Axis.Z)[-1], 1.8)
     items = [
         (*mesh_of(shapes["tray"]), "#d8d2c4"),
