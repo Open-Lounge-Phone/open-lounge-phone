@@ -1,9 +1,22 @@
-# Prototype box (proto_box.py)
+# Core shell (proto_box.py)
 
-A plain, functional box for bring-up and desk testing of the **minimal board** as placed in M2
-(156 × 88 mm, [../DESIGN.md](../DESIGN.md) §9). It is not the product enclosure: it only has to
-hold the board, act as the MX switch plate, frame the display module and give the handset rest
-something to press.
+The **core shell** for the minimal board (156 × 88 mm, [../DESIGN.md](../DESIGN.md) §9): a plain,
+functional enclosure that other designs are built around. It holds the board, acts as the MX
+switch plate, frames the display module and gives a handset rest something to press. Three
+printed parts: **tray**, **lid** (= switch plate) and **bezel**, closed with four M3 screws into
+heat-set inserts; the bezel slips over the display module.
+
+## What a design must keep
+
+Shape, colour, edges, trim and any handset rest are free. A shell built on this one keeps:
+
+- the four M3 board holes H1-H4 and the board's height in the stack (plate top = board top + 5.0 mm,
+  the MX plate height);
+- the 13 MX cut-outs (12 keys + the hook switch) and room for 1u keycaps round them;
+- the display window over the module and the two standoffs under it;
+- the rear openings for USB-C J1 and the 3.5 mm jack J2;
+- holes over the status LED and the piezo, and pinholes under RESET and BOOT;
+- room for the antenna ≥ 15 mm from metal, at the board's left edge.
 
 ```sh
 cd hardware/enclosure
@@ -11,7 +24,8 @@ make parts     # build/proto/board_parts.json from the placed board (KiCad 10)
 make proto     # STL + STEP + fit checks (make render also writes proto.png)
 ```
 
-Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `bezel` as STL + STEP,
+Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `bezel` as STL + STEP (print one
+of each),
 `checks.txt` (fit checks; exit 1 on FAIL) and, with `make render`, `proto.png`. The board
 geometry in `proto_box.py` mirrors `layout/place.py`; the checks compare it with the placed
 board, so a moved part shows up as a FAIL. Without `board_parts.json` the part checks are

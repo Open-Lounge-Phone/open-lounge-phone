@@ -21,7 +21,7 @@ the bottom, DRC clean, image in `build/review/placement.png` (`make placement`);
 - [GUIDELINES.md](GUIDELINES.md): the design rules (child-safe, rugged, simple).
 - [ASSEMBLY.md](ASSEMBLY.md): building the board (PCBA or by hand).
 - [sim/](sim/README.md): the regulator simulation (`make sim`).
-- [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the prototype box for the placed board.
+- [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the core shell (tray, lid, bezel) for the placed board and what designs built around it must keep.
 
 ## Building the outputs
 
@@ -33,7 +33,7 @@ make build     # ERC + design checks -> build/main/ (netlist, BOM, checks, cost,
 make review    # readable schematic PDF -> build/review/schematic.pdf
 make sim       # regulator simulation -> build/sim/report.md (ngspice or KiCad's libngspice)
 make placement # KiCad 10: kicad/main board, DRC, wiring metrics, build/review/placement.png
-make proto     # prototype box (enclosure/) + its fit checks
+make proto     # core shell (enclosure/) + its fit checks
 ```
 
 `layout/`: `place.py` builds `kicad/main/main.kicad_pcb` from the netlist (placement table +

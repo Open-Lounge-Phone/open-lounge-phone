@@ -76,7 +76,7 @@ fab: route
 	$(PY) schematic/cost.py --boards 5 > build/main/fab/jlc-order.txt
 	cat build/main/fab/jlc-order.txt
 
-# Prototype box (code CAD in enclosure/; regenerated for the minimal board in M2)
+# Core shell (code CAD in enclosure/)
 proto:
 	$(MAKE) -C enclosure proto
 
