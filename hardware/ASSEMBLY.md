@@ -29,3 +29,14 @@ produce Gerber X2 + Excellon, IPC-2581, a generic BOM and pick-and-place.
   serial/JTAG device. Hold BOOT and press RESET for download mode.
 - **First power-up:** a current-limited 5 V supply (300 mA) on USB-C; check 3V3 (3.25-3.35 V)
   before plugging in the display module and handset.
+
+## Quality control: X-ray of a first-draft board
+
+![X-ray of the ESP32-S3 module on a first-draft board, five scan angles, aligned on the module](qc/esp32-module-xray.gif)
+
+Five X-ray scans of one assembled first-draft board (scan set `13690919A-Y2`, 2026-10-08), aligned
+on the ESP32-S3 module so only the scan angle changes. They are for quality control: the solder
+joints under and around the module (the edge pads and the ground pad) show up from angles that a
+camera can't see. `tools/xray_gif.py OUT.gif SCAN... --box x0 y0 x1 y1` rebuilds the GIF from any
+scan set (the box is a rectangle around the part in the second scan). The raw scans are not kept in
+the repository.
