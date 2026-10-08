@@ -1,18 +1,23 @@
 # Open Lounge Phone core shell (code CAD, build123d). See PROTO_BOX.md.
 #   make        -> build/proto/{tray,lid,bezel,cradle-*}.{stl,step} + checks.txt (fails on FAIL)
 #   make render -> the same plus build/proto/proto.png
+#   make hands  -> build/hands/cradle-<name>.stl: sculpted catches from hands.yaml (downloads the
+#                  models from Printables once; see PROTO_BOX.md)
 #   make parts  -> build/proto/board_parts.json from the placed board (needs KiCad 10); without
 #                  it the part-fit checks against the board are skipped
 PY := .venv/bin/python
 KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applications/KiCad/KiCad.app))
 KPY := $(KICAD_APP)/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3
 
-.PHONY: proto render parts venv clean
+.PHONY: proto render hands parts venv clean
 proto: venv
 	$(PY) proto_box.py
 
 render: venv
 	$(PY) proto_box.py --render
+
+hands: venv
+	$(PY) hands.py
 
 parts:
 	mkdir -p build/proto

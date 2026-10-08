@@ -53,6 +53,42 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | Floor | Ø2 pinholes under RESET (SW1) and BOOT (SW2), both on the board's bottom side; four Ø13 × 1 recesses for rubber feet; the name debossed |
 | Antenna | the U.FL is at the board's left edge: stick a 2.4 GHz FPC antenna inside the left wall, ≥ 15 mm from metal (DESIGN.md §9) |
 
+## Sculpted catches (`make hands`)
+
+The cradle's arm, hinge and switch foot are the same on every cradle; only the catch that holds the
+handle changes. Besides the four plain styles, `make hands` builds catches from free sculpted models
+on Printables: `hands.py` downloads each model listed in `hands.yaml` once (into `build/hands/src/`),
+turns and sizes it, finds where a 40 mm handle comes to rest on it, joins it to the arm with a bar,
+and writes `build/hands/cradle-<name>.stl`, `checks.txt`, `hands.png` (a contact sheet) and
+`CREDITS.txt`. The models themselves are not in this repository.
+
+| Catch | Model (author) | License | Handle rides |
+|---|---|---|---|
+| `tentacles` | [Octopus Tentacles](https://www.printables.com/model/751736) (Unicorn Dasher), a curling pair | CC0 | +20 mm |
+| `allosaurus` | [Allosaurus fragilis Claw](https://www.printables.com/model/1556040) (cjs_3dp), Smithsonian scan, a pair | CC0 | +23 mm |
+| `cyberhand` | [Cybernetic Hand Sculpture](https://www.printables.com/model/1280802) (Sueg), two hands in a V | CC0 | +9 mm |
+| `antlers` | [Deer Antler, hi resolution scan](https://www.printables.com/model/356636) (billyd), one per rest, handle in the fork | CC-BY | +25 mm |
+| `healinghands` | [Healing Hands Sculpture](https://www.printables.com/model/131178) (The Next Layer), base removed | CC-BY | +21 mm |
+| `lobster` | [Articulated Lobster](https://www.printables.com/model/750316) (AdrianM.), its claws standing up | CC-BY | +19 mm |
+| `lowpolyhand` | [Low Poly Hand Phone Stand](https://www.printables.com/model/947403) (RyGuy Design), two hands in a V | CC-BY-SA | +7 mm |
+| `raptor` | [Raptor Claw](https://www.printables.com/model/613627) (Protopasta), a pair | CC-BY-SA | +25 mm |
+
+"Handle rides" is how much higher than on the plain cradles the catch holds the handle: a sculpture
+needs room under the handle, and the cups only clear the keys and table better. The script allows
+up to 25 mm (`RAISE_MAX`) and shrinks a model that would need more. Checks for every catch: a 40 mm
+handle touches both sides (or rests on the bar between a pair) and lifts straight out; 50 and
+30 mm handles fit and lift out too; the bar is at least 15 mm above the keycaps and above the
+arm; the catch stays between the handset's cups; and the cradle's weight leaves the switch able to
+lift it. Scans that aren't closed solids are written as overlapping shells, which slicers and
+print services merge; their weight is a voxel estimate.
+
+**Licenses.** Sharing a printed or remixed catch: credit the CC-BY ones (`CREDITS.txt` has the
+lines); a CC-BY-SA remix (`lowpolyhand`, `raptor`) stays CC-BY-SA. CC0 needs nothing.
+
+**Adding one:** add an entry to `hands.yaml` with the Printables model id, the file name, author and
+license, then `mode` (`pair` or `single`), `rot` to stand it up, `trim` / `select` / `drop_small`
+to clean it up and `height` or `width`; run `make hands` and look at `build/hands/hands.png`.
+
 ## Fasteners and other parts (per box)
 
 | Qty | Part | Where |

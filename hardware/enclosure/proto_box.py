@@ -225,14 +225,24 @@ def rest(style: str, y: float, g: dict) -> tuple[Part, float]:
     raise ValueError(style)
 
 
-def cradle(style: str = "v") -> Part:
-    """The arm: hinge at the rear, foot on the hook keycap, two rests ("hands") for the handset."""
+def arm_body() -> Part:
+    """The arm every cradle shares: hinge boss and pin hole at the rear, round foot on the hook
+    keycap. Hands go on top (rest() here, sculpted catches in hands.py)."""
     g = cradle_geom()
     lx, fy, zb0, hz = g["lx"], g["fy"], g["zb0"], g["hz"]
     x0, x1 = lx - ARM_W / 2, lx + ARM_W / 2
     arm = box(x0, x1, fy - FOOT_D / 2, HINGE_Y + 6, zb0, zb0 + ARM_H)
     arm = arm + xcyl(x0, x1, fy, g["z_cap"] + FOOT_D / 2, FOOT_D)     # round foot on the cap
     arm = arm + xcyl(x0, x1, HINGE_Y, hz, 12.0)
+    return arm - xcyl(x0 - 1, x1 + 1, HINGE_Y, hz, ARM_HOLE)
+
+
+def cradle(style: str = "v") -> Part:
+    """The arm with two rests ("hands") for the handset."""
+    g = cradle_geom()
+    lx, zb0, hz = g["lx"], g["zb0"], g["hz"]
+    x0, x1 = lx - ARM_W / 2, lx + ARM_W / 2
+    arm = arm_body()
     for y in REST_Y:
         hand, bottom = rest(style, y, g)
         arm = arm + box(x0, x1, y - V_T / 2, y + V_T / 2, zb0 + ARM_H - 0.01, bottom + 0.5) + hand
