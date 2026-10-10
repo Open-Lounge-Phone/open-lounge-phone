@@ -1,6 +1,7 @@
-"""Open Lounge Phone prototype box: a plain, functional enclosure for the minimal board (M2).
+"""Open Lounge Phone core shell: a plain, functional enclosure for the minimal board.
 
     .venv/bin/python proto_box.py [--parts build/proto/board_parts.json] [--render]
+    OLP_DISPLAY=2.13 .venv/bin/python proto_box.py     # for the WeAct 2.13" module (build/proto-2.13/)
 
 Standalone. Printed parts: TRAY and LID (the lid IS the MX switch plate) plus a display BEZEL.
 Outputs STL + STEP to build/proto/, numeric fit checks to build/proto/checks.txt (exit 1 on
@@ -21,16 +22,25 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
 from build123d import (
-    Align, Axis, Box, Circle, Cylinder, Part, Plane, Pos, RectangleRounded, Text, export_step,
-    export_stl, extrude, fillet,
+    Align, Axis, Box, Circle, Cylinder, Part, Plane, Pos, RectangleRounded, Text, chamfer,
+    export_step, export_stl, extrude, fillet,
 )
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "build" / "proto"
+# display module: the board's J3 and standoffs H5/H6 are placed for the WeAct 2.9"; the 2.13" plugs
+# into the same J3 (same header position at its end) and rests on two posts on the lid instead
+DISPLAYS = {
+    "2.9": dict(w=91.8, h=37.5, holes=(86.2, 31.9), view=(68.0, 30.0), view_cx=91.8 / 2, posts=False),
+    "2.13": dict(w=72.0, h=30.0, holes=(66.4, 24.4), view=(52.0, 26.0), view_cx=36.1, posts=True),
+}
+DISPLAY = os.environ.get("OLP_DISPLAY", "2.9")
+DSP = DISPLAYS[DISPLAY]
+OUT = HERE / "build" / ("proto" if DISPLAY == "2.9" else f"proto-{DISPLAY}")
 
 # ---------------------------------------------------------------- board (= layout/place.py)
 BOARD_W, BOARD_H, BOARD_R, BOARD_T = 156.0, 88.0, 3.0, 1.6
@@ -38,10 +48,15 @@ PITCH, X0, YR, YF = 19.05, 46.0, 13.5, 74.5
 COLS = [X0 + i * PITCH for i in range(6)]
 HOOK = (16.0, YF)                                  # SW15, the 13th MX switch
 HOLES = [(152.5, 3.5), (152.5, 84.5), (3.5, 84.5), (31.0, 31.0)]    # H1-H4, M3
-DISP_W, DISP_H = 91.8, 37.5                        # WeAct 2.9" e-paper module
-DISP_X0, DISP_Y0 = COLS[2] - DISP_W / 2, (YR + YF) / 2 - DISP_H / 2
-STANDOFFS = [(DISP_X0 + DISP_W - 2.8, DISP_Y0 + 2.8), (DISP_X0 + DISP_W - 2.8, DISP_Y0 + DISP_H - 2.8)]
-J3_PIN1 = (DISP_X0 + 1.93, DISP_Y0 + DISP_H / 2 + 1.5 * 2.54)
+STD_W, STD_H = 91.8, 37.5                          # WeAct 2.9" module: what the board is placed for
+DISP_MID = (YR + YF) / 2
+DISP_X0 = COLS[2] - STD_W / 2                      # module's header end (fixed by J3)
+DISP_W, DISP_H = DSP["w"], DSP["h"]                # the module fitted
+DISP_Y0 = DISP_MID - DISP_H / 2
+STANDOFFS = [(DISP_X0 + STD_W - 2.8, DISP_MID - 31.9 / 2), (DISP_X0 + STD_W - 2.8, DISP_MID + 31.9 / 2)]
+MODULE_FAR_HOLES = [(DISP_X0 + (DISP_W + DSP["holes"][0]) / 2, DISP_MID + s * DSP["holes"][1] / 2)
+                    for s in (-1, 1)]
+J3_PIN1 = (DISP_X0 + 1.93, DISP_MID + 1.5 * 2.54)
 J3_CENTRE = (J3_PIN1[0] + 1.27, J3_PIN1[1] - 3.81)
 J3_BODY = (5.1, 10.2, 8.5)                         # 2x4 female socket w x h x height
 BZ1_C, BZ1_D, BZ1_H = (15.8, 15.0), 12.2, 6.5      # piezo body centre (between its pins)
@@ -53,7 +68,8 @@ BUTTONS = [(3.345, 23.045, "RESET SW1"), (35.0, 52.8, "BOOT SW2")]   # bottom si
 GAP, WALL, FLOOR = 1.0, 2.5, 2.0
 LEDGE = 1.0                    # tray wall steps in at the lid underside: the lid drops in and sits on it
 OUT_W, OUT_H = BOARD_W + 2 * (GAP + WALL), BOARD_H + 2 * (GAP + WALL)    # 163 x 95
-OUT_R, EDGE_FILLET = 6.0, 1.0
+OUT_R = 6.0
+TOP_ROUND, BOTTOM_CHAMFER = 3.0, 1.0   # outer edges: printable without supports (see envelope())
 FIT = 0.1                      # clearance per side where printed parts mate (industrial print)
 
 BOSS_H = 6.0                   # floor top -> board bottom: the jack (4.0) is the tallest part below
@@ -76,7 +92,8 @@ STANDOFF_L, STANDOFF_HEX = 11.0, 5.5
 Z_DISP = Z_BT + STANDOFF_L                         # module PCB underside 20.6
 DISP_T = 1.2 + 1.2                                 # module PCB + panel glass (EST)
 BEZEL_WALL, BEZEL_TOP = 1.2, 1.2
-VIEW = (68.0, 30.0)            # window over the 66.9 x 29.1 active area (centred, EST)
+VIEW = DSP["view"]             # window over the panel's active area (EST position)
+POST_D, PIN_D, PIN_H = 6.0, 2.2, 1.0   # 2.13": posts under the module's far holes, pin into each
 J3_CUT = (J3_BODY[0] + 1.0, J3_BODY[1] + 1.0)
 STANDOFF_HOLE = 7.0            # lid clearance round the hex standoffs
 
@@ -327,9 +344,21 @@ def rear_cutters():
     return cut
 
 
+def envelope() -> Part:
+    """The closed box's outside, which tray and lid are both trimmed to: R6 corners, a round
+    along the top edge that runs from the tray rim onto the lid edge, a 45 degree chamfer along the
+    bottom edge. Both parts print with that top face up and the tray stands on its flat bottom,
+    so neither edge overhangs. Everything above the lid stays (collar, dome, hinge ears)."""
+    e = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, 0, Z_LT)
+    e = chamfer(e.edges().group_by(Axis.Z)[0], BOTTOM_CHAMFER)
+    e = fillet(e.edges().group_by(Axis.Z)[-1], TOP_ROUND)
+    inset = TOP_ROUND + 0.5
+    return e + rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * inset, OUT_H - 2 * inset, OUT_R - inset,
+                     Z_LT - 1, Z_LT + 200)
+
+
 def tray() -> Part:
     shell = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, 0, Z_LT)
-    shell = fillet(shell.edges().group_by(Axis.Z)[0] + shell.edges().group_by(Axis.Z)[-1], EDGE_FILLET)
     t = shell - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * WALL, OUT_H - 2 * WALL,
                       OUT_R - WALL, Z_FLOOR, Z_LU + 0.01)
     up = WALL - LEDGE              # the wall above the ledge, round the dropped-in lid
@@ -348,7 +377,7 @@ def tray() -> Part:
     from build123d import Rot
     txt = Text(TEXT, font_size=TEXT_SIZE, align=(Align.CENTER, Align.CENTER))
     cut.append(Pos(OUT_W / 2 + 20, OUT_H / 2, 0) * Rot(0, 180, 0) * extrude(txt, amount=-TEXT_DEPTH))
-    return t - union(cut)
+    return (t - union(cut)) & envelope()
 
 
 def lid() -> Part:
@@ -364,6 +393,9 @@ def lid() -> Part:
     px, py = bx2x(BZ1_C[0]), by2y(BZ1_C[1])
     add.append(cyl(px, py, Z_LT - 0.01, Z_PIEZO_TOP + 0.5 + PIEZO_ROOF, PIEZO_BORE + 2 * 1.6))
     add += hinge_ears()
+    for bx, by in (MODULE_FAR_HOLES if DSP["posts"] else []):   # hold up the 2.13" module's far end
+        x, y = bx2x(bx), by2y(by)
+        add += [cyl(x, y, Z_LT - 0.01, Z_DISP, POST_D), cyl(x, y, Z_DISP - 0.01, Z_DISP + PIN_H, PIN_D)]
     body = plate + union(add)
     cut = []
     for bx, by, _ in keys():
@@ -388,18 +420,21 @@ def lid() -> Part:
         from build123d import Cone
         cut.append(Pos(x, y, Z_LT - h) * Cone(SCREW_CLEAR / 2, CSK_D / 2 + 0.3, h + 0.3,
                                               align=(Align.CENTER, Align.CENTER, Align.MIN)))
-    return body - union(cut)
+    return (body - union(cut)) & envelope()
 
 
 def bezel() -> Part:
-    """Frame over the display module: sits on the lid top, walls round the module, a lip over
-    its border with the viewing window. z = 0 at the lid top."""
-    iw, ih = DISP_W + 2 * FIT, DISP_H + 2 * FIT
+    """Frame over the display module: sits on the lid top, walls round the 2.9" module's footprint
+    (also covering the standoff holes when a 2.13" is fitted), a lip over the module with the
+    viewing window. z = 0 at the lid top, origin at the 2.9" module's centre."""
+    iw, ih = STD_W + 2 * FIT, STD_H + 2 * FIT
     ow, oh = iw + 2 * BEZEL_WALL, ih + 2 * BEZEL_WALL
     top = Z_DISP + DISP_T - Z_LT
+    vx = DSP["view_cx"] - STD_W / 2
     b = box(-ow / 2, ow / 2, -oh / 2, oh / 2, 0, top + BEZEL_TOP)
     b = b - box(-iw / 2, iw / 2, -ih / 2, ih / 2, -1, top)
-    return b - box(-VIEW[0] / 2, VIEW[0] / 2, -VIEW[1] / 2, VIEW[1] / 2, top - 1, top + BEZEL_TOP + 1)
+    return b - box(vx - VIEW[0] / 2, vx + VIEW[0] / 2, -VIEW[1] / 2, VIEW[1] / 2, top - 1,
+                   top + BEZEL_TOP + 1)
 
 
 # ---------------------------------------------------------------- checks
@@ -441,9 +476,17 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
     add(jack_ok, "rear openings", f"USB-C {USB_CUT[0]} x {USB_CUT[1]} at z {Z_USB:.1f}, jack "
         f"Ø{JACK_HOLE_D} at z {Z_JACK:.1f} (floor top {Z_FLOOR}); both hang under the board")
     top = Z_DISP + DISP_T
-    gap = (2 * YF - 2 * YR) / 2 - KEYCAP - (DISP_H + 2 * FIT + 2 * BEZEL_WALL)
+    gap = (2 * YF - 2 * YR) / 2 - KEYCAP - (STD_H + 2 * FIT + 2 * BEZEL_WALL)
     add(gap / 2 >= 0.8, "bezel vs keycaps",
         f"rows {YF - YR:.0f} mm apart: {gap / 2:.2f} mm between the bezel and each keycap row")
+    add(TOP_ROUND <= WALL + LID_T and BOTTOM_CHAMFER <= FLOOR, "printable edges",
+        f"top edge R{TOP_ROUND} (tray rim onto the lid edge; printed face up), bottom edge "
+        f"{BOTTOM_CHAMFER} mm x 45 deg chamfer: no overhangs, flat top kept")
+    add(True, "display", f'WeAct {DISPLAY}" module {DISP_W} x {DISP_H}'
+        + (f"; far end on two Ø{POST_D} posts on the lid ({Z_DISP - Z_LT:.1f} mm tall, Ø{PIN_D} pins "
+           f"into its holes at {MODULE_FAR_HOLES[0][0] - DISP_X0:.1f} mm from the header end); "
+           "leave the H5/H6 standoffs off" if DSP["posts"] else "; far end on standoffs H5/H6")
+        + f"; window {VIEW[0]} x {VIEW[1]}")
     add(abs(STANDOFF_L - (J3_BODY[2] + 2.5)) < 1e-6, "display stack",
         f"socket {J3_BODY[2]} + header plastic 2.5 = standoff {STANDOFF_L} mm; module top z "
         f"{top:.1f}, {top - Z_LT:.1f} above the plate")
@@ -640,7 +683,7 @@ def draw(items, path, elev=28, azim=-60, size=(12, 8), title=None, light=(0.35, 
 
 
 def render(shapes) -> None:
-    dx, dy = bx2x(DISP_X0 + DISP_W / 2), by2y(DISP_Y0 + DISP_H / 2)
+    dx, dy = bx2x(DISP_X0 + STD_W / 2), by2y(DISP_MID)
     items = [
         (*mesh_of(shapes["tray"]), "#d8d2c4"),
         (*mesh_of(Pos(0, 0, 18) * shapes["lid"]), "#ece6d6"),
@@ -707,14 +750,16 @@ def raster(items, path, elev=35, azim=-60, width=2400, ss=2, light=(0.35, -0.8, 
 
 def render_assembled(shapes) -> None:
     """The finished prototype: closed box, board, keycaps, display module and bezel."""
-    dx, dy = bx2x(DISP_X0 + DISP_W / 2), by2y(DISP_Y0 + DISP_H / 2)
+    dx, dy = bx2x(DISP_X0 + STD_W / 2), by2y(DISP_MID)
+    mx = bx2x(DISP_X0 + DISP_W / 2)
     cap = Box(KEYCAP, KEYCAP, KEYCAP_H, align=(Align.CENTER, Align.CENTER, Align.MIN))
     cap = fillet(cap.edges().group_by(Axis.Z)[-1], 1.8)
     items = [
         (*mesh_of(shapes["tray"]), "#d8d2c4"),
         (*mesh_of(shapes["lid"]), "#ece6d6"),
-        (*mesh_of(rrect(dx, dy, DISP_W, DISP_H, 1.0, Z_DISP, Z_DISP + 1.2)), "#2f6b3a"),
-        (*mesh_of(rrect(dx, dy, 66.9, 29.1, 0.5, Z_DISP + 1.2, Z_DISP + DISP_T)), "#f2f0ea"),
+        (*mesh_of(rrect(mx, dy, DISP_W, DISP_H, 1.0, Z_DISP, Z_DISP + 1.2)), "#2f6b3a"),
+        (*mesh_of(rrect(bx2x(DISP_X0 + DSP["view_cx"]), dy, VIEW[0] - 1, VIEW[1] - 1, 0.5,
+                        Z_DISP + 1.2, Z_DISP + DISP_T)), "#f2f0ea"),
         (*mesh_of(Pos(dx, dy, Z_LT) * shapes["bezel"]), "#3a3d3c"),
     ]
     for bx, by, label in keys():

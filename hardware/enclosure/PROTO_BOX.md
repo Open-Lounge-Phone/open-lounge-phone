@@ -41,7 +41,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 
 | Item | Value |
 |---|---|
-| Outside | 163 × 95 × 14.6 mm, R6 corners, 1 mm edge fillets; 2.5 mm walls, 2.0 mm floor |
+| Outside | 163 × 95 × 14.6 mm, R6 corners; a 3 mm round along the top edge that runs from the tray rim onto the lid edge, a 1 mm × 45° chamfer along the bottom edge (no overhangs: the tray prints standing on its flat bottom and the lid on its flat underside, so the round faces up on both); 2.5 mm walls, 2.0 mm floor |
 | Tray | the walls rise to the lid top: at z 12.6 they step in to 1.5 mm, leaving a 1 mm ledge the lid drops onto, top flush with the walls. Flat bottom with the feet recesses, screw holes and pinholes cut into it |
 | Stack (z from the table) | floor top 2.0 → board bottom 8.0 (6 mm under the board: the jack, 4 mm, is the tallest part there) → board top 9.6 → lid top 14.6 = board top + 5.0 (MX plate height) |
 | Lid = switch plate | 2.0 mm; **13** × 14.0 mm cutouts (12 keys + the hook switch) with a 15.2 × 0.5 mm underside pocket; 6.1 × 11.2 mm cut-out for the display socket J3; Ø7 holes for the two display standoffs; Ø3 hole over the status LED. Flat underside with only cut-outs in it, so it prints face down on it; 0.1 mm clearance to the tray walls |
@@ -49,6 +49,7 @@ clearance per side where printed parts mate. For hobby FDM add ~0.1 mm to the ke
 | Cradle | one arm along the left end, hinged on two ears on the lid (rear-left, in front of the piezo dome) with an M3 screw as the pin. Its round front foot rests on the hook keycap; the handset lies front to back in two rests ("hands"), so the keys and display stay clear. Four interchangeable hand styles share the same arm, hinge and foot and hold the handle at the same height, so any of them swaps on the pin: **V** (90°, 52 mm opening), **claw** (two crescents, thick at the bottom with horns curving up and in, about 60 mm between the tips), **balls** (two Ø14 balls 36 mm apart that the handle sits between) and **fork** (a flat seat between two round-topped tines, 52 mm apart). All take handles up to about 50 mm wide. 56 % of the handset's weight presses the switch (a handset of 121 g or more for 1.5× a 45 gf linear switch); each arm (18-27 g, by style) puts at most 15 g on the cap, so the switch's spring lifts it when the handset comes off. The handle sits 70 mm above the table so the cups clear the keycaps and the table. Handset numbers in `proto_box.py` (`HANDSET_*`, `HANDLE_W`, `CUP_DROP`): the Opis 60s Micro's listed 21 × 7 × 6 cm, with the handle width and cup drop estimated: measure your handset |
 | Piezo | BZ1 (6.5 mm tall) pokes 1.5 mm through the plate: a Ø16 dome on the lid covers it, with a Ø12.8 bore and seven Ø1.5 sound holes on top |
 | Display | the WeAct 2.9" module plugs into J3 and rests on two M3 × 11 mm standoffs (H5, H6); its underside is at z 20.6, 6 mm above the plate. The **bezel** (separate print) sits on the plate round the module: 1.2 mm walls, 1.2 mm lip, 68 × 30 mm window (centred on the module; the panel's active area is 66.9 × 29.1, position EST). 1.45 mm is left between the bezel and each keycap row |
+| Display, 2.13" option | `make proto DISPLAY=2.13` (outputs in `build/proto-2.13/`) fits the WeAct 2.13" module (72 × 30 mm, same 2×4 header at the same place, so it plugs into J3). Its far end rests on two Ø6 posts on the lid with Ø2.2 pins into its holes (6 mm tall, 69.2 mm from the header end); leave the H5/H6 standoffs off. The bezel keeps the 2.9" footprint (it covers the unused standoff holes) with a 52 × 26 mm window over the 2.13" panel (position EST). Firmware: the driver is set for 296 × 128; the 2.13" is 250 × 122 on the same controller |
 | Rear wall | USB-C J1 (bottom side, hanging under the board): 12.8 × 7.2 R3.4 opening at board x 19.5, z 6.4; 3.5 mm jack J2 (bottom side): Ø8 opening at board x 6.5 on the plug axis (≈ 2 mm below the board, UNVERIFIED until a PJ-31060 sample is measured) |
 | Floor | Ø2 pinholes under RESET (SW1) and BOOT (SW2), both on the board's bottom side; four Ø13 × 1 recesses for rubber feet; the name debossed |
 | Antenna | the U.FL is at the board's left edge: stick a 2.4 GHz FPC antenna inside the left wall, ≥ 15 mm from metal (DESIGN.md §9) |
@@ -123,7 +124,7 @@ it up, `trim` / `select` / `drop_small` to clean it up and `height` or `width`; 
 
 ## Checks (`build/proto/checks.txt`)
 
-Bed fit (220 × 220), walls, the lid's flat underside, the spacers, the MX stack (plate top = board top + 5.0), hook travel, the rear
+Bed fit (220 × 220), walls, the printable edges, the lid's flat underside, the spacers, the MX stack (plate top = board top + 5.0), hook travel, the rear
 openings (inside the wall, above the floor), bezel vs keycaps, the display stack (socket +
 header = standoff length), J1/J2 on the bottom at the rear edge at their cut-outs, bottom parts
 vs the 6 mm under the board, top parts taller than the 3 mm under the plate (only J3 and BZ1,

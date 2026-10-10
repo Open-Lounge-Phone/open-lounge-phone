@@ -1,6 +1,7 @@
 # Open Lounge Phone core shell (code CAD, build123d). See PROTO_BOX.md.
 #   make        -> build/proto/{tray,lid,bezel,cradle-*}.{stl,step} + checks.txt (fails on FAIL)
 #   make render -> the same plus build/proto/proto.png
+#   DISPLAY=2.13 -> for the WeAct 2.13" module instead: build/proto-2.13/ (lid posts, bezel window)
 #   make hands  -> build/hands/cradle-<name>.stl: sculpted catches from hands.yaml (downloads the
 #                  models from Printables once; see PROTO_BOX.md)
 #   make parts  -> build/proto/board_parts.json from the placed board (needs KiCad 10); without
@@ -10,11 +11,13 @@ KICAD_APP ?= $(firstword $(wildcard $(HOME)/Applications/KiCad/KiCad.app /Applic
 KPY := $(KICAD_APP)/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3
 
 .PHONY: proto render hands parts venv clean
+DISPLAY ?= 2.9
+
 proto: venv
-	$(PY) proto_box.py
+	OLP_DISPLAY=$(DISPLAY) $(PY) proto_box.py
 
 render: venv
-	$(PY) proto_box.py --render
+	OLP_DISPLAY=$(DISPLAY) $(PY) proto_box.py --render
 
 hands: venv
 	$(PY) hands.py
