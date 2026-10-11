@@ -201,6 +201,7 @@ static void render(void) {
   }
 
   char lines[4][25] = {{0}};
+  s_menu.voicemail = s_cfg.missed_count;
   int n = menu_lines(&s_menu, lines);
   bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
   if (n == 0 && (ota_state() == OTA_DOWNLOADING || ota_state() == OTA_RESTARTING ||
@@ -265,6 +266,8 @@ static void render(void) {
   if (s_code[0] || s_conn == CONN_CONNECTING) led = LED_PULSE;
   else if (s_conn == CONN_OFFLINE) led = LED_BLINK;
   else if (s_phone.kind == PH_INCOMING) led = LED_RINGING;
+  else if ((s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM) && s_phone.recorded)
+    led = LED_RECORDING;
   else if (s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM || s_phone.kind == PH_DIALING)
     led = LED_ON;
   else if (s_phone.kind == PH_IDLE && s_cfg.missed_count > 0) led = LED_BREATHE;

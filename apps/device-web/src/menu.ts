@@ -16,7 +16,6 @@ export type MenuScreen =
   | "voicemail"
   /** Recording the greeting: BACK (or any key) finishes. */
   | "greeting"
-  | "brightness"
   | "about"
   /** During a call or in a room: hold / add caller, merge, transfer, mute. */
   | "call"
@@ -115,13 +114,12 @@ export function fingerprintLines(words: readonly string[]): string[] {
 const ROOT_OPTIONS: { digit: number; label: string; screen: MenuScreen; spoken: string }[] = [
   { digit: 1, label: "Volume", screen: "volume", spoken: "volume" },
   { digit: 2, label: "Voicemail", screen: "voicemail", spoken: "voicemail" },
-  { digit: 4, label: "Bright", screen: "brightness", spoken: "brightness" },
   { digit: 0, label: "About", screen: "about", spoken: "about this phone" },
 ];
 
 /** Lounge-session items on the top menu: 5 toggles "open to chat", 9 logs out. */
 const CHAT_DIGIT = 5;
-const LOGOUT_DIGIT = 9;
+const LOGOUT_DIGIT = 8;
 /** Team/org spaces: 6 dials an extension. */
 const EXTENSION_DIGIT = 6;
 const EXTENSION_MAX = 6;
@@ -207,12 +205,6 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         labels: {},
         backLabel: "Done",
       };
-    case "brightness":
-      return {
-        ...base,
-        title: `BRIGHT ${settings.brightness}/5`,
-        labels: { 1: "Dimmer", 2: "Brighter" },
-      };
     case "call":
       return {
         ...base,
@@ -264,8 +256,6 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       return state.recording === "name"
         ? PROMPT_TEXT["greet.say_name"]
         : PROMPT_TEXT["greet.say_greeting"];
-    case "brightness":
-      return `Brightness ${settings.brightness}. Press 1 for dimmer, 2 for brighter.`;
     case "call": {
       const options = (ctx.call?.actions ?? []).map(
         (a, i) => `Press ${i + 1} to ${CALL_SPOKEN[a]}.`,
@@ -353,9 +343,8 @@ export function menuStep(
   }
 
   if (event.type === "menu") {
-    // MENU at the top closes the menu; anywhere else it returns to the top.
-    if (state.screen === "call") return { state: undefined, settings };
-    return state.screen === "root" ? { state: undefined, settings } : enter("root");
+    // MENU closes the menu from anywhere (docs/phone-ux.md).
+    return { state: undefined, settings };
   }
   if (event.type === "back") {
     if (state.screen === "call") return { state: undefined, settings };
@@ -409,15 +398,6 @@ export function menuStep(
         settings,
         say: menuPrompt(next, settings, ctx),
         action: { type: "greeting", kind },
-      };
-    }
-    case "brightness": {
-      if (d !== 1 && d !== 2) return { state: touched, settings };
-      const brightness = clamp(settings.brightness + (d === 2 ? 1 : -1), 1, 5);
-      return {
-        state: touched,
-        settings: { ...settings, brightness },
-        say: `Brightness ${brightness}`,
       };
     }
     case "call": {

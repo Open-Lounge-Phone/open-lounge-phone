@@ -22,7 +22,7 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline | Hold / merge / transfer (MENU in a call), voicemail recording, greetings, Lounge features, extensions |
 | **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
 | `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Brightness, voicemail and call menus; rooms (group calls) have no media on the phone yet |
-| MENU → 1 Volume, 3 Wi-Fi status (→ 1 setup), 4 Server (→ 1 change: re-opens setup), 9 Update now, 0 About (firmware version + the four fingerprint words) | |
+| The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume, 2 Voicemail (count), 3 Wi-Fi (→ 1 setup), 4 Server (→ 1 change: re-opens setup), 9 Update now, 0 About (firmware version + the four fingerprint words); the status LED double-flashes in a recorded call | Lounge items (5, 8), Dial extension (6), call actions, spoken prompts |
 
 ## Build and flash
 

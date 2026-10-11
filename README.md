@@ -52,7 +52,7 @@ The software works end to end today. The hardware has its first **early dev boar
 | Firmware | ESP32-S3 firmware v0 (ESP-IDF, [firmware/](firmware/README.md)): keys, hook, ringer, status light, 2.9" e-paper strip; Wi-Fi and server from the console; pairing with a P-256 key, sign-in, `wipe`; calls ring, answer and hang up (signaling only); a Wokwi simulation and a live end-to-end test | v0 done in the simulator (2026-09-30), not yet on a board; next: call audio (esp-webrtc), SoftAP Wi-Fi setup, OTA, encrypted NVS |
 | Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.9" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | **v0.1 early dev board prototype** ([`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1), rev A): designed, routed (DRC clean) and first boards ordered 2026-09-30; bring-up pending; 3D-printable core shell (tray, lid, bezel) ready to print; decorative designs build around it |
 
-More: [architecture](docs/architecture.md), [federation](docs/federation.md) (and its
+More: [architecture](docs/architecture.md), [the phone's UX](docs/phone-ux.md), [federation](docs/federation.md) (and its
 [spec](docs/federation-spec.md)),
 [the public hub](docs/hub.md), [privacy](docs/privacy.md), [hardware](hardware/README.md).
 

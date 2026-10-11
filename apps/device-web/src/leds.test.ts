@@ -1,6 +1,6 @@
 import type { DeviceState } from "@openloungephone/core";
 import { describe, expect, it } from "vitest";
-import { hasNewMissed, type LedInput, ledsFor } from "./leds.ts";
+import { hasNewMissed, type LedInput, statusLed } from "./leds.ts";
 
 const config = {
   buttons: [
@@ -15,99 +15,55 @@ const input = (over: Partial<LedInput> = {}): LedInput => ({
   config,
   pairing: false,
   connection: "online",
-  buttons: 4,
   ...over,
 });
+const state = (s: DeviceState) => input({ deviceState: s });
 
-const modes = (over: Partial<LedInput>) =>
-  ledsFor(input(over)).keys.map((k) => `${k.color}:${k.mode}`);
-
-describe("ledsFor", () => {
-  it("dims mapped keys and turns off unmapped ones when idle", () => {
-    expect(modes({})).toEqual(["white:dim", "white:off", "white:dim", "white:off"]);
-    expect(ledsFor(input()).status).toEqual({ color: "green", mode: "on" });
+// docs/phone-ux.md "Status LED" and firmware main.c render(): one red LED.
+describe("statusLed", () => {
+  it("is dim when ready, breathes with missed calls", () => {
+    expect(statusLed(input())).toBe("dim");
+    expect(statusLed(input({ config: { ...config, missed: [{ from: "Mom" }] } }))).toBe("breathe");
   });
 
-  it("pulses everything blue while pairing", () => {
-    const leds = ledsFor(input({ pairing: true, config: undefined }));
-    expect(leds.keys.every((k) => k.color === "blue" && k.mode === "pulse")).toBe(true);
-    expect(leds.status).toEqual({ color: "blue", mode: "pulse" });
-  });
-
-  it("shows connection problems on the status LED and darkens keys", () => {
-    expect(ledsFor(input({ connection: "offline" })).status).toEqual({ color: "red", mode: "on" });
-    expect(ledsFor(input({ connection: "connecting" })).status).toEqual({
-      color: "amber",
-      mode: "pulse",
-    });
-    expect(modes({ connection: "offline" }).every((m) => m.endsWith(":off"))).toBe(true);
-  });
-
-  it("shows quiet hours in purple", () => {
-    expect(ledsFor(input({ config: { ...config, quiet: true } })).status.color).toBe("purple");
-  });
-
-  it("lights the dialed key and the in-call key green", () => {
-    expect(modes({ deviceState: { kind: "dialing", button: 2 } })[2]).toBe("green:on");
-    const incall: DeviceState = { kind: "incall", callId: "c", connected: true };
-    expect(modes({ deviceState: incall, activeKey: 0 })[0]).toBe("green:on");
-  });
-
-  it("pulses the caller's key on an incoming call, or all keys for an unmapped caller", () => {
-    const fromGrandma: DeviceState = { kind: "incoming", callId: "c", from: "Grandma" };
-    expect(modes({ deviceState: fromGrandma })).toEqual([
-      "white:dim",
-      "white:off",
-      "green:pulse",
-      "white:off",
-    ]);
-    const fromDad: DeviceState = { kind: "incoming", callId: "c", from: "Dad" };
-    expect(modes({ deviceState: fromDad }).every((m) => m === "green:pulse")).toBe(true);
-  });
-
-  it("blinks red after a refused call but not after a normal hangup", () => {
-    expect(modes({ deviceState: { kind: "offhook", lastEnd: "denied" }, activeKey: 2 })[2]).toBe(
-      "red:blink",
-    );
+  it("pulses while pairing or connecting, blinks offline", () => {
+    expect(statusLed(input({ pairing: true }))).toBe("pulse");
+    expect(statusLed(input({ connection: "connecting" }))).toBe("pulse");
+    expect(statusLed(input({ connection: "offline" }))).toBe("blink");
     expect(
-      modes({ deviceState: { kind: "offhook", lastEnd: "busy" } }).every((m) => m === "red:blink"),
-    ).toBe(true);
-    expect(modes({ deviceState: { kind: "offhook", lastEnd: "hangup" }, activeKey: 2 })[2]).toBe(
-      "white:dim",
-    );
+      statusLed(
+        input({
+          connection: "offline",
+          deviceState: { kind: "incoming", callId: "c", from: "Mom" },
+        }),
+      ),
+    ).toBe("blink");
   });
 
-  it("ignores out-of-range keys", () => {
-    expect(ledsFor(input({ deviceState: { kind: "dialing", button: 9 } })).keys).toHaveLength(4);
-  });
-});
-
-describe("missed voicemail", () => {
-  it("breathes the newest caller's key when idle", () => {
-    const leds = ledsFor(
-      input({ config: { ...config, missed: [{ from: "Grandma" }, { from: "Mom" }] } }),
-    );
-    expect(leds.keys[2]).toEqual({ color: "amber", mode: "breathe" });
-    expect(leds.keys[0]).toEqual({ color: "white", mode: "dim" });
-    expect(leds.status).toEqual({ color: "green", mode: "on" });
+  it("flashes while ringing, stays on in calls and rooms", () => {
+    expect(statusLed(state({ kind: "incoming", callId: "c", from: "Mom" }))).toBe("ringing");
+    expect(statusLed(state({ kind: "dialing", button: 0 }))).toBe("on");
+    expect(statusLed(state({ kind: "incall", callId: "c", connected: true }))).toBe("on");
+    expect(statusLed(state({ kind: "inroom", roomId: "r", muted: false }))).toBe("on");
   });
 
-  it("breathes the status LED when the caller has no key", () => {
-    const leds = ledsFor(input({ config: { ...config, quiet: true, missed: [{ from: "Aunt" }] } }));
-    expect(leds.status).toEqual({ color: "purple", mode: "breathe" });
-    expect(leds.keys.every((k) => k.mode !== "breathe")).toBe(true);
+  it("double-flashes as the recording light only in a recorded call or room", () => {
+    expect(
+      statusLed(
+        input({ deviceState: { kind: "incall", callId: "c", connected: true }, recording: true }),
+      ),
+    ).toBe("recording");
+    expect(
+      statusLed(
+        input({ deviceState: { kind: "inroom", roomId: "r", muted: false }, recording: true }),
+      ),
+    ).toBe("recording");
+    expect(statusLed(input({ recording: true }))).toBe("dim");
   });
 
-  it("stays out of the way of calls, pairing and offline", () => {
-    const missed = { ...config, missed: [{ from: "Grandma" }] };
-    const incoming = ledsFor(
-      input({ config: missed, deviceState: { kind: "incoming", callId: "c", from: "Mom" } }),
-    );
-    expect(incoming.keys[2]).toEqual({ color: "white", mode: "dim" });
-    expect(ledsFor(input({ config: missed, pairing: true })).keys[2]?.color).toBe("blue");
-    const offline = ledsFor(input({ config: missed, connection: "offline" }));
-    expect(offline.keys[2]?.mode).toBe("off");
-    expect(offline.status.mode).toBe("on");
+  it("is dim with the handset up and after calls", () => {
+    expect(statusLed(state({ kind: "offhook" }))).toBe("dim");
+    expect(statusLed(state({ kind: "offhook", lastEnd: "busy" }))).toBe("dim");
   });
 });
 
@@ -119,22 +75,5 @@ describe("hasNewMissed", () => {
     expect(hasNewMissed(with_("Mom"), with_("Grandma", "Mom"))).toBe(true);
     expect(hasNewMissed(with_("Mom", "Grandma"), with_("Mom"))).toBe(false);
     expect(hasNewMissed(with_("Mom"), config)).toBe(false);
-  });
-});
-
-describe("menu and function keys", () => {
-  it("dims MENU/BACK when online and turns them off offline", () => {
-    expect(ledsFor(input()).fn).toEqual({ color: "white", mode: "dim" });
-    expect(ledsFor(input({ connection: "offline" })).fn.mode).toBe("off");
-  });
-
-  it("pulses everything blue while pairing", () => {
-    expect(ledsFor(input({ pairing: true })).fn).toEqual({ color: "blue", mode: "pulse" });
-  });
-
-  it("lights only the digits the open menu uses", () => {
-    const leds = ledsFor(input({ menuSlots: [0, 3] }));
-    expect(leds.keys.map((k) => k.mode)).toEqual(["on", "off", "off", "on"]);
-    expect(leds.fn).toEqual({ color: "white", mode: "on" });
   });
 });

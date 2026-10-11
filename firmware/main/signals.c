@@ -32,7 +32,7 @@ static int s_beep_step;
 static uint32_t s_beep_left;
 
 const char *signals_led_name(led_pattern_t p) {
-  static const char *names[] = {"off", "dim", "on", "pulse", "blink", "ringing", "breathe"};
+  static const char *names[] = {"off", "dim", "on", "pulse", "blink", "ringing", "breathe", "recording"};
   return names[p];
 }
 
@@ -45,6 +45,10 @@ static uint32_t led_duty(uint32_t t) {
     case LED_PULSE: return (ms % 1000) < 500 ? (ms % 500) * DUTY_MAX / 500 : 0;
     case LED_BLINK: return (ms % 2000) < 100 ? DUTY_MAX : 0;
     case LED_RINGING: return (ms % 250) < 125 ? DUTY_MAX : 0;
+    case LED_RECORDING: {
+      uint32_t p = ms % 1000;
+      return (p < 80 || (p >= 200 && p < 280)) ? DUTY_MAX : 0;
+    }
     case LED_BREATHE: {
       float x = (1.0f - cosf((float)(ms % 4000) / 4000.0f * 2.0f * (float)M_PI)) / 2.0f;
       return (uint32_t)(x * x * DUTY_MAX);

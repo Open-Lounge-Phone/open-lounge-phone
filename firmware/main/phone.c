@@ -137,6 +137,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       s->kind = PH_INROOM;
       CPY(s->room_id, room);
       s->muted = muted;
+      s->recorded = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "recording"));
     } else if (room) {
       emit_room_leave(emit, room);  // not expecting a room: leave it
     }
@@ -189,6 +190,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         s->kind = PH_INCALL;
         CPY(s->call_id, id);
         s->connected = !strcmp(state, "active");
+        s->recorded = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "recording"));
       } else {
         CPY(s->call_id, id);
       }
@@ -219,6 +221,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         const char *hold = str(m, "hold");
         s->connected = true;
         s->held_by_them = hold && !strcmp(hold, "them");
+        if (cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "recording"))) s->recorded = true;
       }
       break;
     }

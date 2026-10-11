@@ -1,17 +1,19 @@
-// The on-device menu (a subset of apps/device-web/src/menu.ts): MENU opens it, a digit picks
-// the item shown for it, BACK steps out, 20 s without a key closes it.
-// Items: 1 Volume (1 quieter, 2 louder), 3 Wi-Fi status, 4 Server (1 = re-open setup to change
-// it), 9 Update now, 0 About (firmware version + the four
-// fingerprint words). TODO: Voicemail, Brightness, call actions (hold/merge/transfer), Dial extension.
+// The on-device menu, as docs/phone-ux.md specifies: MENU opens and closes it, a digit picks the
+// item shown for it, BACK goes one level up, 20 s without a key closes it.
+// Items: 1 Volume, 2 Voicemail, 3 Wi-Fi, 4 Server, 9 Update now, 0 About. Planned: 5 / 8 Lounge,
+// 6 Dial extension, call actions.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum { MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME, MENU_SERVER } menu_screen_t;
+typedef enum {
+  MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME, MENU_SERVER, MENU_VOICEMAIL
+} menu_screen_t;
 
 typedef struct {
   menu_screen_t screen;
   int64_t last_input_ms;
+  int voicemail;  // new messages (the phone's missed count), shown under 2
 } menu_t;
 
 #define MENU_TIMEOUT_MS 20000

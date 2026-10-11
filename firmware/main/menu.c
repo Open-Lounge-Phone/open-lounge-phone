@@ -14,7 +14,7 @@
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
-  static const char *names[] = {"closed", "root", "about", "wifi", "volume", "server"};
+  static const char *names[] = {"closed", "root", "about", "wifi", "volume", "server", "voicemail"};
   return names[s];
 }
 
@@ -39,6 +39,7 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       app_post(EV_OTA_NOW, 0, NULL);  // 9 = update now
       m->screen = MENU_CLOSED;
     } else if (d == 1) m->screen = MENU_VOLUME;
+    else if (d == 2) m->screen = MENU_VOICEMAIL;
     else if (d == 3) m->screen = MENU_WIFI;
     else if (d == 4) m->screen = MENU_SERVER;
   } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
@@ -66,11 +67,15 @@ static void upper(char *s) {
 int menu_lines(const menu_t *m, char out[4][25]) {
   switch (m->screen) {
     case MENU_ROOT:
-      snprintf(out[0], 25, "MENU");
-      snprintf(out[1], 25, "1 VOLUME 3 WI-FI");
-      snprintf(out[2], 25, "4 SERVER 9 UPDATE");
-      snprintf(out[3], 25, "0 ABOUT");
-      return 4;
+      snprintf(out[0], 25, "1 VOLUME 2 VOICEMAIL");
+      snprintf(out[1], 25, "3 WI-FI 4 SERVER");
+      snprintf(out[2], 25, "9 UPDATE 0 ABOUT");
+      return 3;
+    case MENU_VOICEMAIL:
+      if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
+      else snprintf(out[0], 25, "NO NEW VOICEMAIL");
+      snprintf(out[1], 25, "%s", m->voicemail > 0 ? "PLAY IN APP" : "");
+      return m->voicemail > 0 ? 2 : 1;
     case MENU_VOLUME:
       snprintf(out[0], 25, "VOLUME %d/%d", audio_volume(), VOLUME_MAX);
       snprintf(out[1], 25, "1 LOWER 2 LOUDER");

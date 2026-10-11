@@ -20,6 +20,9 @@ headset.
 1. Press each key: the log prints `KEY 1` … `KEY 0`, `KEY MENU`, `KEY BACK` once per press.
 2. Lift/replace the handset: `HOOK up` / `HOOK down`. Plug/unplug the handset: `JACK in` / `JACK out`.
 3. `status` shows the state; call the phone from the app to hear the piezo and see the LED ring.
+4. Walk through `docs/phone-ux.md`: each screen, the menu (MENU, a digit, BACK, MENU), the LED
+   patterns (dim ready, pulse connecting, blink offline, fast flash ringing, on in a call) and
+   the beeps. Anything that differs from the page is a bug: note it in `firmware/TESTLOG.md`.
 
 ## 2. Codec on I2C
 

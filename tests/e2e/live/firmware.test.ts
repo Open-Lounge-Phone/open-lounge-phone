@@ -116,7 +116,7 @@ async function boot(phone: WokwiPhone): Promise<string> {
   await phone.waitFor(/WS open/, 90_000, "WebSocket open");
   await phone.waitFor(/"t":"pair\.begin","alg":"p256"/, 20_000, "pair.begin");
   const m = await phone.waitFor(/PAIRING CODE: (\d{6})/, 30_000, "pairing code");
-  await phone.waitFor(/STRIP \[PAIR \d{3} \d{3}\|LIFT TO HEAR\]/, 10_000, "code on the strip");
+  await phone.waitFor(/STRIP \[PAIR \d{3} \d{3}\|ENTER IN APP\]/, 10_000, "code on the strip");
   return m[1] as string;
 }
 

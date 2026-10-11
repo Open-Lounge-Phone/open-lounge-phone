@@ -62,10 +62,9 @@ import {
   SLOT_COUNT,
   slotOf,
 } from "./keypad.ts";
-import { type Connection, type DeviceConfig, hasNewMissed, ledsFor } from "./leds.ts";
+import { type Connection, type DeviceConfig, hasNewMissed, statusLed } from "./leds.ts";
 import {
   type LoungeView,
-  loungeKeysLive,
   loungeLines,
   loungeUrl,
   QR_REFRESH_LEAD_MS,
@@ -127,7 +126,6 @@ const handsetEl = $<HTMLButtonElement>(".handset");
 const keyRowEls = [$<HTMLDivElement>(".keys--top"), $<HTMLDivElement>(".keys--bottom")];
 const displayEl = $<HTMLDivElement>(".display");
 const statusLedEl = $<HTMLSpanElement>(".status-led");
-const recLightEl = $<HTMLSpanElement>(".rec-light");
 const handsetLabelEl = $<HTMLSpanElement>(".handset__label");
 const startEl = $<HTMLDivElement>(".start");
 // Live call audio (no captions possible), so it is created here rather than in the markup.
@@ -980,7 +978,7 @@ for (const [r, row] of KEY_ROWS.entries()) {
     el.className = isDigit(key) ? "key" : "key key--fn";
     el.dataset.key = key;
     const face = isDigit(key) ? key : key.toUpperCase();
-    el.innerHTML = `<span class="key__cap"><span class="key__num">${face}</span><span class="key__led"></span><span class="key__legend"></span></span>`;
+    el.innerHTML = `<span class="key__cap"><span class="key__num">${face}</span><span class="key__legend"></span></span>`;
     el.addEventListener("click", () => pressKey(key));
     keyRowEls[r]?.append(el);
     keyEls.set(key, el);
@@ -1140,51 +1138,30 @@ function render(): void {
       : "Lift handset";
 
   const view = menu ? menuView(menu, settings, menuContext()) : undefined;
-  const leds = ledsFor({
-    deviceState,
-    config,
-    pairing: Boolean(pairingCode),
-    connection,
-    buttons: SLOT_COUNT,
-    activeKey,
-    ...(view ? { menuSlots: Object.keys(view.labels).map((d) => slotOf(Number(d))) } : {}),
-  });
-  // Lounge: only the key to press glows during the proof; a free phone's keys stay dark.
-  const loungeLive = variant === "lounge" && authed && !pairingCode;
-  const challenge = loungeLive ? lounge.challenge : undefined;
-  const keyLeds = challenge
-    ? leds.keys.map((_, slot) => ({
-        color: "white" as const,
-        mode: slot === challenge.index ? ("blink" as const) : ("off" as const),
-      }))
-    : loungeLive && !loungeKeysLive(lounge) && !view
-      ? leds.keys.map((led) => ({ ...led, mode: "off" as const }))
-      : leds.keys;
-  keyLeds.forEach((led, slot) => {
+  // Keys have no lights on the minimal board: just their names (Kids Lite prints them on the caps).
+  for (let slot = 0; slot < SLOT_COUNT; slot++) {
     const digit = digitOf(slot);
     const el = keyEls.get(String(digit) as KeyId);
-    if (!el) return;
-    el.dataset.color = led.color;
-    el.dataset.mode = led.mode;
-    // Kids Lite has no display: names are printed on the (relegendable) keycaps instead.
+    if (!el) continue;
     const name = labelFor(slot);
     const legend = el.querySelector(".key__legend");
     if (legend) legend.textContent = displayMode === "none" ? (name ?? "") : "";
     el.setAttribute("aria-label", `Key ${digit}${name ? `: ${name}` : ""}`);
-  });
-  for (const key of ["menu", "back"] as const) {
-    const el = keyEls.get(key);
-    if (!el) continue;
-    el.dataset.color = leds.fn.color;
-    el.dataset.mode = leds.fn.mode;
-    el.setAttribute("aria-label", key === "menu" ? "Menu" : "Back");
   }
-  statusLedEl.dataset.color = leds.status.color;
-  statusLedEl.dataset.mode = leds.status.mode;
-  // The recording light (firmware drives it from `call.state.recording` / `room.state.recording`).
+  // One red status LED, which is also the recording light (docs/phone-ux.md).
   const recOn = recordedNow();
-  recLightEl.classList.toggle("is-on", recOn);
-  recLightEl.setAttribute("aria-label", recOn ? "Recording" : "Not recording");
+  const led = statusLed({
+    deviceState,
+    config,
+    pairing: Boolean(pairingCode),
+    connection,
+    recording: recOn,
+  });
+  statusLedEl.dataset.mode = led;
+  statusLedEl.setAttribute(
+    "aria-label",
+    recOn ? "Status light: recording" : `Status light: ${led}`,
+  );
 
   renderDisplay();
   maybeRefreshQr();

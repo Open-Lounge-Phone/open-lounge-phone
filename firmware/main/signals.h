@@ -10,6 +10,7 @@ typedef enum {
   LED_BLINK,     // offline (slow)
   LED_RINGING,   // incoming call (fast)
   LED_BREATHE,   // missed calls / voicemail waiting
+  LED_RECORDING, // double flash every second: this call or room is recorded
 } led_pattern_t;
 
 typedef enum { BEEP_KEY, BEEP_PAIR, BEEP_ERROR, BEEP_OK } beep_t;

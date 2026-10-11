@@ -90,11 +90,11 @@ describe("menuStep", () => {
     expect(r.said).toContain("Volume 8");
   });
 
-  it("clamps volume and brightness", () => {
+  it("clamps volume", () => {
     const loud = run([menu(), digit(1), ...Array(20).fill(digit(2))]);
     expect(loud.settings.volume).toBe(10);
-    const dim = run([menu(), digit(4), ...Array(20).fill(digit(1))]);
-    expect(dim.settings.brightness).toBe(1);
+    const quiet = run([menu(), digit(1), ...Array(20).fill(digit(1))]);
+    expect(quiet.settings.volume).toBe(0);
   });
 
   it("has no speakerphone item: the phone has a handset only (hardware H5)", () => {
@@ -103,9 +103,10 @@ describe("menuStep", () => {
     expect(r.settings).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("MENU closes at the top and returns to the top from a submenu", () => {
+  it("MENU closes the menu from anywhere; BACK goes one level up", () => {
     expect(run([menu(), menu()]).state).toBeUndefined();
-    expect(run([menu(), digit(1), menu()]).state?.screen).toBe("root");
+    expect(run([menu(), digit(1), menu()]).state).toBeUndefined();
+    expect(run([menu(), digit(1), back()]).state?.screen).toBe("root");
   });
 
   it("ignores unused digits without closing", () => {
@@ -140,7 +141,6 @@ describe("menuView / menuLines", () => {
     expect(root.labels).toEqual({
       1: "Volume",
       2: "Voicemail",
-      4: "Bright",
       0: "About",
     });
     expect(root.backLabel).toBe("Close");
@@ -151,13 +151,13 @@ describe("menuView / menuLines", () => {
 
   it("fits 16-character displays, cycling options with 0 last", () => {
     const root = menuView({ screen: "root", lastInput: 0 }, DEFAULT_SETTINGS, ctx);
-    const seen = [0, 2000, 4000, 6000].map((t) => menuLines(root, t)[1]);
-    expect(seen).toEqual(["1 VOLUME", "2 VOICEMAIL", "4 BRIGHT", "0 ABOUT"]);
+    const seen = [0, 2000, 4000].map((t) => menuLines(root, t)[1]);
+    expect(seen).toEqual(["1 VOLUME", "2 VOICEMAIL", "0 ABOUT"]);
     for (const line of seen) expect(line?.length ?? 0).toBeLessThanOrEqual(16);
   });
 
   it("prompts every screen in words", () => {
-    for (const screen of ["root", "volume", "voicemail", "brightness", "about"] as const) {
+    for (const screen of ["root", "volume", "voicemail", "about"] as const) {
       expect(menuPrompt({ screen, lastInput: 0 }, DEFAULT_SETTINGS, ctx).length).toBeGreaterThan(5);
     }
   });
@@ -168,12 +168,12 @@ describe("Lounge session menu", () => {
 
   it("offers open to chat and log out only while someone uses a Lounge phone", () => {
     const state = { screen: "root" as const, lastInput: 0 };
-    expect(menuView(state, DEFAULT_SETTINGS, ctx).labels[9]).toBeUndefined();
+    expect(menuView(state, DEFAULT_SETTINGS, ctx).labels[8]).toBeUndefined();
     const labels = menuView(state, DEFAULT_SETTINGS, lounge(false)).labels;
     expect(labels[5]).toBe("Chat on");
-    expect(labels[9]).toBe("Log out");
+    expect(labels[8]).toBe("Log out");
     expect(menuView(state, DEFAULT_SETTINGS, lounge(true)).labels[5]).toBe("Chat off");
-    expect(menuPrompt(state, DEFAULT_SETTINGS, lounge(false))).toMatch(/Press 9 to log out/);
+    expect(menuPrompt(state, DEFAULT_SETTINGS, lounge(false))).toMatch(/Press 8 to log out/);
   });
 
   it("returns the action and closes the menu", () => {
@@ -183,10 +183,10 @@ describe("Lounge session menu", () => {
     expect(chat.state).toBeUndefined();
     const off = menuStep(open.state, DEFAULT_SETTINGS, digit(5), lounge(true));
     expect(off.action).toEqual({ type: "chat", open: false });
-    const out = menuStep(open.state, DEFAULT_SETTINGS, digit(9), lounge(true));
+    const out = menuStep(open.state, DEFAULT_SETTINGS, digit(8), lounge(true));
     expect(out.action).toEqual({ type: "logout" });
-    // Without a session, 5 and 9 do nothing.
-    const none = menuStep(open.state, DEFAULT_SETTINGS, digit(9), ctx);
+    // Without a session, 5 and 8 do nothing.
+    const none = menuStep(open.state, DEFAULT_SETTINGS, digit(8), ctx);
     expect(none.action).toBeUndefined();
     expect(none.state?.screen).toBe("root");
   });

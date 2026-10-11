@@ -1,13 +1,18 @@
 import type { DeviceState } from "@openloungephone/core";
 
-export type LedColor = "white" | "green" | "red" | "blue" | "amber" | "purple";
-/** `breathe` is a slow, gentle pulse for notices that can wait (e.g. missed voicemail). */
-export type LedMode = "off" | "dim" | "on" | "pulse" | "breathe" | "blink";
-
-export interface Led {
-  color: LedColor;
-  mode: LedMode;
-}
+/**
+ * The status LED's pattern (docs/phone-ux.md; firmware `signals.c`). The minimal board has one red
+ * LED and no key lights; it is also the recording light.
+ */
+export type LedMode =
+  | "off"
+  | "dim"
+  | "on"
+  | "pulse"
+  | "blink"
+  | "ringing"
+  | "breathe"
+  | "recording";
 
 export type Connection = "connecting" | "online" | "offline";
 
@@ -32,108 +37,20 @@ export interface LedInput {
   /** Showing a pairing code. */
   pairing: boolean;
   connection: Connection;
-  /** Number of speed-dial digit keys (protocol button indices 0..buttons-1). */
-  buttons: number;
-  /** The key of the current or most recent outbound call, if any. */
-  activeKey?: number;
-  /** Menu open: button indices of the digits that do something on the current screen. */
-  menuSlots?: number[];
+  /** The call or room is announced as recorded. */
+  recording?: boolean;
 }
 
-export interface LedState {
-  /** Per digit key, by protocol button index. */
-  keys: Led[];
-  /** MENU and BACK keys (they always light the same way). */
-  fn: Led;
-  status: Led;
-}
-
-const OFF: Led = { color: "white", mode: "off" };
-
-/**
- * Per-key and status LEDs for the current phone state. Pure, so firmware can mirror it. The
- * minimal board (hardware/DESIGN.md) has only the status LED; the key lights are emulator-only.
- */
-export function ledsFor(input: LedInput): LedState {
-  const { deviceState: s, config, pairing, connection, buttons, activeKey } = input;
-  const mapped = new Set(config?.buttons.map((b) => b.index) ?? []);
-
-  let status: Led;
-  if (pairing) status = { color: "blue", mode: "pulse" };
-  else if (connection === "offline") status = { color: "red", mode: "on" };
-  else if (connection === "connecting") status = { color: "amber", mode: "pulse" };
-  else if (config?.quiet) status = { color: "purple", mode: "on" };
-  else status = { color: "green", mode: "on" };
-
-  if (pairing) {
-    const pulse: Led = { color: "blue", mode: "pulse" };
-    return { keys: Array.from({ length: buttons }, () => pulse), fn: pulse, status };
-  }
-
-  const online = connection === "online";
-  if (input.menuSlots) {
-    // Menu: light exactly the digits that mean something on this screen.
-    const lit = new Set(input.menuSlots);
-    return {
-      keys: Array.from({ length: buttons }, (_, i) =>
-        lit.has(i) ? { color: "white", mode: "on" } : OFF,
-      ),
-      fn: { color: "white", mode: "on" },
-      status,
-    };
-  }
-  const fn: Led = online ? { color: "white", mode: "dim" } : OFF;
-
-  const keys: Led[] = Array.from({ length: buttons }, (_, i) =>
-    mapped.has(i) && online ? { color: "white", mode: "dim" } : OFF,
-  );
-  const set = (i: number | undefined, led: Led) => {
-    if (i !== undefined && i >= 0 && i < buttons) keys[i] = led;
-  };
-
-  switch (s.kind) {
-    case "dialing":
-      set(s.button, { color: "green", mode: "on" });
-      break;
-    case "incall":
-      // Held by the other side: the key breathes amber until they're back.
-      set(
-        activeKey,
-        s.heldByThem ? { color: "amber", mode: "breathe" } : { color: "green", mode: "on" },
-      );
-      break;
-    case "inroom":
-      set(activeKey, { color: "green", mode: "on" });
-      break;
-    case "voicemail":
-      // Leaving a message: the called key glows red, like a recording light.
-      set(activeKey, { color: "red", mode: "on" });
-      break;
-    case "incoming": {
-      const match = config?.buttons.find((b) => b.label === s.from);
-      if (match) set(match.index, { color: "green", mode: "pulse" });
-      else for (let i = 0; i < buttons; i++) keys[i] = { color: "green", mode: "pulse" };
-      break;
-    }
-    case "offhook":
-      if (s.lastEnd !== undefined && s.lastEnd !== "hangup") {
-        if (activeKey !== undefined) set(activeKey, { color: "red", mode: "blink" });
-        else for (let i = 0; i < buttons; i++) keys[i] = { color: "red", mode: "blink" };
-      }
-      break;
-    case "idle": {
-      // Missed voicemail: breathe the newest caller's key, or the status LED if unmapped.
-      const newest = config?.missed?.[0]?.from;
-      if (!newest || connection !== "online") break;
-      const match = config?.buttons.find((b) => b.label === newest);
-      if (match && match.index < buttons) set(match.index, { color: "amber", mode: "breathe" });
-      else status = { ...status, mode: "breathe" };
-      break;
-    }
-    default:
-      break;
-  }
-  return { keys, fn, status };
+/** The status LED for the current phone state. Pure, so firmware can mirror it (`main.c`). */
+export function statusLed(input: LedInput): LedMode {
+  const { deviceState: s, config, pairing, connection } = input;
+  if (pairing || connection === "connecting") return "pulse";
+  if (connection === "offline") return "blink";
+  if (s.kind === "incoming") return "ringing";
+  if ((s.kind === "incall" || s.kind === "inroom") && input.recording) return "recording";
+  if (s.kind === "incall" || s.kind === "inroom" || s.kind === "dialing") return "on";
+  if (s.kind === "idle" && (config?.missed?.length ?? 0) > 0) return "breathe";
+  return "dim";
 }
 
 /** True when `next` lists a caller with unheard voicemail that `prev` did not. */

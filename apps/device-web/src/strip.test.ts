@@ -22,7 +22,7 @@ describe("statusLines", () => {
   it("shows the pairing code in two groups, ahead of everything else", () => {
     expect(lines({ pairingCode: "429117", connection: "offline" })).toEqual([
       "PAIR 429 117",
-      "LIFT TO HEAR",
+      "ENTER IN APP",
     ]);
   });
 
@@ -123,11 +123,16 @@ describe("quiet hours and missed voicemail", () => {
     expect(statusLines({ ...base, config: cfg({ quiet: true }) })).toEqual(["QUIET HOURS"]);
   });
 
-  it("shows a single missed caller", () => {
+  it("shows a single missed caller: kids ask a grown-up, others play it in the app", () => {
     expect(statusLines({ ...base, config: cfg({ missed: [{ from: "Grandma" }] }) })).toEqual([
       "MISSED GRANDMA",
       "ASK A GROWN-UP",
     ]);
+    const own = cfg({
+      missed: [{ from: "Grandma" }],
+      owner: { mode: "personal", space: "Home", person: "Ana" },
+    });
+    expect(statusLines({ ...base, config: own })).toEqual(["MISSED GRANDMA", "PLAY IN APP"]);
   });
 
   it("falls back to two lines for long names", () => {

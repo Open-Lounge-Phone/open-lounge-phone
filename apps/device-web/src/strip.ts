@@ -67,7 +67,7 @@ export function statusLines(input: StatusInput): StatusLines {
   const name = (activeLabel ?? "").trim();
 
   if (pairingCode)
-    return [`PAIR ${pairingCode.slice(0, 3)} ${pairingCode.slice(3)}`, "LIFT TO HEAR"];
+    return [`PAIR ${pairingCode.slice(0, 3)} ${pairingCode.slice(3)}`, "ENTER IN APP"];
   if (connection === "offline") return ["OFFLINE", "RECONNECTING"];
   if (connection === "connecting") return ["CONNECTING"];
 
@@ -142,11 +142,11 @@ export function statusLines(input: StatusInput): StatusLines {
         : `${missed.length} MISSED CALLS`;
     if (quiet) return [quiet, clip(summary)];
     if (missed.length === 1) {
+      const next =
+        !config?.owner || config.owner.mode === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP";
       const lines: StatusLines =
-        single.length <= STATUS_WIDTH
-          ? [clip(single), "ASK A GROWN-UP"]
-          : ["MISSED CALL", clip(newest)];
-      return lowLine && lines[1] === "ASK A GROWN-UP" ? [lines[0], lowLine] : lines;
+        single.length <= STATUS_WIDTH ? [clip(single), next] : ["MISSED CALL", clip(newest)];
+      return lowLine && lines[1] === next ? [lines[0], lowLine] : lines;
     }
     // Several callers: cycle their names on the second line every few seconds.
     const who = missed[Math.floor(input.now / MISSED_CYCLE_MS) % missed.length] as string;

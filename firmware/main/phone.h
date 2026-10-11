@@ -25,6 +25,7 @@ typedef struct {
   bool held_by_them;   // incall
   char room_id[65];    // inroom ("" while joining)
   bool muted;          // inroom
+  bool recorded;       // incall / inroom: announced as recorded (status LED + REC)
 } phone_state_t;
 
 /** Messages the step produces are passed here (the caller sends and frees them). */
