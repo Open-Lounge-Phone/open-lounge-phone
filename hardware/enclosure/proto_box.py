@@ -92,6 +92,7 @@ STANDOFF_L, STANDOFF_HEX = 11.0, 5.5
 Z_DISP = Z_BT + STANDOFF_L                         # module PCB underside 20.6
 DISP_T = 1.2 + 1.2                                 # module PCB + panel glass (EST)
 BEZEL_WALL, BEZEL_TOP = 1.2, 1.2
+BEZEL_BEVEL = 1.0              # 45 deg on the bezel's outer top edges and round the window
 VIEW = DSP["view"]             # window over the panel's active area (EST position)
 POST_D, PIN_D, PIN_H = 6.0, 2.2, 1.0   # 2.13": posts under the module's far holes, pin into each
 J3_CUT = (J3_BODY[0] + 1.0, J3_BODY[1] + 1.0)
@@ -144,9 +145,13 @@ JACK_AXIS_BELOW, JACK_BODY_H, JACK_HOLE_D = 2.0, 4.0, 8.0
 Z_JACK = Z_BB - JACK_AXIS_BELOW
 PINHOLE_D = 2.0
 
-FEET = [(12.0, 10.0), (OUT_W - 12.0, 10.0), (12.0, OUT_H - 10.0), (OUT_W - 12.0, OUT_H - 10.0)]
-FOOT_D, FOOT_DEPTH = 13.0, 1.0
 TEXT, TEXT_SIZE, TEXT_DEPTH = "Open Lounge Phone · proto", 6.0, 0.6
+# floor ribs against warping: a diagonal grid on the inner floor whose tops follow an elliptic
+# paraboloid (tallest mid-floor, where a flat panel bows most), trimmed under the board's parts
+RIB_T, RIB_PITCH, RIB_H_MID, RIB_H_EDGE = 1.2, 16.0, 2.5, 0.8
+RIB_CLEAR = 0.5                # rib top to anything hanging under the board
+THT_LEADS = {"J3": 3.0, "BZ1": 3.0}   # through-hole leads below the board [est]
+MX_POST_BELOW = 1.7            # MX centre post below the board (3.3 post, 1.6 board)
 BED = 220.0
 
 # heights above the board surface by footprint name (mm); first match wins. Sources: datasheets
@@ -357,13 +362,77 @@ def envelope() -> Part:
                      Z_LT - 1, Z_LT + 200)
 
 
-def tray() -> Part:
+def floor_ribs(parts: list[dict]) -> tuple[Part | None, list[tuple[str, float]]]:
+    """The rib grid and, for the check, (what, clearance) for everything it passes under."""
+    if not parts:
+        return None, []
+    from build123d import Polyline, Rot, make_face, revolve, scale
+    x0, x1, y0, y1 = WALL, OUT_W - WALL, WALL, OUT_H - WALL
+    cx, cy = OUT_W / 2, OUT_H / 2
+    zt = Z_FLOOR + RIB_H_MID
+    span = math.hypot(OUT_W, OUT_H) + 20
+    ribs = []
+    step = RIB_PITCH * math.sqrt(2)
+    for sgn in (1, -1):                                   # lines x -/+ y = c at 45 degrees
+        n = int(span / step) + 2
+        for k in range(-n, n + 1):
+            ox = cx + k * step / 2
+            ribs.append(Pos(ox, cy, Z_FLOOR - 0.01) * Rot(0, 0, 45 * sgn)
+                        * Box(span, RIB_T, RIB_H_MID + 0.01, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+    grid = union(ribs) & rrect(cx, cy, x1 - x0 - 0.2, y1 - y0 - 0.2, OUT_R - WALL, Z_FLOOR - 0.01, zt + 1)
+    # paraboloid cap: z = edge + (mid - edge)(1 - (dx/a)^2 - (dy/b)^2), a, b to the walls
+    a, b = (x1 - x0) / 2, (y1 - y0) / 2
+    pts = [(r, Z_FLOOR + RIB_H_EDGE + (RIB_H_MID - RIB_H_EDGE) * (1 - r * r)) for r in
+           [i / 12 for i in range(13)]]
+    poly = Plane.XZ * Polyline((0, Z_FLOOR - 1), (1.0, Z_FLOOR - 1), *[(r, z) for r, z in reversed(pts)],
+                               (0, Z_FLOOR - 1))
+    cap = revolve(make_face(poly), Axis.Z)
+    cap = Pos(cx, cy, 0) * scale(cap, (a, b, 1))           # edge height at the side walls
+    cap = cap + box(x0, x1, y0, y1, Z_FLOOR - 1, Z_FLOOR + RIB_H_EDGE)   # and in the corners
+    grid = grid & cap
+    # keep out: parts under the board, MX posts, through-hole leads, pinholes, the lettering
+    cut, clear = [], []
+    for p in parts:
+        bx0, by0, bx1, by1 = p["crt"]
+        below = 0.0
+        if p["side"] == "bottom":
+            below = p["h"]
+        if p["ref"] in THT_LEADS:
+            below = max(below, THT_LEADS[p["ref"]])
+        if below <= 0:
+            continue
+        top_ok = Z_BB - below - RIB_CLEAR
+        if top_ok < zt:
+            wx0, wx1 = bx2x(bx0) - 0.5, bx2x(bx1) + 0.5
+            wy0, wy1 = sorted((by2y(by0), by2y(by1)))
+            cut.append(box(wx0, wx1, wy0 - 0.5, wy1 + 0.5, max(top_ok, Z_FLOOR + 0.01), zt + 2))
+        clear.append((p["ref"], top_ok))
+    for bx, by, label in keys():
+        top_ok = Z_BB - MX_POST_BELOW - RIB_CLEAR
+        cut.append(cyl(bx2x(bx), by2y(by), max(top_ok, Z_FLOOR + 0.01), zt + 2, 5.0))
+        clear.append((f"MX post {label}", top_ok))
+    for bx, by, _ in BUTTONS:
+        cut.append(cyl(bx2x(bx), by2y(by), Z_FLOOR - 1, zt + 2, 6.0))
+    tx, ty = OUT_W / 2 + 20, OUT_H / 2
+    tw = len(TEXT) * TEXT_SIZE * 0.62
+    cut.append(box(tx - tw / 2 - 2, tx + tw / 2 + 2, ty - TEXT_SIZE, ty + TEXT_SIZE, Z_FLOOR - 0.5, zt + 2))
+    return grid - union(cut), clear
+
+
+_RIBS: dict = {}
+
+
+def tray(parts: list[dict] | None = None) -> Part:
     shell = rrect(OUT_W / 2, OUT_H / 2, OUT_W, OUT_H, OUT_R, 0, Z_LT)
     t = shell - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * WALL, OUT_H - 2 * WALL,
                       OUT_R - WALL, Z_FLOOR, Z_LU + 0.01)
     up = WALL - LEDGE              # the wall above the ledge, round the dropped-in lid
     t = t - rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * up, OUT_H - 2 * up, OUT_R - up, Z_LU, Z_LT + 1)
     t = t + union([cyl(bx2x(bx), by2y(by), Z_FLOOR - 0.01, Z_BB, BOSS_D) for bx, by in BOLTS])
+    ribs, clear = floor_ribs(parts or [])
+    _RIBS.update(ribs=ribs, clear=clear)
+    if ribs is not None:
+        t = t + ribs
     cut = []
     for bx, by in BOLTS:
         x, y = bx2x(bx), by2y(by)
@@ -371,12 +440,10 @@ def tray() -> Part:
         cut.append(cyl(x, y, Z_BB - INSERT_DEPTH, Z_BB + 1, INSERT_D))
     for bx, by, _ in BUTTONS:    # poke a paper clip through the floor to press RESET / BOOT
         cut.append(cyl(bx2x(bx), by2y(by), -1, Z_FLOOR + 1, PINHOLE_D))
-    for x, y in FEET:
-        cut.append(cyl(x, y, -1, FOOT_DEPTH, FOOT_D))
     cut += rear_cutters()
     from build123d import Rot
     txt = Text(TEXT, font_size=TEXT_SIZE, align=(Align.CENTER, Align.CENTER))
-    cut.append(Pos(OUT_W / 2 + 20, OUT_H / 2, 0) * Rot(0, 180, 0) * extrude(txt, amount=-TEXT_DEPTH))
+    cut.append(Pos(OUT_W / 2 + 20, OUT_H / 2, Z_FLOOR) * extrude(txt, amount=-TEXT_DEPTH))   # inside
     return (t - union(cut)) & envelope()
 
 
@@ -433,8 +500,9 @@ def bezel() -> Part:
     vx = DSP["view_cx"] - STD_W / 2
     b = box(-ow / 2, ow / 2, -oh / 2, oh / 2, 0, top + BEZEL_TOP)
     b = b - box(-iw / 2, iw / 2, -ih / 2, ih / 2, -1, top)
-    return b - box(vx - VIEW[0] / 2, vx + VIEW[0] / 2, -VIEW[1] / 2, VIEW[1] / 2, top - 1,
-                   top + BEZEL_TOP + 1)
+    b = b - box(vx - VIEW[0] / 2, vx + VIEW[0] / 2, -VIEW[1] / 2, VIEW[1] / 2, top - 1,
+                top + BEZEL_TOP + 1)
+    return chamfer(b.edges().group_by(Axis.Z)[-1], BEZEL_BEVEL)   # outer top edges and the window
 
 
 # ---------------------------------------------------------------- checks
@@ -482,6 +550,33 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
     add(TOP_ROUND <= WALL + LID_T and BOTTOM_CHAMFER <= FLOOR, "printable edges",
         f"top edge R{TOP_ROUND} (tray rim onto the lid edge; printed face up), bottom edge "
         f"{BOTTOM_CHAMFER} mm x 45 deg chamfer: no overhangs, flat top kept")
+    ribs = _RIBS.get("ribs")
+    if ribs is None:
+        add("warn", "floor ribs", "no board_parts.json: tray built without floor ribs")
+    else:
+        bb = ribs.bounding_box()
+        worst = min(c for _, c in _RIBS["clear"]) if _RIBS["clear"] else 0
+        hits = []
+        for p in parts:
+            below = max(p["h"] if p["side"] == "bottom" else 0.0, THT_LEADS.get(p["ref"], 0.0))
+            if below <= 0:
+                continue
+            bx0, by0, bx1, by1 = p["crt"]
+            wy0, wy1 = sorted((by2y(by0), by2y(by1)))
+            zlim = Z_BB - below - RIB_CLEAR + 0.01
+            probe = box(bx2x(bx0), bx2x(bx1), wy0, wy1, zlim, Z_BB)
+            if (ribs & probe).volume > 1e-3:
+                hits.append(p["ref"])
+        add(not hits, "floor ribs",
+            f"{RIB_T} mm diagonal grid at {RIB_PITCH:g} mm, tops on a paraboloid {RIB_H_EDGE}-{RIB_H_MID} mm "
+            f"above the floor (highest z {bb.max.Z:.1f}); >= {RIB_CLEAR} mm under every part below the board"
+            + (": " + ", ".join(hits) if hits else ""))
+    tb = shapes["tray"]
+    flat = [f for f in tb.faces() if f.center().Z < 0.01 and abs(f.normal_at().Z + 1) < 1e-6]
+    under = [f for f in tb.faces() if abs(f.normal_at().Z + 1) < 1e-6 and 0.01 < f.center().Z < Z_FLOOR]
+    add(len(flat) == 1 and not under, "flat bottom",
+        f"one flat bottom face ({flat[0].area / 100:.0f} cm2 on the bed) and no downward faces in the floor "
+        "(no recesses or lettering underneath; the name is inside); STLs lie as they print")
     add(True, "display", f'WeAct {DISPLAY}" module {DISP_W} x {DISP_H}'
         + (f"; far end on two Ø{POST_D} posts on the lid ({Z_DISP - Z_LT:.1f} mm tall, Ø{PIN_D} pins "
            f"into its holes at {MODULE_FAR_HOLES[0][0] - DISP_X0:.1f} mm from the header end); "
@@ -608,6 +703,15 @@ def cradle_checks(shapes) -> list[tuple[str, str, str]]:
 
 
 # ---------------------------------------------------------------- main
+def print_pose(name: str, s: Part) -> Part:
+    """The part as it should print, on z = 0: tray on its flat bottom, lid on its flat underside,
+    bezel window face down, cradles on their lowest point."""
+    from build123d import Rot
+    if name == "bezel":
+        s = Rot(180, 0, 0) * s
+    return Pos(0, 0, -s.bounding_box().min.Z) * s
+
+
 def insert_drawing() -> None:
     """build/.../inserts.pdf + .png: where the tray's four M3 heat-set inserts go, for a print
     service's insert option or for setting them by hand. Coordinates are the STL's own (origin at
@@ -705,10 +809,10 @@ def main() -> int:
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     parts = load_parts(Path(a.parts))
-    shapes = {"tray": tray(), "lid": lid(), "bezel": bezel()}
+    shapes = {"tray": tray(parts), "lid": lid(), "bezel": bezel()}
     shapes.update({f"cradle-{st}": cradle(st) for st in CRADLE_STYLES})
-    for name, s in shapes.items():
-        export_stl(s, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
+    for name, s in shapes.items():         # STL lying as it prints, STEP where it sits assembled
+        export_stl(print_pose(name, s), str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
         export_step(s, str(OUT / f"{name}.step"))
     insert_drawing()
     R = run_checks(parts, shapes)

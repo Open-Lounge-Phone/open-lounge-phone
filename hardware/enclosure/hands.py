@@ -400,7 +400,9 @@ def main() -> int:
         if only and key not in only:
             continue
         mesh, R, info = build(key, m, g)
-        mesh.export(OUT / f"cradle-{key}.stl")
+        lying = mesh.copy()                    # as it prints: on its lowest point (the foot)
+        lying.apply_translation([0, 0, -lying.bounds[0][2]])
+        lying.export(OUT / f"cradle-{key}.stl")
         results[key] = mesh
         infos[key] = info
         lines += [f"{s:4}  {n}: {msg}" for s, n, msg in R]
