@@ -6,6 +6,12 @@ cradle-<style> per cradle (plain styles from build/proto, sculpted ones from bui
 The page instances switch/keycap per key and recolours shells, cradles and the handset.
 
     .venv/bin/python teaser.py      # after make proto (2.9" display) and make hands
+
+The handset is the receiver of "Red Table Phone" by digitaldaydream (OpenGameArt, CC0): its
+object "Reciever.001", smoothed with Blender's subdivision (level 2), exported to
+build/teaser/handset.stl and scaled here to the Opis 60s Micro's 210 mm. Without that file a
+code-built G-style handset is used. KiCad's library here lacks some part models: the ESP32-S3
+model comes from KiCad's GitLab (build/teaser/dl/), the display module is WeAct's own STEP.
 """
 from __future__ import annotations
 
@@ -71,6 +77,102 @@ def handset() -> tuple[trimesh.Trimesh, float]:
     return m, 7.5 + lift                       # and the handle's middle underside
 
 
+def step_solids(path: Path):
+    """[(mesh, bbox)] for each solid of a STEP file, in its own frame (mm)."""
+    cache = OUT / "cache" / (path.stem + ".npz")       # converting STEP is slow: keep the meshes
+    if cache.exists():
+        d = np.load(cache)
+        return [trimesh.Trimesh(d[f"v{i}"], d[f"f{i}"], process=False) for i in range(int(d["n"]))]
+    from build123d import import_step
+    out = []
+    for so in import_step(str(path)).solids():
+        v, f = P.mesh_of(so, tol=0.05, ang=0.3)
+        if len(f):
+            out.append(trimesh.Trimesh(v, f, process=True))
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(cache, n=len(out), **{f"v{i}": m.vertices for i, m in enumerate(out)},
+                        **{f"f{i}": m.faces for i, m in enumerate(out)})
+    return out
+
+
+def esp32() -> dict[str, trimesh.Trimesh]:
+    """KiCad's ESP32-S3-WROOM-1 model cut to the 1U's 19.2 mm (no PCB antenna), on the board's
+    underside at U1: shield can down, antenna end at the board edge."""
+    src = OUT / "dl" / "ESP32-S3-WROOM-1.step"
+    sol = step_solids(src)
+    allv = np.vstack([m.vertices for m in sol])
+    lo, hi = allv.min(0), allv.max(0)
+    ax = int(np.argmax((hi - lo)[:2]))                    # long axis (x or y)
+    can = max(sol, key=lambda m: m.bounds[1][2])          # tallest solid: the shield can
+    can_c = can.centroid[ax]
+    mid = (lo[ax] + hi[ax]) / 2
+    keep_from_hi = can_c > mid                            # the antenna is at the other end
+    cut = hi[ax] - 19.2 if keep_from_hi else lo[ax] + 19.2
+    pcb_col, metal_col = "2b2f3a", "c4c7ca"
+    groups = {}
+    for m in sol:
+        n = np.zeros(3); n[ax] = 1 if keep_from_hi else -1
+        m = m.slice_plane([cut if i == ax else 0 for i in range(3)], n, cap=True) or m
+        if len(m.faces) == 0:
+            continue
+        col = metal_col if m is not None and m.bounds[1][2] - m.bounds[0][2] > 1.0 else pcb_col
+        groups.setdefault(col, []).append(m)
+    meshes = {k: trimesh.util.concatenate(v) for k, v in groups.items()}
+    whole = trimesh.util.concatenate(list(meshes.values()))
+    b = whole.bounds
+    # module frame: cut end (antenna side) at x = 0, length along +x, top (can) along -z
+    T = np.eye(4)
+    if ax == 1:
+        T = trimesh.transformations.rotation_matrix(-math.pi / 2, [0, 0, 1]) @ T
+    for k in meshes:
+        meshes[k].apply_transform(T)
+    whole = trimesh.util.concatenate(list(meshes.values()))
+    b = whole.bounds
+    flipx = (whole.centroid[0] < (b[0][0] + b[1][0]) / 2) if keep_from_hi else False
+    out = {}
+    parts = json.loads((P.OUT / "board_parts.json").read_text())["parts"]
+    u1 = next(p for p in parts if p["ref"] == "U1")
+    x0, y0, x1, y1 = u1["crt"]
+    for k, m in meshes.items():
+        m = m.copy()
+        m.apply_translation(-b[0])
+        L, W = b[1][0] - b[0][0], b[1][1] - b[0][1]
+        if keep_from_hi:                                  # the kept end is at high x: mirror x
+            m.apply_transform(np.diag([-1.0, 1, 1, 1])); m.invert(); m.apply_translation([L, 0, 0])
+        m.apply_transform(np.diag([1.0, 1, -1, 1])); m.invert()          # can down
+        bx = x0 + 0.5                                                    # antenna end at the edge
+        by = (y0 + y1) / 2 - W / 2
+        m.apply_translation([P.bx2x(bx), P.by2y(by) - W, P.Z_BB])
+        out["board_" + k] = m
+    return out
+
+
+def weact_module() -> dict[str, trimesh.Trimesh]:
+    """WeAct's 2.9" module (their STEP: board, header, parts; no panel) where it plugs into J3:
+    header end at the module's low x, its back (parts, header) facing down."""
+    sol = step_solids(OUT.parent / "weact" / "WeAct-EpaperModule-2.9_Board_3D.step")
+    pcb = max(sol, key=lambda m: m.extents[0] * m.extents[1])
+    hdr = [m for m in sol if abs(m.extents[0] - 5.08) < 0.2 and abs(m.extents[1] - 10.16) < 0.2]
+    b = pcb.bounds
+    hx = (hdr[0].bounds[0][0] + hdr[0].bounds[1][0]) / 2 if hdr else b[0][0]
+    header_at_low = hx < (b[0][0] + b[1][0]) / 2
+    out = {}
+    for m in sol:
+        col = "141414" if m is pcb else ("1d1d1d" if any(m is h for h in hdr) else "3a3a3a")
+        if m is not pcb and not any(m is h for h in hdr) and m.extents.max() < 1.0:
+            col = "8a8f94"
+        m = m.copy()
+        m.apply_translation([-b[0][0], -b[0][1], -b[1][2]])            # board top at z = 0
+        if not header_at_low:
+            m.apply_transform(np.diag([-1.0, 1, 1, 1])); m.invert(); m.apply_translation([b[1][0] - b[0][0], 0, 0])
+        m.apply_transform(np.diag([1.0, 1, -1, 1])); m.invert()          # back side (parts) down
+        thick = b[1][2] - b[0][2]
+        m.apply_translation([P.bx2x(P.DISP_X0), P.by2y(P.DISP_MID) - (b[1][1] - b[0][1]) / 2,
+                             P.Z_DISP + thick])
+        out.setdefault("module_" + col, []).append(m)
+    return {k: trimesh.util.concatenate(v) for k, v in out.items()}
+
+
 def switch() -> trimesh.Trimesh:
     """MX switch above the plate: top housing and stem (the part you see under a clear cap)."""
     top = m3d.Manifold.batch_hull([m3d.Manifold.cube([15.6, 15.6, 0.1], True).translate([0, 0, 0.05]),
@@ -126,7 +228,7 @@ def board() -> dict[str, trimesh.Trimesh]:
         groups.setdefault(key, []).append(g)
     out = {k: trimesh.util.concatenate(v) for k, v in groups.items()}
     parts = {p["ref"]: p for p in json.loads((P.OUT / "board_parts.json").read_text())["parts"]}
-    stand = {"U1": 3.2, "J1": 3.26, "J2": 4.0}
+    stand = {"J1": 3.26, "J2": 4.0}
     metal = []
     for ref, h in stand.items():
         x0, y0, x1, y1 = parts[ref]["crt"]
@@ -134,6 +236,11 @@ def board() -> dict[str, trimesh.Trimesh]:
         wy0, wy1 = sorted((P.by2y(y0), P.by2y(y1)))
         metal.append(trimesh.creation.box(bounds=[[wx0, wy0 + 0.3, P.Z_BB - h], [wx1, wy1 - 0.3, P.Z_BB]]))
     out["board_metal"] = trimesh.util.concatenate(metal)
+    x0, y0, x1, y1 = parts["U3"]["crt"]                  # the codec: a 3 x 3 QFN
+    cxq, cyq = P.bx2x((x0 + x1) / 2), P.by2y((y0 + y1) / 2)
+    out["board_161616"] = trimesh.util.concatenate([out.get("board_161616", trimesh.Trimesh()),
+        trimesh.creation.box(bounds=[[cxq - 1.5, cyq - 1.5, P.Z_BB - 0.9], [cxq + 1.5, cyq + 1.5, P.Z_BB]])])
+    out.update(esp32())
     whole = sum(len(m.faces) for m in out.values())
     for k, m in out.items():                   # keep the board's share of faces
         target = max(200, int(FACES["board"] * len(m.faces) / whole))
@@ -179,12 +286,27 @@ def main() -> None:
     add("keycap", keycap())
     w, hgt = P.DISP_W, P.DISP_H                # display module (2.9"): green board + panel
     cx, cy = P.bx2x(P.DISP_X0 + w / 2), P.by2y(P.DISP_MID)
-    add("module", trimesh.creation.box(bounds=[[cx - w / 2, cy - hgt / 2, P.Z_DISP],
-                                               [cx + w / 2, cy + hgt / 2, P.Z_DISP + P.MODULE_PCB_T]]))
+    for k, m in weact_module().items():
+        add(k, H.decimate(m, 6000))
     gx = P.bx2x(P.DISP_X0 + P.DSP["view_cx"])
     add("panel", trimesh.creation.box(bounds=[[gx - 39.5, cy - 15.5, P.Z_DISP + P.MODULE_PCB_T],
                                               [gx + 39.5, cy + 15.5, P.Z_DISP + P.MODULE_PCB_T + 1.0]]))
-    hs, under_mid = handset()
+    own = OUT / "handset.stl"                  # a receiver model (CC0 Red Table Phone's, smoothed)
+    if own.exists():
+        hs = trimesh.load(own, force="mesh")
+        e = hs.extents
+        order = np.argsort(e)                  # longest -> y, shortest -> z (lying, cups down)
+        R = np.zeros((4, 4)); R[3, 3] = 1
+        R[1, order[2]] = R[0, order[1]] = R[2, order[0]] = 1
+        hs.apply_transform(R)
+        hs.apply_scale(210.0 / hs.extents[1])
+        hs.apply_translation([-hs.centroid[0], -hs.centroid[1], -hs.bounds[0][2]])
+        hs = H.decimate(hs, 20000)
+        v = hs.vertices                        # the handle's underside, mid-length
+        mid = np.abs(v[:, 1]) < 12
+        under_mid = float(v[mid, 2].min()) if mid.any() else hs.extents[2] * 0.55
+    else:
+        hs, under_mid = handset()
     g = P.cradle_geom()                        # handle's middle underside on the plain cradles
     hs.apply_translation([g["lx"], g["yc"], g["hb"] - under_mid])
     add("handset", hs)
