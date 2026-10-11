@@ -28,7 +28,8 @@ make proto     # STL + STEP + fit checks (make render also writes proto.png)
 Outputs in `build/proto/` (generated, not committed): `tray`, `lid`, `bezel` and the four cradle
 styles `cradle-v`, `cradle-claw`, `cradle-balls`, `cradle-fork` as STL + STEP (print one of each
 part, and one cradle in the style you like),
-`checks.txt` (fit checks; exit 1 on FAIL) and, with `make render`, `proto.png`. The board
+`inserts.pdf` / `.png` (where the tray's four heat-set inserts go, for a print service's insert
+option), `checks.txt` (fit checks; exit 1 on FAIL) and, with `make render`, `proto.png`. The board
 geometry in `proto_box.py` mirrors `layout/place.py`; the checks compare it with the placed
 board, so a moved part shows up as a FAIL. Without `board_parts.json` the part checks are
 skipped.

@@ -608,6 +608,96 @@ def cradle_checks(shapes) -> list[tuple[str, str, str]]:
 
 
 # ---------------------------------------------------------------- main
+def insert_drawing() -> None:
+    """build/.../inserts.pdf + .png: where the tray's four M3 heat-set inserts go, for a print
+    service's insert option or for setting them by hand. Coordinates are the STL's own (origin at
+    the tray's front-left bottom corner, x right, y toward the rear wall, z up)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle as Ci, FancyBboxPatch, Rectangle
+
+    holes = [(chr(65 + i), bx2x(bx), by2y(by)) for i, (bx, by) in enumerate(BOLTS)]
+    fig = plt.figure(figsize=(11.69, 8.27))                    # A4 landscape
+    fig.suptitle("Open Lounge Phone core shell: tray, M3 heat-set insert holes", fontsize=14,
+                 x=0.04, ha="left", y=0.965)
+    ax = fig.add_axes([0.04, 0.30, 0.60, 0.60])
+    ax.set_aspect("equal")
+    ax.add_patch(FancyBboxPatch((OUT_R, OUT_R), OUT_W - 2 * OUT_R, OUT_H - 2 * OUT_R,
+                                boxstyle=f"round,pad={OUT_R}", fill=False, lw=1.6))
+    r = OUT_R - WALL
+    ax.add_patch(FancyBboxPatch((WALL + r, WALL + r), OUT_W - 2 * WALL - 2 * r,
+                                OUT_H - 2 * WALL - 2 * r, boxstyle=f"round,pad={r}", fill=False,
+                                lw=0.8, ls="--", color="0.45"))
+    for name, x, y in holes:
+        ax.add_patch(Ci((x, y), BOSS_D / 2, fill=False, lw=0.8, color="0.3"))
+        ax.add_patch(Ci((x, y), INSERT_D / 2, color="#b5651d"))
+        ax.plot([x, x], [-9, y], lw=0.5, color="0.6", ls=":")
+        ax.plot([-9, x], [y, y], lw=0.5, color="0.6", ls=":")
+        ax.annotate(name, (x, y), (x + 5, y + 5), fontsize=12, weight="bold")
+    for v in sorted({round(x, 2) for _, x, _ in holes}):
+        ax.text(v, -11, f"{v:g}", ha="center", va="top", fontsize=9)
+    for v in sorted({round(y, 2) for _, _, y in holes}):
+        ax.text(-11, v, f"{v:g}", ha="right", va="center", fontsize=9)
+    ax.plot(0, 0, "k+", ms=12)
+    ax.text(1.5, 1.5, "0, 0", fontsize=8)
+    ax.text(OUT_W / 2, OUT_H + 4, "REAR wall (USB-C and jack openings)", ha="center", fontsize=9)
+    ax.text(OUT_W / 2, -20, "FRONT", ha="center", fontsize=9)
+    ax.text(OUT_W / 2, OUT_H / 2, f"top view, open side up\n{OUT_W:g} x {OUT_H:g} mm", ha="center",
+            va="center", fontsize=10, color="0.4")
+    ax.set_xlim(-25, OUT_W + 8)
+    ax.set_ylim(-26, OUT_H + 10)
+    ax.axis("off")
+
+    sx = fig.add_axes([0.68, 0.36, 0.30, 0.50])            # section through one boss
+    sx.set_aspect("equal")
+    w = 14
+    sx.add_patch(Rectangle((-w, 0), 2 * w, Z_FLOOR, color="0.85"))
+    sx.add_patch(Rectangle((-BOSS_D / 2, Z_FLOOR), BOSS_D, Z_BB - Z_FLOOR, color="0.85"))
+    sx.add_patch(Rectangle((-SCREW_CLEAR / 2, -0.01), SCREW_CLEAR, Z_BB - INSERT_DEPTH + 0.01,
+                           color="white"))
+    sx.add_patch(Rectangle((-INSERT_D / 2, Z_BB - INSERT_DEPTH), INSERT_D, INSERT_DEPTH + 0.01,
+                           color="#f3d9c2", ec="#b5651d", lw=1))
+    sx.plot([-w, w], [0, 0], "k", lw=1)
+    sx.text(0, Z_BB + 0.6, f"Ø{INSERT_D:g} x {INSERT_DEPTH:g} deep", ha="center", fontsize=9,
+            color="#b5651d")
+    sx.annotate("", (BOSS_D / 2 + 1.5, Z_BB), (BOSS_D / 2 + 1.5, Z_BB - INSERT_DEPTH),
+                arrowprops=dict(arrowstyle="<->", lw=0.8))
+    sx.text(BOSS_D / 2 + 2, Z_BB - INSERT_DEPTH / 2, f"{INSERT_DEPTH:g}", va="center", fontsize=9)
+    sx.annotate("", (-BOSS_D / 2 - 1.5, 0), (-BOSS_D / 2 - 1.5, Z_BB),
+                arrowprops=dict(arrowstyle="<->", lw=0.8))
+    sx.text(-BOSS_D / 2 - 2, Z_BB / 2, f"{Z_BB:g}", va="center", ha="right", fontsize=9)
+    sx.text(0, -1.3, f"Ø{SCREW_CLEAR:g} through", ha="center", va="top", fontsize=9)
+    sx.text(w - 0.5, Z_FLOOR / 2, "floor", ha="right", va="center", fontsize=8, color="0.4")
+    sx.text(w - 0.5, Z_BB - 1.5, f"boss Ø{BOSS_D:g}", ha="right", fontsize=8, color="0.35")
+    sx.set_title("section through each boss (z up from the tray bottom)", fontsize=10)
+    sx.set_xlim(-w - 1, w + 1)
+    sx.set_ylim(-3.5, Z_BB + 2.5)
+    sx.axis("off")
+
+    rows = [[n, f"{x:.2f}", f"{y:.2f}", f"{Z_BB:g}", f"{INSERT_D:g}", f"{INSERT_DEPTH:g}"]
+            for n, x, y in holes]
+    tb = fig.add_axes([0.04, 0.05, 0.42, 0.20])
+    tb.axis("off")
+    t = tb.table(cellText=rows, colLabels=["hole", "x", "y", "boss top z", "hole Ø", "depth"],
+                 loc="upper left", cellLoc="center")
+    t.scale(1, 1.4)
+    fig.text(0.50, 0.24, "\n".join([
+        "Insert: M3 heat-set, 4 mm long, knurl OD 4.2 mm (4 pieces, brass).",
+        f"Hole: Ø{INSERT_D:g} x {INSERT_DEPTH:g} mm deep from the boss top (pressed in hot,",
+        "  ~0.2 mm interference); a Ø3.3 clearance hole continues through the floor.",
+        "Install from the open (top) side; the insert's top flush with the boss top,",
+        "  which is where the board sits.",
+        "Print service insert option: the 4 holes A-D above. If the service uses its",
+        "  own insert, let it size the hole for that insert.",
+        "Screws: M3 x 12 countersunk from the lid, through a 3 mm spacer and the board.",
+        "All mm. Coordinates as in tray.stl.",
+    ]), fontsize=9, va="top", family="monospace")
+    for ext in ("pdf", "png"):
+        fig.savefig(OUT / f"inserts.{ext}", dpi=150, facecolor="white")
+    plt.close(fig)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--parts", default=str(OUT / "board_parts.json"))
@@ -620,6 +710,7 @@ def main() -> int:
     for name, s in shapes.items():
         export_stl(s, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
         export_step(s, str(OUT / f"{name}.step"))
+    insert_drawing()
     R = run_checks(parts, shapes)
     lines = [f"{s:4}  {n}: {m}" for s, n, m in R]
     (OUT / "checks.txt").write_text("\n".join(lines) + "\n")
