@@ -57,6 +57,7 @@ STANDOFFS = [(DISP_X0 + STD_W - 2.8, DISP_MID - 31.9 / 2), (DISP_X0 + STD_W - 2.
 MODULE_FAR_HOLES = [(DISP_X0 + (DISP_W + DSP["holes"][0]) / 2, DISP_MID + s * DSP["holes"][1] / 2)
                     for s in (-1, 1)]
 J3_PIN1 = (DISP_X0 + 1.93, DISP_MID + 1.5 * 2.54)
+BEZEL_SCREWS = MODULE_FAR_HOLES if DSP["posts"] else STANDOFFS
 J3_CENTRE = (J3_PIN1[0] + 1.27, J3_PIN1[1] - 3.81)
 J3_BODY = (5.1, 10.2, 8.5)                         # 2x4 female socket w x h x height
 BZ1_C, BZ1_D, BZ1_H = (15.8, 15.0), 12.2, 6.5      # piezo body centre (between its pins)
@@ -94,7 +95,16 @@ DISP_T = 1.2 + 1.2                                 # module PCB + panel glass (E
 BEZEL_WALL, BEZEL_TOP = 1.2, 1.2
 BEZEL_BEVEL = 1.0              # 45 deg on the bezel's outer top edges and round the window
 VIEW = DSP["view"]             # window over the panel's active area (EST position)
-POST_D, PIN_D, PIN_H = 6.0, 2.2, 1.0   # 2.13": posts under the module's far holes, pin into each
+POST_D = 8.0                   # 2.13": posts under the module's far holes, an M3 insert in each
+MODULE_PCB_T = 1.2
+# the bezel screws down through the module's far holes (2.9": into the standoffs, 2.13": into the
+# posts' inserts): M3 x 8 countersunk; a boss under the bezel top clamps the module's PCB
+BEZEL_SCREW_L, BEZEL_BOSS_D = 8.0, 6.5
+# hidden ribs on the lid top inside the bezel (it is hollow under the module): stiffen the solid
+# band between the key rows without touching the flat underside
+LID_RIB_T, LID_RIB_PITCH, LID_RIB_H = 1.2, 12.0, 3.0
+MODULE_BACK_CLEAR = 2.5        # parts on the module's back are lower than this [est]
+MODULE_CONNECTOR = (8.0, 30.0) # its side cable connector, mm from the header end: no ribs [est]
 J3_CUT = (J3_BODY[0] + 1.0, J3_BODY[1] + 1.0)
 STANDOFF_HOLE = 7.0            # lid clearance round the hex standoffs
 
@@ -462,7 +472,8 @@ def lid() -> Part:
     add += hinge_ears()
     for bx, by in (MODULE_FAR_HOLES if DSP["posts"] else []):   # hold up the 2.13" module's far end
         x, y = bx2x(bx), by2y(by)
-        add += [cyl(x, y, Z_LT - 0.01, Z_DISP, POST_D), cyl(x, y, Z_DISP - 0.01, Z_DISP + PIN_H, PIN_D)]
+        add.append(cyl(x, y, Z_LT - 0.01, Z_DISP, POST_D))
+    add.append(lid_ribs())
     body = plate + union(add)
     cut = []
     for bx, by, _ in keys():
@@ -476,6 +487,8 @@ def lid() -> Part:
                    Z_LU - 3, Z_LT + 1))
     for bx, by in STANDOFFS:
         cut.append(cyl(bx2x(bx), by2y(by), Z_LU - 3, Z_LT + 1, STANDOFF_HOLE))
+    for bx, by in (MODULE_FAR_HOLES if DSP["posts"] else []):   # M3 heat-set insert, from the top
+        cut.append(cyl(bx2x(bx), by2y(by), Z_DISP - INSERT_DEPTH, Z_DISP + 1, INSERT_D))
     cut.append(cyl(px, py, Z_LU - 3, Z_PIEZO_TOP + 0.5, PIEZO_BORE))
     for x, y in sound_holes():
         cut.append(cyl(x, y, Z_PIEZO_TOP, Z_PIEZO_TOP + 5, SOUND_D))
@@ -502,7 +515,39 @@ def bezel() -> Part:
     b = b - box(-iw / 2, iw / 2, -ih / 2, ih / 2, -1, top)
     b = b - box(vx - VIEW[0] / 2, vx + VIEW[0] / 2, -VIEW[1] / 2, VIEW[1] / 2, top - 1,
                 top + BEZEL_TOP + 1)
-    return chamfer(b.edges().group_by(Axis.Z)[-1], BEZEL_BEVEL)   # outer top edges and the window
+    b = chamfer(b.edges().group_by(Axis.Z)[-1], BEZEL_BEVEL)      # outer top edges and the window
+    from build123d import Cone
+    ox, oy = DISP_X0 + STD_W / 2, DISP_MID
+    zb, zt = Z_DISP + MODULE_PCB_T - Z_LT, top + BEZEL_TOP
+    h = (CSK_D - SCREW_CLEAR) / 2
+    for bx, by in BEZEL_SCREWS:                # boss down onto the module PCB, countersunk M3
+        x, y = bx - ox, -(by - oy)
+        b = b + cyl(x, y, zb, top + 0.01, BEZEL_BOSS_D)
+        b = b - cyl(x, y, zb - 1, zt + 1, SCREW_CLEAR)
+        b = b - Pos(x, y, zt - h) * Cone(SCREW_CLEAR / 2, CSK_D / 2 + 0.3, h + 0.31,
+                                         align=(Align.CENTER, Align.CENTER, Align.MIN))
+    return b
+
+
+def lid_ribs() -> Part:
+    """Diagonal rib grid on the lid top, inside the bezel's footprint (hidden by it)."""
+    from build123d import Rot
+    cx, cy = bx2x(DISP_X0 + STD_W / 2), by2y(DISP_MID)
+    w, h = STD_W - 1.0, STD_H - 1.0
+    span = math.hypot(w, h) + 10
+    step = LID_RIB_PITCH * math.sqrt(2)
+    ribs = []
+    for sgn in (1, -1):
+        n = int(span / step) + 2
+        for k in range(-n, n + 1):
+            ribs.append(Pos(cx + k * step / 2, cy, Z_LT - 0.01) * Rot(0, 0, 45 * sgn)
+                        * Box(span, LID_RIB_T, LID_RIB_H, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+    x_start = bx2x(DISP_X0 + MODULE_CONNECTOR[1])             # header end: socket and connector
+    grid = union(ribs) & box(x_start, cx + w / 2, cy - h / 2, cy + h / 2, Z_LT - 0.01, Z_LT + LID_RIB_H)
+    cut = []
+    for bx, by in STANDOFFS:                                  # hex standoffs pass through the lid
+        cut.append(cyl(bx2x(bx), by2y(by), Z_LT - 1, Z_LT + LID_RIB_H + 1, STANDOFF_HOLE + 2))
+    return grid - union(cut)
 
 
 # ---------------------------------------------------------------- checks
@@ -578,10 +623,24 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
         f"one flat bottom face ({flat[0].area / 100:.0f} cm2 on the bed) and no downward faces in the floor "
         "(no recesses or lettering underneath; the name is inside); STLs lie as they print")
     add(True, "display", f'WeAct {DISPLAY}" module {DISP_W} x {DISP_H}'
-        + (f"; far end on two Ø{POST_D} posts on the lid ({Z_DISP - Z_LT:.1f} mm tall, Ø{PIN_D} pins "
-           f"into its holes at {MODULE_FAR_HOLES[0][0] - DISP_X0:.1f} mm from the header end); "
-           "leave the H5/H6 standoffs off" if DSP["posts"] else "; far end on standoffs H5/H6")
-        + f"; window {VIEW[0]} x {VIEW[1]}")
+        + (f"; far end on two Ø{POST_D} posts on the lid ({Z_DISP - Z_LT:.1f} mm tall) with M3 inserts, "
+           f"{MODULE_FAR_HOLES[0][0] - DISP_X0:.1f} mm from the header end; leave the H5/H6 standoffs off"
+           if DSP["posts"] else "; far end on standoffs H5/H6") + f"; window {VIEW[0]} x {VIEW[1]}")
+    grip = Z_DISP + DISP_T + BEZEL_TOP - Z_DISP
+    thread = BEZEL_SCREW_L - grip
+    wall = (POST_D - INSERT_D) / 2
+    add(3.0 <= thread <= INSERT_DEPTH - 0.3 and (not DSP["posts"] or wall >= 1.5), "bezel screws",
+        f"2 x M3 x {BEZEL_SCREW_L:g} countersunk through the bezel and the module's far holes into "
+        + ("the posts' inserts" if DSP["posts"] else "the standoffs")
+        + f": {grip:.1f} mm grip, {thread:.1f} mm of thread" + (f"; post wall {wall:.1f} mm round the insert"
+                                                                if DSP["posts"] else ""))
+    rib_top = Z_LT + LID_RIB_H
+    lr = lid_ribs().bounding_box()
+    inside = (lr.min.X >= bx2x(DISP_X0) - 0.01 and lr.max.X <= bx2x(DISP_X0 + STD_W) + 0.01)
+    add(inside and Z_DISP - rib_top >= MODULE_BACK_CLEAR, "lid ribs",
+        f"{LID_RIB_T} mm grid at {LID_RIB_PITCH:g} mm, {LID_RIB_H:g} mm tall on the lid top under the bezel "
+        f"(hidden), {Z_DISP - rib_top:.1f} mm below the module; from past the module's side connector "
+        "to its far end, clear of the standoff holes; the lid's underside stays flat")
     add(abs(STANDOFF_L - (J3_BODY[2] + 2.5)) < 1e-6, "display stack",
         f"socket {J3_BODY[2]} + header plastic 2.5 = standoff {STANDOFF_L} mm; module top z "
         f"{top:.1f}, {top - Z_LT:.1f} above the plate")
@@ -779,15 +838,18 @@ def insert_drawing() -> None:
     sx.set_ylim(-3.5, Z_BB + 2.5)
     sx.axis("off")
 
-    rows = [[n, f"{x:.2f}", f"{y:.2f}", f"{Z_BB:g}", f"{INSERT_D:g}", f"{INSERT_DEPTH:g}"]
+    rows = [[n, "tray", f"{x:.2f}", f"{y:.2f}", f"{Z_BB:g}", f"{INSERT_D:g}", f"{INSERT_DEPTH:g}"]
             for n, x, y in holes]
+    if DSP["posts"]:                           # 2.13": the lid's two display posts, as in lid.stl
+        rows += [[chr(69 + i), "lid post", f"{bx2x(bx):.2f}", f"{by2y(by):.2f}", f"{Z_DISP - Z_LU:g}",
+                  f"{INSERT_D:g}", f"{INSERT_DEPTH:g}"] for i, (bx, by) in enumerate(MODULE_FAR_HOLES)]
     tb = fig.add_axes([0.04, 0.05, 0.42, 0.20])
     tb.axis("off")
-    t = tb.table(cellText=rows, colLabels=["hole", "x", "y", "boss top z", "hole Ø", "depth"],
+    t = tb.table(cellText=rows, colLabels=["hole", "part", "x", "y", "top z", "hole Ø", "depth"],
                  loc="upper left", cellLoc="center")
     t.scale(1, 1.4)
     fig.text(0.50, 0.24, "\n".join([
-        "Insert: M3 heat-set, 4 mm long, knurl OD 4.2 mm (4 pieces, brass).",
+        f"Insert: M3 heat-set, 4 mm long, knurl OD 4.2 mm ({len(rows)} pieces, brass).",
         f"Hole: Ø{INSERT_D:g} x {INSERT_DEPTH:g} mm deep from the boss top (pressed in hot,",
         "  ~0.2 mm interference); a Ø3.3 clearance hole continues through the floor.",
         "Install from the open (top) side; the insert's top flush with the boss top,",
@@ -795,7 +857,8 @@ def insert_drawing() -> None:
         "Print service insert option: the 4 holes A-D above. If the service uses its",
         "  own insert, let it size the hole for that insert.",
         "Screws: M3 x 12 countersunk from the lid, through a 3 mm spacer and the board.",
-        "All mm. Coordinates as in tray.stl.",
+        "All mm. Coordinates as in tray.stl" + (" and lid.stl (E, F: tops of the display posts," if DSP["posts"] else "."),
+        *(["  for the screws that hold the bezel and the display's far end)."] if DSP["posts"] else []),
     ]), fontsize=9, va="top", family="monospace")
     for ext in ("pdf", "png"):
         fig.savefig(OUT / f"inserts.{ext}", dpi=150, facecolor="white")
