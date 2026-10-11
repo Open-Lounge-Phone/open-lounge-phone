@@ -91,12 +91,12 @@ KEYCAP, KEYCAP_H = 18.2, 9.0   # clear XDA-profile 1u cap, nominal (measure your
 # display: J3 (8.5) + the module's male pins (2.5 plastic) = 11.0 = M3 standoff length
 STANDOFF_L, STANDOFF_HEX = 11.0, 5.5
 Z_DISP = Z_BT + STANDOFF_L                         # module PCB underside 20.6
-DISP_T = 1.2 + 1.2                                 # module PCB + panel glass (EST)
+MODULE_PCB_T = 1.7             # WeAct 2.13" and 2.9" boards (their STEP models: 1.69)
+DISP_T = MODULE_PCB_T + 1.4    # module underside -> bezel lip: clears the panel glass (~1.0-1.2 + tape)
 BEZEL_WALL, BEZEL_TOP = 1.2, 1.2
 BEZEL_BEVEL = 1.0              # 45 deg on the bezel's outer top edges and round the window
 VIEW = DSP["view"]             # window over the panel's active area (EST position)
 POST_D = 8.0                   # 2.13": posts under the module's far holes, an M3 insert in each
-MODULE_PCB_T = 1.2
 # the bezel screws down through the module's far holes (2.9": into the standoffs, 2.13": into the
 # posts' inserts): M3 x 8 countersunk; a boss under the bezel top clamps the module's PCB
 BEZEL_SCREW_L, BEZEL_BOSS_D = 8.0, 6.5
