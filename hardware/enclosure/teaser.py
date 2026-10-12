@@ -86,7 +86,7 @@ def step_solids(path: Path):
     from build123d import import_step
     out = []
     for so in import_step(str(path)).solids():
-        v, f = P.mesh_of(so, tol=0.05, ang=0.3)
+        v, f = P.mesh_of(so, tol=0.25, ang=0.6)          # coarse: plenty for a render
         if len(f):
             out.append(trimesh.Trimesh(v, f, process=True))
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -201,8 +201,8 @@ def board() -> dict[str, trimesh.Trimesh]:
     USB-C and the jack (on the bottom side; their STEP models aren't in KiCad's library here)."""
     glb = OUT / "board.glb"
     cli = KICAD / "Contents/MacOS/kicad-cli"
-    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "--include-silkscreen", "--include-soldermask",
-                    "--include-pads", "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
+    # board body and parts only: silkscreen, mask and pad layers are coplanar and flicker
+    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
                     "-o", str(glb), str(HERE.parent / "kicad/main/main.kicad_pcb")],
                    check=True, capture_output=True)
     sc = trimesh.load(glb)
@@ -310,6 +310,11 @@ def main() -> None:
     g = P.cradle_geom()                        # handle's middle underside on the plain cradles
     hs.apply_translation([g["lx"], g["yc"], g["hb"] - under_mid])
     add("handset", hs)
+    hg, under_g = handset()                    # a second receiver shape: the code-built G handset
+    s_g = 210.0 / hg.extents[1]
+    hg.apply_scale(s_g)
+    hg.apply_translation([g["lx"], g["yc"], g["hb"] - under_g * s_g])
+    add("handset-g", hg)
     scene.export(OUT / "scene.glb")
     keys = [{"x": P.bx2x(bx), "y": P.by2y(by), "label": lab} for bx, by, lab in P.keys()]
     meta = {"keys": keys, "rides": rides, "plate": P.Z_LT, "cap_z": P.Z_LT + 6.6,
