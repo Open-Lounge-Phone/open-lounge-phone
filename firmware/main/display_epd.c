@@ -4,6 +4,8 @@
 // controller's built-in waveform) in between. TODO: confirm the partial mode on a real panel.
 #include <string.h>
 
+#include "sdkconfig.h"
+
 #include "board.h"
 #include "display.h"
 #include "driver/gpio.h"
@@ -13,11 +15,19 @@
 #include "freertos/task.h"
 
 static const char *TAG = "epd";
-#define NATIVE_W 128  // source lines (x)
-#define NATIVE_H 296  // gate lines (y)
+#define NATIVE_W 128  // source lines in RAM (x)
+#if CONFIG_OLP_EPD_213
+#define VIS_W 122     // the 2.13" panel shows 122 of them
+#define NATIVE_H 250  // gate lines (y)
+#define EPD_NAME "WeAct 2.13\" e-paper (SSD1680)"
+#else
+#define VIS_W 128
+#define NATIVE_H 296
+#define EPD_NAME "WeAct 2.9\" e-paper (SSD1680)"
+#endif
 #define ROW_BYTES (NATIVE_W / 8)
-#define LAND_W 296
-#define LAND_H 128
+#define LAND_W NATIVE_H
+#define LAND_H VIS_W
 
 static spi_device_handle_t s_spi;
 static uint8_t s_ram[ROW_BYTES * NATIVE_H];
@@ -66,7 +76,7 @@ static bool panel_init(void) {
   if (!wait_busy("reset", 1000)) return false;  // BUSY stuck high: no module
   cmd(0x12, NULL, 0);  // software reset
   wait_busy("swreset", 2000);
-  CMD(0x01, (NATIVE_H - 1) & 0xFF, (NATIVE_H - 1) >> 8, 0x00);  // driver output: 296 gates
+  CMD(0x01, (NATIVE_H - 1) & 0xFF, (NATIVE_H - 1) >> 8, 0x00);  // driver output: the gate lines
   CMD(0x11, 0x03);                                              // data entry: x+, y+
   CMD(0x44, 0x00, ROW_BYTES - 1);                               // RAM x window (bytes)
   CMD(0x45, 0x00, 0x00, (NATIVE_H - 1) & 0xFF, (NATIVE_H - 1) >> 8);  // RAM y window
@@ -112,7 +122,7 @@ static esp_err_t epd_init(void) {
   if (err != ESP_OK) return err;
   if (!panel_init()) return ESP_ERR_NOT_FOUND;
   s_fitted = true;
-  ESP_LOGI(TAG, "SSD1680 2.9\" e-paper ready");
+  ESP_LOGI(TAG, "%s ready", EPD_NAME);
   return ESP_OK;
 }
 
@@ -120,8 +130,8 @@ static esp_err_t epd_init(void) {
 static void convert(const uint8_t *fb) {
   memset(s_ram, 0xFF, sizeof s_ram);
   for (int ny = 0; ny < NATIVE_H; ny++) {
-    for (int nx = 0; nx < NATIVE_W; nx++) {
-      int lx = ny, ly = NATIVE_W - 1 - nx;
+    for (int nx = 0; nx < VIS_W; nx++) {
+      int lx = ny, ly = VIS_W - 1 - nx;
       int bit = ly * LAND_W + lx;
       if (fb[bit / 8] & (0x80 >> (bit % 8))) s_ram[ny * ROW_BYTES + nx / 8] &= ~(0x80 >> (nx % 8));
     }
@@ -145,7 +155,7 @@ static void epd_flush(const uint8_t *fb, bool full) {
 }
 
 const display_driver_t display_epd_ssd1680 = {
-    .name = "WeAct 2.9\" e-paper (SSD1680)",
+    .name = EPD_NAME,
     .width = LAND_W,
     .height = LAND_H,
     .init = epd_init,

@@ -1,5 +1,12 @@
 menu "Open Lounge Phone"
 
+config OLP_EPD_213
+    bool "Display: WeAct 2.13\" e-paper (250 x 122); off = the 2.9\" (296 x 128)"
+    default y
+    help
+        The 2.13" module plugs into the same 2x4 socket (same controller and pin order); its panel
+        is smaller. Text is drawn smaller to fit (docs/phone-ux.md).
+
 config OLP_SERVER_URL
     string "Server (WebSocket base URL; empty = none, chosen on the setup page)"
     default ""
