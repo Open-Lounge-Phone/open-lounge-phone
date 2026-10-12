@@ -114,6 +114,11 @@ static int cmd_wipe(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_epd(int argc, char **argv) {
+  display_epd_probe();
+  return 0;
+}
+
 static int cmd_screen(int argc, char **argv) {
   display_dump();
   return 0;
@@ -236,6 +241,7 @@ void console_start(void) {
        .func = cmd_drop},
       {.command = "wipe", .help = "forget the device key, id and settings (keeps Wi-Fi)", .func = cmd_wipe},
       {.command = "screen", .help = "print the display's framebuffer (tools/fb2png.py)", .func = cmd_screen},
+      {.command = "epd", .help = "check the e-paper module answers, then a timed full refresh", .func = cmd_epd},
       {.command = "audio", .help = "audio [tone <name>|loop <ms>|off|watch <hz>]: audio state and bring-up tests",
        .func = cmd_audio},
       {.command = "volume", .help = "volume [0-10]: earpiece volume (10 = the cap)", .func = cmd_volume},

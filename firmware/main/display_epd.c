@@ -2,6 +2,7 @@
 // sequence as in GxEPD2_290_T94 / the Waveshare 2.9" V2 driver (the same controller).
 // Full refresh (0x22 0xF7) every FULL_EVERY updates, fast partial refresh (0x22 0xFC, the
 // controller's built-in waveform) in between. TODO: confirm the partial mode on a real panel.
+#include <stdio.h>
 #include <string.h>
 
 #include "sdkconfig.h"
@@ -11,6 +12,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -148,10 +150,61 @@ static void epd_flush(const uint8_t *fb, bool full) {
   } else {
     CMD(0x22, 0xFC);
   }
+  int64_t t0 = esp_timer_get_time();
   cmd(0x20, NULL, 0);  // go
   wait_busy(full ? "full refresh" : "partial refresh", 5000);
+  int ms = (int)((esp_timer_get_time() - t0) / 1000);
   if (!full) write_ram(0x26);  // base for the next partial refresh
-  ESP_LOGI(TAG, "%s refresh done", full ? "full" : "partial");
+  // A real refresh keeps BUSY high for ~0.3 s (partial) to ~2 s (full); a few ms means the
+  // module never ran it: not powered, not connected, or the wrong SPI mode (see `epd`).
+  ESP_LOGI(TAG, "%s refresh done in %d ms%s", full ? "full" : "partial", ms,
+           ms < 50 ? " (too fast: the module didn't refresh; run `epd`)" : "");
+}
+
+/** Bring-up check (console `epd`): reset the module and watch BUSY. A powered SSD1680 holds BUSY
+ * high for a moment after a reset and a software reset; no module, no power or the wrong SPI mode
+ * leaves it low. Then a full refresh, timed. */
+void display_epd_probe(void) {
+  if (!s_spi) {
+    printf("epd: SPI not set up\n");
+    return;
+  }
+  printf("epd: BUSY idle level %d\n", gpio_get_level(PIN_EPD_BUSY));
+  gpio_set_level(PIN_EPD_RST, 0);
+  vTaskDelay(pdMS_TO_TICKS(10));
+  gpio_set_level(PIN_EPD_RST, 1);
+  int64_t t0 = esp_timer_get_time();
+  bool seen = false;
+  while (esp_timer_get_time() - t0 < 200000) {
+    if (gpio_get_level(PIN_EPD_BUSY)) seen = true;
+    if (seen && !gpio_get_level(PIN_EPD_BUSY)) break;
+  }
+  cmd(0x12, NULL, 0);  // software reset
+  int64_t t1 = esp_timer_get_time();
+  bool seen2 = false;
+  int64_t high_us = 0;
+  while (esp_timer_get_time() - t1 < 500000) {
+    if (gpio_get_level(PIN_EPD_BUSY)) { seen2 = true; high_us = esp_timer_get_time() - t1; }
+    else if (seen2) break;
+  }
+  if (!seen && !seen2) {
+    printf("epd: NO ANSWER: BUSY never went high. Check the module's orientation (it lies over the\n"
+           "     board toward H5/H6), 3.3 V between its pins 8 (VCC) and 7 (GND), the header and\n"
+           "     socket joints, and its SPI jumper on 4-Lines.\n");
+    return;
+  }
+  printf("epd: module answered (BUSY high ~%d ms after the software reset)\n", (int)(high_us / 1000));
+  panel_init();
+  s_fitted = true;
+  memset(s_ram, 0x00, sizeof s_ram);  // all black, then the screen comes back on the next update
+  write_ram(0x24);
+  write_ram(0x26);
+  CMD(0x22, 0xF7);
+  int64_t t2 = esp_timer_get_time();
+  cmd(0x20, NULL, 0);
+  wait_busy("probe refresh", 5000);
+  printf("epd: full refresh (all black) took %d ms (expect ~1500-3000)\n",
+         (int)((esp_timer_get_time() - t2) / 1000));
 }
 
 const display_driver_t display_epd_ssd1680 = {
