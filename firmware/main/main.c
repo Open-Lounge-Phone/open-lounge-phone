@@ -2,6 +2,7 @@
 // the console only post events to it. Mirrors apps/device-web/src/main.ts (the browser phone):
 // hello → (unpaired) pair.begin → pair.code … pair.done → reconnect → auth.challenge →
 // auth.proof → config, then the handset state machine (phone.c = deviceStep).
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,9 @@
 #include "vmleave.h"
 #include "vmplay.h"
 #include "marquee.h"
+#include "lounge.h"
+#include <sys/time.h>
+#include <time.h>
 
 static const char *TAG = "olp";
 
@@ -60,6 +64,10 @@ static int64_t s_code_at, s_reopen_at = -1, s_last_ping, s_last_status;
 static int s_unauthorized;
 static phone_state_t s_phone;
 static phone_config_t s_cfg;
+static lounge_t s_lounge;      // a Lounge phone's takeover state (lounge.c)
+static bool s_extensions;      // config.extensions: MENU 6 dials one
+static bool s_lounge_qr_px;    // the takeover code owns the screen
+static char s_lounge_qr_shown[65];
 static menu_t s_menu;
 static char s_active_label[25];
 static int64_t s_call_started = -1;
@@ -210,6 +218,17 @@ static void sync_media(void) {
 
 static void draw_check(int w, int h, int64_t now);
 
+/** The server's web address (wss://host/path → https://host/path) for links on screen. */
+static void http_base(char *out, size_t n) {
+  char url[PROV_SERVER_MAX];
+  net_server_url(url, sizeof url);
+  if (!strncmp(url, "wss://", 6)) snprintf(out, n, "https://%s", url + 6);
+  else if (!strncmp(url, "ws://", 5)) snprintf(out, n, "http://%s", url + 5);
+  else snprintf(out, n, "%s", url);
+  size_t l = strlen(out);
+  if (l && out[l - 1] == '/') out[l - 1] = '\0';
+}
+
 /** Characters per line at the size gfx_render_lines picks for `n` lines. */
 static int line_capacity(int w, int h, int n) {
   int scale = n <= 2 ? 3 : 2;
@@ -239,6 +258,11 @@ static void render(void) {
   s_menu.voicemail = s_cfg.missed_count;
   s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
   s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
+  s_menu.lounge = s_lounge.on;
+  s_menu.lounge_session = s_lounge.session;
+  s_menu.open_to_chat = s_lounge.open_to_chat;
+  s_menu.extensions = s_extensions;
+  s_menu.setup = s_lounge.on ? SETUP_HIDDEN : s_menu.kids ? SETUP_CONFIRM : SETUP_OPEN;
   int n = vmplay_active() ? vmplay_lines(lines, now) : 0;
   if (n == 0) n = menu_lines(&s_menu, lines);
   bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
@@ -294,6 +318,16 @@ static void render(void) {
     in.no_wifi = ssid[0] == '\0';
     in.wifi_problem = net_wifi_up() ? NULL : net_wifi_problem();
     n = strip_lines(&in, strip);
+    // A Lounge phone: SCAN TO USE, PRESS KEY 7, HI ANA (lounge.c) over the usual status.
+    char ll[2][41];
+    bool idle = s_phone.kind == PH_IDLE && !s_hook_up;
+    int ln = s_authed && s_conn == CONN_ONLINE && !s_code[0]
+                 ? lounge_lines(&s_lounge, idle, s_phone.kind == PH_OFFHOOK, ll, now)
+                 : 0;
+    if (ln) {
+      for (int i = 0; i < ln; i++) snprintf(strip[i], sizeof strip[i], "%.40s", ll[i]);
+      n = ln;
+    }
     n_status = n;
   }
   int w, h;
@@ -339,6 +373,7 @@ static void render(void) {
   }
   // Handset up, nothing dialled: whose phone this is and who is on each key (docs/phone-ux.md).
   bool keys = n_status > 0 && s_phone.kind == PH_OFFHOOK && !s_phone.held[0] && s_authed &&
+              lounge_keys_live(&s_lounge) && s_lounge.challenge < 0 &&
               s_conn == CONN_ONLINE && !s_code[0] && s_menu.screen == MENU_CLOSED &&
               !selftest_active();
   if (keys && !snake_active() && !s_boot_until) {
@@ -369,6 +404,33 @@ static void render(void) {
     if (!snake_active() && !s_setup_qr && !s_about_px) display_pixels(NULL);
   }
 
+  // A free Lounge phone: its takeover code, redrawn when the code (or the hint) changes.
+  bool lqr = s_authed && s_conn == CONN_ONLINE && !s_code[0] &&
+             lounge_show_qr(&s_lounge, s_phone.kind == PH_IDLE && !s_hook_up,
+                            s_menu.screen != MENU_CLOSED, now);
+  if (lqr && !snake_active() && !s_boot_until && !s_setup_qr) {
+    char sig[sizeof s_lounge_qr_shown];
+    snprintf(sig, sizeof sig, "%.24s|%.38s", s_lounge.nonce, n_status > 1 ? full[1] : "");
+    if (!s_lounge_qr_px || strcmp(sig, s_lounge_qr_shown)) {
+      uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
+      char url[PROV_SERVER_MAX + 140];
+      http_base(url, sizeof url);
+      size_t at = strlen(url);
+      snprintf(url + at, sizeof url - at, "/lounge#%s.%s", identity_device_id(), s_lounge.nonce);
+      if (fb) {
+        screen_lounge(fb, w, h, url, s_cfg.owner_space, n_status > 1 ? full[1] : "");
+        display_pixels(fb);
+        free(fb);
+      }
+      ESP_LOGI(TAG, "LOUNGE code shown [SCAN TO USE|%s]", n_status > 1 ? full[1] : "");
+      snprintf(s_lounge_qr_shown, sizeof s_lounge_qr_shown, "%s", sig);
+      s_lounge_qr_px = true;
+    }
+  } else if (s_lounge_qr_px) {
+    s_lounge_qr_px = false;
+    if (!snake_active() && !s_setup_qr && !s_about_px && !s_keys_px) display_pixels(NULL);
+  }
+
   // MENU → 7: the phone check page, redrawn every 10 s while open (signal, uptime, memory).
   bool check = s_menu.screen == MENU_CHECK;
   if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= 10000)) {
@@ -394,7 +456,7 @@ static void render(void) {
     display_pixels(NULL);
   }
   if (snake_active() || s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px ||
-      s_keys_px) {
+      s_keys_px || s_lounge_qr_px) {
     s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
@@ -413,7 +475,7 @@ static void render(void) {
   led_pattern_t led;
   if (s_code[0] || s_conn == CONN_CONNECTING) led = LED_PULSE;
   else if (s_conn == CONN_OFFLINE) led = LED_BLINK;
-  else if (s_phone.kind == PH_INCOMING) led = LED_RINGING;
+  else if (s_phone.kind == PH_INCOMING || s_lounge.challenge >= 0) led = LED_RINGING;
   else if ((s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM) && s_phone.recorded)
     led = LED_RECORDING;
   else if (s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM || s_phone.kind == PH_DIALING)
@@ -467,6 +529,17 @@ static void draw_check(int w, int h, int64_t now) {
   free(fb);
   ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] up=[%s] mem=[%s]", wifi,
            ip[0] ? ip : "-", server, issue, handset, up, mem);
+}
+
+void app_print_lounge(void) {
+  char url[PROV_SERVER_MAX + 140];
+  http_base(url, sizeof url);
+  size_t at = strlen(url);
+  snprintf(url + at, sizeof url - at, "/lounge#%s.%s", identity_device_id(), s_lounge.nonce);
+  printf("LOUNGE on=%d session=%d name=%s chat=%d challenge=%d house_line=%d here=%s url=%s\n",
+         s_lounge.on, s_lounge.session, s_lounge.name[0] ? s_lounge.name : "-",
+         s_lounge.open_to_chat, s_lounge.challenge, s_lounge.house_line,
+         s_lounge.here[0] ? s_lounge.here : "-", s_lounge.nonce[0] ? url : "-");
 }
 
 void app_print_status(void) {
@@ -606,6 +679,16 @@ static void copy(char *dst, size_t n, const char *src) {
   snprintf(dst, n, "%s", src ? src : "");
 }
 
+/** A deadline from the server (`expiresAt`, ms since the epoch) on this phone's clock. */
+static int64_t local_deadline(const cJSON *m, int64_t fallback_ms) {
+  const cJSON *at = cJSON_GetObjectItemCaseSensitive(m, "expiresAt");
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  int64_t epoch = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  if (!cJSON_IsNumber(at) || epoch < 1700000000000LL) return now_ms() + fallback_ms;
+  return now_ms() + ((int64_t)at->valuedouble - epoch);
+}
+
 static void on_config(const cJSON *m) {
   bool first = !s_authed;
   memset(&s_cfg, 0, sizeof s_cfg);
@@ -630,6 +713,12 @@ static void on_config(const cJSON *m) {
     copy(s_cfg.owner_space, sizeof s_cfg.owner_space, jstr(owner, "space"));
     copy(s_cfg.owner_person, sizeof s_cfg.owner_person, jstr(owner, "person"));
   }
+  s_lounge.on = !strcmp(s_cfg.owner_mode, "lounge");
+  s_lounge.house_line = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "houseLine"));
+  const cJSON *here = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(m, "here"), 0);
+  copy(s_lounge.here, sizeof s_lounge.here, here ? jstr(here, "name") : "");
+  for (char *c = s_lounge.here; *c; c++) *c = (char)toupper((unsigned char)*c);
+  s_extensions = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "extensions"));
   const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
   if (cJSON_IsNumber(off)) ota_set_utc_offset(off->valueint);
   const cJSON *srv_now = cJSON_GetObjectItemCaseSensitive(m, "now");
@@ -724,6 +813,26 @@ static void on_message(char *text) {
     const char *code = jstr(m, "code");
     ESP_LOGW(TAG, "server error %s: %s", or_q(code), or_q(jstr(m, "message")));
     if (code && !strcmp(code, "unauthorized") && identity_device_id()[0]) forget_device_id();
+  } else if (!strcmp(t, "lounge.idle")) {
+    lounge_idle(&s_lounge, jstr(m, "nonce"), local_deadline(m, 55000));
+  } else if (!strcmp(t, "lounge.challenge")) {
+    const cJSON *idx = cJSON_GetObjectItemCaseSensitive(m, "index");
+    if (cJSON_IsNumber(idx)) lounge_challenge(&s_lounge, idx->valueint, local_deadline(m, 30000));
+    menu_close(&s_menu);
+    ESP_LOGI(TAG, "LOUNGE challenge: press key %d", cJSON_IsNumber(idx) ? idx->valueint : -1);
+  } else if (!strcmp(t, "lounge.session")) {
+    lounge_session(&s_lounge, jstr(m, "name"), cJSON_IsTrue(cJSON_GetObjectItem(m, "openToChat")));
+    ESP_LOGI(TAG, "LOUNGE session started");
+  } else if (!strcmp(t, "lounge.ended")) {
+    // Forget the person: their name, keys, missed calls and the last caller.
+    lounge_ended(&s_lounge, jstr(m, "reason"), now_ms());
+    memset(s_cfg.labels, 0, sizeof s_cfg.labels);
+    memset(s_cfg.missed, 0, sizeof s_cfg.missed);
+    s_cfg.missed_count = 0;
+    s_active_label[0] = '\0';
+    menu_close(&s_menu);
+    vmplay_stop();
+    ESP_LOGI(TAG, "LOUNGE session ended (%s): forgot everything", or_q(jstr(m, "reason")));
   } else if (!strcmp(t, "voicemail.items")) {
     vmplay_items(m, now_ms());
   } else if (!strcmp(t, "rtc.config")) {
@@ -792,6 +901,17 @@ static void on_key(int index) {
     return;
   }
   if (index >= 10) return;  // MENU/BACK outside the menu
+  if (s_lounge.on && s_lounge.challenge >= 0 && s_authed) {
+    // The takeover proof: the key the screen names (any key is sent; the server checks it).
+    cJSON *p = msg("lounge.press");
+    cJSON_AddNumberToObject(p, "index", index);
+    emit(p);
+    return;
+  }
+  if (!lounge_keys_live(&s_lounge)) {
+    ESP_LOGI(TAG, "key %d: Lounge phone not taken over", index);
+    return;
+  }
   if (!s_authed) {
     ESP_LOGI(TAG, "key %d: not signed in yet", index);
     return;
@@ -870,6 +990,10 @@ static void tick(void) {
     finish_selftest();
   }
   vm_leave_tick(now);
+  lounge_tick(&s_lounge, now);
+  bool idle_screen = s_authed && s_conn == CONN_ONLINE && s_phone.kind == PH_IDLE && !s_hook_up;
+  if (lounge_wants_refresh(&s_lounge, idle_screen, s_menu.screen != MENU_CLOSED, now))
+    emit(msg("lounge.refresh"));
   vmplay_tick(now);
   ota_tick(now);
   menu_tick(&s_menu, now);
@@ -915,6 +1039,8 @@ void app_main(void) {
   abort();
 #endif
 
+  // The QR library logs the text it encodes: the setup network's password, a takeover link.
+  esp_log_level_set("QRCODE", ESP_LOG_WARN);
   signals_start();
 #if CONFIG_OLP_QEMU
   display_start(&display_none);
@@ -980,6 +1106,29 @@ void app_main(void) {
           break;
         case EV_VM_LOADED:
           vmplay_loaded(ev.a, now_ms());
+          break;
+        case EV_EXT_DIAL:
+          if (ev.a == 1) {  // from the call screen: transfer the call to it
+            ESP_LOGI(TAG, "CALL ACTION transfer to extension %s", ev.data ? ev.data : "?");
+            phone_transfer_extension(&s_phone, ev.data, emit);
+          } else if (!s_hook_up || s_phone.kind != PH_OFFHOOK) {
+            snprintf(s_ota_msg[0], 25, "LIFT THE HANDSET");
+            snprintf(s_ota_msg[1], 25, "THEN MENU 6");
+            s_ota_msg_until = now_ms() + 4000;
+          } else if (ev.data) {
+            snprintf(s_active_label, sizeof s_active_label, "EXT %s", ev.data);
+            phone_extension(&s_phone, ev.data, emit);
+          }
+          free(ev.data);
+          break;
+        case EV_LOUNGE_CHAT: {
+          cJSON *c = msg("lounge.chat");
+          cJSON_AddBoolToObject(c, "open", ev.a);
+          emit(c);
+          break;
+        }
+        case EV_LOUNGE_LEAVE:
+          emit(msg("lounge.leave"));
           break;
         case EV_SELFTEST:
           if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {

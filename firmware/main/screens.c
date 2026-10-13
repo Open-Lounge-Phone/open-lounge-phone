@@ -201,3 +201,30 @@ void screen_keys(uint8_t *fb, int w, int h, const char *title, const char *const
   marquee(f, sizeof f, footer, chars_in(w - 8, 1), step);
   gfx_text_at(fb, w, h, (w - gfx_text_width(f, 1)) / 2, h - 9, f, 1, true);
 }
+
+void screen_lounge(uint8_t *fb, int w, int h, const char *url, const char *space, const char *hint) {
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
+  s_qr_fb = fb;
+  s_qr_w = w;
+  s_qr_h = h;
+  s_qr_px = 0;
+  s_qr_side = 0;
+  esp_qrcode_config_t cfg = ESP_QRCODE_CONFIG_DEFAULT();
+  cfg.display_func = draw_qr;
+  cfg.max_qrcode_version = 8;
+  cfg.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
+  esp_qrcode_generate(&cfg, url);
+  int x = s_qr_px ? s_qr_x + s_qr_side + 8 : 8, right = w - x - 4;
+  gfx_text_at(fb, w, h, x, 10, "SCAN TO", 2, true);
+  gfx_text_at(fb, w, h, x, 28, "USE THIS", 2, true);
+  gfx_text_at(fb, w, h, x, 46, "PHONE", 2, true);
+  gfx_rect(fb, w, h, x, 68, right, 1, true);
+  char line[48];
+  snprintf(line, sizeof line, "%s", hint ? hint : "");
+  while (gfx_text_width(line, 1) > right && strlen(line) > 1) line[strlen(line) - 1] = '\0';
+  gfx_text_at(fb, w, h, x, 76, line, 1, true);
+  snprintf(line, sizeof line, "%s", space ? space : "");
+  for (char *c = line; *c; c++) *c = (char)toupper((unsigned char)*c);
+  while (gfx_text_width(line, 1) > right && strlen(line) > 1) line[strlen(line) - 1] = '\0';
+  gfx_text_at(fb, w, h, x, h - 12, line, 1, true);
+}

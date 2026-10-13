@@ -1,5 +1,15 @@
 # Firmware changelog
 
+## 0.9.1 — 2026-10-13: Lounge phones, extensions, safer setup
+
+- **Lounge phones** work on the hardware: the takeover QR code on the e-paper, `PRESS KEY 7`
+  for the proof (the LED flashes fast), `HI ANA` while in use, MENU 5 open to chat, MENU 8 log
+  out, "who's here" and house-line keys; the phone forgets the person when the session ends.
+- **MENU 6 dials an extension** in team and organization spaces.
+- **MENU 3 Network** shows Wi-Fi and server together (4 opens it too); kids' phones ask for a
+  second press before the setup network, Lounge phones don't offer it at all.
+- The root menu fits whatever applies into three lines; console `lounge` prints the takeover link.
+
 ## 0.9.0 — 2026-10-13: listen on the phone
 
 - **Voicemail plays on the phone** (a person's own phone): MENU 2 → 1 with the handset up plays

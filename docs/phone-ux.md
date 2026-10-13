@@ -60,6 +60,7 @@ Highest priority first: the first row that applies is shown.
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
 | Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app) |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
+| Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
 | Ready | `READY 14:05` (local time, once the server has sent its clock; `READY` before) / the owner line: `KIDS: SMITHS`, `LOUNGE: STUDIO`, `ANA'S PHONE` |
 
 ## Keys by state
@@ -89,17 +90,31 @@ The menu closes by itself after 20 s without a key.
 |---|---|---|
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
 | 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard; a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). Greetings from the phone are planned | yes |
-| 3 | Wi-Fi: network, signal, address; 1 opens the setup network | yes |
-| 4 | Server: which one; 1 opens the setup network to change it | yes |
-| 5 | Lounge: open to chat on / off | planned |
-| 6 | Dial an extension (team and organization spaces) | planned |
+| 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on) | yes |
+| 4 | The same screen as 3 | yes |
+| 5 | Lounge phone in use: open to chat on / off | yes |
+| 6 | Dial an extension (team and organization spaces; shown when the space has extensions): `EXT 204_`, digits, BACK deletes, MENU dials (handset up) | yes |
 | 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, time running and clock, memory; 1 starts the self-test | yes |
-| 8 | Lounge: log out | planned |
+| 8 | Lounge phone in use: log out (the phone forgets the person) | yes |
 | 9 | Update now (official firmware with updates on) | yes |
 | 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |
 
-Root screen: `MENU` / `1 VOLUME 2 VOICEMAIL` / `3 WI-FI 4 SERVER` / `7 CHECK 0 ABOUT`, with
-`9 UPDATE` where updates are on and it fits (9 works either way).
+Root screen: `MENU`, then the items that apply, packed into three lines that fit (20 characters
+on the 2.13-inch): `1 VOLUME 2 VOICEMAIL` / `3 NETWORK 6 EXT` / `7 CHECK 0 ABOUT`; a Lounge
+phone in use: `1 VOLUME 5 CHAT` / `8 LOG OUT 3 NETWORK` / `7 CHECK 0 ABOUT`. `9 UPDATE` comes
+last and is left off when it doesn't fit (9 works either way).
+
+### Lounge phone
+
+A shared phone (set up as a Lounge phone in the app). Free: the takeover QR code with
+`SCAN TO USE THIS PHONE`, a hint (`THIS PHONE`, `HERE: BEN` when someone is open to chat at
+another Lounge phone, `OR PRESS A KEY` when the space gave free phones house-line keys) and the
+space's name. Scanning asks for proof the person is at the phone: `PRESS KEY 7` / `TO START`
+(the red LED flashes fast) until they press it. In use: `HI ANA` / `MENU = OPTIONS` (or
+`OPEN TO CHAT`), their people on the keys. When the session ends (log out, the space's time limit,
+someone else takes it over) the phone forgets them and shows `SIGNED OUT` / `SEE YOU` (or
+`TIME'S UP`, `SOMEONE ELSE`) for 4 s, then the code again. Digit keys do nothing on a free phone
+without house-line keys.
 
 **Call screen** (MENU in a call or a room): `CALL` (or `ROOM`) / `1 HOLD` / `2 TRANSFER` /
 `9 VOLUME`. On hold: `1 RESUME`. In a room: `1 MUTE` or `1 UNMUTE`. Transfer without a held call
@@ -120,8 +135,8 @@ jack is optional), with a long beep after 30 s without input, or when a call rin
 | Dim (8 %) | ready |
 | Slow breathe (4 s) | ready, with missed calls or new voicemail |
 | Pulse (1 s) | pairing, or connecting to the server |
+| Fast flash (4 per second) | ringing, or a Lounge phone waiting for its `PRESS KEY` proof |
 | Short blink every 2 s | offline: no Wi-Fi or no server |
-| Fast flash (4 per second) | ringing |
 | On | calling, in a call or in a room |
 | Double flash every second | this call or room is being recorded (it is also the recording light) |
 

@@ -32,6 +32,9 @@ typedef enum {
   EV_VM_SENT,      // a = 1 the voicemail upload worked
   EV_VM_PLAY,      // MENU -> 2: a = 0 play the messages, 1 clear them (mark heard)
   EV_VM_LOADED,    // a = 1 a message's audio downloaded
+  EV_EXT_DIAL,     // MENU -> 6: data = the extension's digits (malloc'd)
+  EV_LOUNGE_CHAT,  // MENU -> 5 on a Lounge phone: a = 1 open to chat
+  EV_LOUNGE_LEAVE, // MENU -> 8 on a Lounge phone: log out
 } ev_type_t;
 
 typedef struct {

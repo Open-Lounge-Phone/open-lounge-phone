@@ -119,6 +119,29 @@ void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
   // Keys only dial with the handset up and nothing else going on.
 }
 
+void phone_extension(phone_state_t *s, const char *number, phone_emit_fn emit) {
+  if (s->kind != PH_OFFHOOK || !number) return;  // dials only with the handset up and idle
+  char held[65];
+  CPY(held, s->held);
+  cJSON *m = msg("call.extension");
+  cJSON_AddStringToObject(m, "number", number);
+  emit(m);
+  phone_init(s);
+  s->kind = PH_DIALING;
+  s->button = -1;
+  CPY(s->held, held);
+}
+
+void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_fn emit) {
+  if (s->kind != PH_INCALL || !s->connected || s->held[0] || !number) return;
+  s->transfer_pending = false;
+  cJSON *m = msg("call.transfer");
+  cJSON_AddStringToObject(m, "callId", s->call_id);
+  cJSON *to = cJSON_AddObjectToObject(m, "to");
+  cJSON_AddStringToObject(to, "extension", number);
+  emit(m);
+}
+
 static const char *str(const cJSON *o, const char *key) {
   const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
   return cJSON_IsString(v) ? v->valuestring : NULL;

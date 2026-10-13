@@ -125,3 +125,30 @@ TEST(phone_voicemail_offer_keeps_ticket) {
   CHECK_STR(s.vm_ticket, "tkt_0123456789abcdef");
   CHECK(s.vm_max_ms == 90000);
 }
+
+TEST(phone_dials_an_extension_only_off_hook) {
+  phone_state_t s;
+  phone_init(&s);
+  s_n = 0;
+  phone_extension(&s, "204", emit);
+  CHECK(s.kind == PH_IDLE && s_n == 0);
+  phone_hook(&s, true, emit);
+  s_n = 0;
+  phone_extension(&s, "204", emit);
+  CHECK(s.kind == PH_DIALING && s.button == -1);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.extension\",\"number\":\"204\"}");
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c9\",\"state\":\"active\"}");
+  CHECK(s.kind == PH_INCALL && s.connected);
+}
+
+TEST(phone_transfers_to_an_extension) {
+  phone_state_t s;
+  in_call(&s);
+  phone_transfer_extension(&s, "204", emit);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.transfer\",\"callId\":\"c1\",\"to\":{\"extension\":\"204\"}}");
+  in_call(&s);
+  phone_action(&s, ACT_HOLD, emit);
+  s_n = 0;
+  phone_transfer_extension(&s, "204", emit);  // not in a call (on hold): nothing
+  CHECK(s_n == 0);
+}

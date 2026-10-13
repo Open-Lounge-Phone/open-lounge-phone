@@ -17,12 +17,19 @@
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
-  static const char *names[] = {"closed", "root",      "about", "wifi", "volume",
-                                "server", "voicemail", "call",  "check"};
+  static const char *names[] = {"closed",    "root", "about", "wifi", "volume", "server",
+                                "voicemail", "call", "check", "ext"};
   return names[s];
 }
 
 void menu_close(menu_t *m) { m->screen = MENU_CLOSED; }
+
+/** The call screen offers a blind transfer (in a call, nothing on hold). */
+static bool call_can_transfer(const menu_t *m) {
+  for (int i = 0; i < m->n_actions; i++)
+    if (m->actions[i] == ACT_TRANSFER && m->actions[0] == ACT_HOLD) return true;
+  return false;
+}
 
 bool menu_key(menu_t *m, int key, int64_t now_ms) {
   if (m->screen == MENU_CLOSED) {
@@ -32,6 +39,20 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     return true;
   }
   m->last_input_ms = now_ms;
+  if (m->screen == MENU_EXT) {  // MENU 6: digits, BACK deletes, MENU dials
+    size_t len = strlen(m->ext);
+    if (key == 10) {
+      if (len >= 2) app_post(EV_EXT_DIAL, m->ext_transfer, strdup(m->ext));
+      m->screen = MENU_CLOSED;
+    } else if (key == 11) {
+      if (len) m->ext[len - 1] = '\0';
+      else m->screen = MENU_ROOT;
+    } else if (len + 1 < sizeof m->ext && len < 6) {
+      m->ext[len] = (char)('0' + digit_of(key));
+      m->ext[len + 1] = '\0';
+    }
+    return true;
+  }
   if (key == 10) {  // MENU closes it from anywhere
     m->screen = MENU_CLOSED;
   } else if (key == 11) {  // BACK steps out
@@ -46,9 +67,20 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     } else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 2) m->screen = MENU_VOICEMAIL;
-    else if (d == 3) m->screen = MENU_WIFI;
-    else if (d == 4) m->screen = MENU_SERVER;
-    else if (d == 7) m->screen = MENU_CHECK;
+    else if (d == 3 || d == 4) {  // Wi-Fi and server share one screen (and one setup page)
+      m->screen = MENU_WIFI;
+      m->confirm = false;
+    } else if (d == 7) m->screen = MENU_CHECK;
+    else if (d == 6 && m->extensions) {
+      m->screen = MENU_EXT;
+      m->ext[0] = '\0';
+    } else if (d == 5 && m->lounge_session) {
+      app_post(EV_LOUNGE_CHAT, !m->open_to_chat, NULL);
+      m->screen = MENU_CLOSED;
+    } else if (d == 8 && m->lounge_session) {
+      app_post(EV_LOUNGE_LEAVE, 0, NULL);
+      m->screen = MENU_CLOSED;
+    }
   } else if (m->screen == MENU_CALL) {
     int d = digit_of(key);
     if (d >= 1 && d <= m->n_actions) {
@@ -56,6 +88,10 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     } else if (d == 9) {
       m->screen = MENU_VOLUME;
+    } else if (d == 6 && m->extensions && call_can_transfer(m)) {
+      m->screen = MENU_EXT;  // transfer to an extension
+      m->ext[0] = '\0';
+      m->ext_transfer = true;
     }
   } else if (m->screen == MENU_VOICEMAIL && m->can_play) {
     int d = digit_of(key);
@@ -69,9 +105,13 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     }
   } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
-    if (digit_of(key) == 1) {
-      app_post(EV_PROV_OPEN, 0, NULL);  // 1 = the setup page (Wi-Fi and server)
-      m->screen = MENU_CLOSED;
+    if (digit_of(key) == 1 && m->setup != SETUP_HIDDEN) {
+      if (m->setup == SETUP_CONFIRM && !m->confirm) {
+        m->confirm = true;  // a kids' phone: press 1 again
+      } else {
+        app_post(EV_PROV_OPEN, 0, NULL);  // the setup page (Wi-Fi and server)
+        m->screen = MENU_CLOSED;
+      }
     }
   } else if (m->screen == MENU_VOLUME) {
     int d = digit_of(key);
@@ -100,15 +140,37 @@ static void upper(char *s) {
 int menu_lines(const menu_t *m, char out[4][25]) {
   switch (m->screen) {
     case MENU_ROOT: {
+      // The items that apply, packed into three lines that fit the screen (20 characters on
+      // the 2.13-inch, 24 on the 2.9-inch). Every key works even where it isn't shown.
       int w, h;
       display_size(&w, &h);
+      int cap = (w - 8) / 12 > 24 ? 24 : (w - 8) / 12;
+      const char *items[10];
+      int n = 0;
+      items[n++] = "1 VOLUME";
+      if (m->lounge_session) {
+        items[n++] = m->open_to_chat ? "5 CHAT OFF" : "5 CHAT";
+        items[n++] = "8 LOG OUT";
+      } else if (!m->lounge) {
+        items[n++] = "2 VOICEMAIL";
+      }
+      items[n++] = "3 NETWORK";
+      if (m->extensions) items[n++] = "6 EXT";
+      items[n++] = "7 CHECK";
+      items[n++] = "0 ABOUT";
+      if (ota_enabled()) items[n++] = "9 UPDATE";  // last: the one left off when it won't fit
       snprintf(out[0], 25, "MENU");
-      snprintf(out[1], 25, "1 VOLUME 2 VOICEMAIL");
-      snprintf(out[2], 25, "3 WI-FI 4 SERVER");
-      // 9 still works where it doesn't fit (20 characters on the 2.13-inch screen).
-      bool update = ota_enabled() && (w - 8) / 12 >= 23;
-      snprintf(out[3], 25, "7 CHECK%s 0 ABOUT", update ? " 9 UPDATE" : "");
-      return 4;
+      int line = 1;
+      out[1][0] = out[2][0] = out[3][0] = '\0';
+      for (int i = 0; i < n && line < 4; i++) {
+        size_t have = strlen(out[line]), add = strlen(items[i]);
+        if (have && have + 1 + add > (size_t)cap) {
+          if (++line >= 4) break;
+          have = 0;
+        }
+        snprintf(out[line] + have, 25 - have, "%s%s", have ? " " : "", items[i]);
+      }
+      return line < 4 ? line + 1 : 4;
     }
     case MENU_CALL: {
       // One call has audio at a time on this phone, so "hold" doesn't add a caller here (the
@@ -118,7 +180,8 @@ int menu_lines(const menu_t *m, char out[4][25]) {
       snprintf(out[0], 25, "%s", room ? "ROOM" : "CALL");
       int n = 1;
       for (int i = 0; i < m->n_actions; i++)
-        snprintf(out[n++], 25, "%d %s", i + 1, labels[m->actions[i]]);
+        snprintf(out[n++], 25, "%d %s%s", i + 1, labels[m->actions[i]],
+                 m->actions[i] == ACT_TRANSFER && m->extensions && call_can_transfer(m) ? " 6 EXT" : "");
       snprintf(out[n++], 25, "9 VOLUME");
       return n;
     }
@@ -153,35 +216,32 @@ int menu_lines(const menu_t *m, char out[4][25]) {
       upper(out[2]);
       return 3;
     }
-    case MENU_WIFI: {
-      char ssid[33] = "", ip[16] = "";
+    case MENU_WIFI:
+    case MENU_SERVER: {  // one screen: the Wi-Fi network and the server (3, or 4)
+      char ssid[33] = "", ip[16] = "", url[PROV_SERVER_MAX], host[64];
       int rssi = 0;
       net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
-      if (!net_wifi_up()) {
-        snprintf(out[0], 25, "WI-FI OFFLINE");
-        snprintf(out[1], 25, "%.24s", ssid[0] ? ssid : "NOT SET");
-        upper(out[1]);
-        snprintf(out[2], 25, "1 SET UP WI-FI");
-        return 3;
-      }
-      snprintf(out[0], 25, "%.24s", ssid);
-      upper(out[0]);
-      snprintf(out[1], 25, "SIGNAL %d DBM", rssi);
-      snprintf(out[2], 25, "%s", ip);
-      snprintf(out[3], 25, "1 SET UP WI-FI");
+      net_server_url(url, sizeof url);
+      if (!strcmp(url, PROV_HUB_URL)) snprintf(host, sizeof host, "PUBLIC HUB");
+      else if (url[0]) prov_server_host(url, host, sizeof host);
+      else snprintf(host, sizeof host, "NOT SET");
+      snprintf(out[0], 25, "NETWORK");
+      if (!ssid[0]) snprintf(out[1], 25, "WI-FI NOT SET");
+      else if (!net_wifi_up()) snprintf(out[1], 25, "%.15s OFFLINE", ssid);
+      else snprintf(out[1], 25, "%.16s %d", ssid, rssi);
+      snprintf(out[2], 25, "%.24s", host);
+      upper(out[1]);
+      upper(out[2]);
+      if (m->setup == SETUP_HIDDEN) snprintf(out[3], 25, "ADMIN: SEE GUIDE");
+      else if (m->confirm) snprintf(out[3], 25, "PRESS 1 AGAIN");
+      else snprintf(out[3], 25, "1 CHANGE");
       return 4;
     }
-    case MENU_SERVER: {
-      char url[PROV_SERVER_MAX];
-      net_server_url(url, sizeof url);
-      snprintf(out[0], 25, "SERVER");
-      if (!strcmp(url, PROV_HUB_URL)) snprintf(out[1], 25, "PUBLIC HUB");
-      else if (url[0]) prov_server_host(url, out[1], 25);
-      else snprintf(out[1], 25, "NOT SET");
-      upper(out[1]);
-      snprintf(out[2], 25, "1 CHANGE");
+    case MENU_EXT:
+      snprintf(out[0], 25, "%s %s_", m->ext_transfer ? "TO EXT" : "EXT", m->ext);
+      snprintf(out[1], 25, "%s", m->ext_transfer ? "MENU TRANSFERS" : "MENU DIALS");
+      snprintf(out[2], 25, "BACK DELETES");
       return 3;
-    }
     default:
       return 0;
   }

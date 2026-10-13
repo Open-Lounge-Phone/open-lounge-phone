@@ -21,5 +21,8 @@ void screen_keys(uint8_t *fb, int w, int h, const char *title, const char *const
 /** Something on the key map is too long and scrolls (marquee.c): redraw it every step. */
 bool screen_keys_scrolls(int w, int h, const char *title, const char *const labels[10],
                          const char *footer);
+/** A free Lounge phone: the takeover QR code (`url`), "SCAN TO USE THIS PHONE", a hint ("THIS
+ * PHONE", "HERE: BEN", "OR PRESS A KEY") and the space's name at the bottom. */
+void screen_lounge(uint8_t *fb, int w, int h, const char *url, const char *space, const char *hint);
 /** The setup screen: a QR code that joins the setup network, and the same steps in words. */
 void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass);

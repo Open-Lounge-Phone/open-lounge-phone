@@ -88,6 +88,12 @@ static int cmd_key(int argc, char **argv) {
   return 0;
 }
 
+void app_print_lounge(void);
+static int cmd_lounge(int argc, char **argv) {
+  app_print_lounge();
+  return 0;
+}
+
 static int cmd_hook(int argc, char **argv) {
   if (argc < 2 || (strcmp(argv[1], "up") && strcmp(argv[1], "down"))) {
     printf("usage: hook <up|down>\n");
@@ -237,6 +243,7 @@ void console_start(void) {
       {.command = "status", .help = "phone, connection and Wi-Fi state", .func = cmd_status},
       {.command = "key", .help = "key <0-9|menu|back>: press a key", .func = cmd_key},
       {.command = "hook", .help = "hook <up|down>: lift or hang up the handset", .func = cmd_hook},
+      {.command = "lounge", .help = "Lounge phone: who is using it, and the takeover link", .func = cmd_lounge},
       {.command = "drop", .help = "drop [wifi]: drop the WebSocket (or Wi-Fi) to test reconnects",
        .func = cmd_drop},
       {.command = "wipe", .help = "forget the device key, id and settings (keeps Wi-Fi)", .func = cmd_wipe},
