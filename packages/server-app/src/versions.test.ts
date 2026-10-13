@@ -1,7 +1,7 @@
 // Versions and features between servers (spec §9): what this server advertises, how it
 // negotiates with older, newer and partial peers, and how it degrades in plain words.
 import { readFileSync } from "node:fs";
-import { FEATURE_NAMES, type Party } from "@openloungephone/federation";
+import { FEATURE_NAMES, LEGACY_FEATURES, type Party } from "@openloungephone/federation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FederationError, fedFetch } from "./federation.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
@@ -105,7 +105,8 @@ describe("negotiating with other servers", () => {
       federation: "/fed/v1",
       software: "openloungephone/0.1",
     }));
-    for (const f of FEATURE_NAMES) expect(await peerSupports(a.env, "b.test", f)).toBe(true);
+    for (const f of LEGACY_FEATURES) expect(await peerSupports(a.env, "b.test", f)).toBe(true);
+    expect(await peerSupports(a.env, "b.test", "public-lines")).toBe(false);
     const connId = await connect(a, jesse, b, bob);
     const jApp = await a.connectApp(jesse.token);
     const bApp = await b.connectApp(bob.token);

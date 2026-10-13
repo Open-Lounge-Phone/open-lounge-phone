@@ -30,6 +30,8 @@ export const FEATURES = {
     "`POST /fed/v1/presence` with `to` listing all of the sender's connections on the receiving server in one request.",
   transfer:
     "Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces).",
+  "public-lines":
+    "Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`.",
 } as const satisfies Record<string, string>;
 
 export type Feature = keyof typeof FEATURES;

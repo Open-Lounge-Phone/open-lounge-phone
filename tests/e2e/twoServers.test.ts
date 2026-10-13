@@ -14,6 +14,7 @@ import {
   knockAndAccept,
   mergeAcross,
   noAnswerAcross,
+  publicLineAcross,
   removeAndWipe,
   roomsAcross,
   rotateMidCall,
@@ -91,7 +92,7 @@ afterAll(() => {
   for (const entry of running) stop(entry);
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer", async () => {
+it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer, public line", async () => {
   onTestFailed(() =>
     reportLogs(
       running.map((r) => r.log),
@@ -115,4 +116,6 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key 
   await block(jesse, bob);
   // A team space on A takes Bob's call and transfers him to its ring group.
   await workplaceAcross(a, bob);
+  // A shop on A publishes a line; Bob calls it without connecting, waits, leaves a voicemail.
+  await publicLineAcross(a, bob);
 }, 90_000);

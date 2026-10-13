@@ -281,6 +281,20 @@
           }
         },
         "required": ["kind", "deviceId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "line"
+          },
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          }
+        },
+        "required": ["kind", "handle"]
       }
     ]
   },
@@ -361,6 +375,20 @@
               }
             },
             "required": ["kind", "deviceId"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "line"
+              },
+              "handle": {
+                "type": "string",
+                "pattern": "^[a-z0-9._-]{2,30}$"
+              }
+            },
+            "required": ["kind", "handle"]
           }
         ]
       },
@@ -1043,6 +1071,39 @@
                   }
                 },
                 "required": ["by"]
+              },
+              "queue": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "voicemail": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "line": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": ["name"]
               }
             },
             "required": ["t", "callId", "state"]
@@ -1634,6 +1695,28 @@
               }
             },
             "required": ["t", "callId", "msg"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "string",
+                "const": "call.voicemail"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "callId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            },
+            "required": ["t", "callId"]
           }
         ]
       }

@@ -38,6 +38,7 @@ import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
+import { lineRoutes } from "./lines.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
@@ -413,11 +414,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   api.get("/devices/:id/contacts", async (c) => {
     const device = await manageable(c.get("user"), c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    const [contacts, buttons, remote, rooms] = await Promise.all([
+    const [contacts, buttons, remote, rooms, lines] = await Promise.all([
       store.listContacts(device.id),
       store.listButtons(device.id),
       store.listRemoteContacts(device.id),
       store.rooms.onPhone(device.id),
+      store.lines.onPhone(device.id),
     ]);
     const host = ownHost(env, c.req.url);
     return c.json({
@@ -432,6 +434,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       })),
       // Rooms the phone may join: `rk_…` ids in `contacts`.
       rooms: rooms.map((r) => ({ id: r.id, roomId: r.roomId, label: r.label })),
+      // Public lines on its keys (personal phones only): `ln_…` ids in `contacts`.
+      lines: lines.map((l) => ({ id: l.id, address: l.address, label: l.label })),
     });
   });
 
@@ -774,6 +778,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   workplaceRoutes(api, env, live);
+  lineRoutes(api, env, live);
   recordingRoutes(api, env);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);

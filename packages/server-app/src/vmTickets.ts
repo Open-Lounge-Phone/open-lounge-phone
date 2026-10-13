@@ -19,6 +19,7 @@ import { fairUseProblem } from "./fairUse.ts";
 import { FederationError, fedFetch, outbound } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import type { Vars } from "./httpUtil.ts";
+import { lineGreeting } from "./lines.ts";
 import { peerSupports } from "./peers.ts";
 import {
   depositVoicemail,
@@ -130,8 +131,9 @@ async function targetGreeting(env: ServerEnv, t: VmTarget): Promise<Response> {
     );
   }
   if (t.kind === "device") return greetingResponse(await greetingOf(env, { deviceId: t.deviceId }));
-  // A ring group has the spoken default greeting, with its name.
-  if (t.kind === "group") return greetingResponse({ kind: "default" });
+  // A ring group has the spoken default greeting with its name, unless its public line has
+  // a greeting of its own.
+  if (t.kind === "group") return greetingResponse(await lineGreeting(env, t.groupId));
   if (t.kind === "relay") {
     if (t.host === LOCAL_HOST) {
       // Another household here (a transfer between spaces on this server): its own ticket.

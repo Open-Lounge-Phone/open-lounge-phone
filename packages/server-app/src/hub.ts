@@ -10,17 +10,24 @@ import {
   huntSteps,
   isOpen,
   isQuietAt,
+  LINE_ENDED_NOTE,
   localClock,
   loungeDayEnd,
   MAX_RING_SECONDS,
   type Meeting,
+  maxWaitOutcome,
   mayConnect,
+  mayLeaveVoicemailInstead,
   NO_EXTENSION_NOTE,
   newRoom,
   nextQuietChange,
   nextRoundRobin,
+  noQueueOutcome,
   type PartyCall,
   pickRecorder,
+  queueAdmit,
+  queueOrder,
+  queuePositions,
   RECORDING_MAX_MS,
   RECORDING_MODELS,
   type RoomEvent,
@@ -36,10 +43,13 @@ import {
   type Device,
   deviceMode,
   type HouseLineKey,
+  isLineContactId,
   isRemoteContactId,
   isRoomContactId,
   LOCAL_HOST,
   newId,
+  type PublicLine,
+  type RingGroup,
   type Room as StoredRoom,
   type User,
   type VoicemailOwner,
@@ -69,6 +79,7 @@ import {
   type ConferenceSnapshot,
   type Conn,
   type HuntState,
+  type LineCallState,
   LOUNGE_NONCE_TTL_MS,
   LOUNGE_PROOF_MS,
   LOUNGE_RECONNECT_GRACE_MS,
@@ -91,6 +102,7 @@ import {
   sendGuestProgress,
 } from "./fedCalls.ts";
 import { ownHost } from "./federation.ts";
+import { admitLineCall, lineInfo, logLineCaller } from "./lines.ts";
 import { type LiveRoom, LiveRooms, type RoomInbound } from "./liveRooms.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { SWEEP_EVERY_MS, sweepSpace } from "./timeline.ts";
@@ -129,17 +141,31 @@ class FedConn implements Conn {
   readonly to: { host: string; householdId?: string };
   private leg: string | undefined;
   private readonly offers: boolean;
+  /** Someone calling our public line: `ringing` (queue updates) goes to them too. */
+  private readonly lineCaller: boolean;
 
   constructor(
     env: ServerEnv,
     to: { host: string; householdId?: string },
     leg?: string,
     offers = false,
+    lineCaller = false,
   ) {
     this.env = env;
     this.to = to;
     this.leg = leg;
     this.offers = offers;
+    this.lineCaller = lineCaller;
+  }
+
+  /** Our caller would rather leave a voicemail than wait in the far line's queue. */
+  voicemail(callId: string): void {
+    const calls = this.env.calls;
+    if (!calls) return;
+    const signal: FedSignal = { t: "call.voicemail", callId: this.leg ?? callId };
+    this.line.chain = this.line.chain
+      .then(() => calls.signal(this.to, signal))
+      .catch((e) => this.env.log("warn", "federated signal failed", { error: String(e) }));
   }
 
   /** Keeps signals of a transferred call and its successor in one order. */
@@ -168,7 +194,7 @@ class FedConn implements Conn {
       return;
     }
     if (msg.t !== "call.state" && msg.t !== "rtc.sdp" && msg.t !== "rtc.ice") return;
-    if (msg.t === "call.state" && msg.state === "ringing") return;
+    if (msg.t === "call.state" && msg.state === "ringing" && !this.lineCaller) return;
     // A voicemail offer never crosses to the other server, except to a Lounge phone there where
     // one of our accounts is a guest, and to someone whose call our team/org space transferred
     // (their server relays it to them; see `relayOffer`).
@@ -269,6 +295,12 @@ interface Room {
   noRecording?: boolean;
   /** The far server's explanation for ending it (e.g. it doesn't take recorded calls). */
   endNote?: string;
+  /** A call to one of our public lines: its place in the queue (see `pumpLines`). */
+  line?: LineCallState;
+  /** The line's longest-wait timer. */
+  cancelWait?: () => void;
+  /** A call to a public line elsewhere: queue updates and its voicemail offer pass through. */
+  farLine?: boolean;
 }
 
 /** Someone signed in at another Lounge phone and open to chat ("who's here"). */
@@ -415,6 +447,8 @@ export class HouseholdHub {
         ...(r.hunt ? { hunt: r.hunt } : {}),
         ...(r.recording ? { recording: r.recording } : {}),
         ...(r.noRecording ? { noRecording: true } : {}),
+        ...(r.line ? { line: r.line } : {}),
+        ...(r.farLine ? { farLine: true } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -472,10 +506,14 @@ export class HouseholdHub {
         ...(snap.hunt ? { hunt: snap.hunt } : {}),
         ...(snap.recording ? { recording: snap.recording } : {}),
         ...(snap.noRecording ? { noRecording: true } : {}),
+        ...(snap.line ? { line: snap.line } : {}),
+        ...(snap.farLine ? { farLine: true } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
     }
+    // Callers waiting in a public line's queue keep their place and their longest wait.
+    for (const room of this.rooms.values()) if (room.line) this.armWait(room);
     if (conferences) {
       const byPeerSession = new Map(peers.map((p) => [p.session, p]));
       this.conf.restore(conferences.rooms, byPeerSession);
@@ -540,6 +578,7 @@ export class HouseholdHub {
       }
       await this.scheduleWake();
       this.maybeSweep();
+      this.kickLines();
       return peer;
     });
   }
@@ -569,6 +608,7 @@ export class HouseholdHub {
         conn.send(this.memberMessage(userId, avail));
       }
       if (cameOnline) this.broadcastMember(user.id, available.get(user.id) ?? true);
+      this.kickLines();
       for (const d of await this.env.store.listDevices(this.householdId)) {
         // Everyone sees the Lounge phones (and who is at them).
         if (!peer.guardian && d.ownerUserId !== user.id && d.kind !== "lounge") continue;
@@ -627,7 +667,7 @@ export class HouseholdHub {
         void this.apply(room, { type: "hangup", by: room.state.caller });
       } else if (room.calleePeer === peer) {
         void this.apply(room, { type: "hangup", by: room.state.callee });
-      } else if (!room.calleePeer && this.ringTargets(room).length === 0) {
+      } else if (!room.calleePeer && !room.line?.waiting && this.ringTargets(room).length === 0) {
         // The last session or phone that was ringing for the callee went away (a ring group
         // moves on to its next step).
         if (room.hunt) void this.huntNext(room);
@@ -651,6 +691,7 @@ export class HouseholdHub {
           device.hook = msg.state;
           this.remember(device);
           if (device.lounge) await this.touchIdle(device);
+          if (msg.state === "down") this.kickLines();
           return;
         case "button":
           return this.deviceDial(device, msg.index);
@@ -707,6 +748,8 @@ export class HouseholdHub {
           return this.merge(peer, msg.callId, msg.with);
         case "call.transfer":
           return this.transfer(peer, msg);
+        case "call.voicemail":
+          return this.lineVoicemail(peer, msg.callId);
         case "room.leave":
         case "room.mute":
         case "room.remove":
@@ -743,7 +786,10 @@ export class HouseholdHub {
         case "presence.set":
           await this.env.store.setAvailable(peer.id, msg.available);
           this.broadcastMember(peer.id, msg.available);
+          if (msg.available) this.kickLines();
           return;
+        case "call.line":
+          return this.lineDial(peer, msg.address);
         case "lounge.claim":
           return this.loungeClaim(peer, msg.deviceId, msg.nonce);
         case "lounge.leave": {
@@ -772,6 +818,8 @@ export class HouseholdHub {
           return this.merge(peer, msg.callId, msg.with);
         case "call.transfer":
           return this.transfer(peer, msg);
+        case "call.voicemail":
+          return this.lineVoicemail(peer, msg.callId);
         case "room.join":
           if (msg.roomId) return this.joinById(peer, msg.roomId);
           return this.joinByAddress(peer, msg.address ?? "");
@@ -1034,6 +1082,10 @@ export class HouseholdHub {
     });
     if (decision.decision === "deny" || !contact) return this.refuse(device, "denied");
     if (isRoomContactId(contact.id)) return this.joinFromPhone(device, contact.id);
+    if (isLineContactId(contact.id)) {
+      const entry = await this.env.store.lines.contact(device.id, contact.id);
+      return entry ? this.lineDial(device, entry.address) : this.refuse(device, "denied");
+    }
     if (isRemoteContactId(contact.id)) return this.remoteContactDial(device, contact.id);
     const from = await this.vmCaller(device, device.label);
     const vm = from && {
@@ -1193,8 +1245,15 @@ export class HouseholdHub {
 
   /** Rings a person's targets here, and starts their branches elsewhere. */
   private ringAll(room: Room, targets: Peer[], plans: BranchPlan[], label: string): void {
+    // A public line's call shows who is calling, as their server vouches for them.
+    const line = room.line;
     for (const t of targets) {
-      t.conn.send({ t: "call.ringing", callId: room.id, from: { label } });
+      t.conn.send({
+        t: "call.ringing",
+        callId: room.id,
+        from: { label, ...(line ? { address: line.address } : {}) },
+        ...(line ? { line: line.info } : {}),
+      });
     }
     const calls = this.env.calls;
     if (!calls) return;
@@ -1433,6 +1492,10 @@ export class HouseholdHub {
     switch (r.state.phase) {
       case "connecting": {
         room.answered = true;
+        if (room.line) {
+          room.line.waiting = false;
+          room.cancelWait?.();
+        }
         room.cancelTimer?.();
         room.cancelTimer = this.env.setTimer(
           () => void this.run(() => this.apply(room, { type: "timeout" })),
@@ -1454,6 +1517,7 @@ export class HouseholdHub {
         return;
       case "ended": {
         room.cancelTimer?.();
+        room.cancelWait?.();
         this.rooms.delete(room.id);
         for (const [k, v] of this.handoffs) if (v === room.id) this.handoffs.delete(k);
         await this.logCall(room, r.state.reason ?? "hangup").catch((e) =>
@@ -1486,6 +1550,24 @@ export class HouseholdHub {
           const d = this.devices.get(p.id);
           if (d === p && d.lounge) await this.touchIdle(d);
         }
+        if (room.line) {
+          const outcome = room.answered
+            ? "answered"
+            : voicemail
+              ? "voicemail"
+              : reason === "hangup"
+                ? "hung up"
+                : "missed";
+          await logLineCaller(this.env, {
+            groupId: room.line.groupId,
+            householdId: this.householdId,
+            address: room.line.address,
+            name: room.line.name,
+            outcome,
+          });
+        }
+        // Someone may be free now (or a caller left the line): the queue moves.
+        this.kickLines();
         return;
       }
       default:
@@ -2372,6 +2454,7 @@ export class HouseholdHub {
     loungeRelay?: boolean;
     transferred?: boolean;
     kidsPhone?: boolean;
+    line?: boolean;
   }): Peer {
     return this.remoteFromInfo({
       session: newId("s"),
@@ -2387,6 +2470,7 @@ export class HouseholdHub {
       ...(info.loungeRelay ? { loungeRelay: true } : {}),
       ...(info.transferred ? { transferred: true } : {}),
       ...(info.kidsPhone ? { kidsPhone: true } : {}),
+      ...(info.line ? { line: true } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
     } as PeerInfo);
@@ -2402,7 +2486,8 @@ export class HouseholdHub {
         this.env,
         { host, ...(info.peerHousehold ? { householdId: info.peerHousehold } : {}) },
         info.leg,
-        info.loungeRelay === true || info.transferred === true,
+        info.loungeRelay === true || info.transferred === true || info.line === true,
+        info.line === true,
       ),
     };
   }
@@ -2528,6 +2613,8 @@ export class HouseholdHub {
       vmCheck?: VmCaller["check"];
       /** Calling a kids' phone elsewhere: never recorded. */
       kidsPhone?: boolean;
+      /** Calling a public line: its queue updates and voicemail offer come through. */
+      line?: boolean;
     },
   ): Promise<void> {
     const calls = this.env.calls;
@@ -2548,9 +2635,13 @@ export class HouseholdHub {
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
     const to = target.body.to;
     const host = target.host || ownHost(this.env);
+    const { line: _line, ...peerInfo } = target;
     const remote = this.remotePeer({
-      ...target,
-      address: to.kind === "person" ? `${to.handle}@${host}` : `device:${to.deviceId}@${host}`,
+      ...peerInfo,
+      address:
+        to.kind === "person" || to.kind === "line"
+          ? `${to.handle}@${host}`
+          : `device:${to.deviceId}@${host}`,
     });
     // The far end decides when it stops ringing (its own ring time); this is only a backstop.
     const room = this.openRoom(caller, remote.key, undefined, MAX_RING_SECONDS * 1000 + 5_000);
@@ -2558,6 +2649,7 @@ export class HouseholdHub {
     room.calleePeer = remote;
     if (vm) room.vm = vm;
     if (target.kidsPhone) room.noRecording = true;
+    if (target.line) room.farLine = true;
     this.roomsDirty = true;
     await calls.register(target.host, room.id, this.householdId);
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
@@ -2572,8 +2664,11 @@ export class HouseholdHub {
     void calls.place(target.host, body, this.householdId).then(
       (r) =>
         r.state === "ended"
-          ? this.run(() => {
+          ? this.run(async () => {
               if (r.note) room.endNote = r.note;
+              // A public line offers its own box: our caller gets an offer that forwards there.
+              if (r.voicemail && room.farLine)
+                await this.relayOffer(room, target.host, r.voicemail);
               return this.apply(room, { type: "end", reason: r.reason });
             })
           : undefined,
@@ -2621,6 +2716,16 @@ export class HouseholdHub {
         );
         this.ringAll(room, targets, plans, req.label);
         return { state: "ringing" };
+      }
+      if (req.target.kind === "line") {
+        return this.lineRing(req.target.groupId, {
+          host: req.host,
+          key: req.key,
+          label: req.label,
+          peerHousehold: req.peerHousehold,
+          callId: req.callId,
+          address: req.address ?? "",
+        });
       }
       if (req.target.kind === "guest") {
         // Ring our Lounge phone where the calling server's account is a guest right now.
@@ -2698,6 +2803,10 @@ export class HouseholdHub {
         }
         return;
       }
+      if (msg.t === "call.voicemail") {
+        // Their caller would rather leave a message than wait in our line.
+        return remote === room.caller ? this.lineVoicemail(remote, room.id) : undefined;
+      }
       if (room.branches?.includes(remote)) {
         // One of the places ringing for the callee elsewhere.
         if (msg.t !== "call.state") return;
@@ -2714,6 +2823,16 @@ export class HouseholdHub {
         return this.apply(room, { type: "answer", by: room.state.callee });
       }
       const party = remote === room.caller ? "caller" : "callee";
+      if (msg.t === "call.state" && msg.state === "ringing") {
+        // A public line elsewhere: its name, and our caller's place in its queue.
+        if (party !== "callee" || !room.farLine || room.state.phase !== "ringing") return;
+        if (msg.line) {
+          remote.label = msg.line.name.slice(0, 24);
+          this.roomsDirty = true;
+        }
+        room.caller.conn.send({ ...msg, callId: room.id });
+        return;
+      }
       if (msg.t === "call.state") {
         if (msg.state === "ended" && msg.merged) {
           return this.convertToLeg(room, remote, msg.merged.roomId);
@@ -2913,7 +3032,7 @@ export class HouseholdHub {
     if (guest) {
       if (guest.host !== host) return;
       from = { label: guest.name.slice(0, 24), address: `device:${caller.id}` };
-    } else if (far.transferred && !room.vm && caller.kind !== "remote") {
+    } else if ((far.transferred || room.farLine) && !room.vm && caller.kind !== "remote") {
       from = await this.vmCaller(caller, caller.label);
     }
     if (!from) return;
@@ -3189,7 +3308,13 @@ export class HouseholdHub {
     caller: Peer,
     groupId: string,
     label: string,
-    opts: { except?: string; forwarded?: boolean; id?: string },
+    opts: {
+      except?: string;
+      forwarded?: boolean;
+      id?: string;
+      /** A call to the group's public line: it may wait in the line's queue. */
+      line?: { line: PublicLine; address: string; name: string };
+    },
   ): Promise<Room | Refusal> {
     const { store } = this.env;
     const group = await store.workplace.group(groupId);
@@ -3208,7 +3333,9 @@ export class HouseholdHub {
         group.id,
       );
       if (action.kind === "group") {
-        return this.openToGroup(caller, action.groupId, label, { ...opts, forwarded: true });
+        // A forwarded call follows that group's own ringing (it never waits in a line).
+        const { line: _l, ...rest } = opts;
+        return this.openToGroup(caller, action.groupId, label, { ...rest, forwarded: true });
       }
       if (action.kind === "user" && action.userId !== opts.except) {
         const r = await this.openToUser(caller, action.userId, label, opts.id);
@@ -3216,27 +3343,49 @@ export class HouseholdHub {
       }
       return { reason: "voicemail", note: CLOSED_NOTE, vm: box };
     }
-    const availability = await store.availability(this.householdId);
-    const steps = huntSteps(
-      group.strategy,
-      group.members,
-      (u) =>
-        u !== opts.except &&
-        (availability.get(u) ?? true) &&
-        !this.busy(userKey(u)) &&
-        !this.ringingForGroup(u) &&
-        this.reachable(u, caller).length > 0,
-      group.nextIndex,
-    );
+    const line = opts.line;
+    // Callers already waiting in the line go first: a new one joins at the end.
+    const waiting = line ? this.waitingFor(group.id) : [];
+    const steps = waiting.length ? [] : await this.huntFor(group, caller, opts.except);
     const first = steps[0];
-    if (!first) return { reason: "unavailable", vm: box };
+    const stepMs = group.ringSeconds * 1000;
+    const now = this.env.now();
+    // Places in line are strictly ordered, even for callers in the same millisecond.
+    let since = now;
+    for (const r of this.rooms.values()) if (r.line) since = Math.max(since, r.line.since + 1);
+    const lineState = (w: boolean): LineCallState | undefined =>
+      line && {
+        groupId: group.id,
+        info: lineInfo(this.env, line.line, group),
+        address: line.address,
+        name: line.name,
+        since,
+        waiting: w,
+        waitUntil: now + line.line.queueWaitSeconds * 1000,
+      };
+    if (!first) {
+      if (!line) return { reason: "unavailable", vm: box };
+      const admit = queueAdmit(line.line, waiting.length);
+      if (admit === "full") return { reason: "busy", vm: box };
+      if (admit === "off") return { reason: "unavailable", vm: box };
+      // Nobody free: wait in line (see `pumpLines`), no ringing until someone is.
+      const room = this.openRoom(caller, `hg:${group.id}`, opts.id, stepMs);
+      room.cancelTimer?.();
+      room.cancelTimer = undefined;
+      room.hunt = { groupId: group.id, name: group.name, steps: [], step: 0, stepMs, label };
+      room.group = [];
+      room.line = lineState(true);
+      this.armWait(room);
+      return room;
+    }
     if (group.strategy === "round_robin") {
       await store.workplace.setNextIndex(group.id, nextRoundRobin(group.members, first[0] ?? ""));
     }
-    const stepMs = group.ringSeconds * 1000;
     const room = this.openRoom(caller, `hg:${group.id}`, opts.id, stepMs);
     room.hunt = { groupId: group.id, name: group.name, steps, step: 0, stepMs, label };
     room.group = first;
+    room.line = lineState(false);
+    if (room.line) this.armWait(room);
     this.armHunt(room);
     this.ringAll(
       room,
@@ -3269,7 +3418,7 @@ export class HouseholdHub {
   private async huntNext(room: Room): Promise<void> {
     const hunt = room.hunt;
     if (this.rooms.get(room.id) !== room || room.calleePeer || !hunt) return;
-    if (room.state.phase !== "ringing") return;
+    if (room.state.phase !== "ringing" || room.line?.waiting) return;
     for (const t of this.ringTargets(room)) {
       t.conn.send({ t: "call.state", callId: room.id, state: "ended", reason: "hangup" });
     }
@@ -3288,6 +3437,7 @@ export class HouseholdHub {
     }
     room.group = [];
     this.roomsDirty = true;
+    if (room.line && !room.line.done) return this.backInLine(room);
     await this.apply(room, { type: "timeout" });
   }
 
@@ -3301,6 +3451,396 @@ export class HouseholdHub {
     room.group = (room.group ?? []).filter((u) => u !== person);
     this.roomsDirty = true;
     if (room.group.length === 0) await this.huntNext(room);
+  }
+
+  // --- public lines (docs/workplace.md "Public lines") -------------------------------------
+
+  /** The steps a ring group would ring now (members who are free and reachable). */
+  private async huntFor(
+    group: Pick<RingGroup, "id" | "strategy" | "members" | "nextIndex">,
+    caller: Peer,
+    except?: string,
+  ): Promise<string[][]> {
+    const availability = await this.env.store.availability(this.householdId);
+    return huntSteps(
+      group.strategy,
+      group.members,
+      (u) =>
+        u !== except &&
+        (availability.get(u) ?? true) &&
+        !this.busy(userKey(u)) &&
+        !this.ringingForGroup(u) &&
+        this.reachable(u, caller).length > 0,
+      group.nextIndex,
+    );
+  }
+
+  /** Calls waiting in a line's queue, first come first served. */
+  private waitingFor(groupId: string): Room[] {
+    const waiting = [...this.rooms.values()]
+      .filter((r) => r.line?.groupId === groupId && r.line.waiting && r.state.phase === "ringing")
+      .map((room) => ({ callId: room.id, since: room.line?.since ?? 0, room }));
+    return queueOrder(waiting).map((e) => e.room);
+  }
+
+  /** Someone may have come free, or a caller left a line: let the queues move (soon). */
+  private kickLines(): void {
+    if (![...this.rooms.values()].some((r) => r.line?.waiting)) return;
+    void this.run(() => this.pumpLines());
+  }
+
+  /**
+   * Rings the line's members for the callers at the front of each queue, as long as there is
+   * someone free to ring, then tells everyone still waiting their place.
+   */
+  private async pumpLines(): Promise<void> {
+    const groups = new Set<string>();
+    for (const r of this.rooms.values()) if (r.line?.waiting) groups.add(r.line.groupId);
+    for (const groupId of groups) {
+      for (const room of this.waitingFor(groupId)) {
+        if (!(await this.ringFromLine(room))) break;
+      }
+      await this.sendQueue(groupId);
+    }
+  }
+
+  /** The caller at the front of the line: ring the members who are free now, if any. */
+  private async ringFromLine(room: Room): Promise<boolean> {
+    const state = room.line;
+    const hunt = room.hunt;
+    if (!state || !hunt) return false;
+    const group = await this.env.store.workplace.group(state.groupId);
+    if (!group) return false;
+    const except = room.caller.kind === "user" ? room.caller.id : personOf(room.caller);
+    const steps = await this.huntFor(group, room.caller, except);
+    const first = steps[0];
+    if (!first) return false;
+    if (group.strategy === "round_robin") {
+      await this.env.store.workplace.setNextIndex(
+        group.id,
+        nextRoundRobin(group.members, first[0] ?? ""),
+      );
+    }
+    state.waiting = false;
+    state.sent = undefined;
+    room.hunt = { ...hunt, steps, step: 0, stepMs: group.ringSeconds * 1000 };
+    room.group = first;
+    this.roomsDirty = true;
+    // No `queue`: the line is ringing for them again.
+    room.caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    this.ringAll(
+      room,
+      first.flatMap((u) => this.reachable(u, room.caller)),
+      [],
+      hunt.label,
+    );
+    this.armHunt(room);
+    return true;
+  }
+
+  /** Tells each caller waiting in a line their place (only when it changed). */
+  private async sendQueue(groupId: string): Promise<void> {
+    const waiting = this.waitingFor(groupId);
+    if (!waiting.length) return;
+    const line = await this.env.store.lines.get(groupId);
+    const positions = queuePositions(
+      waiting.map((r) => ({ callId: r.id, since: r.line?.since ?? 0 })),
+    );
+    const instead = !!line && mayLeaveVoicemailInstead(line);
+    for (const r of waiting) {
+      const state = r.line as LineCallState;
+      const place = positions.get(r.id);
+      const queue = {
+        ...(line?.showPosition !== false && place ? place : {}),
+        ...(instead && r.vm ? { voicemail: true } : {}),
+      };
+      const key = JSON.stringify(queue);
+      if (state.sent === key) continue;
+      state.sent = key;
+      this.roomsDirty = true;
+      r.caller.conn.send({ t: "call.state", callId: r.id, state: "ringing", queue });
+    }
+  }
+
+  /** The line's longest wait for this caller (re-armed after the host slept). */
+  private armWait(room: Room): void {
+    const state = room.line;
+    if (!state || state.done) return;
+    room.cancelWait?.();
+    room.cancelWait = this.env.setTimer(
+      () => void this.run(() => this.lineWaitOver(room)),
+      Math.max(0, state.waitUntil - this.env.now()),
+    );
+  }
+
+  /** The line rang its members for this caller and nobody answered: back to their place. */
+  private async backInLine(room: Room): Promise<void> {
+    const state = room.line as LineCallState;
+    const line = await this.env.store.lines.get(state.groupId);
+    if (!line?.queue) return this.apply(room, { type: "timeout" });
+    room.cancelTimer?.();
+    room.cancelTimer = undefined;
+    state.waiting = true;
+    this.roomsDirty = true;
+    if (state.expired || this.env.now() >= state.waitUntil) return this.lineWaitOver(room);
+    await this.sendQueue(state.groupId);
+  }
+
+  /** A caller waited the line's longest wait: voicemail, overflow, or the end, as it says. */
+  private async lineWaitOver(room: Room): Promise<void> {
+    const state = room.line;
+    if (this.rooms.get(room.id) !== room || !state || state.done) return;
+    if (room.calleePeer || room.state.phase !== "ringing") return;
+    if (!state.waiting) {
+      // Members are ringing for them right now: it applies if nobody answers.
+      state.expired = true;
+      this.roomsDirty = true;
+      return;
+    }
+    const line = await this.env.store.lines.get(state.groupId);
+    const action = line ? maxWaitOutcome(line, state.groupId) : { kind: "end" as const };
+    state.waiting = false;
+    state.done = true;
+    room.cancelWait?.();
+    this.roomsDirty = true;
+    if (action.kind === "voicemail") return this.apply(room, { type: "end", reason: "timeout" });
+    if (action.kind === "group") return this.overflowToGroup(room, action.groupId);
+    if (action.kind === "user") return this.overflowToUser(room, action.userId);
+    room.vm = undefined;
+    room.endNote = action.message ?? LINE_ENDED_NOTE;
+    return this.apply(room, { type: "end", reason: "unavailable" });
+  }
+
+  /** After the longest wait: ring another ring group of the space instead (no queue there). */
+  private async overflowToGroup(room: Room, groupId: string): Promise<void> {
+    const group = await this.env.store.workplace.group(groupId);
+    if (!group || group.householdId !== this.householdId) {
+      return this.apply(room, { type: "end", reason: "unavailable" });
+    }
+    if (room.vm) {
+      room.vm = { ...room.vm, target: { kind: "group", groupId: group.id, name: group.name } };
+    }
+    const steps = await this.huntFor(group, room.caller);
+    const first = steps[0];
+    if (!first) return this.apply(room, { type: "end", reason: "unavailable" });
+    const label = room.hunt?.label ?? room.caller.label;
+    const stepMs = group.ringSeconds * 1000;
+    room.state = { ...room.state, callee: `hg:${group.id}` };
+    room.hunt = { groupId: group.id, name: group.name, steps, step: 0, stepMs, label };
+    room.group = first;
+    this.roomsDirty = true;
+    room.caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    this.ringAll(
+      room,
+      first.flatMap((u) => this.reachable(u, room.caller)),
+      [],
+      label,
+    );
+    this.armHunt(room);
+  }
+
+  /** After the longest wait: ring one member instead. */
+  private async overflowToUser(room: Room, userId: string): Promise<void> {
+    const user = await this.env.store.getUser(userId);
+    if (user && room.vm) {
+      room.vm = { ...room.vm, target: { kind: "user", userId, name: user.name } };
+    }
+    const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
+    const targets = this.reachable(userId, room.caller);
+    if (!user || user.householdId !== this.householdId || !available || !targets.length) {
+      return this.apply(room, { type: "end", reason: "unavailable" });
+    }
+    if (this.busy(userKey(userId))) return this.apply(room, { type: "end", reason: "busy" });
+    const label = room.hunt?.label ?? room.caller.label;
+    room.state = { ...room.state, callee: userKey(userId) };
+    room.hunt = undefined;
+    room.group = undefined;
+    this.roomsDirty = true;
+    room.caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    this.ringAll(room, targets, [], label);
+    room.cancelTimer?.();
+    room.cancelTimer = this.env.setTimer(
+      () => void this.run(() => this.apply(room, { type: "timeout" })),
+      await this.personRingMs(userId),
+    );
+  }
+
+  /**
+   * The caller would rather leave a voicemail than wait: for a line here, end the wait with the
+   * line's offer; for a line elsewhere, ask its server (the offer comes back with `ended`).
+   */
+  private async lineVoicemail(peer: Peer, callId: string): Promise<void> {
+    const room = this.rooms.get(callId);
+    if (!room || room.caller !== peer || room.state.phase !== "ringing") return;
+    if (room.farLine) {
+      const far = room.calleePeer;
+      if (far?.kind === "remote") (far.conn as FedConn).voicemail(room.id);
+      return;
+    }
+    const state = room.line;
+    if (!state || state.done || !room.vm) return;
+    const line = await this.env.store.lines.get(state.groupId);
+    if (!line || !mayLeaveVoicemailInstead(line)) return;
+    state.waiting = false;
+    state.done = true;
+    this.roomsDirty = true;
+    await this.apply(room, { type: "end", reason: "voicemail" });
+  }
+
+  /**
+   * Someone here calls a public line by its address (`call.line`, or a line on a phone's key):
+   * a line of this space directly, any other through `/fed/v1/calls` (another household here is
+   * reached the same way, without the network). Never from a kids' phone.
+   */
+  private async lineDial(peer: Peer, address: string): Promise<void> {
+    const { store } = this.env;
+    if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_LINES);
+    const as = await this.callingAs(peer);
+    const user = as && (await store.getUser(as.id));
+    const account = user && (await store.getAccount(user.accountId));
+    if (!as || !account) return this.refuse(peer, "denied");
+    const addr = parseAddress(address);
+    if (!addr) return this.refuse(peer, "unavailable");
+    if (addr.host !== ownHost(this.env)) {
+      return this.lineRemote(peer, as, account, addr.host, addr.handle, undefined);
+    }
+    const line = await store.lines.byHandle(addr.handle);
+    if (!line?.enabled) return this.refuse(peer, "unavailable");
+    if (line.householdId !== this.householdId) {
+      return this.lineRemote(peer, as, account, LOCAL_HOST, addr.handle, line.householdId);
+    }
+    const callerAddress = `${account.handle}@${ownHost(this.env)}`;
+    const admitted = await admitLineCall(this.env, line, {
+      address: callerAddress,
+      host: LOCAL_HOST,
+      accountId: account.id,
+      name: as.label,
+      kidsPhone: false,
+    });
+    if (!admitted) return this.refuse(peer, "unavailable");
+    if (!this.canDial(peer)) return this.refuse(peer, "busy");
+    const allowance = await this.allowance(peer, as);
+    if (allowance.note) return this.refuse(peer, "denied", allowance.note);
+    const opened = await this.openToGroup(peer, line.groupId, as.label, {
+      except: as.id,
+      line: { line, address: callerAddress, name: as.label },
+    });
+    const from = await this.vmCaller(peer, as.label, as);
+    const vmOk = noQueueOutcome(line) === "voicemail";
+    if (!("state" in opened)) {
+      await this.lineRefused(line, callerAddress, as.label, opened);
+      const vm = from && opened.vm && vmOk ? { target: opened.vm, from } : undefined;
+      return this.refuse(peer, opened.reason, opened.note, vm);
+    }
+    opened.payer = allowance.payer;
+    const target = vmOk ? await this.vmTargetOf(opened) : undefined;
+    if (from && target) opened.vm = { target, from };
+    this.roomsDirty = true;
+    peer.conn.send({
+      t: "call.state",
+      callId: opened.id,
+      state: "ringing",
+      ...(opened.line ? { line: opened.line.info } : {}),
+    });
+    await this.sendQueue(line.groupId);
+  }
+
+  /** A public line in another household here (host '') or on another server. */
+  private async lineRemote(
+    peer: Peer,
+    as: { id: string; label: string },
+    account: Account,
+    host: string,
+    handle: string,
+    peerHousehold: string | undefined,
+  ): Promise<void> {
+    return this.dialRemote(peer, {
+      as,
+      host,
+      key: `fed:${host}:line:${handle}`,
+      label: handle.slice(0, 24),
+      peerHousehold,
+      body: { from: partyOf(account), to: { kind: "line", handle } },
+      line: true,
+    });
+  }
+
+  /**
+   * Someone elsewhere calls one of our public lines (already admitted by `admitLineCall`): ring
+   * its members, or let them wait in its queue. The line's voicemail offer goes to their server,
+   * which relays it to them.
+   */
+  private async lineRing(
+    groupId: string,
+    req: {
+      host: string;
+      key: string;
+      label: string;
+      peerHousehold: string | undefined;
+      callId: string;
+      address: string;
+    },
+  ): Promise<RingResult> {
+    const line = await this.env.store.lines.get(groupId);
+    if (!line?.enabled || line.householdId !== this.householdId) {
+      return { state: "ended", reason: "unavailable" };
+    }
+    const remote = this.remotePeer({
+      host: req.host,
+      key: req.key,
+      label: req.label,
+      peerHousehold: req.peerHousehold,
+      address: req.address,
+      line: true,
+    });
+    const opened = await this.openToGroup(remote, groupId, req.label, {
+      id: req.callId,
+      line: { line, address: req.address, name: req.label },
+    });
+    const from: VmCaller = { label: req.label, address: req.address };
+    const vmOk = noQueueOutcome(line) === "voicemail";
+    if (!("state" in opened)) {
+      await this.lineRefused(line, req.address, req.label, opened);
+      const voicemail =
+        opened.vm && vmOk
+          ? await this.offer({ target: opened.vm, from }, opened.reason, this.env.now())
+          : undefined;
+      return {
+        state: "ended",
+        reason: opened.reason,
+        ...(opened.note ? { note: opened.note } : {}),
+        ...(voicemail ? { voicemail } : {}),
+      } as RingResult;
+    }
+    const target = vmOk ? await this.vmTargetOf(opened) : undefined;
+    if (target) opened.vm = { target, from };
+    this.roomsDirty = true;
+    remote.conn.send({
+      t: "call.state",
+      callId: opened.id,
+      state: "ringing",
+      ...(opened.line ? { line: opened.line.info } : {}),
+    });
+    await this.sendQueue(groupId);
+    return { state: "ringing" };
+  }
+
+  /** A line's caller who never got in line (closed, queue full or off), for "Recent callers". */
+  private async lineRefused(
+    line: PublicLine,
+    address: string,
+    name: string,
+    r: Refusal,
+  ): Promise<void> {
+    const outcome =
+      r.note === CLOSED_NOTE ? "closed" : r.reason === "busy" ? "line full" : "nobody free";
+    await logLineCaller(this.env, {
+      groupId: line.groupId,
+      householdId: this.householdId,
+      address,
+      name,
+      outcome,
+    });
   }
 
   // --- recording (docs/security-model.md) ------------------------------------------------
@@ -3476,7 +4016,9 @@ export class HouseholdHub {
       if (!device.owner && !device.lounge) {
         const allowed = new Set<string>();
         for (const c of await this.env.store.listContacts(device.id)) {
-          if (!isRemoteContactId(c.id) && !isRoomContactId(c.id)) allowed.add(userKey(c.id));
+          if (!isRemoteContactId(c.id) && !isRoomContactId(c.id) && !isLineContactId(c.id)) {
+            allowed.add(userKey(c.id));
+          }
         }
         for (const r of await this.env.store.listRemoteContacts(device.id)) {
           if (r.connection.peerAccount) {
@@ -3647,7 +4189,7 @@ export class HouseholdHub {
     // A key on the transferring phone: its allow-list entry for that key.
     if (by.kind !== "device") return undefined;
     const id = (await this.env.store.listButtons(by.id)).get(to.button);
-    if (!id || isRoomContactId(id)) return undefined;
+    if (!id || isRoomContactId(id) || isLineContactId(id)) return undefined;
     if (isRemoteContactId(id)) {
       const entry = (await this.env.store.listRemoteContacts(by.id)).find((r) => r.id === id);
       return entry ? { connectionId: entry.connectionId } : undefined;
@@ -4265,6 +4807,8 @@ const idOf = (key: string) => key.slice(4);
 type Refusal = { reason: EndReason; note?: string; vm?: VmTarget };
 
 const NO_EXTENSION = NO_EXTENSION_NOTE;
+/** Why a kids' phone's call to a public line is refused (on the phone, before anything else). */
+const KIDS_NO_LINES = "Kids' phones can't call public lines";
 const REMOTE_TRANSFER =
   "someone from another household or server can only be transferred inside a team or org space";
 const REMOTE_TARGET =

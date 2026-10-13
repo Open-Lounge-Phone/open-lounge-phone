@@ -2,6 +2,7 @@
 // `from` is one of that server's accounts, so a server can only speak for its own people.
 import {
   CallStateMsg,
+  CallVoicemail,
   RoomEnded,
   RoomHere,
   RoomIdle,
@@ -81,6 +82,11 @@ export const CallTarget = z.discriminatedUnion("kind", [
    * now: the guest's server rings them there too. Only for the server that vouched for them.
    */
   z.object({ kind: z.literal("guest"), deviceId: Id }),
+  /**
+   * A public line (feature `public-lines`): a team's or organization's published ring group,
+   * by its handle. No connection needed; the receiver applies the line's own rules.
+   */
+  z.object({ kind: z.literal("line"), handle: Handle }),
 ]);
 export type CallTarget = z.infer<typeof CallTarget>;
 
@@ -336,8 +342,17 @@ export const RoomJoinResult = z.union([
 ]);
 export type RoomJoinResult = z.infer<typeof RoomJoinResult>;
 
-/** Call signaling relayed between the two servers of a federated call (same shapes as clients). */
-export const FedSignal = z.discriminatedUnion("t", [CallStateMsg, RtcSdp, RtcIce, RoomSignal]);
+/**
+ * Call signaling relayed between the two servers of a federated call (same shapes as clients).
+ * `call.voicemail` (feature `public-lines`) goes from a caller's server to a public line's.
+ */
+export const FedSignal = z.discriminatedUnion("t", [
+  CallStateMsg,
+  RtcSdp,
+  RtcIce,
+  RoomSignal,
+  CallVoicemail,
+]);
 export type FedSignal = z.infer<typeof FedSignal>;
 export const StreamSignal = z.object({ t: z.literal("signal"), msg: FedSignal });
 

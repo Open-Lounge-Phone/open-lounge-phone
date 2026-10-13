@@ -17,7 +17,17 @@ export type DeviceState =
   | { kind: "idle" } // handset on the cradle
   /** Handset up, waiting for a key. `held`: a call this phone put on hold (MENU → Add caller). */
   | { kind: "offhook"; lastEnd?: EndReason; held?: string }
-  | { kind: "dialing"; button: number; callId?: string; held?: string } // not yet answered
+  /**
+   * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
+   * line, and whether key 1 leaves a voicemail instead).
+   */
+  | {
+      kind: "dialing";
+      button: number;
+      callId?: string;
+      held?: string;
+      queue?: { position?: number; size?: number; voicemail?: boolean };
+    }
   | { kind: "incoming"; callId: string; from: string } // ringing, handset down
   | {
       kind: "incall";
@@ -134,6 +144,10 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
         { t: "button", index: input.index },
       );
     }
+    // Waiting in a public line's queue: key 1 leaves a voicemail instead (when offered).
+    if (s.kind === "dialing" && s.queue?.voicemail && s.callId && input.index === 0) {
+      return stay(s, { t: "call.voicemail", callId: s.callId });
+    }
     if (s.kind === "incall" && s.transferPending) {
       const { transferPending: _t, ...rest } = s;
       return stay(rest, { t: "call.transfer", callId: s.callId, to: { button: input.index } });
@@ -205,7 +219,9 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
       if (msg.state === "connecting") {
         return stay({ kind: "incall", callId: msg.callId, connected: false, ...held });
       }
-      return stay({ ...s, callId: msg.callId });
+      // A public line's queue: the place in line; `ringing` without one = ringing again.
+      const { queue: _q, ...rest } = s;
+      return stay({ ...rest, callId: msg.callId, ...(msg.queue ? { queue: msg.queue } : {}) });
     }
     case "incoming":
       if (msg.callId !== s.callId) return stay(s);
@@ -286,7 +302,7 @@ export function soundFor(s: DeviceState): Sound {
     case "incoming":
       return "ring";
     case "dialing":
-      return "ringback";
+      return s.queue ? "hold" : "ringback";
     case "offhook":
       return s.lastEnd === undefined || s.lastEnd === "hangup" ? "dialtone" : "busy";
   }

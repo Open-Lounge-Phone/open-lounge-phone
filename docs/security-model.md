@@ -101,6 +101,16 @@ What the firmware does today (firmware/README.md has the details) and what is st
   lock a room.
 - **Default-deny calling**, enforced on the server. Kids' phones have no address and can't be
   knocked.
+- **Public lines are the one exception to knock-first** ([workplace.md](workplace.md#public-lines)):
+  a team or organization can publish a ring group at its own address that anyone may call without
+  connecting. Why that is safe enough: it is off until an owner or admin turns it on and confirms
+  a warning (audited); it reaches only the people the space put on that line, never a person's
+  own address or phone; every caller is identified by an address their server signs for, shown
+  to whoever answers; the space can block people and whole servers, and narrow the line to people
+  connected to it or to an allow-list; the operator's blocklist and per-caller and per-server
+  limits apply; a line that doesn't take you looks exactly like one that doesn't exist; and kids'
+  phones can never call one (their own server refuses, and the line's server refuses calls
+  flagged as from a kids' phone).
 - **Federation:** signed server-to-server requests (RFC 9421), server-key pinning, blocklists and
   rate limits.
 - **Lounge:** signing in needs a physical key press (proximity proof). Nothing stays on the phone,
