@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 from pathlib import Path
 
@@ -34,6 +35,10 @@ if not KICAD.exists():
     KICAD = Path("/Applications/KiCad/KiCad.app")
 # Face budgets: only meshes above these are thinned (the shell and cradles are well under them).
 FACES = {"tray": 120000, "lid": 80000, "bezel": 20000, "cradle": 24000, "board": 260000}
+# The site's hero background (OLP_TEASER_WEB=1 → scene-web.glb): lighter, it loads on the home page.
+WEB = os.environ.get("OLP_TEASER_WEB") == "1"
+if WEB:
+    FACES = {"tray": 60000, "lid": 40000, "bezel": 12000, "cradle": 12000, "board": 110000}
 STEP_TOL = 0.02          # mm: how closely STEP models (ESP32, display module) are meshed
 CREASE = math.radians(32)  # edges sharper than this stay sharp in the shading
 
@@ -382,7 +387,7 @@ def main() -> None:
     w, hgt = P.DISP_W, P.DISP_H                # display module (2.9"): green board + panel
     cx, cy = P.bx2x(P.DISP_X0 + w / 2), P.by2y(P.DISP_MID)
     for k, m in weact_module().items():
-        add(k, H.decimate(m, 60000))
+        add(k, H.decimate(m, 24000 if WEB else 60000))
     gx = P.bx2x(P.DISP_X0 + P.DSP["view_cx"])
     add("panel", trimesh.creation.box(bounds=[[gx - 39.5, cy - 15.5, P.Z_DISP + P.MODULE_PCB_T],
                                               [gx + 39.5, cy + 15.5, P.Z_DISP + P.MODULE_PCB_T + 1.0]]))
@@ -396,7 +401,7 @@ def main() -> None:
         hs.apply_transform(R)
         hs.apply_scale(210.0 / hs.extents[1])
         hs.apply_translation([-hs.centroid[0], -hs.centroid[1], -hs.bounds[0][2]])
-        hs = H.decimate(hs, 80000)
+        hs = H.decimate(hs, 30000 if WEB else 80000)
         v = hs.vertices                        # the handle's underside, mid-length
         mid = np.abs(v[:, 1]) < 12
         under_mid = float(v[mid, 2].min()) if mid.any() else hs.extents[2] * 0.55
@@ -415,7 +420,9 @@ def main() -> None:
     # computeVertexNormals() gives the same crisp-edged, smooth-curved shading.
     import trimesh.exchange.gltf.extensions as gltf_ext
     gltf_ext._DRACO_COMPRESSION = 10
-    (OUT / "scene.glb").write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=False,
+    if WEB:
+        gltf_ext._DRACO_QUANTIZATION = 12   # ~0.05 mm on a 200 mm part: invisible at hero size
+    (OUT / ("scene-web.glb" if WEB else "scene.glb")).write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=False,
                                                                       extension_draco=True))
     keys = [{"x": P.bx2x(bx), "y": P.by2y(by), "label": lab} for bx, by, lab in P.keys()]
     meta = {"keys": keys, "rides": rides, "plate": P.Z_LT, "cap_z": P.Z_LT + 6.6,
@@ -424,7 +431,8 @@ def main() -> None:
                         "lid": 56, "module": 86, "panel": 86, "keycap": 114, "bezel": 132,
                         "cradle": 160, "handset": 210}}
     (OUT / "scene.json").write_text(json.dumps(meta))
-    print("scene.glb", round((OUT / "scene.glb").stat().st_size / 1e6, 2), "MB;", len(scene.geometry), "meshes")
+    out = OUT / ("scene-web.glb" if WEB else "scene.glb")
+    print(out.name, round(out.stat().st_size / 1e6, 2), "MB;", len(scene.geometry), "meshes")
 
 
 if __name__ == "__main__":
