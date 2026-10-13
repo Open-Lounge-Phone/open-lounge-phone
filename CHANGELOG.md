@@ -10,9 +10,9 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.2.0 (not tagged yet)
+## 0.2.0 (2026-10-13, `server-v0.2.0`)
 
-Everything on `main` since `server-v0.1.0`. Device protocol and federation stay at version 1;
+Everything since `server-v0.1.0`; this is what l1 and the public hub run. Device protocol and federation stay at version 1;
 every change below is additive.
 
 - **Versions and features.** Servers advertise their software, the federation versions they
