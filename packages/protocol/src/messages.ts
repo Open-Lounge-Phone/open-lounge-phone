@@ -401,7 +401,7 @@ export const DeviceHello = z
     display: z
       .enum(["eink", "seg14", "oled", "none"])
       .describe(
-        "Status display fitted: `eink` = a 2.9-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
+        "Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
       ),
   })
   .describe("First message on every connection.");

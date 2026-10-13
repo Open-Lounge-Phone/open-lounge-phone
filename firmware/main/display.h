@@ -1,5 +1,5 @@
 // A tiny display interface: a 1-bit landscape framebuffer and a driver that shows it. The
-// standard module is the WeAct 2.9" e-paper (SSD1680); an OLED/TFT driver only has to fill in
+// standard module is the WeAct 2.13" e-paper (SSD1680, 250 x 122; the 2.9" also works); an OLED/TFT driver only has to fill in
 // another display_driver_t.
 #pragma once
 #include <stdbool.h>

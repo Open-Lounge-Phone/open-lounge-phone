@@ -10,7 +10,7 @@
 - audio:   ES8311 codec (datasheet reference parts) + 3.5 mm TRRS handset jack (CTIA):
            earpiece on tip + ring 1, mic on sleeve with an RC-filtered bias, insertion detect
            on the tip's normally-closed contact.
-- ui:      2x4 socket + 2 standoff holes for the WeAct 2.9" e-paper module, piezo ringer on one
+- ui:      2x4 socket for the WeAct 2.13" e-paper module (2 standoff holes for the 2.9" option), piezo ringer on one
            GPIO through an NPN, one reverse-mount status LED, board marking (logo + name) and
            four M3 mounting holes.
 
@@ -175,7 +175,7 @@ def audio(n, GND, V3V3):
 
 
 def ui(n, GND, VBUS, V3V3):
-    # display module socket (WeAct 2.9" e-Paper 2x4 order; the module plugs in directly)
+    # display module socket (WeAct e-Paper 2x4 order, 2.13" or 2.9"; the module plugs in directly)
     h = make("DISPLAY_HDR", ref="J3", note="SPI display module (WeAct 2.9\" plugs in)")
     h["VCC"] += V3V3
     h["GND"] += GND

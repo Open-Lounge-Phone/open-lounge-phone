@@ -2,7 +2,7 @@
 
 The **minimal board**: an ESP32-S3 module, one USB-C port for power
 and flashing, one 3.3 V regulator, 12 hot-swap MX keys and a hook switch wired straight to
-GPIOs, a socket for a ready-made 2.9" e-paper display module, a 3.5 mm jack with an ES8311
+GPIOs, a socket for a ready-made 2.13" e-paper display module, a 3.5 mm jack with an ES8311
 codec for an off-the-shelf analog handset, a piezo ringer and one status LED. 53 parts on a
 2-layer board. It has **no** battery, NFC, speaker, per-key LEDs, hardware mute switch or mic
 lights.

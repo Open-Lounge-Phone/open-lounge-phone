@@ -107,7 +107,7 @@ const CLOSE_REPLACED = 4000;
 const params = new URLSearchParams(location.search);
 const profile = params.get("profile")?.trim() || "default";
 const startedAt = Date.now();
-// The board has a header for a display module (standard: a 2.9-inch e-paper module).
+// The board has a header for a display module (standard: a 2.13-inch e-paper module, 250 x 122).
 // `none` = Kids Lite (no display; keys carry printed labels), `segments` = 14-segment module.
 const displayParam = params.get("display");
 const displayMode =

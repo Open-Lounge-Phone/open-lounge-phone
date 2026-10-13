@@ -5,7 +5,7 @@ parts whose 3D models KiCad's library lacks), switch, keycap, module, panel, han
 cradle-<style> per cradle (plain styles from build/proto, sculpted ones from build/hands).
 The page instances switch/keycap per key and recolours shells, cradles and the handset.
 
-    .venv/bin/python teaser.py      # after make proto (2.9" display) and make hands
+    .venv/bin/python teaser.py      # after make proto DISPLAY=2.9 and make hands
 
 The handset is the receiver of "Red Table Phone" by digitaldaydream (OpenGameArt, CC0): its
 object "Reciever.001", smoothed with Blender's subdivision (level 2), exported to
@@ -26,7 +26,9 @@ import numpy as np
 import trimesh
 
 import hands as H
-import proto_box as P
+# The teaser still shows WeAct's 2.9" module (their STEP model); the standard is now the 2.13".
+os.environ.setdefault("OLP_DISPLAY", "2.9")
+import proto_box as P  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "build" / "teaser"

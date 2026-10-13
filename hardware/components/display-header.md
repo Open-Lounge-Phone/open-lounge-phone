@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | MPN / maker | HX PM2.54-2x4P ZC (through-hole, vertical, 8.5 mm), HX (Hanxia) |
-| Function here | the WeAct Studio 2.9" e-Paper module plugs straight in; pin order = its 2x4 header (WeAct schematic, P1): 1 BUSY (IO48), 2 RES (IO38), 3 D/C (IO21), 4 CS (IO47), 5 SCL = CLK (IO13), 6 SDA = DIN (IO14), 7 GND, 8 VCC (3V3) |
+| Function here | the WeAct Studio 2.13" e-Paper module (standard) or 2.9" plugs straight in; pin order = its 2x4 header (WeAct schematic, P1): 1 BUSY (IO48), 2 RES (IO38), 3 D/C (IO21), 4 CS (IO47), 5 SCL = CLK (IO13), 6 SDA = DIN (IO14), 7 GND, 8 VCC (3V3) |
 | Datasheet | https://datasheet.lcsc.com/datasheet/pdf/482b54eeb534f75792299da9df2c4b10.pdf |
 | LCSC / JLC | C32713305; **extended**. Any 2x4 2.54 mm female header fits (hand-solder). |
 | Footprint | `Connector_PinSocket_2.54mm:PinSocket_2x04_P2.54mm_Vertical` |

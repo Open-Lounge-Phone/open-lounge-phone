@@ -131,11 +131,11 @@ spec(
 )
 
 spec(
-    # 2x4 2.54 mm female socket: the WeAct Studio 2.9" e-Paper module (the standard display,
+    # 2x4 2.54 mm female socket: the WeAct Studio 2.13" e-Paper module (the standard display; the 2.9" too,
     # owner M2 2026-09-30) plugs straight in with its 2x4 header, pin order from its drawing and
     # schematic (WeActStudio.EpaperModule, Hardware/, P1): 1 BUSY, 2 RES, 3 D/C, 4 CS, 5 SCL
     # (CLK), 6 SDA (DIN), 7 GND, 8 VDD (3.3-5 V; its own LDO). Two M3 standoffs at the far end
-    # hold the module (H5, H6). Other modules (Waveshare, OLED, TFT) use female-male jumpers.
+    # (H5, H6) hold the 2.9"; the 2.13" is held by the faceplate. Other modules (Waveshare, OLED, TFT) use female-male jumpers.
     "DISPLAY_HDR", ref="J", mpn="HX PM2.54-2x4P ZC", manufacturer="HX (Hanxia)", lcsc="C32713305",
     footprint="Connector_PinSocket_2.54mm:PinSocket_2x04_P2.54mm_Vertical",
     desc="2x4 2.54 mm female socket: WeAct 2.9\" e-Paper module (BUSY RES DC CS CLK DIN GND VCC)",

@@ -1,5 +1,6 @@
-// WeAct Studio 2.9" e-paper module (296 x 128, SSD1680) on SPI + DC/RST/BUSY. Command
-// sequence as in GxEPD2_290_T94 / the Waveshare 2.9" V2 driver (the same controller).
+// WeAct Studio e-paper module on SPI + DC/RST/BUSY: the 2.13" (250 x 122, standard) or the 2.9"
+// (296 x 128, CONFIG_OLP_EPD_213=n), both SSD1680. Command sequence as in GxEPD2_290_T94 / the
+// Waveshare 2.9" V2 driver (the same controller).
 // Full refresh (0x22 0xF7) every FULL_EVERY updates, fast partial refresh (0x22 0xFC, the
 // controller's built-in waveform) in between. TODO: confirm the partial mode on a real panel.
 #include <stdio.h>

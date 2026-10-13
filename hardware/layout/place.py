@@ -4,8 +4,9 @@
 
 Frame: mm, x right, y DOWN from the board's rear-left corner (KiCad's view from the top).
 Owner-approved placement defaults (DESIGN.md §9):
-  - 2 x 6 MX keys at 19.05 mm (rear 1 2 3 4 5 MENU, front 6 7 8 9 0 BACK); the WeAct 2.9"
-    e-paper module between the rows on J3 (2x4 socket) + two M3 standoffs (H5, H6)
+  - 2 x 6 MX keys at 19.05 mm (rear 1 2 3 4 5 MENU, front 6 7 8 9 0 BACK); the e-paper
+    module between the rows on J3 (2x4 socket): the WeAct 2.13" (standard) or the 2.9" on two M3
+    standoffs (H5, H6)
   - every SMD part on the BOTTOM (one-sided assembly); switches plug in from the top
   - hook = a 13th MX switch in a hot-swap socket, out of the key rows (left end)
   - USB-C J1 and the 3.5 mm jack J2 on the rear edge; the ESP32 module's U.FL at the left edge
@@ -49,7 +50,8 @@ YR, YF = 13.5, 74.5              # rear row (1..MENU), front row (6..BACK): 61 m
 COLS = [X0 + i * PITCH for i in range(6)]
 KEY_ORDER = ["1", "2", "3", "4", "5", "MENU", "6", "7", "8", "9", "0", "BACK"]   # SW3..SW14
 
-# WeAct 2.9" e-paper module (drawing: 91.8 x 37.5, holes 86.2 x 31.9 at 2.8 from the edges,
+# J3 and H5/H6 are placed for the WeAct 2.9" e-paper module (the 2.13" standard plugs into the same
+# J3; its far end is held by the faceplate) (drawing: 91.8 x 37.5, holes 86.2 x 31.9 at 2.8 from the edges,
 # 2x4 header 1.93 mm from the short edge). Header end on the LEFT, centred over digit columns.
 DISP_W, DISP_H = 91.8, 37.5
 DISP_X0 = COLS[2] - DISP_W / 2

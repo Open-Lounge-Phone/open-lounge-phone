@@ -14,7 +14,7 @@ Status: **M1 schematic** (SKiDL, `make build` checks it), **M2 placement** (`mak
 | Power | USB-C receptacle (5 V + native USB), 2 × 5.1 kΩ CC, one USB ESD part, one 3.3 V LDO | J1, D1, U2 |
 | Keys | 12 MX switches in Kailh-style hot-swap sockets, each on its own GPIO | SW3-SW14 |
 | Hook | one more MX switch in a hot-swap socket, pressed by the handset cradle | SW15 |
-| Display | 2x4 socket for the WeAct 2.9" e-paper module (plugs in) + 2 M3 standoff holes | J3, H5, H6 |
+| Display | 2x4 socket for the WeAct 2.13" e-paper module (plugs in); 2 M3 standoff holes for the 2.9" option | J3, H5, H6 |
 | Handset | 3.5 mm TRRS jack (CTIA) + ES8311 codec with its reference parts | J2, U3 |
 | Ringer | piezo buzzer on one GPIO through an NPN | BZ1, Q1 |
 | Status | one reverse-mount LED (shines up through a board hole) + resistor | D2 |
@@ -123,21 +123,24 @@ log drives that pin for a moment after reset, so a key held during boot only los
 
 ## 6. Display: a module on a socket
 
-The standard display is the **WeAct Studio 2.9" e-Paper module** (296 × 128 B/W, SSD1680,
-~$8 retail). It sits between the key rows, centred over the digit columns, and **plugs straight
+The standard display is the **WeAct Studio 2.13" e-Paper module** (250 × 122 B/W, SSD1680,
+72 × 30 mm board). It sits between the key rows and **plugs straight
 into J3**, a 2x4 2.54 mm female socket in the module's own header order (WeAct drawing and
 schematic, `WeActStudio.EpaperModule/Hardware/`): **1 BUSY, 2 RES, 3 D/C, 4 CS, 5 SCL (CLK),
 6 SDA (DIN), 7 GND, 8 VCC** (3V3; the module has its own LDO, boost and 100 Ω series
-resistors, no pull-ups on the lines). Its far end rests on **two M3 × 11 mm standoffs** in H5
-and H6, which match the module's own M3 holes (86.2 × 31.9 mm pattern, 2.8 mm from the edges
-of its 91.8 × 37.5 mm board). 11 mm = the socket's 8.5 mm + the module header's 2.5 mm plastic.
+resistors, no pull-ups on the lines). Its far end is located by **two posts under the
+faceplate** that come down onto the module's own holes (66.4 × 24.4 mm pattern). The board's
+H5 and H6 are spaced for the **WeAct 2.9"** (296 × 128, 91.8 × 37.5 mm board, holes
+86.2 × 31.9), which still fits as an option on two M3 × 11 mm standoffs there. 11 mm = the
+socket's 8.5 mm + the module header's 2.5 mm plastic.
 The module ships with a right-angle header: fit a straight 2x4 male header pointing down
 instead. Which end of that header is pin 1, seen from the panel side, is to be confirmed on a
 sample (the socket is placed for pin 1 at the module's outer column, lower row).
 
 | Module | Notes |
 |---|---|
-| **WeAct Studio 2.9" e-Paper** (standard) | plugs into J3 + 2 standoffs |
+| **WeAct Studio 2.13" e-Paper** (standard) | plugs into J3; the faceplate's posts hold its far end |
+| WeAct Studio 2.9" e-Paper | plugs into J3 + 2 standoffs in H5/H6; firmware `CONFIG_OLP_EPD_213=n` |
 | Waveshare 2.9" e-Paper Module (V2) | same controller; PH2.0 cable → female-male jumpers to J3 (order differs) |
 | 1.3" SPI OLED (SH1106/SSD1306) | 7 pins, no BUSY: jumper wires |
 | 1.54"-2.0" SPI TFT (ST7789) | BLK to 3V3: jumper wires; draws the most (budgeted 60 mA) |
@@ -186,9 +189,9 @@ sample (the socket is placed for pin 1 at the module's outer column, lower row).
 **Owner-approved placement defaults (2026-09-30), as built:**
 
 1. Two rows of 6 MX keys at 19.05 mm (`1 2 3 4 5 MENU` rear, `6 7 8 9 0 BACK` front), row
-   centres **61 mm** apart. The WeAct 2.9" module sits between the rows on J3 plus two M3 × 11
-   standoffs (H5, H6) at its own holes (§6), centred over the digit columns; 1.45 mm is left
-   between its bezel and each keycap row.
+   centres **61 mm** apart. The display module sits between the rows on J3 (§6): the 2.13"
+   standard, held at its far end by the faceplate; H5/H6 take standoffs for the 2.9" option,
+   which leaves 1.45 mm between its board and each keycap row.
 2. **All SMD parts on the bottom** (one-sided JLCPCB assembly). On top: only the plugged MX
    switches, J3 and the piezo (hand- or wave-soldered THT). The hot-swap sockets are on the
    bottom as usual.
@@ -310,8 +313,8 @@ shows key lights), no **speaker** (the piezo rings; prompts play in the earpiece
 ## 12. Owner decisions for M2 and what is still open
 
 Resolved 2026-09-30 by the owner-approved placement defaults (§9): board size and zones
-(156 × 88, electronics band at the left), all SMD on the bottom, the WeAct 2.9" as the standard
-display on J3 + standoffs, the hook as an MX switch out of the key rows, USB-C and jack on the
+(156 × 88, electronics band at the left), all SMD on the bottom, the WeAct 2.13" as the standard
+display on J3 (the 2.9" on standoffs as an option), the hook as an MX switch out of the key rows, USB-C and jack on the
 rear edge, a 12 mm piezo and one status LED seen from the top, a generic 2.4 GHz U.FL adhesive
 antenna.
 
@@ -339,4 +342,5 @@ Still open:
   JSCJ MMBT3904 rev 2.1 p1; Lite-On LTST-C230KRKT p1, p3; XKB TS-1187A rev A0; HanElectricity
   CPG151101S11-2 and Kailh KH-PS2206-43 drawings p1. Links in [components/](components/README.md).
 - WeAct Studio EpaperModule (github.com/WeActStudio/WeActStudio.EpaperModule, Hardware/):
-  2.9" board shape (91.8 × 37.5, holes 86.2 × 31.9, 2x4 header) and schematic (header order).
+  2.13" and 2.9" board shapes (72 × 30, holes 66.4 × 24.4; 91.8 × 37.5, holes 86.2 × 31.9;
+  the same 2x4 header) and schematic (header order).

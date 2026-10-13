@@ -6,8 +6,8 @@ The one source of truth for how the hardware phone looks, sounds and responds. T
 this page wins and the code is the bug.
 
 **The hardware** (`hardware/DESIGN.md`): 12 keys `1 2 3 4 5 MENU` / `6 7 8 9 0 BACK`, a hook
-switch under the cradle, a 2.9" e-paper screen (296 × 128, black on white; the 2.13" option is
-250 × 122), one red status LED, a piezo ringer (beeps only, no speech) and the handset's
+switch under the cradle, a 2.13" e-paper screen (250 × 122, black on white; the 2.9" option is
+296 × 128), one red status LED, a piezo ringer (beeps only, no speech) and the handset's
 earpiece and mic on the 3.5 mm jack. No speaker, no per-key lights, no battery.
 
 ## Screen

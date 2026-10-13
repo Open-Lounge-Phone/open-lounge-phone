@@ -1,6 +1,6 @@
 // Stand-in display for the Wokwi simulator: an ILI9341 SPI TFT (320 x 240), on the e-paper's
-// pins (CLK, DIN, CS, DC, RST; no BUSY). It draws the same 296 x 128 strip image, black on an
-// e-paper grey, centred. Wokwi has no supported 2.9" e-paper part (see ../README.md).
+// pins (CLK, DIN, CS, DC, RST; no BUSY). It draws the same screen image as the e-paper, black on
+// an e-paper grey, centred. Wokwi has no supported e-paper part (see ../README.md).
 #include <string.h>
 
 #include "board.h"

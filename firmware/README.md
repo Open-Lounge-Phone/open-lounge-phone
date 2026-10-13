@@ -362,11 +362,11 @@ pairing live, run `sim.sh interactive` and type the printed code into the compan
 server (Home → + Pair a phone). Another server: `server <address>` at the `olp>` prompt.
 
 Simulator notes (all only in the sim build):
-- **Display stand-in:** Wokwi has no supported 2.9" e-paper part. The community chip
+- **Display stand-in:** Wokwi has no supported e-paper part. The community chip
   (`board-epaper-2in9`, bonnyr/wokwi-ws29v2) takes one byte per chip select, animates every
   refresh line by line (the whole simulation ran at a fraction of real time) and dropped the
   simulator's connection. The sim uses Wokwi's ILI9341 SPI TFT on the same pins
-  (`main/display_ili9341.c`), drawing the same 296 × 128 strip image.
+  (`main/display_ili9341.c`), drawing the same screen image.
 - **TLS:** Wokwi emulates the S3's software ECC about 7× slower than silicon (a P-256 verify
   takes 1.4 s of simulated time, P-384 2.4 s), so a full handshake with the certificate bundle
   outlasted Cloudflare's handshake timeout. The sim trusts the servers' intermediate (Google

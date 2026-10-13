@@ -1,7 +1,7 @@
 """Open Lounge Phone core shell: a plain, functional enclosure for the minimal board.
 
     .venv/bin/python proto_box.py [--parts build/proto/board_parts.json] [--render]
-    OLP_DISPLAY=2.13 .venv/bin/python proto_box.py     # for the WeAct 2.13" module (build/proto-2.13/)
+    OLP_DISPLAY=2.9 .venv/bin/python proto_box.py      # for the WeAct 2.9" option (build/proto-2.9/)
 
 Standalone. Printed parts: TRAY and LID (the lid IS the MX switch plate) plus a display BEZEL.
 Outputs STL + STEP to build/proto/, numeric fit checks to build/proto/checks.txt (exit 1 on
@@ -32,15 +32,16 @@ from build123d import (
 )
 
 HERE = Path(__file__).resolve().parent
-# display module: the board's J3 and standoffs H5/H6 are placed for the WeAct 2.9"; the 2.13" plugs
-# into the same J3 (same header position at its end) and rests on two posts on the lid instead
+# display module: the WeAct 2.13" e-paper is the standard. It plugs into J3; its far end is held
+# by posts (on the lid here, under the face in faceplate.py). The board's standoff holes H5/H6 are
+# spaced for the WeAct 2.9", which still fits (OLP_DISPLAY=2.9) on standoffs.
 DISPLAYS = {
     "2.9": dict(w=91.8, h=37.5, holes=(86.2, 31.9), view=(68.0, 30.0), view_cx=91.8 / 2, posts=False),
     "2.13": dict(w=72.0, h=30.0, holes=(66.4, 24.4), view=(52.0, 26.0), view_cx=36.1, posts=True),
 }
-DISPLAY = os.environ.get("OLP_DISPLAY", "2.9")
+DISPLAY = os.environ.get("OLP_DISPLAY", "2.13")
 DSP = DISPLAYS[DISPLAY]
-OUT = HERE / "build" / ("proto" if DISPLAY == "2.9" else f"proto-{DISPLAY}")
+OUT = HERE / "build" / ("proto" if DISPLAY == "2.13" else f"proto-{DISPLAY}")
 
 # ---------------------------------------------------------------- board (= layout/place.py)
 BOARD_W, BOARD_H, BOARD_R, BOARD_T = 156.0, 88.0, 3.0, 1.6
@@ -504,9 +505,10 @@ def lid() -> Part:
 
 
 def bezel() -> Part:
-    """Frame over the display module: sits on the lid top, walls round the 2.9" module's footprint
-    (also covering the standoff holes when a 2.13" is fitted), a lip over the module with the
-    viewing window. z = 0 at the lid top, origin at the 2.9" module's centre."""
+    """Frame over the display module: sits on the lid top, walls round the 2.9" footprint the board
+    is placed for (covering the unused standoff holes when the standard 2.13" is fitted), a lip
+    over the module with the viewing window. z = 0 at the lid top, origin at that footprint's
+    centre."""
     iw, ih = STD_W + 2 * FIT, STD_H + 2 * FIT
     ow, oh = iw + 2 * BEZEL_WALL, ih + 2 * BEZEL_WALL
     top = Z_DISP + DISP_T - Z_LT

@@ -267,7 +267,7 @@ minimal board does not have them.)
 2. **Custom PCB** — the minimal board in a compact 3D-printed base: an
    off-the-shelf analog G-style handset (3.5 mm TRRS plug, e.g. the Opis 60s Micro) on a raised
    hook rest that presses an MX hook switch, USB-C power (also flashing and the console), 12
-   hot-swap keys wired straight to the ESP32, a 2.9" e-paper display module on a header, an ES8311
+   hot-swap keys wired straight to the ESP32, a 2.13" e-paper display module on a header, an ES8311
    codec, a piezo ringer and one status LED. No battery, NFC, speaker, per-key LEDs or hardware
    mute switch. Hardware v0.1 (rev A) is designed and routed, and its first boards were ordered
    (the `hw-v0.1` release).
