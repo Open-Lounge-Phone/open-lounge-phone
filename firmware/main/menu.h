@@ -19,6 +19,8 @@ typedef struct {
   menu_screen_t screen;
   int64_t last_input_ms;
   int voicemail;  // new messages (the phone's missed count), shown under 2
+  bool can_play;  // a person's own phone: 1 plays the messages, 3 clears them (vmplay.c)
+  bool kids;      // a kids' phone: a grown-up listens in the app
   // What the call screen offers now (phone_actions), set by the app before each key and render.
   phone_action_t actions[2];
   int n_actions;

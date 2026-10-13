@@ -1,5 +1,13 @@
 # Firmware changelog
 
+## 0.9.0 — 2026-10-13: listen on the phone
+
+- **Voicemail plays on the phone** (a person's own phone): MENU 2 → 1 with the handset up plays
+  each unheard message in the earpiece (1 again, 2 next, BACK stop) and marks it heard; 3 clears
+  them all. Needs a server with `voicemail-play` (messages are now recorded as 8 kHz WAV).
+- **Long text scrolls** in a loop instead of being cut off (names, the owner line, networks).
+- **About** shows the mark, `OPEN LOUNGE PHONE` and `OPEN SOURCE  OPENLOUNGEPHONE.APP`.
+
 ## 0.8.0 — 2026-10-13: messages, call menu, phone check
 
 - **Key map** when the handset is up: whose phone it is, then who is on each digit key (1-5 and

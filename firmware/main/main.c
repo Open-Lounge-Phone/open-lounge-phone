@@ -36,6 +36,8 @@
 #include "snake.h"
 #include "strip.h"
 #include "vmleave.h"
+#include "vmplay.h"
+#include "marquee.h"
 
 static const char *TAG = "olp";
 
@@ -208,6 +210,14 @@ static void sync_media(void) {
 
 static void draw_check(int w, int h, int64_t now);
 
+/** Characters per line at the size gfx_render_lines picks for `n` lines. */
+static int line_capacity(int w, int h, int n) {
+  int scale = n <= 2 ? 3 : 2;
+  while (scale > 1 && (16 * 6 * scale > w || n * 10 * scale > h)) scale--;
+  int cap = (w - 4) / (6 * scale);
+  return cap > 24 ? 24 : cap;
+}
+
 static void render(void) {
   int64_t now = now_ms();
   if (s_conn != s_conn_seen) {
@@ -227,7 +237,10 @@ static void render(void) {
   char lines[4][25] = {{0}};
   int n_status = 0;  // lines from the status strip (0 = a menu or another screen has them)
   s_menu.voicemail = s_cfg.missed_count;
-  int n = menu_lines(&s_menu, lines);
+  s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
+  s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
+  int n = vmplay_active() ? vmplay_lines(lines, now) : 0;
+  if (n == 0) n = menu_lines(&s_menu, lines);
   bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
   if (n == 0 && (ota_state() == OTA_DOWNLOADING || ota_state() == OTA_RESTARTING ||
                  (s_ota_manual && ota_state() == OTA_CHECKING))) {
@@ -260,8 +273,8 @@ static void render(void) {
     snprintf(lines[2], 25, "PRESS MENU 4");
     n = 3;
   }
+  char strip[2][STATUS_MAX + 1];
   if (n == 0) {
-    char strip[2][STATUS_WIDTH + 1];
     strip_input_t in = {
         .connection = s_conn,
         .pairing_code = s_code[0] ? s_code : NULL,
@@ -282,10 +295,14 @@ static void render(void) {
     in.wifi_problem = net_wifi_up() ? NULL : net_wifi_problem();
     n = strip_lines(&in, strip);
     n_status = n;
-    for (int i = 0; i < n; i++) strlcpy(lines[i], strip[i], sizeof lines[i]);
   }
   int w, h;
   display_size(&w, &h);
+  // Text longer than a line scrolls in a loop (marquee.c) instead of being cut off.
+  char full[4][STATUS_MAX + 1] = {{0}};
+  for (int i = 0; i < n; i++) snprintf(full[i], sizeof full[i], "%.40s", n_status ? strip[i] : lines[i]);
+  long step = (long)(now / MARQUEE_STEP_MS);
+  for (int i = 0; i < n; i++) marquee(lines[i], sizeof lines[i], full[i], line_capacity(w, h, n), step);
   if (s_boot_until && now >= s_boot_until) {
     s_boot_until = 0;
     if (!snake_active()) display_pixels(NULL);
@@ -325,23 +342,24 @@ static void render(void) {
               s_conn == CONN_ONLINE && !s_code[0] && s_menu.screen == MENU_CLOSED &&
               !selftest_active();
   if (keys && !snake_active() && !s_boot_until) {
-    char title[STATUS_WIDTH + 1] = "SPEED DIAL", footer[64], sig[sizeof s_keys_sig];
+    char title[STATUS_MAX + 1] = "SPEED DIAL", footer[96], sig[sizeof s_keys_sig];
     if (s_cfg.owner_mode[0]) strip_owner_line(title, &s_cfg);
-    if (n_status == 2) snprintf(footer, sizeof footer, "%s - %s", lines[0], lines[1]);
+    if (n_status == 2) snprintf(footer, sizeof footer, "%s - %s", full[0], full[1]);
     else snprintf(footer, sizeof footer, "PRESS A KEY TO CALL");
     const char *labels[10];
-    int at = snprintf(sig, sizeof sig, "%s|%s", title, footer);
-    for (int i = 0; i < 10; i++) {
-      labels[i] = s_cfg.labels[i];
+    for (int i = 0; i < 10; i++) labels[i] = s_cfg.labels[i];
+    // Long names scroll: then each step is a new picture.
+    long kstep = screen_keys_scrolls(w, h, title, labels, footer) ? step : 0;
+    int at = snprintf(sig, sizeof sig, "%ld|%s|%s", kstep, title, footer);
+    for (int i = 0; i < 10; i++)
       if (at < (int)sizeof sig) at += snprintf(sig + at, sizeof sig - at, "|%s", labels[i]);
-    }
     if (!s_keys_px || strcmp(sig, s_keys_sig)) {
       uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
       if (fb) {
-        screen_keys(fb, w, h, title, labels, footer);
+        screen_keys(fb, w, h, title, labels, footer, kstep);
         display_pixels(fb);
         free(fb);
-        ESP_LOGI(TAG, "KEYS %s", sig);
+        if (!kstep || !s_keys_px) ESP_LOGI(TAG, "KEYS %s", sig);
       }
       snprintf(s_keys_sig, sizeof s_keys_sig, "%s", sig);
       s_keys_px = true;
@@ -381,8 +399,12 @@ static void render(void) {
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
     s_shown_n = n;
-    ESP_LOGI(TAG, "STRIP [%s%s%s%s%s%s%s]", lines[0], n > 1 ? "|" : "", n > 1 ? lines[1] : "",
-             n > 2 ? "|" : "", n > 2 ? lines[2] : "", n > 3 ? "|" : "", n > 3 ? lines[3] : "");
+    static char logged[4][STATUS_MAX + 1];  // the log gets the whole text once, not each step
+    if (memcmp(full, logged, sizeof logged)) {
+      memcpy(logged, full, sizeof logged);
+      ESP_LOGI(TAG, "STRIP [%s%s%s%s%s%s%s]", full[0], n > 1 ? "|" : "", n > 1 ? full[1] : "",
+               n > 2 ? "|" : "", n > 2 ? full[2] : "", n > 3 ? "|" : "", n > 3 ? full[3] : "");
+    }
     const char *ptrs[4] = {lines[0], lines[1], lines[2], lines[3]};
     display_text(ptrs, n);
   }
@@ -702,6 +724,8 @@ static void on_message(char *text) {
     const char *code = jstr(m, "code");
     ESP_LOGW(TAG, "server error %s: %s", or_q(code), or_q(jstr(m, "message")));
     if (code && !strcmp(code, "unauthorized") && identity_device_id()[0]) forget_device_id();
+  } else if (!strcmp(t, "voicemail.items")) {
+    vmplay_items(m, now_ms());
   } else if (!strcmp(t, "rtc.config")) {
     // ICE servers for a call: start its peer connection now, so gathering (STUN/TURN) overlaps
     // with the signaling. The caller offers (it is still dialing here), the callee answers.
@@ -746,6 +770,7 @@ done:
 static void on_key(int index) {
   int64_t now = now_ms();
   signals_beep(BEEP_KEY);
+  if (vmplay_key(index, now)) return;  // listening to voicemail: 1 again, 2 next, BACK stop
   if (selftest_active()) {  // the self-test takes every key, MENU and BACK too
     selftest_key(index, now);
     return;
@@ -785,6 +810,7 @@ static void on_key(int index) {
 static void on_hook(bool up) {
   s_hook_up = up;
   if (!up) vm_leave_finish(now_ms());  // hanging up sends a message being recorded
+  if (!up) vmplay_stop();              // …and stops one playing
   selftest_hook(up, now_ms());
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
@@ -836,6 +862,7 @@ static void finish_selftest(void) {
 
 static void tick(void) {
   int64_t now = now_ms();
+  if (vmplay_active() && s_phone.kind == PH_INCOMING) vmplay_stop();  // a call comes first
   if (selftest_active() && s_phone.kind == PH_INCOMING) {  // a call comes first
     selftest_stop();
     finish_selftest();
@@ -843,6 +870,7 @@ static void tick(void) {
     finish_selftest();
   }
   vm_leave_tick(now);
+  vmplay_tick(now);
   ota_tick(now);
   menu_tick(&s_menu, now);
   if (s_reopen_at >= 0 && now >= s_reopen_at) {
@@ -915,6 +943,7 @@ void app_main(void) {
   audio_start(false);
 #endif
   media_init();
+  vmplay_init(emit);
   input_start();
   console_start();
   prov_init(&s_prov);
@@ -939,6 +968,18 @@ void app_main(void) {
         case EV_VM_SENT:
           vm_leave_sent(ev.a, now_ms());
           signals_beep(ev.a ? BEEP_OK : BEEP_ERROR);
+          break;
+        case EV_VM_PLAY:
+          if (ev.a == 0 && !s_hook_up) {  // listening needs the handset
+            snprintf(s_ota_msg[0], 25, "LIFT THE HANDSET");
+            snprintf(s_ota_msg[1], 25, "THEN MENU 2 1");
+            s_ota_msg_until = now_ms() + 4000;
+          } else if (s_authed) {
+            vmplay_start(ev.a == 1, now_ms());
+          }
+          break;
+        case EV_VM_LOADED:
+          vmplay_loaded(ev.a, now_ms());
           break;
         case EV_SELFTEST:
           if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {

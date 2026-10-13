@@ -17,6 +17,9 @@ earpiece and mic on the 3.5 mm jack. No speaker, no per-key lights, no battery.
   and the self-test.
 - **Status screens: 1 or 2 lines of at most 16 characters**, at 3× (18 px per character,
   288 px wide). This is the protocol's strip: the server never sends more.
+- **Longer text scrolls** instead of being cut off: a long name (a caller, a key's person, the
+  owner line, a Wi-Fi network) holds at its start for 2 s, then moves one character every 0.6 s
+  through to the end and round again.
 - **Menus and setup: 3 or 4 lines of at most 20 characters**, at 2× (12 px per character).
   20 keeps every screen readable on the 2.13" (250 px wide).
 - **What's on screen is what to do next.** A second line names the action (`LIFT TO ANSWER`,
@@ -54,7 +57,8 @@ Highest priority first: the first row that applies is shown.
 | Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
-| Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids), or `3 MISSED CALLS` / each name in turn (3 s) |
+| Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
+| Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app) |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Ready | `READY 14:05` (local time, once the server has sent its clock; `READY` before) / the owner line: `KIDS: SMITHS`, `LOUNGE: STUDIO`, `ANA'S PHONE` |
 
@@ -84,7 +88,7 @@ The menu closes by itself after 20 s without a key.
 | Key | Item | On the phone |
 |---|---|---|
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
-| 2 | Voicemail: how many new messages (`PLAY IN APP`); greetings are planned | yes |
+| 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard; a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). Greetings from the phone are planned | yes |
 | 3 | Wi-Fi: network, signal, address; 1 opens the setup network | yes |
 | 4 | Server: which one; 1 opens the setup network to change it | yes |
 | 5 | Lounge: open to chat on / off | planned |
@@ -92,7 +96,7 @@ The menu closes by itself after 20 s without a key.
 | 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, time running and clock, memory; 1 starts the self-test | yes |
 | 8 | Lounge: log out | planned |
 | 9 | Update now (official firmware with updates on) | yes |
-| 0 | About: a page with the firmware, board and server, and the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone | yes |
+| 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |
 
 Root screen: `MENU` / `1 VOLUME 2 VOICEMAIL` / `3 WI-FI 4 SERVER` / `7 CHECK 0 ABOUT`, with
 `9 UPDATE` where updates are on and it fits (9 works either way).

@@ -29,6 +29,12 @@ void audio_call(bool on, audio_sender_t sender);
 void audio_record(int16_t *buf, size_t max_samples);
 size_t audio_recorded(void);
 size_t audio_record_stop(void);
+/**
+ * Playing a voicemail: 8 kHz 16-bit samples to the earpiece (the buffer must stay alive until
+ * audio_play(NULL, 0)). audio_played() says how far it got (== count: finished).
+ */
+void audio_play(const int16_t *samples, size_t count);
+size_t audio_played(void);
 /** This phone put the call on hold: the mic is off and silence is sent; nothing plays. */
 void audio_hold(bool held);
 /** A received mu-law frame (any length) from the call. Safe from any task. */

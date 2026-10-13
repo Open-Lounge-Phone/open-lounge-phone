@@ -30,6 +30,8 @@ typedef enum {
   EV_CALL_ACTION,  // MENU in a call: a = phone_action_t
   EV_SELFTEST,     // MENU -> 7 -> 1: start the self-test
   EV_VM_SENT,      // a = 1 the voicemail upload worked
+  EV_VM_PLAY,      // MENU -> 2: a = 0 play the messages, 1 clear them (mark heard)
+  EV_VM_LOADED,    // a = 1 a message's audio downloaded
 } ev_type_t;
 
 typedef struct {

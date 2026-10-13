@@ -57,6 +57,12 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     } else if (d == 9) {
       m->screen = MENU_VOLUME;
     }
+  } else if (m->screen == MENU_VOICEMAIL && m->can_play) {
+    int d = digit_of(key);
+    if (d == 1 || (d == 3 && m->voicemail > 0)) {
+      app_post(EV_VM_PLAY, d == 3, NULL);
+      m->screen = MENU_CLOSED;
+    }
   } else if (m->screen == MENU_CHECK) {
     if (digit_of(key) == 1) {
       app_post(EV_SELFTEST, 0, NULL);
@@ -123,7 +129,11 @@ int menu_lines(const menu_t *m, char out[4][25]) {
     case MENU_VOICEMAIL:
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
       else snprintf(out[0], 25, "NO NEW VOICEMAIL");
-      snprintf(out[1], 25, "%s", m->voicemail > 0 ? "PLAY IN APP" : "");
+      if (m->can_play) {
+        snprintf(out[1], 25, "%s", m->voicemail > 0 ? "1 PLAY 3 CLEAR" : "1 PLAY");
+        return 2;
+      }
+      snprintf(out[1], 25, "%s", m->voicemail > 0 ? (m->kids ? "ASK A GROWN-UP" : "PLAY IN APP") : "");
       return m->voicemail > 0 ? 2 : 1;
     case MENU_VOLUME: {
       static const char *levels[] = {"", "SOFT", "MEDIUM", "LOUD"};

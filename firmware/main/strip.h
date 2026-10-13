@@ -1,11 +1,13 @@
-// A C mirror of `statusLines` (apps/device-web/src/strip.ts): ≤ 2 uppercase lines × 16 chars.
+// A C mirror of `statusLines` (apps/device-web/src/strip.ts): ≤ 2 uppercase lines; a line
+// longer than 16 characters (a long name) scrolls on screen.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 #include "phone.h"
 #include "vmleave.h"
 
-#define STATUS_WIDTH 16
+#define STATUS_WIDTH 16  // what fits a line; longer text (names) scrolls on screen (marquee.c)
+#define STATUS_MAX 40    // the longest line kept
 #define MAX_BUTTONS 16
 #define MAX_MISSED 8
 
@@ -39,6 +41,6 @@ typedef struct {
 } strip_input_t;
 
 /** Returns the number of lines (1 or 2) written to out. */
-int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]);
-/** The trust line: "KIDS: SMITHS", "ANA'S PHONE", "LOUNGE: STUDIO" (≤ 16 chars; config.owner). */
+int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]);
+/** The trust line: "KIDS: SMITHS", "ANA'S PHONE", "LOUNGE: STUDIO" (≤ STATUS_MAX chars). */
 void strip_owner_line(char *dst, const phone_config_t *c);

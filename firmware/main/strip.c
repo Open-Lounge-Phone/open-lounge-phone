@@ -8,22 +8,22 @@
 
 static void clip(char *dst, const char *src) {
   int i = 0;
-  for (; src[i] && i < STATUS_WIDTH; i++) dst[i] = (char)toupper((unsigned char)src[i]);
+  for (; src[i] && i < STATUS_MAX; i++) dst[i] = (char)toupper((unsigned char)src[i]);
   dst[i] = '\0';
 }
 
-static int set1(char out[2][STATUS_WIDTH + 1], const char *a) {
+static int set1(char out[2][STATUS_MAX + 1], const char *a) {
   clip(out[0], a);
   return 1;
 }
-static int set2(char out[2][STATUS_WIDTH + 1], const char *a, const char *b) {
+static int set2(char out[2][STATUS_MAX + 1], const char *a, const char *b) {
   clip(out[0], a);
   clip(out[1], b);
   return 2;
 }
 
 /** "CALLING MOM" on one line when it fits, else "CALLING" / "GRANDMA JOSEPHINE". */
-static int with_name(char out[2][STATUS_WIDTH + 1], const char *prefix, const char *name,
+static int with_name(char out[2][STATUS_MAX + 1], const char *prefix, const char *name,
                      const char *suffix) {
   char one[96];
   snprintf(one, sizeof one, "%s%s%s%s%s", prefix, (*prefix && *name) ? " " : "", name,
@@ -60,7 +60,7 @@ void strip_owner_line(char *dst, const phone_config_t *c) {
   clip(dst, buf);
 }
 
-int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
+int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
   const phone_state_t *s = in->state;
   const char *name = in->active_label ? in->active_label : "";
   char buf[48];
@@ -122,7 +122,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
   if (in->vm_stage == VM_FAILED) return set1(out, "MESSAGE NOT SENT");
 
   const phone_config_t *c = in->config;
-  char quiet[STATUS_WIDTH + 1] = "";
+  char quiet[STATUS_MAX + 1] = "";
   if (c && c->quiet) {
     if (c->quiet_until[0]) snprintf(buf, sizeof buf, "QUIET TIL %s", c->quiet_until);
     else snprintf(buf, sizeof buf, "QUIET HOURS");
@@ -152,7 +152,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
     snprintf(ready, sizeof ready, "READY %02d:%02d", in->local_minute / 60, in->local_minute % 60);
   const char *first = quiet[0] ? quiet : ready;
   if (c && c->owner_mode[0]) {
-    char owner[STATUS_WIDTH + 1];
+    char owner[STATUS_MAX + 1];
     strip_owner_line(owner, c);
     return set2(out, first, owner);
   }

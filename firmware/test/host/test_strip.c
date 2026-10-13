@@ -8,7 +8,7 @@ TEST(strip_ready_clock) {
   phone_config_t cfg = {.present = true};
   strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
                       .call_started_ms = -1, .local_minute = -1};
-  char out[2][STATUS_WIDTH + 1];
+  char out[2][STATUS_MAX + 1];
   CHECK(strip_lines(&in, out) == 1);
   CHECK_STR(out[0], "READY");
   in.local_minute = 14 * 60 + 5;
@@ -27,7 +27,7 @@ TEST(strip_leave_a_message) {
   snprintf(ph.from, sizeof ph.from, "MOM");
   strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
                       .local_minute = -1, .vm_stage = VM_BEEP};
-  char out[2][STATUS_WIDTH + 1];
+  char out[2][STATUS_MAX + 1];
   strip_lines(&in, out);
   CHECK_STR(out[0], "LEAVE A MESSAGE");
   CHECK_STR(out[1], "MOM");
@@ -40,4 +40,18 @@ TEST(strip_leave_a_message) {
   in.vm_stage = VM_SENT;
   CHECK(strip_lines(&in, out) == 1);
   CHECK_STR(out[0], "MESSAGE SENT");
+}
+
+TEST(strip_keeps_long_names_whole) {
+  phone_state_t ph;
+  phone_init(&ph);
+  phone_config_t cfg = {.present = true, .missed_count = 1};
+  snprintf(cfg.missed[0], sizeof cfg.missed[0], "Claude test phone");
+  snprintf(cfg.owner_mode, sizeof cfg.owner_mode, "personal");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "MISSED CALL");
+  CHECK_STR(out[1], "CLAUDE TEST PHONE");  // scrolls on screen, not cut to 16
 }

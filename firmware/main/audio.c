@@ -26,6 +26,8 @@ static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
 static bool s_offhook, s_call, s_held;
 static int16_t *s_rec_buf;  // leaving a voicemail: the mic goes here (no call needed)
+static const int16_t *s_play_buf;  // playing a voicemail to the earpiece
+static size_t s_play_len, s_play_pos;
 static size_t s_rec_max, s_rec_len;
 static tone_t s_tone_want;
 static audio_sender_t s_sender;
@@ -151,6 +153,21 @@ size_t audio_record_stop(void) {
   return n;
 }
 
+void audio_play(const int16_t *samples, size_t count) {
+  taskENTER_CRITICAL(&s_lock);
+  s_play_buf = samples;
+  s_play_len = samples ? count : 0;
+  s_play_pos = 0;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
+size_t audio_played(void) {
+  taskENTER_CRITICAL(&s_lock);
+  size_t n = s_play_pos;
+  taskEXIT_CRITICAL(&s_lock);
+  return n;
+}
+
 void audio_hold(bool held) {
   taskENTER_CRITICAL(&s_lock);
   s_held = held;
@@ -168,6 +185,7 @@ static void task(void *arg) {
     taskENTER_CRITICAL(&s_lock);
     bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
     bool rec = s_rec_buf != NULL;
+    bool play = s_play_buf != NULL;
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
     bool forced = s_forced_tone != TONE_NONE;
     audio_sender_t sender = s_sender;
@@ -181,7 +199,7 @@ static void task(void *arg) {
       s_dev->mic(mic_want);
       mic_now = mic_want;
     }
-    bool speaker_want = offhook || loop_ms > 0 || forced;
+    bool speaker_want = offhook || loop_ms > 0 || forced || play;
     if (speaker_want != speaker_now) {
       s_dev->speaker(speaker_want);
       speaker_now = speaker_want;
@@ -229,6 +247,15 @@ static void task(void *arg) {
     } else if (call) {
       if (ring_pop(out, DSP_FRAME, START_FILL)) measure(&s_rx_meter, out, DSP_FRAME, true);
       if (held) memset(out, 0, sizeof out);
+    }
+    if (play) {
+      taskENTER_CRITICAL(&s_lock);
+      if (s_play_buf) {
+        size_t n = s_play_len - s_play_pos < DSP_FRAME ? s_play_len - s_play_pos : DSP_FRAME;
+        memcpy(out, s_play_buf + s_play_pos, n * sizeof(int16_t));
+        s_play_pos += n;
+      }
+      taskEXIT_CRITICAL(&s_lock);
     }
     tone_mix(&s_tone, out, DSP_FRAME);
     s_dev->write(out, DSP_FRAME);  // blocks ~20 ms

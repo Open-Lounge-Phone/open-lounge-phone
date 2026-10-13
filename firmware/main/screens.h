@@ -1,5 +1,6 @@
 // Pixel screens beyond text: the boot logo, the setup QR code, About and the diagnostics page (docs/phone-ux.md).
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 
 /** The boot screen: the mark and "OPEN LOUNGE PHONE", the firmware version small. */
@@ -16,6 +17,9 @@ void screen_page(uint8_t *fb, int w, int h, const char *title, const char *const
  * status at the bottom ("PRESS A KEY TO CALL", "BUSY - PRESS A KEY").
  */
 void screen_keys(uint8_t *fb, int w, int h, const char *title, const char *const labels[10],
-                 const char *footer);
+                 const char *footer, long step);
+/** Something on the key map is too long and scrolls (marquee.c): redraw it every step. */
+bool screen_keys_scrolls(int w, int h, const char *title, const char *const labels[10],
+                         const char *footer);
 /** The setup screen: a QR code that joins the setup network, and the same steps in words. */
 void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass);
