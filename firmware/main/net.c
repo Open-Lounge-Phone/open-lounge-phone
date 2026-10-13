@@ -92,9 +92,12 @@ const char *net_wifi_problem(void) {
     case WIFI_REASON_AUTH_FAIL:
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
-    case WIFI_REASON_AUTH_EXPIRE:
     case WIFI_REASON_MIC_FAILURE:
       return "WRONG PASSWORD?";
+    case WIFI_REASON_AUTH_EXPIRE:     // the router never finished the first handshake:
+    case WIFI_REASON_ASSOC_EXPIRE:    // usually the radio (antenna, distance), not the password
+    case WIFI_REASON_BEACON_TIMEOUT:
+      return "WEAK WI-FI";
     case WIFI_REASON_NO_AP_FOUND:
     case WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD:
       return "NETWORK NOT SEEN";
@@ -123,9 +126,12 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     const wifi_event_sta_disconnected_t *d = data;
     s_reason = d ? d->reason : -1;
     const char *why = net_wifi_problem();
-    ESP_LOGW(TAG, "wifi disconnected (reason %d%s%s%s); retry in %d ms", s_reason, why ? ": " : "",
-             why ? why : "", s_reason == WIFI_REASON_NO_AP_FOUND ? ", 5 GHz only? out of range?" : "",
-             delay);
+    ESP_LOGW(TAG, "wifi disconnected (reason %d%s%s%s, rssi %d dBm); retry in %d ms", s_reason,
+             why ? ": " : "", why ? why : "",
+             s_reason == WIFI_REASON_NO_AP_FOUND        ? ", 5 GHz only? out of range?"
+             : !strcmp(why ? why : "", "WEAK WI-FI") ? ", check the antenna on the U.FL"
+                                                     : "",
+             d ? d->rssi : 0, delay);
     esp_timer_stop(s_retry);
     esp_timer_start_once(s_retry, (uint64_t)delay * 1000);
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {

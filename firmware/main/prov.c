@@ -64,6 +64,8 @@ static void scan(void) {
   }
   free(recs);
   ESP_LOGI(TAG, "scan: %d networks", s_naps);
+  for (int i = 0; i < s_naps && i < 8; i++)  // signal per network: below -80 dBm is too weak to join
+    ESP_LOGI(TAG, "scan: %-32s %4d dBm%s", s_aps[i].ssid, s_aps[i].rssi, s_aps[i].secure ? "" : " open");
 }
 
 // --- the setup site -------------------------------------------------------------------------

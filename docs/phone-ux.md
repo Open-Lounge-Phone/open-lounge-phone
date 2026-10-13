@@ -38,7 +38,7 @@ Highest priority first: the first row that applies is shown.
 | No server chosen | `SET UP:` / `CHOOSE A SERVER` / `PRESS MENU 4` |
 | Pairing | `PAIR 123 456` / `ENTER IN APP` |
 | No Wi-Fi saved | `NO WI-FI` / `PRESS MENU 3` |
-| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `WRONG PASSWORD?`, `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
+| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `WRONG PASSWORD?`, `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
 | Connecting | `CONNECTING` |
 | Calling | `CALLING MOM` (or `CALLING` / long name) |
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
