@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "display.h"
+#include "gfx.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "signals.h"
@@ -41,15 +42,11 @@ static void place_food(void) {
   } while (on_body(s_food, 0));
 }
 
-static void fill(int x0, int y0, int w, int h) {
-  int row = (s_w + 7) / 8;
-  for (int y = y0; y < y0 + h && y < s_h; y++)
-    for (int x = x0; x < x0 + w && x < s_w; x++) s_fb[y * row + x / 8] |= 0x80 >> (x % 8);
-}
+static void fill(int x0, int y0, int w, int h) { gfx_rect(s_fb, s_w, s_h, x0, y0, w, h, true); }
 
 static void draw(void) {
   int ox = (s_w - s_cols * CELL) / 2, oy = (s_h - s_rows * CELL) / 2;
-  memset(s_fb, 0, (size_t)((s_w + 7) / 8) * s_h);
+  memset(s_fb, 0, (size_t)(s_w * s_h + 7) / 8);
   fill(ox - 2, oy - 2, s_cols * CELL + 4, 1);                  // a thin frame
   fill(ox - 2, oy + s_rows * CELL + 1, s_cols * CELL + 4, 1);
   fill(ox - 2, oy - 2, 1, s_rows * CELL + 4);
@@ -63,7 +60,7 @@ static void draw(void) {
 
 static void start_game(int64_t now) {
   display_size(&s_w, &s_h);
-  if (!s_fb) s_fb = calloc(1, (size_t)((s_w + 7) / 8) * s_h);
+  if (!s_fb) s_fb = calloc(1, (size_t)(s_w * s_h + 7) / 8);
   s_cols = (s_w - 6) / CELL;
   s_rows = (s_h - 6) / CELL;
   s_len = 3;

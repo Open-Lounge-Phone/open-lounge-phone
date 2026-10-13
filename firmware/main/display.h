@@ -24,7 +24,8 @@ void display_epd_probe(void);
 void display_start(const display_driver_t *drv);
 /** Show up to 4 lines of text (≤ 2 lines use large type, as the protocol's strip model). */
 void display_text(const char *const *lines, int n);
-/** Show a ready-made framebuffer instead of text (width*height bits, 1 = black); NULL goes back
+/** Show a ready-made framebuffer instead of text (width*height bits packed row after row with no
+ * padding, as gfx draws them; 1 = black); NULL goes back
  * to text, redrawn on the next display_text. */
 void display_pixels(const uint8_t *fb);
 void display_size(int *w, int *h);

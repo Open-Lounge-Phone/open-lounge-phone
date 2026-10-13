@@ -37,7 +37,7 @@ static void task(void *arg) {
     xSemaphoreGive(s_lock);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     bool custom = s_custom_on, fresh = s_custom_new;
-    if (custom && fresh) memcpy(s_fb, s_custom, (size_t)((s_drv->width + 7) / 8) * s_drv->height);
+    if (custom && fresh) memcpy(s_fb, s_custom, (size_t)(s_drv->width * s_drv->height + 7) / 8);
     s_custom_new = false;
     xSemaphoreGive(s_lock);
     if (custom) {
@@ -79,7 +79,7 @@ void display_text(const char *const *lines, int n) {
 
 void display_pixels(const uint8_t *fb) {
   if (!s_task) return;
-  size_t bytes = (size_t)((s_drv->width + 7) / 8) * s_drv->height;
+  size_t bytes = (size_t)(s_drv->width * s_drv->height + 7) / 8;  // packed: rows back to back
   xSemaphoreTake(s_lock, portMAX_DELAY);
   if (fb) {
     if (!s_custom) s_custom = malloc(bytes);

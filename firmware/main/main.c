@@ -266,7 +266,7 @@ static void render(void) {
     if (!snake_active()) display_pixels(NULL);
   }
   if (qr && !snake_active() && !s_boot_until && !s_setup_qr) {
-    uint8_t *fb = calloc(1, (size_t)((w + 7) / 8) * h);
+    uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
     if (fb) {
       screen_setup(fb, w, h, prov_ssid(), prov_password());
       display_pixels(fb);
@@ -726,7 +726,7 @@ void app_main(void) {
   {
     int w, h;
     display_size(&w, &h);
-    uint8_t *fb = calloc(1, (size_t)((w + 7) / 8) * h);
+    uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
     if (fb && !forced_setup) {
       screen_boot(fb, w, h, FW_VERSION);
       display_pixels(fb);

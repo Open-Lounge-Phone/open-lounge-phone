@@ -8,7 +8,7 @@
 #include "qrcode.h"
 
 void screen_boot(uint8_t *fb, int w, int h, const char *version) {
-  memset(fb, 0, (size_t)((w + 7) / 8) * h);
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
   int s = 3, gap = 14;
   int tw = gfx_text_width("LOUNGE", s);
   int x0 = (w - (BOOT_LOGO_W + gap + tw)) / 2, y0 = (h - BOOT_LOGO_H) / 2;
@@ -51,7 +51,7 @@ static void wifi_qr_text(char *out, size_t n, const char *ssid, const char *pass
 }
 
 void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass) {
-  memset(fb, 0, (size_t)((w + 7) / 8) * h);
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
   char text[160];
   wifi_qr_text(text, sizeof text, ssid, pass);
   s_qr_fb = fb;

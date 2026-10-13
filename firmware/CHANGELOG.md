@@ -12,6 +12,8 @@
   and on the screen. The setup page refuses an empty password for a secured network.
 - Optional, off by default: framed screens (`CONFIG_OLP_UI_V2`) and Snake (`CONFIG_OLP_SNAKE`:
   MENU ten times in a row; 3/8/7/9 steer, BACK quits).
+- Fixed: pixel screens (boot logo, setup QR, Snake) use the display's packed framebuffer; a
+  padded row layout skewed Snake diagonally and overran the buffer.
 
 ## 0.7.0 — 2026-10-01: versions and compatibility
 
