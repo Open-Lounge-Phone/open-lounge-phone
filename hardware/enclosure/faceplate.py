@@ -101,205 +101,62 @@ def display():
     return (cx, Y(P.DISP_MID), d["w"], d["h"]), (wx, Y(P.DISP_MID), WIN[0], WIN[1])
 
 
-# ---------------------------------------------------------------- wall version: payphone cradle
-# The faceplate grows a wing on the left (the phone hangs on a wall, y up); on it, a saddle whose
-# prongs are part of the print. The handset's earpiece cup drops into the saddle and its rim rests
-# on a two-finger fork (the handle hangs down between the fingers). The fork is keyed on a printed
-# D-shaft that runs sideways through both prongs and a bearing block to an arm over the hook switch
-# (SW15): the cup's weight turns the shaft and the arm's foot presses SW15's keycap in. Lift the
-# handset and SW15's own spring plus one compression spring under a finger bring the fork back up.
-# A ledge under the fingers stops them, so the switch travels ~3 mm (actuates at 2, bottoms at 4).
-# Handset sizes are the Opis 60s Micro's (cup ~70, handle ~40): measure yours.
-WING_W = 92.0             # wing width left of the faceplate's skirt
-CUP_IN = 72.0             # between the prongs (the earpiece cup's diameter + 2)
-PRONG = 9.0               # prong wall thickness
-HANDLE_GAP = 42.0         # between the fingers: the handle hangs through here
-LIPS = 8.0                # front lips narrow the opening so the cup can't fall forward
-SAD_Y0, SAD_Y1 = 24.0, 76.0      # saddle bottom and prong tops (y, model)
-SAD_Z1 = 68.0             # how far the saddle stands out (z above the board top)
-BACK_Z = 20.0             # the saddle's back wall face
-AX_Y, AX_Z = 38.0, 26.0   # the shaft (y, z); above SW15's keycap top (P.CAP_TOP + 5 = 22)
-SHAFT_D, SHAFT_FLAT = 6.0, 1.0    # printed D-shaft
-BEARING = 6.4             # round holes it turns in
-FINGER_W, FINGER_T = 12.0, 4.0
-FINGER_TIP_Z = 58.0
-LEDGE_TOP = AX_Y - 6.0    # under the fingers: their stop (4 mm at the tips)
-SPRING_D, SPRING_POCKET = 5.6, 5.0   # a 5 x 10 mm compression spring
-HUB_D = 12.0
-ARM_X = 16.0              # over SW15
-BLOCK_X = (5.0, 10.0)     # the bearing block between the prong and the arm
-KEYCAP_TOP = P.PLATE_ABOVE_PCB + P.CAP_TOP   # 22: SW15 keeps a 1u keycap the arm presses
+# ---------------------------------------------------------------- handset rest
+# The handset lies on the left strip as it does on the bare board: the earpiece cup hangs over the
+# top edge, the handle runs down over the piezo and the hook switch. Two rests printed with the face
+# hold the handle's flat underside at REST_Z, 3 mm under SW15's keycap top, so the handset's own
+# weight holds the hook switch down (MX: actuates at 2, bottoms at 4). Lift it, the switch springs
+# up. No moving parts. The top rest is a bridge over the piezo grille (sound comes out under it);
+# a lip on the right keeps the handle off the 1 and 6 keys.
+HANDLE_W = 45.0           # MEASURE: the handle's width where it lies on the rests
+KEYCAP_TOP = P.PLATE_ABOVE_PCB + P.CAP_TOP   # 22: SW15's keycap top (MEASURE yours, not pressed)
+PRESS = 3.0               # how far the handset holds the hook key down
+REST_Z = KEYCAP_TOP - PRESS
+LIP_X = (34.7, 36.2)      # right lip, clear of the 1/6 keycaps (they start at 36.9)
+LIP_TOP = REST_Z + 2.5
+REST_X0 = -(0.3 + 2.2)    # the face's left edge (skirt)
+TOP_REST_Y = (8.0, 22.0)  # KiCad y: the bridge over the piezo (centre y 15)
+MID_REST_Y = (47.0, 55.0)  # KiCad y: above the hook key, clear of the LED hole (y 59.3)
+REST_R = 3.0
 
 
-def sad_x() -> float:
-    return -(SKIRT_GAP + SKIRT_WALL) - WING_W / 2
+def rest(y0, y1, arch=False):
+    """One rest from the face up to REST_Z, the right lip, soft edges; `arch` bridges the grille."""
+    yc = Y((y0 + y1) / 2)
+    w = LIP_X[0] - REST_X0
+    part = rrect(REST_X0 + w / 2, yc, w, y1 - y0, REST_R, FACE_Z - 0.5, REST_Z)
+    part = round_top(part, REST_Z, 1.2)
+    lip = rrect(sum(LIP_X) / 2, yc, LIP_X[1] - LIP_X[0], y1 - y0, 0.7, FACE_Z - 0.5, LIP_TOP)
+    part += round_top(lip, LIP_TOP, 0.7)
+    if arch:   # open underneath over the grille, front to back
+        gx = BZ[0]
+        span = GRILLE_D + 2.0
+        part -= Pos(gx, yc, FACE_Z - 1) * Box(span, y1 - y0 + 2, 2 * (REST_Z - 4.0 - FACE_Z + 1))
+    return part
 
 
-def xcyl(x0, x1, y, z, d):
-    """A cylinder along x."""
-    return Pos((x0 + x1) / 2, y, z) * Rot(0, 90, 0) * Cylinder(d / 2, x1 - x0)
-
-
-def dshaft_hole(x0, x1, y, z, d, flat):
-    """A D-shaped hole along x (keys the fork and the arm to the shaft)."""
-    hole = xcyl(x0, x1, y, z, d)
-    return hole - Pos((x0 + x1) / 2, y, z + d / 2 - flat / 2 + 0.25) * Box(x1 - x0 + 2, d + 2, flat + 0.5)
-
-
-def bx(x0, x1, y0, y1, z0, z1):
-    return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
-
-
-def build_wall():
-    """The faceplate with the wing and the saddle (one print)."""
-    shell = build(WING_W)
-    z_top = FACE_Z
-    # the saddle: two prongs and a back wall, then the cavity, the lips and the handle gap
-    sx = sad_x()
-    hw = CUP_IN / 2 + PRONG
-    saddle = rrect(sx, (SAD_Y0 + SAD_Y1) / 2, 2 * hw, SAD_Y1 - SAD_Y0, 6.0, z_top - 0.5, SAD_Z1)
-    saddle = round_top(saddle, SAD_Z1, 3.0)
-    saddle -= bx(sx - CUP_IN / 2, sx + CUP_IN / 2, LEDGE_TOP, SAD_Y1 + 1, BACK_Z, SAD_Z1 + 1)
-    # front lips: the opening narrows at the front
-    saddle += bx(sx - CUP_IN / 2, sx - CUP_IN / 2 + LIPS, LEDGE_TOP, SAD_Y1, SAD_Z1 - 6, SAD_Z1)
-    saddle += bx(sx + CUP_IN / 2 - LIPS, sx + CUP_IN / 2, LEDGE_TOP, SAD_Y1, SAD_Z1 - 6, SAD_Z1)
-    # the handle hangs through the floor between the fingers (front of the shaft)
-    saddle -= bx(sx - HANDLE_GAP / 2, sx + HANDLE_GAP / 2, SAD_Y0 - 1, LEDGE_TOP + 0.1, AX_Z + HUB_D / 2 + 1, SAD_Z1 + 1)
-    # room for the fork's hub to turn, behind the ledges
-    saddle -= bx(sx - CUP_IN / 2, sx + CUP_IN / 2, AX_Y - HUB_D / 2 - 1.5, LEDGE_TOP + 0.1, BACK_Z, AX_Z + HUB_D / 2 + 1)
-    # the shaft's holes through both prongs (the left one blind, from inside)
-    saddle -= xcyl(sx - CUP_IN / 2 - PRONG + 2, sx + hw + 1, AX_Y, AX_Z, BEARING)
-    # spring pocket under the left finger, near its tip
-    fx = sx - HANDLE_GAP / 2 - FINGER_W / 2 - 0.5
-    saddle -= Pos(fx, LEDGE_TOP - SPRING_POCKET / 2, FINGER_TIP_Z - 8) * Rot(90, 0, 0) * Cylinder(SPRING_D / 2, SPRING_POCKET)
-    shell = shell + saddle
-    # bearing block between the prong and the arm (over the board's left edge, clear of the LED)
-    block = rrect(sum(BLOCK_X) / 2, AX_Y, BLOCK_X[1] - BLOCK_X[0], 14.0, 2.0, z_top - 0.5, AX_Z + 7)
-    block = round_top(block, AX_Z + 7, 2.0)
-    block -= xcyl(BLOCK_X[0] - 1, BLOCK_X[1] + 1, AX_Y, AX_Z, BEARING)
-    shell = shell + block
+def build_rest():
+    """The faceplate with the two handset rests (one print)."""
+    shell = build()
+    shell += rest(*TOP_REST_Y, arch=True)
+    shell += rest(*MID_REST_Y)
+    # keep the grille slots and the LED hole open
+    shell -= cyl(P.LED[0], Y(P.LED[1]), FACE_Z - 3, LIP_TOP + 1, LED_HOLE)
     return shell
 
 
-def build_fork():
-    """The two-finger fork, keyed onto the shaft."""
-    sx = sad_x()
-    hub_len = CUP_IN - 1.0
-    fork = xcyl(sx - hub_len / 2, sx + hub_len / 2, AX_Y, AX_Z, HUB_D)
-    for side in (-1, 1):
-        x_in = sx + side * HANDLE_GAP / 2
-        x0, x1 = sorted((x_in, x_in + side * FINGER_W))
-        fork += bx(x0, x1, AX_Y + 2 - FINGER_T, AX_Y + 2, AX_Z, FINGER_TIP_Z)
-        fork += Pos((x0 + x1) / 2, AX_Y + 2 - FINGER_T / 2, FINGER_TIP_Z) * Rot(0, 90, 0) * Cylinder(FINGER_T / 2, x1 - x0)
-    fork -= dshaft_hole(sx - hub_len / 2 - 1, sx + hub_len / 2 + 1, AX_Y, AX_Z, SHAFT_D + 0.2, SHAFT_FLAT)
-    return fork
-
-
-def build_arm():
-    """The arm over SW15: a hub keyed on the shaft and a foot that presses the keycap."""
-    w = 6.0
-    arm = xcyl(ARM_X - w / 2, ARM_X + w / 2, AX_Y, AX_Z, HUB_D)
-    arm += bx(ARM_X - w / 2, ARM_X + w / 2, P.YR - 4, AX_Y, AX_Z - 3, AX_Z + 3)     # the bar down
-    arm += bx(ARM_X - 6, ARM_X + 6, P.YR - 6, P.YR + 6, KEYCAP_TOP, AX_Z - 2)        # the foot
-    arm -= dshaft_hole(ARM_X - w / 2 - 1, ARM_X + w / 2 + 1, AX_Y, AX_Z, SHAFT_D + 0.2, SHAFT_FLAT)
-    # an M3 grub screw clamps it on the flat
-    arm -= Pos(ARM_X, AX_Y, AX_Z + HUB_D / 2) * Cylinder(1.25, HUB_D / 2 + 1)
-    return arm
-
-
-def build_shaft():
-    """The printed D-shaft: from inside the left prong to past the arm."""
-    sx = sad_x()
-    x0 = sx - CUP_IN / 2 - PRONG + 2.5
-    x1 = ARM_X + 3.0
-    shaft = xcyl(x0, x1, AX_Y, AX_Z, SHAFT_D)
-    shaft -= Pos((x0 + x1) / 2, AX_Y, AX_Z + SHAFT_D / 2 - SHAFT_FLAT / 2 + 0.25) * Box(x1 - x0 + 2, SHAFT_D + 2, SHAFT_FLAT + 0.5)
-    return shaft
-
-
-# ---------------------------------------------------------------- variant B: one-piece rocker
-SNAP = 5.4                # the open-top bearing's mouth: the 6 mm bar snaps past it
-
-
-def snap_slot(x0, x1, y_top):
-    """An open-top bearing along x: a round seat at the shaft, a narrower mouth up to y_top."""
-    seat = xcyl(x0, x1, AX_Y, AX_Z, BEARING)
-    return seat + bx(x0, x1, AX_Y, y_top + 1, AX_Z - SNAP / 2, AX_Z + SNAP / 2)
-
-
-def build_wall_b():
-    """The faceplate and saddle with open-top (snap) bearings instead of holes."""
-    shell = build_wall()
-    sx = sad_x()
-    hw = CUP_IN / 2 + PRONG
-    for x0, x1 in ((sx - hw + 2, sx - CUP_IN / 2 + 0.1), (sx + CUP_IN / 2 - 0.1, sx + hw + 0.1)):
-        shell -= snap_slot(x0, x1, SAD_Y1)
-    shell -= snap_slot(BLOCK_X[0] - 1, BLOCK_X[1] + 1, AX_Y + 8)
-    return shell
-
-
-def build_rocker():
-    """B: the fork's fingers, a 6 mm bar and the arm over SW15 in one print."""
-    sx = sad_x()
-    rocker = build_fork()
-    x0 = sx - CUP_IN / 2 - PRONG + 2.5
-    rocker += xcyl(x0, ARM_X + 3, AX_Y, AX_Z, SHAFT_D)
-    arm = build_arm()
-    rocker += arm
-    rocker -= Pos(ARM_X, AX_Y, AX_Z + HUB_D / 2) * Cylinder(1.3, HUB_D / 2 + 1)   # no grub screw
-    return rocker
-
-
-# ---------------------------------------------------------------- variant C: a hook, no saddle
-HOOK_Y = 70.0             # where the hook sticks out (upper wing)
-HOOK_LEN = 62.0           # from the shaft to the tip
-HOOK_W, HOOK_T = 16.0, 7.0
-
-
-def build_wall_c():
-    """The faceplate with the wing and a smooth boss housing the hook's pivot (no saddle)."""
-    shell = build(WING_W)
-    z_top = FACE_Z
-    sx = sad_x()
-    # a long smooth boss on the wing carrying the bar from the hook to the board edge
-    boss = rrect((sx - 20 + BLOCK_X[1]) / 2, AX_Y, BLOCK_X[1] - (sx - 20), 18.0, 9.0, z_top - 0.5, AX_Z + 8)
-    boss = round_top(boss, AX_Z + 8, 4.0)
-    # a channel the bar turns in (open at the top: it snaps in), and the hook's slot
-    boss -= snap_slot(sx - 20 + 4, BLOCK_X[1] + 1, AX_Y + 10)
-    boss -= bx(sx - HOOK_W / 2 - 1, sx + HOOK_W / 2 + 1, AX_Y - 10, AX_Y + 10, AX_Z - 6, AX_Z + 9)
-    shell = shell + boss
-    return shell
-
-
-def build_hook():
-    """C: the hook (handset hangs on it by the handle), the bar and the arm, one print."""
-    sx = sad_x()
-    hook = xcyl(sx - 20 + 4.5, ARM_X + 3, AX_Y, AX_Z, SHAFT_D)
-    hub = xcyl(sx - HOOK_W / 2, sx + HOOK_W / 2, AX_Y, AX_Z, HUB_D)
-    arm_out = bx(sx - HOOK_W / 2, sx + HOOK_W / 2, AX_Y - HOOK_T / 2, AX_Y + HOOK_T / 2, AX_Z, AX_Z + HOOK_LEN)
-    lip = bx(sx - HOOK_W / 2, sx + HOOK_W / 2, AX_Y - HOOK_T / 2, AX_Y + 14, AX_Z + HOOK_LEN - HOOK_T, AX_Z + HOOK_LEN)
-    hook = hook + hub + arm_out + lip
-    hook = round_top(hook, AX_Y + 14, 2.0)
-    hook += build_arm()
-    hook -= Pos(ARM_X, AX_Y, AX_Z + HUB_D / 2) * Cylinder(1.3, HUB_D / 2 + 1)
-    return hook
-
-
-def build(wing: float = 0.0):
-    """The faceplate; `wing` grows it that much to the left (the wall version's cradle wing)."""
+def build():
+    """The faceplate."""
     cx, cy = BOARD_W / 2, BOARD_H / 2
     edge = SKIRT_GAP + SKIRT_WALL
-    out_w, out_h = BOARD_W + 2 * edge + wing, BOARD_H + 2 * edge
+    out_w, out_h = BOARD_W + 2 * edge, BOARD_H + 2 * edge
     out_r = BOARD_R + edge
     z_top, z_under = FACE_Z, FACE_Z - FACE_T
     # Shell: the face plus the skirt down to the board's underside, with a rounded top edge.
-    shell = rrect(cx - wing / 2, cy, out_w, out_h, out_r, -BOARD_T, z_top)
+    shell = rrect(cx, cy, out_w, out_h, out_r, -BOARD_T, z_top)
     shell = round_top(shell, z_top, EDGE_ROUND)
     shell -= rrect(cx, cy, BOARD_W + 2 * SKIRT_GAP, BOARD_H + 2 * SKIRT_GAP, BOARD_R + SKIRT_GAP,
                    -BOARD_T - 1, z_under)
-    if wing:   # the wing is hollow underneath too (the wall box closes it)
-        x0, x1 = -edge - wing + SKIRT_WALL, -SKIRT_GAP
-        shell -= rrect((x0 + x1) / 2, cy, x1 - x0, BOARD_H + 2 * SKIRT_GAP, 2.0, -BOARD_T - 1, z_under)
     # Display hood: walls round the module from the face up past the glass, a lip, a window.
     (mx, my, mw, mh), (wx, wy, ww, wh) = display()
     cav_w, cav_h = mw + 0.6, mh + 0.6
@@ -373,17 +230,13 @@ def report(shell) -> list[str]:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    if os.environ.get("OLP_FACEPLATE") == "wall":
-        parts = {"a-faceplate": build_wall(), "a-fork": build_fork(), "a-arm": build_arm(),
-                 "a-shaft": build_shaft(),
-                 "b-faceplate": build_wall_b(), "b-rocker": build_rocker(),
-                 "c-faceplate": build_wall_c(), "c-hook": build_hook()}
-        for name, part in parts.items():
-            export_step(part, str(OUT / f"{name}.step"))
-            export_stl(part, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
-            bb = part.bounding_box()
-            print(f"{name}: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm, "
-                  f"{part.volume / 1000:.1f} cm3")
+    if os.environ.get("OLP_FACEPLATE") == "rest":
+        part = build_rest()
+        export_step(part, str(OUT / "faceplate-rest.step"))
+        export_stl(part, str(OUT / "faceplate-rest.stl"), tolerance=0.02, angular_tolerance=0.15)
+        bb = part.bounding_box()
+        print(f"faceplate-rest: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm, "
+              f"{part.volume / 1000:.1f} cm3; handle at z {REST_Z}, hook key held {PRESS} down")
         return
     shell = build()
     export_step(shell, str(OUT / "faceplate.step"))
