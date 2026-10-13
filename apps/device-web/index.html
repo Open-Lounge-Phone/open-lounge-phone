@@ -29,13 +29,25 @@
           <span class="cord" aria-hidden="true"></span>
         </div>
         <div class="deck">
+          <!-- Laid out like the board: a side column (piezo, status light, hook switch), the two key
+               rows, and the e-paper module between them under keys 1-4. -->
+          <div class="side side--top"><span class="grille" aria-hidden="true"></span></div>
           <div class="keys keys--top"></div>
-          <div class="display" role="status" aria-live="polite"></div>
-          <div class="keys keys--bottom"></div>
-          <div class="badge">
+          <div class="side side--mid">
             <span class="status-led" role="img" aria-label="Status light"></span>
-            <span class="brand">Open Lounge Phone</span>
           </div>
+          <div class="mid">
+            <div class="hood">
+              <div class="display" role="status" aria-live="polite"></div>
+            </div>
+            <span class="brand" aria-hidden="true">Open<br />Lounge<br />Phone</span>
+          </div>
+          <div class="side side--bottom">
+            <button class="hookkey" type="button" aria-pressed="true" title="Hook switch (the handset rests on it)">
+              <span class="hookkey__cap">HOOK</span>
+            </button>
+          </div>
+          <div class="keys keys--bottom"></div>
         </div>
       </section>
 

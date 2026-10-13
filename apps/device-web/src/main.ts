@@ -36,7 +36,7 @@ import {
   PROTOCOL_VERSION,
   type ServerToDevice,
 } from "@openloungephone/protocol";
-import { renderSVG } from "uqr";
+import { encode } from "uqr";
 import {
   type Autopair,
   COMPANION_TOKEN_KEY,
@@ -45,6 +45,15 @@ import {
   shouldAutopair,
 } from "./autopair.ts";
 import { playChime, unlockChime } from "./chime.ts";
+import {
+  lines as epdLines,
+  frame,
+  keyMap,
+  lineCapacity,
+  loungeCode,
+  MARQUEE_STEP_MS,
+  paint,
+} from "./epaper.ts";
 import { keyGrid } from "./grid.ts";
 import {
   forgetIdentity,
@@ -75,6 +84,7 @@ import {
   DEFAULT_SETTINGS,
   type MenuEvent,
   type MenuState,
+  type MenuView,
   menuLines,
   menuStep,
   menuView,
@@ -83,7 +93,7 @@ import {
 import { type PowerSource, powerStatus, type Variant } from "./power.ts";
 import { renderSegments } from "./segments.ts";
 import { forgetKind, loadKind, saveKind, startScreen } from "./setup.ts";
-import { MISSED_CYCLE_MS, STATUS_WIDTH, statusLines } from "./strip.ts";
+import { MISSED_CYCLE_MS, ownerLine, STATUS_WIDTH, statusLines } from "./strip.ts";
 import { ScreenAwake, type WakeLockLike } from "./wake.ts";
 
 type Signal = Extract<ServerToDevice, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -123,6 +133,25 @@ let powerSource: PowerSource = "3A";
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 const handsetEl = $<HTMLButtonElement>(".handset");
+const hookKeyEl = $<HTMLButtonElement>(".hookkey");
+
+// The e-paper, drawn as the firmware draws it (epaper.ts); see drawEpaper().
+const EPD_INK = [36, 36, 32];
+const EPD_PAPER = [226, 225, 216];
+let epd: {
+  lines: string[];
+  grid?: string[][] | undefined;
+  qr?: string | undefined;
+  menu?: MenuView | undefined;
+  offhook: boolean;
+} = { lines: [], offhook: false };
+let epdChanges = 0;
+let epdScroll: ReturnType<typeof setInterval> | undefined;
+const epdCanvas = document.createElement("canvas");
+epdCanvas.className = "epd";
+epdCanvas.width = 250;
+epdCanvas.height = 122;
+
 const keyRowEls = [$<HTMLDivElement>(".keys--top"), $<HTMLDivElement>(".keys--bottom")];
 const displayEl = $<HTMLDivElement>(".display");
 const statusLedEl = $<HTMLSpanElement>(".status-led");
@@ -985,6 +1014,7 @@ for (const [r, row] of KEY_ROWS.entries()) {
   }
 }
 handsetEl.addEventListener("click", toggleHook);
+hookKeyEl.addEventListener("click", toggleHook);
 
 document.addEventListener("keydown", (e) => {
   if (
@@ -1131,6 +1161,7 @@ function updateAnnouncement(): void {
 
 function render(): void {
   handsetEl.setAttribute("aria-pressed", String(hookUp));
+  hookKeyEl.setAttribute("aria-pressed", String(!hookUp)); // the switch is down on the hook
   handsetLabelEl.textContent = hookUp
     ? "Hang up"
     : deviceState.kind === "incoming"
@@ -1245,51 +1276,83 @@ function renderDisplay(): void {
     renderSegments(displayEl, lines, STATUS_WIDTH);
     return;
   }
-  const children: HTMLElement[] = lines.map((line) => {
-    const div = document.createElement("div");
-    div.className = "eink-line";
-    div.textContent = line;
-    return div;
-  });
-  if (qr) {
-    // The takeover code (on hardware: the printed QR tag, or the display if it can draw one).
-    const code = document.createElement("a");
-    code.className = "eink-qr";
-    code.href = qr;
-    code.target = "_blank";
-    code.rel = "noopener";
-    code.setAttribute("aria-label", "Scan with the Open Lounge Phone app to use this phone");
-    code.innerHTML = renderSVG(qr, { border: 1, whiteColor: "transparent" });
-    children.unshift(code);
-    displayEl.classList.add("display--qr");
-  } else displayEl.classList.remove("display--qr");
-  if (grid) {
-    // A small map of the keys: same order as the rows above and below the display.
-    const map = document.createElement("div");
-    map.className = "eink-grid";
-    for (const [r, row] of grid.entries()) {
-      for (const [c, label] of row.entries()) {
-        const cell = document.createElement("div");
-        const key = KEY_ROWS[r]?.[c];
-        cell.className = `eink-cell${key && !isDigit(key) ? " eink-cell--fn" : ""}`;
-        const num = document.createElement("span");
-        num.className = "eink-cell__key";
-        num.textContent = key && isDigit(key) ? key : "";
-        const name = document.createElement("span");
-        name.className = "eink-cell__label";
-        name.textContent = label;
-        cell.append(num, name);
-        map.append(cell);
-      }
-    }
-    children.push(map);
-  }
-  displayEl.replaceChildren(...children);
-  // E-ink panels flash on a full refresh; skip it for the call timer's partial updates.
-  if (!(deviceState.kind === "incall" && deviceState.connected)) {
+  epd = {
+    lines,
+    grid,
+    qr,
+    menu: view,
+    offhook: deviceState.kind === "offhook" && !deviceState.held,
+  };
+  drawEpaper();
+  // E-paper: fast partial refreshes, a full one (it flashes) every 20 changes, as on the board.
+  if (++epdChanges % 20 === 0) {
     displayEl.classList.remove("display--refresh");
     void displayEl.offsetWidth;
     displayEl.classList.add("display--refresh");
+  }
+}
+
+// --- the e-paper, drawn as the firmware draws it (epaper.ts) ----------------------------
+
+/** The menu as the board shows it: the title, then "1 VOLUME 2 VOICEMAIL"… in 20-character lines. */
+function menuScreen(view: MenuView): string[] {
+  if (view.detail?.length) return [view.title, ...view.detail].slice(0, 4);
+  const items = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+    .map((d) => [d, view.labels[Number(d)]] as const)
+    .filter(([, l]) => l)
+    .map(([d, l]) => `${d} ${l}`.toUpperCase());
+  const out: string[] = [];
+  for (const item of items) {
+    const last = out[out.length - 1];
+    if (last !== undefined && last.length + 1 + item.length <= 20)
+      out[out.length - 1] = `${last} ${item}`;
+    else out.push(item);
+  }
+  return [view.title, ...out].slice(0, 4);
+}
+
+function drawEpaper(): void {
+  if (displayMode !== "eink") return;
+  if (epdCanvas.parentElement !== displayEl) displayEl.replaceChildren(epdCanvas);
+  const f = frame();
+  const step = Math.floor(Date.now() / MARQUEE_STEP_MS);
+  let shown: string[] = [];
+  if (epd.qr) {
+    loungeCode(
+      f,
+      encode(epd.qr, { border: 0 }).data,
+      epd.lines[1] ?? "",
+      config?.owner?.space ?? "",
+    );
+  } else if (epd.menu) {
+    shown = menuScreen(epd.menu);
+    epdLines(f, shown, step);
+  } else if (epd.grid && epd.offhook) {
+    // Handset up, nothing dialled: whose phone it is and who is on each key (screens.c).
+    const g = epd.grid;
+    const labels = [...(g[0] ?? []).slice(0, 5), ...(g[1] ?? []).slice(0, 5)];
+    const footer =
+      epd.lines.length > 1 ? `${epd.lines[0]} - ${epd.lines[1]}` : "PRESS A KEY TO CALL";
+    keyMap(f, config?.owner ? ownerLine(config.owner) : "SPEED DIAL", labels, footer, step);
+    shown = [...labels, footer];
+  } else {
+    shown = epd.lines;
+    epdLines(f, shown, step);
+  }
+  const ctx = epdCanvas.getContext("2d");
+  if (ctx) {
+    const img = ctx.createImageData(250, 122);
+    paint(f, img.data, EPD_INK, EPD_PAPER);
+    ctx.putImageData(img, 0, 0);
+  }
+  // Long names scroll (marquee.c): redraw while anything is wider than its line.
+  const scrolls = shown.some(
+    (l) => l.length > lineCapacity(Math.max(1, Math.min(4, shown.length))),
+  );
+  if (scrolls && !epdScroll) epdScroll = setInterval(drawEpaper, MARQUEE_STEP_MS);
+  else if (!scrolls && epdScroll) {
+    clearInterval(epdScroll);
+    epdScroll = undefined;
   }
 }
 

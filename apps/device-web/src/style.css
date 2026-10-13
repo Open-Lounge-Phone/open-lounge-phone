@@ -772,3 +772,124 @@ body {
 .display--qr .eink-grid {
   grid-column: 1 / -1;
 }
+
+/* --- laid out like the board (docs/phone-ux.md, hardware/enclosure/faceplate.py) ------------- */
+.deck {
+  grid-template-columns: 13% 1fr;
+  gap: 14px 10px;
+  align-items: center;
+}
+.side {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+/* the piezo's round grille, top left */
+.grille {
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgb(0 0 0 / 0.28) 3px 5px) center / 70% 52%
+    no-repeat,
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--shell) 85%, #8f846f) 60%,
+      color-mix(in srgb, var(--shell) 70%, #8f846f) 62%
+    );
+  box-shadow:
+    0 2px 3px rgb(0 0 0 / 0.18),
+    0 1px 0 rgb(255 255 255 / 0.7) inset;
+}
+.side--mid .status-led {
+  width: 10px;
+  height: 10px;
+}
+/* the middle row: the module under keys 1-4 (same 6 columns as the key rows), the name beside it */
+.mid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  padding: 0 10px;
+  align-items: center;
+}
+.hood {
+  grid-column: 1 / 5;
+  padding: 7px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--shell) 96%, #fff),
+    color-mix(in srgb, var(--shell) 82%, #a99d86)
+  );
+  box-shadow:
+    0 4px 8px -2px var(--shell-shadow),
+    0 1px 0 rgb(255 255 255 / 0.8) inset;
+}
+.mid .brand {
+  grid-column: 5 / 7;
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.28em;
+  text-align: center;
+}
+/* the e-paper itself: the firmware's pixels (epaper.ts), 250 x 122, crisp */
+.display--eink {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--paper);
+  font: inherit;
+  filter: brightness(calc(0.6 + var(--brightness) * 0.4));
+}
+.epd {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 250 / 122;
+  image-rendering: pixelated;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35) inset;
+}
+.display--eink.display--qr {
+  display: block;
+}
+/* the hook switch: an MX key the handset's cradle presses (down = on the hook) */
+.hookkey {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.hookkey__cap {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  border-radius: 9px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  background: linear-gradient(180deg, #fbf9f4, #e6dfd0);
+  box-shadow:
+    0 4px 0 color-mix(in srgb, var(--shell) 60%, #8f846f),
+    0 6px 8px rgb(0 0 0 / 0.18);
+  transition:
+    transform 120ms,
+    box-shadow 120ms;
+}
+.hookkey[aria-pressed="true"] .hookkey__cap {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--shell) 60%, #8f846f),
+    0 2px 3px rgb(0 0 0 / 0.18);
+}
+.hookkey:focus-visible {
+  outline: 3px solid var(--led-blue);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
