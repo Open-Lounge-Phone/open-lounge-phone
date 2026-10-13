@@ -22,6 +22,13 @@ void audio_set_offhook(bool up);
 void audio_set_tone(tone_t tone);
 /** Call media on/off: the mic is captured and sent only while on. */
 void audio_call(bool on, audio_sender_t sender);
+/**
+ * Leaving a voicemail: the mic records 8 kHz 16-bit samples into `buf` (at most `max_samples`;
+ * the mic is on only meanwhile). audio_record_stop ends it and says how many samples it took.
+ */
+void audio_record(int16_t *buf, size_t max_samples);
+size_t audio_recorded(void);
+size_t audio_record_stop(void);
 /** This phone put the call on hold: the mic is off and silence is sent; nothing plays. */
 void audio_hold(bool held);
 /** A received mu-law frame (any length) from the call. Safe from any task. */

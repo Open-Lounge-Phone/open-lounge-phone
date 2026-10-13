@@ -209,6 +209,9 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         phone_init(s);
         s->kind = PH_VOICEMAIL;
         CPY(s->from, str(vm, "name"));
+        CPY(s->vm_ticket, str(vm, "ticket"));
+        const cJSON *max = cJSON_GetObjectItemCaseSensitive(vm, "maxMs");
+        s->vm_max_ms = cJSON_IsNumber(max) ? max->valueint : 120000;
       } else if (ended) {
         to_offhook(s, reason ? reason : "hangup");
         CPY(s->held, held);

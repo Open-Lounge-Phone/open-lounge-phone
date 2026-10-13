@@ -102,11 +102,24 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
       return t ? set2(out, t, "PRESS A KEY") : set1(out, "PRESS A KEY");
     }
     case PH_VOICEMAIL:
-      // v0 can't record a message yet (no audio): say so and let them hang up.
-      return set2(out, "NO ANSWER", "HANG UP");
+      if (in->vm_stage == VM_RECORDING) {
+        char t[16];
+        clock_text(t, sizeof t, in->vm_remaining_ms);
+        snprintf(buf, sizeof buf, "RECORDING %s", t);
+        return set2(out, buf, "HANG UP TO SEND");
+      }
+      if (in->vm_stage == VM_FAILED) return set2(out, "MESSAGE NOT SENT", "HANG UP");
+      if (in->vm_stage == VM_SENDING) return set1(out, "SENDING MESSAGE");
+      if (in->vm_stage == VM_SENT) return set2(out, "MESSAGE SENT", "HANG UP");
+      return set2(out, "LEAVE A MESSAGE", *name ? name : s->from);
     default:
       break;
   }
+
+  // Just hung up after leaving a message.
+  if (in->vm_stage == VM_SENDING) return set1(out, "SENDING MESSAGE");
+  if (in->vm_stage == VM_SENT) return set1(out, "MESSAGE SENT");
+  if (in->vm_stage == VM_FAILED) return set1(out, "MESSAGE NOT SENT");
 
   const phone_config_t *c = in->config;
   char quiet[STATUS_WIDTH + 1] = "";

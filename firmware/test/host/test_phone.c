@@ -113,3 +113,15 @@ TEST(phone_room_mute_and_no_actions) {
   s.held_by_them = true;
   CHECK(phone_actions(&s, a) == 0);
 }
+
+TEST(phone_voicemail_offer_keeps_ticket) {
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_button(&s, 0, emit);
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":\"timeout\","
+             "\"voicemail\":{\"ticket\":\"tkt_0123456789abcdef\",\"name\":\"Mom\",\"maxMs\":90000}}");
+  CHECK(s.kind == PH_VOICEMAIL);
+  CHECK_STR(s.vm_ticket, "tkt_0123456789abcdef");
+  CHECK(s.vm_max_ms == 90000);
+}

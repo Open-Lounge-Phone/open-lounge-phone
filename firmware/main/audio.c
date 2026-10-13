@@ -25,6 +25,8 @@ static int16_t s_ring[RING];
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
 static bool s_offhook, s_call, s_held;
+static int16_t *s_rec_buf;  // leaving a voicemail: the mic goes here (no call needed)
+static size_t s_rec_max, s_rec_len;
 static tone_t s_tone_want;
 static audio_sender_t s_sender;
 static int s_volume = VOLUME_DEFAULT;
@@ -125,6 +127,30 @@ static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+void audio_record(int16_t *buf, size_t max_samples) {
+  taskENTER_CRITICAL(&s_lock);
+  s_rec_buf = buf;
+  s_rec_max = buf ? max_samples : 0;
+  s_rec_len = 0;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
+size_t audio_recorded(void) {
+  taskENTER_CRITICAL(&s_lock);
+  size_t n = s_rec_len;
+  taskEXIT_CRITICAL(&s_lock);
+  return n;
+}
+
+size_t audio_record_stop(void) {
+  taskENTER_CRITICAL(&s_lock);
+  size_t n = s_rec_len;
+  s_rec_buf = NULL;
+  s_rec_max = 0;
+  taskEXIT_CRITICAL(&s_lock);
+  return n;
+}
+
 void audio_hold(bool held) {
   taskENTER_CRITICAL(&s_lock);
   s_held = held;
@@ -141,6 +167,7 @@ static void task(void *arg) {
   for (;;) {
     taskENTER_CRITICAL(&s_lock);
     bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
+    bool rec = s_rec_buf != NULL;
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
     bool forced = s_forced_tone != TONE_NONE;
     audio_sender_t sender = s_sender;
@@ -149,7 +176,7 @@ static void task(void *arg) {
     taskEXIT_CRITICAL(&s_lock);
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
-    bool mic_want = (call && !held) || loop_ms > 0;
+    bool mic_want = (call && !held) || loop_ms > 0 || rec;
     if (mic_want != mic_now) {
       s_dev->mic(mic_want);
       mic_now = mic_want;
@@ -173,6 +200,15 @@ static void task(void *arg) {
     if (mic_now) {
       s_dev->read(mic, DSP_FRAME);
       measure(&s_mic_meter, mic, DSP_FRAME, false);
+      if (rec) {
+        taskENTER_CRITICAL(&s_lock);
+        if (s_rec_buf) {
+          size_t n = s_rec_max - s_rec_len < DSP_FRAME ? s_rec_max - s_rec_len : DSP_FRAME;
+          memcpy(s_rec_buf + s_rec_len, mic, n * sizeof(int16_t));
+          s_rec_len += n;
+        }
+        taskEXIT_CRITICAL(&s_lock);
+      }
     }
     if (call && sender) {
       if (held) memset(mic, 0, sizeof mic);  // on hold: silence keeps the connection alive

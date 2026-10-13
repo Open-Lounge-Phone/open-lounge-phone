@@ -29,6 +29,7 @@ typedef enum {
   EV_OTA_DONE,     // a = -1 failed/refused, 0 up to date, 1 available, 2 installed (restart when idle)
   EV_CALL_ACTION,  // MENU in a call: a = phone_action_t
   EV_SELFTEST,     // MENU -> 7 -> 1: start the self-test
+  EV_VM_SENT,      // a = 1 the voicemail upload worked
 } ev_type_t;
 
 typedef struct {

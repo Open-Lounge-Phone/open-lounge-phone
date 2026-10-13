@@ -12,7 +12,7 @@ typedef enum {
   PH_INCOMING,   // ringing, handset down
   PH_INCALL,
   PH_INROOM,
-  PH_VOICEMAIL,  // our call wasn't answered; voicemail offered (v0: no recording)
+  PH_VOICEMAIL,  // our call wasn't answered; voicemail offered (leave a message: vmleave.c)
 } phone_kind_t;
 
 typedef struct {
@@ -26,6 +26,8 @@ typedef struct {
   char room_id[65];    // inroom ("" while joining)
   bool muted;          // inroom
   bool recorded;       // incall / inroom: announced as recorded (status LED + REC)
+  char vm_ticket[129];  // voicemail: the offer's single-use ticket
+  int vm_max_ms;       // voicemail: the longest message accepted
   char held[65];       // offhook / dialing / incall: a call this phone put on hold ("" = none)
   bool transfer_pending;  // incall: the next key transfers the call to that key's person
 } phone_state_t;

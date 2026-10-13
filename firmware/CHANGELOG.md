@@ -1,5 +1,22 @@
 # Firmware changelog
 
+## 0.8.0 — 2026-10-13: messages, call menu, phone check
+
+- **Leave a message** when a call isn't answered: a beep, the handset mic records (8 kHz WAV, up
+  to the server's limit), hanging up sends it. Under 1.5 s is dropped. Recorded greetings aren't
+  played yet.
+- **Call screen** (MENU in a call): 1 Hold / Resume, 2 Transfer (blind: the next key picks who),
+  9 Volume; in a room, 1 Mute / Unmute. One call has audio at a time, so holding doesn't add a
+  second caller. While on hold the mic is off and silence is sent.
+- **Clock** on the ready screen (`READY 14:05`) from the server's `config.now` and the space's
+  UTC offset; no time server needed.
+- **Phone check** (MENU 7): Wi-Fi network, signal and channel, address, server state and for how
+  long, the last Wi-Fi problem, handset and jack, time running, clock, memory. 1 starts the
+  **self-test**: every key, the hook and the jack tick off on a keypad picture, with a 1 kHz tone
+  in the earpiece and a click per key.
+- **Ringer** volume (soft, medium, loud) and style (classic, double, beeps) in MENU 1 (4 and 5),
+  saved on the phone; each press plays it.
+
 ## 0.7.1 — 2026-10-13: first boards
 
 - Display: the WeAct 2.13" e-paper (250 × 122) is the default; the 2.9" is `CONFIG_OLP_EPD_213=n`.

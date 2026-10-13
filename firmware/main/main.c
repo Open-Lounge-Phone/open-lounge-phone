@@ -35,6 +35,7 @@
 #include "selftest.h"
 #include "snake.h"
 #include "strip.h"
+#include "vmleave.h"
 
 static const char *TAG = "olp";
 
@@ -268,6 +269,8 @@ static void render(void) {
         .call_started_ms = s_call_started,
         .now_ms = now,
         .local_minute = ota_local_minute(),
+        .vm_stage = vm_leave_stage(),
+        .vm_remaining_ms = vm_leave_remaining_ms(now),
     };
     char ssid[33], ip[16];
     int rssi;
@@ -692,8 +695,10 @@ static void on_message(char *text) {
         copy(s_active_label, sizeof s_active_label, s_phone.from);
         menu_close(&s_menu);
       }
-      if (s_phone.kind == PH_VOICEMAIL)
-        ESP_LOGI(TAG, "voicemail offered for %s: not recorded in v0", s_phone.from);
+      if (s_phone.kind == PH_VOICEMAIL && before != PH_VOICEMAIL) {
+        ESP_LOGI(TAG, "voicemail offered for %s (up to %d s)", s_phone.from, s_phone.vm_max_ms / 1000);
+        if (s_hook_up) vm_leave_start(s_phone.vm_ticket, s_phone.vm_max_ms, now_ms());
+      }
     }
   }
 done:
@@ -743,6 +748,7 @@ static void on_key(int index) {
 
 static void on_hook(bool up) {
   s_hook_up = up;
+  if (!up) vm_leave_finish(now_ms());  // hanging up sends a message being recorded
   selftest_hook(up, now_ms());
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
@@ -800,6 +806,7 @@ static void tick(void) {
   } else if (selftest_tick(now)) {
     finish_selftest();
   }
+  vm_leave_tick(now);
   ota_tick(now);
   menu_tick(&s_menu, now);
   if (s_reopen_at >= 0 && now >= s_reopen_at) {
@@ -892,6 +899,10 @@ void app_main(void) {
         case EV_CALL_ACTION:
           ESP_LOGI(TAG, "CALL ACTION %s", phone_action_name((phone_action_t)ev.a));
           phone_action(&s_phone, (phone_action_t)ev.a, emit);
+          break;
+        case EV_VM_SENT:
+          vm_leave_sent(ev.a, now_ms());
+          signals_beep(ev.a ? BEEP_OK : BEEP_ERROR);
           break;
         case EV_SELFTEST:
           if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {

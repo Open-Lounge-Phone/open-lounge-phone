@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "phone.h"
+#include "vmleave.h"
 
 #define STATUS_WIDTH 16
 #define MAX_BUTTONS 16
@@ -32,6 +33,8 @@ typedef struct {
   const char *active_label;   // the other party on the current or last call
   int64_t call_started_ms;    // -1 = not connected yet
   int64_t now_ms;
+  vm_stage_t vm_stage;        // leaving a voicemail (vmleave.c)
+  int vm_remaining_ms;        // …while recording
   int local_minute;           // minutes since local midnight for the ready clock, -1 = unknown
 } strip_input_t;
 
