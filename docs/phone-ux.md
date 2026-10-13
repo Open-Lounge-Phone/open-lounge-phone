@@ -83,8 +83,8 @@ The menu closes by itself after 20 s without a key.
 | 9 | Update now (official firmware with updates on) | yes |
 | 0 | About: firmware version and the four fingerprint words | yes |
 
-Root screen: `1 VOLUME 2 VOICEMAIL` / `3 WI-FI 4 SERVER` / `9 UPDATE 0 ABOUT` (items that
-don't apply are left out).
+Root screen: `MENU` / `1 VOLUME 2 VOICEMAIL` / `3 WI-FI 4 SERVER` / `9 UPDATE 0 ABOUT` (items
+that don't apply are left out).
 
 ## Status LED (red)
 

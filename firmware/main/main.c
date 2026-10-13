@@ -31,6 +31,7 @@
 #include "media.h"
 #include "signals.h"
 #include "storage.h"
+#include "snake.h"
 #include "strip.h"
 
 static const char *TAG = "olp";
@@ -253,7 +254,9 @@ static void render(void) {
     n = strip_lines(&in, strip);
     for (int i = 0; i < n; i++) strlcpy(lines[i], strip[i], sizeof lines[i]);
   }
-  if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
+  if (snake_active()) {
+    s_shown_n = -1;  // the game owns the screen; redraw the status when it ends
+  } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
     s_shown_n = n;
     ESP_LOGI(TAG, "STRIP [%s%s%s%s%s%s%s]", lines[0], n > 1 ? "|" : "", n > 1 ? lines[1] : "",
@@ -572,6 +575,11 @@ done:
 static void on_key(int index) {
   int64_t now = now_ms();
   signals_beep(BEEP_KEY);
+  if (snake_key(index, now)) return;
+  if (index == KEY_MENU_INDEX && snake_menu_press(now)) {
+    menu_close(&s_menu);
+    return;
+  }
   menu_screen_t was = s_menu.screen;
   // MENU opens the menu when nothing is going on (in a call it is TODO: hold/transfer).
   bool menu_ok = s_phone.kind == PH_IDLE || s_phone.kind == PH_OFFHOOK;
@@ -793,6 +801,8 @@ void app_main(void) {
       }
     }
     tick();
+    if (s_phone.kind == PH_INCOMING || s_hook_up) snake_stop();  // a call wins
+    snake_tick(now_ms());
     prov_event(PROV_EV_TICK, false);
     sync_media();
     render();

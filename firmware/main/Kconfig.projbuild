@@ -1,5 +1,19 @@
 menu "Open Lounge Phone"
 
+config OLP_SNAKE
+    bool "Snake easter egg (MENU ten times fast)"
+    default n
+    help
+        A personal extra: press MENU ten times within four seconds. 3 up, 8 down, 7 left, 9 right,
+        BACK quits, MENU plays again. Off in shared builds.
+
+config OLP_UI_V2
+    bool "Framed screens (title bar, rules, separators)"
+    default n
+    help
+        A personal look: status screens draw a frame and a rule under the main line; menus and
+        setup screens get a black title bar and dotted separators. Off = docs/phone-ux.md.
+
 config OLP_EPD_213
     bool "Display: WeAct 2.13\" e-paper (250 x 122); off = the 2.9\" (296 x 128)"
     default y

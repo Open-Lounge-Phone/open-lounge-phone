@@ -67,10 +67,11 @@ static void upper(char *s) {
 int menu_lines(const menu_t *m, char out[4][25]) {
   switch (m->screen) {
     case MENU_ROOT:
-      snprintf(out[0], 25, "1 VOLUME 2 VOICEMAIL");
-      snprintf(out[1], 25, "3 WI-FI 4 SERVER");
-      snprintf(out[2], 25, "9 UPDATE 0 ABOUT");
-      return 3;
+      snprintf(out[0], 25, "MENU");
+      snprintf(out[1], 25, "1 VOLUME 2 VOICEMAIL");
+      snprintf(out[2], 25, "3 WI-FI 4 SERVER");
+      snprintf(out[3], 25, "9 UPDATE 0 ABOUT");
+      return 4;
     case MENU_VOICEMAIL:
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
       else snprintf(out[0], 25, "NO NEW VOICEMAIL");

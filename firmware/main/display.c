@@ -21,6 +21,8 @@ static TaskHandle_t s_task;
 static char s_want[MAX_LINES][25];
 static int s_want_n = -1;
 static uint8_t *s_fb;
+static uint8_t *s_custom;   // a game's framebuffer, shown instead of text
+static bool s_custom_on, s_custom_new;
 
 static void task(void *arg) {
   char shown[MAX_LINES][25];
@@ -32,6 +34,16 @@ static void task(void *arg) {
     int n = s_want_n;
     memcpy(lines, s_want, sizeof lines);
     xSemaphoreGive(s_lock);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool custom = s_custom_on, fresh = s_custom_new;
+    if (custom && fresh) memcpy(s_fb, s_custom, (size_t)((s_drv->width + 7) / 8) * s_drv->height);
+    s_custom_new = false;
+    xSemaphoreGive(s_lock);
+    if (custom) {
+      if (fresh) s_drv->flush(s_fb, updates++ % FULL_EVERY == 0);
+      shown_n = -1;  // text redraws once the game is over
+      continue;
+    }
     if (n == shown_n && !memcmp(lines, shown, sizeof lines)) continue;
     const char *ptrs[MAX_LINES] = {lines[0], lines[1], lines[2], lines[3]};
     gfx_render_lines(s_fb, s_drv->width, s_drv->height, ptrs, n);
@@ -59,6 +71,26 @@ void display_text(const char *const *lines, int n) {
   s_want_n = n;
   xSemaphoreGive(s_lock);
   xTaskNotifyGive(s_task);
+}
+
+void display_pixels(const uint8_t *fb) {
+  if (!s_task) return;
+  size_t bytes = (size_t)((s_drv->width + 7) / 8) * s_drv->height;
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  if (fb) {
+    if (!s_custom) s_custom = malloc(bytes);
+    memcpy(s_custom, fb, bytes);
+    s_custom_on = s_custom_new = true;
+  } else {
+    s_custom_on = false;
+  }
+  xSemaphoreGive(s_lock);
+  xTaskNotifyGive(s_task);
+}
+
+void display_size(int *w, int *h) {
+  *w = s_drv ? s_drv->width : 0;
+  *h = s_drv ? s_drv->height : 0;
 }
 
 void display_dump(void) {

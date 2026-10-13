@@ -3,7 +3,10 @@
 #include "gfx.h"
 
 #include <ctype.h>
+#include <stdbool.h>
 #include <string.h>
+
+#include "sdkconfig.h"
 
 // 5x7 font, ASCII 0x20-0x5F, one byte per column, LSB at the top.
 static const uint8_t FONT[64][5] = {
@@ -48,6 +51,91 @@ static void glyph(uint8_t *fb, int w, int h, int x0, int y0, char c, int scale) 
             pixel(fb, w, h, x0 + col * scale + dx, y0 + row * scale + dy);
 }
 
+#if CONFIG_OLP_UI_V2
+// The framed look (CONFIG_OLP_UI_V2): status screens get the main line large over a rule;
+// screens with 3-4 lines get their first line as a black title bar and dotted separators.
+static void ink(uint8_t *fb, int w, int h, int x, int y, bool on) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return;
+  uint8_t m = 0x80 >> ((y * w + x) % 8);
+  if (on) fb[(y * w + x) / 8] |= m;
+  else fb[(y * w + x) / 8] &= (uint8_t)~m;
+}
+
+static void rect(uint8_t *fb, int w, int h, int x0, int y0, int rw, int rh, bool on) {
+  for (int y = y0; y < y0 + rh; y++)
+    for (int x = x0; x < x0 + rw; x++) ink(fb, w, h, x, y, on);
+}
+
+static void text(uint8_t *fb, int w, int h, const char *str, int y, int scale, bool on) {
+  int len = (int)strlen(str), pitch = 6 * scale;
+  int x0 = (w - (len * pitch - scale)) / 2;
+  for (int k = 0; k < len; k++) {
+    char c = (char)toupper((unsigned char)str[k]);
+    if (c < 0x20 || c > 0x5F) c = '?';
+    const uint8_t *g = FONT[c - 0x20];
+    for (int col = 0; col < 5; col++)
+      for (int row = 0; row < 7; row++)
+        if (g[col] & (1 << row)) rect(fb, w, h, x0 + k * pitch + col * scale, y + row * scale, scale, scale, on);
+  }
+}
+
+/** The largest scale (up to `max`) at which `str` fits `room` pixels. */
+static int fit(const char *str, int room, int max) {
+  int len = (int)strlen(str), s = max;
+  while (s > 1 && len * 6 * s - s > room) s--;
+  return s;
+}
+
+static void dotted(uint8_t *fb, int w, int h, int y, int margin) {
+  for (int x = margin; x < w - margin; x += 3) ink(fb, w, h, x, y, true);
+}
+
+static void frame(uint8_t *fb, int w, int h) {
+  rect(fb, w, h, 3, 1, w - 6, 1, true);       // a thin border with clipped corners
+  rect(fb, w, h, 3, h - 2, w - 6, 1, true);
+  rect(fb, w, h, 1, 3, 1, h - 6, true);
+  rect(fb, w, h, w - 2, 3, 1, h - 6, true);
+  ink(fb, w, h, 2, 2, true);
+  ink(fb, w, h, w - 3, 2, true);
+  ink(fb, w, h, 2, h - 3, true);
+  ink(fb, w, h, w - 3, h - 3, true);
+}
+
+void gfx_render_lines(uint8_t *fb, int w, int h, const char *const *lines, int n) {
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
+  if (n <= 0) return;
+  frame(fb, w, h);
+  int room = w - 20;
+  if (n == 1) {
+    int s = fit(lines[0], room, 3), th = 7 * s;
+    int y = (h - th) / 2;
+    text(fb, w, h, lines[0], y, s, true);
+    rect(fb, w, h, w / 3, y - 12, w / 3, 2, true);
+    rect(fb, w, h, w / 3, y + th + 10, w / 3, 2, true);
+    return;
+  }
+  if (n == 2) {
+    int s0 = fit(lines[0], room, 3), s1 = fit(lines[1], room, 2);
+    int block = 7 * s0 + 12 + 2 + 12 + 7 * s1;
+    int y = (h - block) / 2;
+    text(fb, w, h, lines[0], y, s0, true);
+    y += 7 * s0 + 12;
+    rect(fb, w, h, 14, y, w - 28, 2, true);
+    text(fb, w, h, lines[1], y + 2 + 12, s1, true);
+    return;
+  }
+  // 3-4 lines: a title bar, then the rest with dotted separators
+  int bar = 7 * 2 + 10;
+  rect(fb, w, h, 4, 4, w - 8, bar, true);
+  text(fb, w, h, lines[0], 4 + 5, fit(lines[0], w - 16, 2), false);
+  int items = n - 1, top = 4 + bar, slot = (h - 4 - top) / items;
+  for (int i = 0; i < items; i++) {
+    int s = fit(lines[i + 1], w - 10, 2);
+    text(fb, w, h, lines[i + 1], top + i * slot + (slot - 7 * s) / 2, s, true);
+    if (i < items - 1) dotted(fb, w, h, top + (i + 1) * slot, 12);
+  }
+}
+#else
 void gfx_render_lines(uint8_t *fb, int w, int h, const char *const *lines, int n) {
   memset(fb, 0, (size_t)(w * h + 7) / 8);
   if (n <= 0) return;
@@ -63,3 +151,4 @@ void gfx_render_lines(uint8_t *fb, int w, int h, const char *const *lines, int n
     for (int k = 0; k < len; k++) glyph(fb, w, h, x + k * pitch, y, lines[i][k], scale);
   }
 }
+#endif
