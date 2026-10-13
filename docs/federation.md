@@ -7,13 +7,11 @@ protocol spec) are implemented; F3 (phone ↔ phone) is planned.** This page is 
 overview; the normative protocol an independent server can implement is
 **[federation-spec.md](federation-spec.md)** (`/fed/v1`: discovery, keys, the signature
 profile, every endpoint's schema, the stream, errors, versioning and security).
-Owner direction (2026-09-27): people should be able to send and accept connection invites
-regardless of which server they're on, and call each other through a fair, seamless
-server-to-server protocol. No central server, and the owner's public-good hub is just one more
-server. The buildable phases map to the README's status table: P1 = F0, P2 = F1 connections
-and knocks, P3 = F2 calls, P4 = the public hub, P5 = F4 interop.
+People can send and accept connection requests whichever server they're on, and call each
+other through a fair, seamless server-to-server protocol. There is no central server; the public
+hub is just one more server.
 
-Owner decisions (2026-09-28):
+Design choices:
 - **Knock, then talk.** Anyone may send one contact request (a *knock*) to `name@server`. It is
   rate-limited and blockable, and calling works only after it's accepted. Kids' phones are never
   knockable.
@@ -21,10 +19,10 @@ Owner decisions (2026-09-28):
   network.
 - **Onboarding = a public hub plus people's own servers.** `hub.openloungephone.app` has open
   sign-up; anyone can still run their own server. Both federate as equals.
-- **One account on one home server reaches everyone**, so the earlier "multi-server companion"
-  idea (M6) is dropped: a companion talks only to its own home server.
-- **The hub is free, funded by donations** (owner, 2026-09-28), with a fair-use allowance that
-  stops abuse; see [hub.md](hub.md). Its code is ready (plan phase P4); it isn't deployed yet.
+- **One account on one home server reaches everyone**: a companion talks only to its own home
+  server.
+- **The hub is free, funded by donations**, with a fair-use allowance that stops abuse; see
+  [hub.md](hub.md).
 - In the UI, connections are also called **buddies**. There is no text chat.
 
 ## Principles

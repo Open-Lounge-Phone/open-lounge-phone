@@ -1,9 +1,8 @@
 # Security model and trust
 
-Status: 2026-09-30 design (hardware re-based on the **minimal board**, owner decision
-2026-09-30); the software side is **built** (the four-word fingerprint, the device
-page, remove and wipe, retention defaults and transcription per space, and — batch C2 — call
-recording as designed below). Items marked *(planned)* are not built yet.
+Status: the hardware side describes the **minimal board**; the software side is **built** (the
+four-word fingerprint, the device page, remove and wipe, retention defaults and transcription per
+space, and call recording as designed below). Items marked *(planned)* are not built yet.
 
 ## Your keys, your server
 
@@ -158,7 +157,7 @@ code on the screen belongs to a different phone; they are not a secret.
 - Expired rows and their audio are deleted by a sweep: daily when self-hosted, on activity in the
   space on Cloudflare (no timers), and always before a timeline or inbox is shown.
 
-## Recording (built in batch C2)
+## Recording (built)
 
 1. **Off unless a space turns it on** (`PUT /api/space/recording`, guardians or admins; audited).
    Never in a home with kids' phones — a home with one can't turn it on, and a home that records

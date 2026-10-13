@@ -1,6 +1,6 @@
 # Team and org spaces: a workplace phone system
 
-Status: **built** (batch C1, 2026-09-29). Only spaces of type `team` or `org` have these
+Status: **built**. Only spaces of type `team` or `org` have these
 features; homes (families, kids' phones, quiet hours) are unchanged. There is no phone-network
 (PSTN) bridge, now or later: everyone here is reached by extension, by `handle@host`, or through
 a connection.

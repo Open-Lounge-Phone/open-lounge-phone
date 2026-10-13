@@ -1,8 +1,9 @@
 # Hardware phone lifecycle
 
-Status: owner decisions 2026-09-28. The **server and app parts are built** (modes at claim,
-per-space session length, idle options, remove = wipe) and run on the browser phone
-(`/device/`); the firmware parts wait for the board.
+Status: the **server and app parts are built** (modes at claim, per-space session length, idle
+options, remove = wipe) and run on the browser phone (`/device/`). The firmware has remove =
+wipe, the factory reset and Lounge phones; choosing the mode on the phone itself at first run is
+planned.
 
 ## Modes (set when a phone is claimed)
 
@@ -72,7 +73,7 @@ the phone.
    - **Changing mode or owner:** always goes through a wipe. No data ever carries over. The server
      enforces it: `PATCH /api/devices/:id` only renames a phone and answers `409` to any owner or
      mode field.
-   - **No claim lock (owner decision).** A removed phone holds nothing of value (no contacts, no
+   - **No claim lock.** A removed phone holds nothing of value (no contacts, no
      history, no keys that still work), so anyone can reset it and claim it again. That keeps
      second-hand and handed-down phones easy.
 
