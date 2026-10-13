@@ -75,8 +75,13 @@ The hub shows how far its donations go, computed from its configuration by
 configuration — `FUNDING_BALANCE_USD=150`, `BASE_COST_USD_PER_MONTH=5`,
 `COST_PER_ACTIVE_USER_USD_PER_MONTH=0.02` — that is: **$150 in funding**, **every $1/month
 covers about 50 people**, and **$150 keeps the hub running for ~375 people for a year (or ~1,000
-people for 6 months)**. The [website](https://github.com/Open-Lounge-Phone/website)'s funding
-page and home page card and the companion's funding card all use the same function.
+people for 6 months)**. The companion's funding card shows these figures.
+
+The [website](https://github.com/Open-Lounge-Phone/website)'s funding page and home page card show
+a **$150 monthly goal** instead: this month's donations against the goal (it starts again each
+month), what the goal pays for (`peopleFor` over one month: ~7,250 people), and past months. The
+numbers are build settings in the website's `src/consts.ts` (`FUNDING_GOAL_USD`, `FUNDING_MONTH`,
+`FUNDING_RAISED_USD`, and the month history).
 
 Donations go through **GitHub Sponsors**. The link is one setting, `SPONSOR_URL`, used by the
 website build and by the hub; while it's unset the Sponsor button is hidden (never a placeholder).
