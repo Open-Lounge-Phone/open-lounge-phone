@@ -31,6 +31,7 @@
 #include "media.h"
 #include "signals.h"
 #include "storage.h"
+#include "screens.h"
 #include "snake.h"
 #include "strip.h"
 
@@ -60,6 +61,8 @@ static char s_active_label[25];
 static int64_t s_call_started = -1;
 static char s_shown[4][25];
 static int s_shown_n = -1;
+static int64_t s_boot_until;  // the boot logo stays this long
+static bool s_setup_qr;       // the setup QR screen is up
 static phone_kind_t s_logged_kind = PH_IDLE;
 static prov_t s_prov;  // the Wi-Fi setup network (prov_core.c decides)
 // Updates: when to check, whether one is installed and waiting for the phone to be idle, and a
@@ -216,8 +219,10 @@ static void render(void) {
     memcpy(lines, s_ota_msg, sizeof s_ota_msg);
     n = 2;
   }
+  bool qr = false;
   if (n == 0 && prov_ap_active() && !busy) {
     // The steps, while the setup network is open: join it with the password, open the page.
+    qr = true;
     snprintf(lines[0], 25, "WI-FI SETUP: JOIN");
     snprintf(lines[1], 25, "%.24s", prov_ssid());
     snprintf(lines[2], 25, "PASSWORD %s", prov_password());
@@ -254,8 +259,26 @@ static void render(void) {
     n = strip_lines(&in, strip);
     for (int i = 0; i < n; i++) strlcpy(lines[i], strip[i], sizeof lines[i]);
   }
-  if (snake_active()) {
-    s_shown_n = -1;  // the game owns the screen; redraw the status when it ends
+  int w, h;
+  display_size(&w, &h);
+  if (s_boot_until && now >= s_boot_until) {
+    s_boot_until = 0;
+    if (!snake_active()) display_pixels(NULL);
+  }
+  if (qr && !snake_active() && !s_boot_until && !s_setup_qr) {
+    uint8_t *fb = calloc(1, (size_t)((w + 7) / 8) * h);
+    if (fb) {
+      screen_setup(fb, w, h, prov_ssid(), prov_password());
+      display_pixels(fb);
+      free(fb);
+      s_setup_qr = true;
+    }
+  } else if (!qr && s_setup_qr) {
+    s_setup_qr = false;
+    if (!snake_active()) display_pixels(NULL);
+  }
+  if (snake_active() || s_boot_until || s_setup_qr) {
+    s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
     s_shown_n = n;
@@ -699,6 +722,17 @@ void app_main(void) {
   display_start(&display_epd_ssd1680);
 #endif
   bool forced_setup = boot_keys();
+  {
+    int w, h;
+    display_size(&w, &h);
+    uint8_t *fb = calloc(1, (size_t)((w + 7) / 8) * h);
+    if (fb && !forced_setup) {
+      screen_boot(fb, w, h, FW_VERSION);
+      display_pixels(fb);
+      s_boot_until = now_ms() + 2500;
+    }
+    free(fb);
+  }
   net_start();       // starts the radio: esp_fill_random is truly random from here on
   identity_init();   // loads or generates the device key
 #if CONFIG_OLP_AUDIO_TEST_DEVICE

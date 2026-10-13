@@ -16,7 +16,7 @@ static const char *TAG = "snake";
 #define CELL 10
 #define MAX_LEN 400
 #define TRIGGER 10
-#define TRIGGER_MS 4000
+#define GAP_MS 1500  // presses in a row, none more than this apart
 
 typedef struct { int8_t x, y; } pt_t;
 static bool s_on, s_alive;
@@ -92,11 +92,12 @@ static void game_over(void) {
 
 bool snake_menu_press(int64_t now) {
   if (s_on) return false;
-  s_presses[s_pi] = now;
-  s_pi = (s_pi + 1) % TRIGGER;
-  int64_t oldest = s_presses[s_pi];  // the press TRIGGER-1 presses ago
-  if (oldest == 0 || now - oldest > TRIGGER_MS) return false;
-  memset(s_presses, 0, sizeof s_presses);
+  s_pi = (s_presses[0] && now - s_presses[0] <= GAP_MS) ? s_pi + 1 : 1;
+  s_presses[0] = now;
+  ESP_LOGD(TAG, "menu press %d/%d", s_pi, TRIGGER);
+  if (s_pi < TRIGGER) return false;
+  s_pi = 0;
+  s_presses[0] = 0;
   start_game(now);
   return true;
 }

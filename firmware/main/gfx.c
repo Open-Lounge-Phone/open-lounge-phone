@@ -51,9 +51,6 @@ static void glyph(uint8_t *fb, int w, int h, int x0, int y0, char c, int scale) 
             pixel(fb, w, h, x0 + col * scale + dx, y0 + row * scale + dy);
 }
 
-#if CONFIG_OLP_UI_V2
-// The framed look (CONFIG_OLP_UI_V2): status screens get the main line large over a rule;
-// screens with 3-4 lines get their first line as a black title bar and dotted separators.
 static void ink(uint8_t *fb, int w, int h, int x, int y, bool on) {
   if (x < 0 || y < 0 || x >= w || y >= h) return;
   uint8_t m = 0x80 >> ((y * w + x) % 8);
@@ -61,14 +58,16 @@ static void ink(uint8_t *fb, int w, int h, int x, int y, bool on) {
   else fb[(y * w + x) / 8] &= (uint8_t)~m;
 }
 
-static void rect(uint8_t *fb, int w, int h, int x0, int y0, int rw, int rh, bool on) {
+void gfx_rect(uint8_t *fb, int w, int h, int x0, int y0, int rw, int rh, bool on) {
   for (int y = y0; y < y0 + rh; y++)
     for (int x = x0; x < x0 + rw; x++) ink(fb, w, h, x, y, on);
 }
+#define rect gfx_rect
 
-static void text(uint8_t *fb, int w, int h, const char *str, int y, int scale, bool on) {
+int gfx_text_width(const char *str, int scale) { return (int)strlen(str) * 6 * scale - scale; }
+
+void gfx_text_at(uint8_t *fb, int w, int h, int x0, int y, const char *str, int scale, bool on) {
   int len = (int)strlen(str), pitch = 6 * scale;
-  int x0 = (w - (len * pitch - scale)) / 2;
   for (int k = 0; k < len; k++) {
     char c = (char)toupper((unsigned char)str[k]);
     if (c < 0x20 || c > 0x5F) c = '?';
@@ -77,6 +76,20 @@ static void text(uint8_t *fb, int w, int h, const char *str, int y, int scale, b
       for (int row = 0; row < 7; row++)
         if (g[col] & (1 << row)) rect(fb, w, h, x0 + k * pitch + col * scale, y + row * scale, scale, scale, on);
   }
+}
+
+void gfx_bitmap(uint8_t *fb, int w, int h, int x0, int y0, const uint8_t *bm, int bw, int bh) {
+  int row = (bw + 7) / 8;
+  for (int y = 0; y < bh; y++)
+    for (int x = 0; x < bw; x++)
+      if (bm[y * row + x / 8] & (0x80 >> (x % 8))) ink(fb, w, h, x0 + x, y0 + y, true);
+}
+
+#if CONFIG_OLP_UI_V2
+// The framed look (CONFIG_OLP_UI_V2): status screens get the main line large over a rule;
+// screens with 3-4 lines get their first line as a black title bar and dotted separators.
+static void text(uint8_t *fb, int w, int h, const char *str, int y, int scale, bool on) {
+  gfx_text_at(fb, w, h, (w - gfx_text_width(str, scale)) / 2, y, str, scale, on);
 }
 
 /** The largest scale (up to `max`) at which `str` fits `room` pixels. */

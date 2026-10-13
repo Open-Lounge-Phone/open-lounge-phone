@@ -12,7 +12,8 @@ earpiece and mic on the 3.5 mm jack. No speaker, no per-key lights, no battery.
 
 ## Screen
 
-- **Text only**, upper case, a 5 × 7 pixel font scaled up, each line centred.
+- **Text**, upper case, a 5 × 7 pixel font scaled up, each line centred. Two screens are drawn
+  as pictures: the boot logo and the setup QR code.
 - **Status screens: 1 or 2 lines of at most 16 characters**, at 3× (18 px per character,
   288 px wide). This is the protocol's strip: the server never sends more.
 - **Menus and setup: 3 or 4 lines of at most 20 characters**, at 2× (12 px per character).
@@ -30,10 +31,11 @@ Highest priority first: the first row that applies is shown.
 
 | State | Screen |
 |---|---|
+| Power-on | the mark (handset over the 2 × 6 keypad) and `OPEN LOUNGE PHONE`, firmware version small, for 2.5 s |
 | Holding MENU+BACK at power-on | `KEEP HOLDING` / `FOR WI-FI SETUP`, then `KEEP HOLDING` / `TO RESET` (3 s and 10 s) |
 | Updating | `CHECKING UPDATE` / `PLEASE WAIT`, `UPDATING 42%` / `DON'T UNPLUG`, `UPDATED` |
 | Menu open | the menu screen (below) |
-| Setup network open (no call) | `WI-FI SETUP: JOIN` / network name / `PASSWORD xxxxxxxx` / `OPEN 192.168.4.1` |
+| Setup network open (no call) | a QR code that joins the setup network (scan it with a phone camera; the setup page opens), beside `SCAN TO SET UP` and the same in words: `OR JOIN` / network name / `PW xxxxxxxx` / `OPEN 192.168.4.1` |
 | Server too old or phone too old | `SERVER TOO OLD` or `UPDATE NEEDED` / what to do |
 | No server chosen | `SET UP:` / `CHOOSE A SERVER` / `PRESS MENU 4` |
 | Pairing | `PAIR 123 456` / `ENTER IN APP` |

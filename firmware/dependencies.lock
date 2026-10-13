@@ -27,6 +27,13 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.8.0
+  espressif/qrcode:
+    component_hash: 3b493771bc5d6ad30cbf87c25bf784aada8a08c941504355b55d6b75518ed7bc
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.0~2
   idf:
     source:
       type: idf
@@ -34,7 +41,8 @@ dependencies:
 direct_dependencies:
 - espressif/esp_peer
 - espressif/esp_websocket_client
+- espressif/qrcode
 - idf
-manifest_hash: 9fd4f5a1c942baedca8ab11917fe69dc7dd5a2ee7a7ea5d073f803b6a430d99e
+manifest_hash: 9d8f8bedc8ebba46cfe8d64c48b55471b0d0baf5c4a1c5e9f08a956d56132bdf
 target: esp32s3
 version: 2.0.0

@@ -1,5 +1,6 @@
 dependencies:
   idf: ">=5.3"
   espressif/esp_websocket_client: "^1.4.0"
+  espressif/qrcode: "^0.1.0"   # the setup screen's Wi-Fi QR code
   # WebRTC (ICE, DTLS-SRTP, RTP) from esp-webrtc-solution; see README "Call audio".
   espressif/esp_peer: "~1.5.6"
