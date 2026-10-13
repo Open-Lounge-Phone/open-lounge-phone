@@ -249,6 +249,7 @@ static void render(void) {
     int rssi;
     net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
     in.no_wifi = ssid[0] == '\0';
+    in.wifi_problem = net_wifi_up() ? NULL : net_wifi_problem();
     n = strip_lines(&in, strip);
     for (int i = 0; i < n; i++) strlcpy(lines[i], strip[i], sizeof lines[i]);
   }

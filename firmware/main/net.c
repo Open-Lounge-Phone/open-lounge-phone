@@ -84,6 +84,30 @@ static void retry_now(void *arg) {
   if (s_ssid[0]) esp_wifi_connect();
 }
 
+static int s_reason;  // the last disconnect reason (0 = none since the last join)
+
+/** Why the phone couldn't join, in words for the screen (≤ 16 characters), or NULL. */
+const char *net_wifi_problem(void) {
+  switch (s_reason) {
+    case WIFI_REASON_AUTH_FAIL:
+    case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_AUTH_EXPIRE:
+    case WIFI_REASON_MIC_FAILURE:
+      return "WRONG PASSWORD?";
+    case WIFI_REASON_NO_AP_FOUND:
+    case WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD:
+      return "NETWORK NOT SEEN";
+    case WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY:
+    case WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD:
+      return "SECURITY NOT OK";
+    case 0:
+      return NULL;
+    default:
+      return "CAN'T JOIN WI-FI";
+  }
+}
+
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
   static int retries;
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
@@ -96,12 +120,18 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     // scanning for a missing network hops channels and drops the setup network's clients).
     int delay = s_slow_retry ? 60000 : retries < 10 ? 500 * (retries + 1) : 10000;
     retries++;
-    ESP_LOGW(TAG, "wifi disconnected; retry in %d ms", delay);
+    const wifi_event_sta_disconnected_t *d = data;
+    s_reason = d ? d->reason : -1;
+    const char *why = net_wifi_problem();
+    ESP_LOGW(TAG, "wifi disconnected (reason %d%s%s%s); retry in %d ms", s_reason, why ? ": " : "",
+             why ? why : "", s_reason == WIFI_REASON_NO_AP_FOUND ? ", 5 GHz only? out of range?" : "",
+             delay);
     esp_timer_stop(s_retry);
     esp_timer_start_once(s_retry, (uint64_t)delay * 1000);
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *e = data;
     retries = 0;
+    s_reason = 0;
     s_wifi_up = true;
     ESP_LOGI(TAG, "WIFI connected ip=" IPSTR, IP2STR(&e->ip_info.ip));
     app_post(EV_WIFI_UP, 0, NULL);
@@ -116,7 +146,11 @@ static void apply_wifi(void) {
   // Fixed-size fields, not necessarily NUL-terminated (a 32-byte SSID fills it).
   memcpy(cfg.sta.ssid, s_ssid, strnlen(s_ssid, sizeof cfg.sta.ssid));
   memcpy(cfg.sta.password, pass, strnlen(pass, sizeof cfg.sta.password));
-  cfg.sta.threshold.authmode = pass[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+  cfg.sta.threshold.authmode = pass[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;  // WPA2 or better
+  cfg.sta.pmf_cfg.capable = true;               // WPA3 and WPA2/WPA3 routers need PMF
+  cfg.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;      // both WPA3 key-exchange methods
+  cfg.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;  // mesh systems: every access point with this name
+  cfg.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;  // and join the strongest
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
   ESP_LOGI(TAG, "wifi: %s", s_ssid[0] ? s_ssid : "(not set: use `wifi <ssid> <pass>`)");
 }

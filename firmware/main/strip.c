@@ -70,7 +70,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
     return set2(out, buf, "ENTER IN APP");
   }
   if (in->no_wifi) return set2(out, "NO WI-FI", "PRESS MENU 3");
-  if (in->connection == CONN_OFFLINE) return set2(out, "OFFLINE", "RECONNECTING");
+  if (in->connection == CONN_OFFLINE)
+    return set2(out, "OFFLINE", in->wifi_problem ? in->wifi_problem : "RECONNECTING");
   if (in->connection == CONN_CONNECTING) return set1(out, "CONNECTING");
 
   switch (s->kind) {

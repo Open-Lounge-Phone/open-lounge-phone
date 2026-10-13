@@ -200,6 +200,10 @@ static esp_err_t post_save(httpd_req_t *req) {
   net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
   bool keep_wifi = !name[0] && saved[0] && net_has_wifi();
   const char *err = keep_wifi ? NULL : prov_check(name, pass);
+  if (!err && !keep_wifi && !pass[0]) {  // a network the scan saw as secured needs its password
+    for (int i = 0; i < s_naps; i++)
+      if (s_aps[i].secure && !strcmp(s_aps[i].ssid, name)) err = "That network needs its password.";
+  }
   char current[PROV_SERVER_MAX], server[PROV_SERVER_MAX];
   net_server_url(current, sizeof current);
   if (!err) err = prov_server_choice(srv, addr, current, server, sizeof server);

@@ -25,7 +25,8 @@ typedef struct {
 typedef struct {
   conn_t connection;
   const char *pairing_code;   // NULL unless showing a code
-  bool no_wifi;               // no credentials at all: "SET ME UP"
+  bool no_wifi;               // no credentials at all: "NO WI-FI"
+  const char *wifi_problem;   // why Wi-Fi won't join (net_wifi_problem), or NULL
   const phone_state_t *state;
   const phone_config_t *config;
   const char *active_label;   // the other party on the current or last call
