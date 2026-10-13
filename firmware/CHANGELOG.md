@@ -10,6 +10,8 @@
   second press before the setup network, Lounge phones don't offer it at all.
 - The root menu fits whatever applies into three lines; console `lounge` prints the takeover link.
 - Fixed: the dial tone no longer plays over a voicemail you're listening to.
+- Builds with the games extra (`CONFIG_OLP_SNAKE`, off by default, on in labs): MENU ten times
+  opens a games menu, 1 Snake, 2 Memory (watch the digits, key them back).
 - The labs firmware (`firmware/labs/`, 0.0.0) builds from the same sources; nothing changes for
   this build.
 
