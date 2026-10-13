@@ -1,5 +1,18 @@
 # Firmware changelog
 
+## 0.7.1 — 2026-10-13: first boards
+
+- Display: the WeAct 2.13" e-paper (250 × 122) is the default; the 2.9" is `CONFIG_OLP_EPD_213=n`.
+  Each refresh logs its time; the console's `epd` checks the module answers.
+- Screens follow `docs/phone-ux.md`: a boot logo, a QR code that joins the setup network, a
+  MENU title, the recording light (double flash) and `REC`, Voicemail in the menu (2), plain
+  pairing and Wi-Fi texts.
+- Wi-Fi: WPA3 and mixed WPA2/WPA3 routers, mesh systems (strongest access point), and why a
+  join fails (`WEAK WI-FI`, `WRONG PASSWORD?`, `NETWORK NOT SEEN`, `SECURITY NOT OK`) in the log
+  and on the screen. The setup page refuses an empty password for a secured network.
+- Optional, off by default: framed screens (`CONFIG_OLP_UI_V2`) and Snake (`CONFIG_OLP_SNAKE`:
+  MENU ten times in a row; 3/8/7/9 steer, BACK quits).
+
 ## 0.7.0 — 2026-10-01: versions and compatibility
 
 - **Says which side needs an update.** A server that no longer accepts this phone's protocol
