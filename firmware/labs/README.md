@@ -59,5 +59,5 @@ can ring a room, and the audio isn't encrypted (calls through the server are).
 
 Host-tested: settings, the intercom state machine (room to room, all rooms, busy, doorbell,
 chime), the check-in schedule and the key combos (`make -C firmware/test/host`); the server's
-check-in alert (`voicemail.test.ts`). Builds for the board. **Not yet run on the board**: the
-intercom between two boards, Home Assistant, the USB keyboard and stories need real hardware.
+check-in alert (`voicemail.test.ts`). Runs on the board (its screens and settings page). **Not yet
+tried on hardware**: the intercom between two boards, Home Assistant, the USB keyboard and stories.
