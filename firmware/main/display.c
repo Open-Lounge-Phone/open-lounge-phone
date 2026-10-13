@@ -27,6 +27,7 @@ static bool s_custom_on, s_custom_new;
 static void task(void *arg) {
   char shown[MAX_LINES][25];
   int shown_n = -1, updates = 0;
+  bool was_custom = false;  // switching between a pixel screen and text: a full, clean refresh
   for (;;) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     char lines[MAX_LINES][25];
@@ -40,14 +41,17 @@ static void task(void *arg) {
     s_custom_new = false;
     xSemaphoreGive(s_lock);
     if (custom) {
-      if (fresh) s_drv->flush(s_fb, updates++ % FULL_EVERY == 0);
+      if (fresh) s_drv->flush(s_fb, !was_custom || updates++ % FULL_EVERY == 0);
+      was_custom = true;
       shown_n = -1;  // text redraws once the game is over
       continue;
     }
+    bool switching = was_custom;
+    was_custom = false;
     if (n == shown_n && !memcmp(lines, shown, sizeof lines)) continue;
     const char *ptrs[MAX_LINES] = {lines[0], lines[1], lines[2], lines[3]};
     gfx_render_lines(s_fb, s_drv->width, s_drv->height, ptrs, n);
-    bool full = updates++ % FULL_EVERY == 0;
+    bool full = switching || updates++ % FULL_EVERY == 0;
     s_drv->flush(s_fb, full);
     memcpy(shown, lines, sizeof shown);
     shown_n = n;

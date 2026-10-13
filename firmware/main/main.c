@@ -627,6 +627,7 @@ static void on_key(int index) {
 
 static void on_hook(bool up) {
   s_hook_up = up;
+  snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
   phone_hook(&s_phone, up, emit);
 }
@@ -835,7 +836,7 @@ void app_main(void) {
       }
     }
     tick();
-    if (s_phone.kind == PH_INCOMING || s_hook_up) snake_stop();  // a call wins
+    if (s_phone.kind == PH_INCOMING) snake_stop();  // a call wins
     snake_tick(now_ms());
     prov_event(PROV_EV_TICK, false);
     sync_media();
