@@ -5,6 +5,8 @@
 cmake_minimum_required(VERSION 3.16)
 set(PROJECT_VER "0.0.0")
 # The phone's defaults, then the labs ones.
-set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/../sdkconfig.defaults;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.labs")
+if(NOT DEFINED SDKCONFIG_DEFAULTS)   # a simulator build passes its own (adds ../sdkconfig.qemu)
+  set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/../sdkconfig.defaults;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.labs")
+endif()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(openloungephone-labs)

@@ -19,3 +19,5 @@ const char *labs_label(int index);
 bool labs_busy(void);                                // the intercom is ringing / calling / talking
 bool labs_ringing(void);
 int labs_menu_lines(char out[4][25]);
+/** A labs mode (not "phone") is set: it works without a server, so no "choose a server" screen. */
+bool labs_standalone(void);

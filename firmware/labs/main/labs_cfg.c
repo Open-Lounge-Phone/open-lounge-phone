@@ -58,12 +58,16 @@ static int key_index(const cJSON *v) {
 }
 
 bool labs_cfg_parse(const char *json, const labs_cfg_t *keep, labs_cfg_t *out, char *err, size_t errlen) {
-  labs_cfg_t c;
+  // ~4 KB: on the heap (the settings page's task has a small stack)
+  labs_cfg_t *cp = malloc(sizeof *cp);
+  if (!cp) { snprintf(err, errlen, "no memory"); return false; }
+#define c (*cp)
   labs_cfg_defaults(&c);
   cJSON *j = cJSON_Parse(json ? json : "");
   if (!cJSON_IsObject(j)) {
     snprintf(err, errlen, "not a JSON object");
     cJSON_Delete(j);
+    free(cp);
     return false;
   }
   bool ok = true;
@@ -131,6 +135,8 @@ bool labs_cfg_parse(const char *json, const labs_cfg_t *keep, labs_cfg_t *out, c
   upper(c.door_label);
   cJSON_Delete(j);
   if (ok) *out = c;
+#undef c
+  free(cp);
   return ok;
 }
 

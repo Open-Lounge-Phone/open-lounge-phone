@@ -166,9 +166,9 @@ static esp_err_t h_post(httpd_req_t *req) {
   if (!authed(req)) return json_reply(req, "401 Unauthorized", "{\"error\":\"PIN\"}");
   char *b = body(req, 6000);
   if (!b) return json_reply(req, "400 Bad Request", "{\"error\":\"empty or too big\"}");
-  labs_cfg_t next;
-  char err[96] = "";
-  bool ok = labs_cfg_parse(b, labs_cfg(), &next, err, sizeof err);
+  labs_cfg_t *next = malloc(sizeof *next);
+  char err[96] = "no memory";
+  bool ok = next && labs_cfg_parse(b, labs_cfg(), next, err, sizeof err);
   free(b);
   if (!ok) {
     cJSON *e = cJSON_CreateObject();
@@ -177,9 +177,11 @@ static esp_err_t h_post(httpd_req_t *req) {
     cJSON_Delete(e);
     esp_err_t r = json_reply(req, "400 Bad Request", s);
     free(s);
+    free(next);
     return r;
   }
-  bool restart = labs_cfg_set(&next);
+  bool restart = labs_cfg_set(next);
+  free(next);
   json_reply(req, "200 OK", restart ? "{\"ok\":true,\"restart\":true}" : "{\"ok\":true}");
   if (restart) xTaskCreate(restart_task, "labs_rst", 2048, NULL, 3, NULL);
   return ESP_OK;

@@ -305,7 +305,11 @@ static void render(void) {
     compat_lines(s_compat, lines);
     n = 2;
   }
-  if (n == 0 && s_no_server && !busy) {
+  bool standalone = false;   // labs: an intercom / doorbell / home panel needs no server
+#if CONFIG_OLP_LABS
+  standalone = labs_standalone();
+#endif
+  if (n == 0 && s_no_server && !busy && !standalone) {
     snprintf(lines[0], 25, "SET UP:");
     snprintf(lines[1], 25, "CHOOSE A SERVER");
     snprintf(lines[2], 25, "PRESS MENU 4");
