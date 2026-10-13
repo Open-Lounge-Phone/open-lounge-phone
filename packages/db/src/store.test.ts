@@ -282,6 +282,34 @@ describe("voicemail", () => {
     ).rejects.toThrow();
   });
 
+  it("shows a personal phone its owner's voicemail from every space", async () => {
+    const { household: home, guardian } = await household();
+    const { household: other, guardian: meThere } = await store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Mom", accountId: guardian.accountId },
+      T0,
+    );
+    const { code } = await store.createPairing(KEY, T0);
+    const phone = await store.claimPairing({ code, householdId: home.id, name: "Mine" }, T0);
+    if (!phone) throw new Error("no device");
+    await store.createVoicemail({
+      householdId: other.id,
+      deviceId: null,
+      toUser: meThere.id,
+      fromUser: null,
+      fromLabel: "Test phone",
+      fromAddress: null,
+      createdAt: T0,
+      durationMs: 1000,
+      mime: "audio/wav",
+      blobKey: "k",
+      transcriptStatus: "pending",
+    });
+    expect(await store.unheardFrom(phone.id, 8, guardian.id)).toEqual(["Test phone"]);
+    const stranger = await household();
+    expect(await store.unheardFrom(phone.id, 8, stranger.guardian.id)).toEqual([]);
+    expect(await store.unheardFrom(phone.id, 8, null)).toEqual([]);
+  });
+
   it("stores voicemail settings and greetings per person and per phone", async () => {
     const { guardian } = await household();
     const owner = { accountId: guardian.accountId };

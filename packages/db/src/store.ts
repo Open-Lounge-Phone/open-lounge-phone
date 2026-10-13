@@ -2284,8 +2284,12 @@ export class Store {
    */
   async unheardFrom(deviceId: string, limit = 8, ownerUserId?: string | null): Promise<string[]> {
     const rows = await this.sql.all<{ from_label: string }>(
+      // A personal phone shows its owner's voicemail from every space they're in (the same
+      // account-wide inbox the app shows), not just the phone's own space.
       `SELECT from_label, MAX(created_at) AS latest FROM voicemails
-       WHERE (device_id = ? OR to_user = ?) AND heard_at IS NULL
+       WHERE (device_id = ? OR to_user IN (
+           SELECT id FROM users WHERE account_id = (SELECT account_id FROM users WHERE id = ?)))
+         AND heard_at IS NULL
        GROUP BY from_label ORDER BY latest DESC LIMIT ?`,
       deviceId,
       ownerUserId ?? null,

@@ -133,10 +133,12 @@ export async function depositVoicemail(
   return vm;
 }
 
-/** A person's own phones show their unheard voicemail too. */
+/** A person's own phones, in any of their spaces, show their unheard voicemail too. */
 async function refreshOwnPhones(env: ServerEnv, live: Coordinator, user: User): Promise<void> {
-  for (const d of await env.store.listDevices(user.householdId)) {
-    if (d.ownerUserId === user.id) await live.refreshDevice(user.householdId, d.id);
+  for (const { user: me } of await env.store.listMemberships(user.accountId)) {
+    for (const d of await env.store.listDevices(me.householdId)) {
+      if (d.ownerUserId === me.id) await live.refreshDevice(me.householdId, d.id);
+    }
   }
 }
 
