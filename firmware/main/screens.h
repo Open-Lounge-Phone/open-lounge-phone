@@ -10,5 +10,12 @@ void screen_about(uint8_t *fb, int w, int h, const char *fw, const char *board, 
 /** A page of label / value rows under a title bar (MENU → 7 diagnostics), an optional footer. */
 void screen_page(uint8_t *fb, int w, int h, const char *title, const char *const rows[][2], int n,
                  const char *footer);
+/**
+ * Handset up, nothing dialled: whose phone it is in the title bar, then who is on each digit key
+ * (labels in protocol order: 1-9 → 0-8, 0 → 9; "" = nobody) as 1-5 and 6-0 columns, and the
+ * status at the bottom ("PRESS A KEY TO CALL", "BUSY - PRESS A KEY").
+ */
+void screen_keys(uint8_t *fb, int w, int h, const char *title, const char *const labels[10],
+                 const char *footer);
 /** The setup screen: a QR code that joins the setup network, and the same steps in words. */
 void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass);

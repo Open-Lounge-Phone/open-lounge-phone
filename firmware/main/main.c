@@ -66,6 +66,8 @@ static int s_shown_n = -1;
 static int64_t s_boot_until;  // the boot logo stays this long
 static bool s_setup_qr;       // the setup QR screen is up
 static bool s_about_px;       // MENU → 0 drawn as a page
+static bool s_keys_px;        // handset up: who is on which key
+static char s_keys_sig[400];  // …what it shows, to redraw only on a change
 static bool s_check_px;       // MENU → 7 drawn as a page
 static int64_t s_check_drawn;  // …redrawn every few seconds while open
 static bool s_selftest_px;    // the self-test owns the screen
@@ -223,6 +225,7 @@ static void render(void) {
   }
 
   char lines[4][25] = {{0}};
+  int n_status = 0;  // lines from the status strip (0 = a menu or another screen has them)
   s_menu.voicemail = s_cfg.missed_count;
   int n = menu_lines(&s_menu, lines);
   bool busy = s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK;
@@ -278,6 +281,7 @@ static void render(void) {
     in.no_wifi = ssid[0] == '\0';
     in.wifi_problem = net_wifi_up() ? NULL : net_wifi_problem();
     n = strip_lines(&in, strip);
+    n_status = n;
     for (int i = 0; i < n; i++) strlcpy(lines[i], strip[i], sizeof lines[i]);
   }
   int w, h;
@@ -316,6 +320,37 @@ static void render(void) {
     s_about_px = false;
     if (!snake_active() && !s_setup_qr) display_pixels(NULL);
   }
+  // Handset up, nothing dialled: whose phone this is and who is on each key (docs/phone-ux.md).
+  bool keys = n_status > 0 && s_phone.kind == PH_OFFHOOK && !s_phone.held[0] && s_authed &&
+              s_conn == CONN_ONLINE && !s_code[0] && s_menu.screen == MENU_CLOSED &&
+              !selftest_active();
+  if (keys && !snake_active() && !s_boot_until) {
+    char title[STATUS_WIDTH + 1] = "SPEED DIAL", footer[64], sig[sizeof s_keys_sig];
+    if (s_cfg.owner_mode[0]) strip_owner_line(title, &s_cfg);
+    if (n_status == 2) snprintf(footer, sizeof footer, "%s - %s", lines[0], lines[1]);
+    else snprintf(footer, sizeof footer, "PRESS A KEY TO CALL");
+    const char *labels[10];
+    int at = snprintf(sig, sizeof sig, "%s|%s", title, footer);
+    for (int i = 0; i < 10; i++) {
+      labels[i] = s_cfg.labels[i];
+      if (at < (int)sizeof sig) at += snprintf(sig + at, sizeof sig - at, "|%s", labels[i]);
+    }
+    if (!s_keys_px || strcmp(sig, s_keys_sig)) {
+      uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
+      if (fb) {
+        screen_keys(fb, w, h, title, labels, footer);
+        display_pixels(fb);
+        free(fb);
+        ESP_LOGI(TAG, "KEYS %s", sig);
+      }
+      snprintf(s_keys_sig, sizeof s_keys_sig, "%s", sig);
+      s_keys_px = true;
+    }
+  } else if (s_keys_px) {
+    s_keys_px = false;
+    if (!snake_active() && !s_setup_qr && !s_about_px) display_pixels(NULL);
+  }
+
   // MENU → 7: the phone check page, redrawn every 10 s while open (signal, uptime, memory).
   bool check = s_menu.screen == MENU_CHECK;
   if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= 10000)) {
@@ -340,7 +375,8 @@ static void render(void) {
     s_selftest_px = false;
     display_pixels(NULL);
   }
-  if (snake_active() || s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px) {
+  if (snake_active() || s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px ||
+      s_keys_px) {
     s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);

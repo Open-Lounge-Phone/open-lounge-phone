@@ -2,6 +2,8 @@
 
 ## 0.8.0 — 2026-10-13: messages, call menu, phone check
 
+- **Key map** when the handset is up: whose phone it is, then who is on each digit key (1-5 and
+  6-0), and `PRESS A KEY TO CALL` (or why the last call didn't go through).
 - **Leave a message** when a call isn't answered: a beep, the handset mic records (8 kHz WAV, up
   to the server's limit), hanging up sends it. Under 1.5 s is dropped. Recorded greetings aren't
   played yet.

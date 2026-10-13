@@ -126,3 +126,40 @@ void screen_page(uint8_t *fb, int w, int h, const char *title, const char *const
     gfx_text_at(fb, w, h, 8, h - 10, footer, 1, true);
   }
 }
+
+void screen_keys(uint8_t *fb, int w, int h, const char *title, const char *const labels[10],
+                 const char *footer) {
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
+  gfx_rect(fb, w, h, 0, 0, w, 22, true);  // title bar
+  char t[32];
+  snprintf(t, sizeof t, "%.20s", title);
+  gfx_text_at(fb, w, h, (w - gfx_text_width(t, 2)) / 2, 4, t, 2, false);
+
+  // Two columns like the two key rows: 1-5 on the left, 6-0 on the right.
+  int top = 26, bottom = h - 14, pitch = (bottom - top) / 5, col = (w - 8) / 2;
+  for (int i = 0; i < 10; i++) {
+    int x = 4 + (i / 5) * col, y = top + (i % 5) * pitch;
+    const char *label = labels[i] && labels[i][0] ? labels[i] : NULL;
+    char digit[2] = {(char)(i == 9 ? '0' : '1' + i), 0};
+    // The digit as a little keycap: filled when someone is on it, plain when not.
+    int kw = 16, kh = pitch - 1 < 15 ? pitch - 1 : 15;
+    int ds = kh >= 15 ? 2 : 1;
+    if (label) gfx_rect(fb, w, h, x, y, kw, kh, true);
+    gfx_text_at(fb, w, h, x + (kw - gfx_text_width(digit, ds) + 1) / 2, y + (kh - 7 * ds + 1) / 2,
+                digit, ds, !label);
+    char name[32];
+    int room = col - kw - 10;
+    if (!label) {
+      snprintf(name, sizeof name, "-");
+    } else {
+      snprintf(name, sizeof name, "%s", label);
+      for (char *c = name; *c; c++) *c = (char)toupper((unsigned char)*c);
+    }
+    // Big when it fits, else small, else clipped.
+    int s = gfx_text_width(name, 2) <= room && kh >= 14 ? 2 : 1;
+    while (gfx_text_width(name, s) > room && strlen(name) > 1) name[strlen(name) - 1] = '\0';
+    gfx_text_at(fb, w, h, x + kw + 5, y + (kh - 7 * s) / 2, name, s, true);
+  }
+  for (int x = 8; x < w - 8; x += 3) gfx_rect(fb, w, h, x, h - 13, 1, 1, true);  // dotted rule
+  gfx_text_at(fb, w, h, (w - gfx_text_width(footer, 1)) / 2, h - 9, footer, 1, true);
+}

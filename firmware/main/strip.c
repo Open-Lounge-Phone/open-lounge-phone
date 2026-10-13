@@ -50,7 +50,7 @@ static const char *end_text(const char *r) {
   return NULL;  // hangup, unavailable: no message
 }
 
-static void owner_line(char *dst, const phone_config_t *c) {
+void strip_owner_line(char *dst, const phone_config_t *c) {
   char buf[96];
   if (!strcmp(c->owner_mode, "personal") && c->owner_person[0])
     snprintf(buf, sizeof buf, "%s'S PHONE", c->owner_person);
@@ -153,7 +153,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
   const char *first = quiet[0] ? quiet : ready;
   if (c && c->owner_mode[0]) {
     char owner[STATUS_WIDTH + 1];
-    owner_line(owner, c);
+    strip_owner_line(owner, c);
     return set2(out, first, owner);
   }
   return set1(out, first);

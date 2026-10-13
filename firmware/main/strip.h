@@ -40,3 +40,5 @@ typedef struct {
 
 /** Returns the number of lines (1 or 2) written to out. */
 int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]);
+/** The trust line: "KIDS: SMITHS", "ANA'S PHONE", "LOUNGE: STUDIO" (≤ 16 chars; config.owner). */
+void strip_owner_line(char *dst, const phone_config_t *c);

@@ -12,8 +12,9 @@ earpiece and mic on the 3.5 mm jack. No speaker, no per-key lights, no battery.
 
 ## Screen
 
-- **Text**, upper case, a 5 × 7 pixel font scaled up, each line centred. Three screens are drawn
-  as pictures: the boot logo, the setup QR code and About.
+- **Text**, upper case, a 5 × 7 pixel font scaled up, each line centred. Some screens are drawn
+  as pictures: the boot logo, the setup QR code, About, the key map (handset up), the phone check
+  and the self-test.
 - **Status screens: 1 or 2 lines of at most 16 characters**, at 3× (18 px per character,
   288 px wide). This is the protocol's strip: the server never sends more.
 - **Menus and setup: 3 or 4 lines of at most 20 characters**, at 2× (12 px per character).
@@ -50,7 +51,7 @@ Highest priority first: the first row that applies is shown.
 | In a call | `IN CALL 01:23` / name; recorded: `REC 01:23` / name; while connecting `CONNECTING` / name |
 | They put you on hold | `ON HOLD` / name |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
-| Handset up, nothing dialled | `PRESS A KEY`; after a call that didn't go through: `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` / `PRESS A KEY` |
+| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids), or `3 MISSED CALLS` / each name in turn (3 s) |
