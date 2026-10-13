@@ -120,7 +120,7 @@ PIV_Z = KEYCAP_TOP + 5.0                      # the tongue's underside sits on t
 HUB_D, HUB_X = 12.0, (6.0, 26.0)              # the pivot hub, between the lugs
 PIN_D = 3.1
 BUSH_OD, BUSH_L = 5.0, 6.0
-LUG_T, LUG_GAP, LUG_W = 6.5, 0.5, 16.0
+LUG_T, LUG_GAP, LUG_W = 7.0, 0.5, 18.0
 TONGUE_W, TONGUE_T = 9.0, 5.0
 FOOT = 16.0                # the tongue's foot on the hook keycap
 NECK = 40.0                # MEASURE: the handle's width under the cup (passes between the arms)
@@ -158,29 +158,37 @@ def soften(part, r):
         return part
 
 
+def pivot_housing():
+    """The pivot mount as one sculpted piece: two cheeks, each lofted from a broad rounded foot
+    that flares into the face up to a rounded crown round the pin, on a low plinth that runs
+    forward over the H4 insert boss (the pin's load goes to a screw). The slot between the
+    cheeks opens onto the piezo grille. Rounded by construction (no fillets on the loft)."""
+    from build123d import Plane, loft
+    y = Y(PIV_KY)
+    hy = Y(P.HOLES[3][1])
+    s0, s1 = HUB_X[0] - LUG_GAP, HUB_X[1] + LUG_GAP           # the slot
+    by0, by1 = hy - 5.0, min(y + LUG_W / 2 + 9.0, BOARD_H + 1.5)
+    h = None
+    for (fx0, fx1), (tx0, tx1) in (((-2.0, s0), (s0 - LUG_T, s0)), ((s1, s1 + LUG_T + 3.0), (s1, s1 + LUG_T))):
+        foot = Plane.XY.offset(FACE_Z - 0.6) * Pos((fx0 + fx1) / 2, (by0 + by1) / 2) * RectangleRounded(fx1 - fx0, by1 - by0, 3.0)
+        crown = Plane.XY.offset(PIV_Z) * Pos((tx0 + tx1) / 2, y) * RectangleRounded(tx1 - tx0, LUG_W, 2.5)
+        cheek = loft([foot, crown]) + soften(xbar(tx0, tx1, y, PIV_Z, LUG_W), 1.6)
+        h = cheek if h is None else h + cheek
+    plinth = rrect((-2.0 + s1 + LUG_T + 3.0) / 2, (by0 + Y(BZ[1] + GRILLE_D / 2 + 0.5)) / 2,
+                   s1 + LUG_T + 5.0, Y(BZ[1] + GRILLE_D / 2 + 0.5) - by0, 3.0, FACE_Z - 0.6, FACE_Z + 2.5)
+    h += round_top(plinth, FACE_Z + 2.5, 1.5)
+    return h
+
+
 def build_hook_face():
-    """The faceplate with the pivot mount: two gusseted lugs, bushing bores, a rib into H4."""
+    """The faceplate with the pivot housing: bushing bores and a pin hole."""
     shell = build()
     y = Y(PIV_KY)
-    lugs = []
-    for x0 in (HUB_X[0] - LUG_GAP - LUG_T, HUB_X[1] + LUG_GAP):
-        lug = rrect(x0 + LUG_T / 2, y, LUG_T, LUG_W, 2.0, FACE_Z - 0.5, PIV_Z)
-        lug += xbar(x0, x0 + LUG_T, y, PIV_Z, LUG_W)
-        # gussets fore and aft: a wide foot that tapers up to the lug
-        for side in (-1, 1):
-            g = bx(x0, x0 + LUG_T, y + side * LUG_W / 2, y + side * (LUG_W / 2 + 7), FACE_Z - 0.5, FACE_Z + 9)
-            g -= Pos(x0 + LUG_T / 2, y + side * (LUG_W / 2 + 7), FACE_Z + 9) * Rot(0, 90, 0) * Cylinder(7.5, LUG_T + 2)
-            lug += g
-        lugs.append((x0, lug))
-    for _, lug in lugs:
-        shell += lug
-    # the right lug's rib runs down to the H4 insert boss (31, 31): the pin's load goes to a screw
-    hx, hy = P.HOLES[3]
-    x0 = lugs[1][0]
-    shell += bx(x0 + 1.0, x0 + LUG_T - 1.0, Y(hy), y - LUG_W / 2, FACE_Z - 0.5, FACE_Z + 5.0)
-    shell += cyl(hx, Y(hy), FACE_Z - 0.5, FACE_Z + 5.0, 9.0)
-    # bushing bores from outside, a pin hole through
-    xl, xr = lugs[0][0], lugs[1][0] + LUG_T
+    shell += pivot_housing()
+    # keep the piezo grille and its hollow open (the housing's base runs round them)
+    gx, gy = BZ[0], Y(BZ[1])
+    shell -= cyl(gx, gy, FACE_Z - FACE_T - 1, BZ_H + 0.4, BZ_D + 0.8)
+    xl, xr = HUB_X[0] - LUG_GAP - LUG_T, HUB_X[1] + LUG_GAP + LUG_T
     shell -= xbar(xl - 1, xl + BUSH_L, y, PIV_Z, BUSH_OD)
     shell -= xbar(xr - BUSH_L, xr + 1, y, PIV_Z, BUSH_OD)
     return shell
