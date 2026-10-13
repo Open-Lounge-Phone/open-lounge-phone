@@ -32,6 +32,7 @@
 #include "signals.h"
 #include "storage.h"
 #include "screens.h"
+#include "selftest.h"
 #include "snake.h"
 #include "strip.h"
 
@@ -64,6 +65,12 @@ static int s_shown_n = -1;
 static int64_t s_boot_until;  // the boot logo stays this long
 static bool s_setup_qr;       // the setup QR screen is up
 static bool s_about_px;       // MENU → 0 drawn as a page
+static bool s_check_px;       // MENU → 7 drawn as a page
+static int64_t s_check_drawn;  // …redrawn every few seconds while open
+static bool s_selftest_px;    // the self-test owns the screen
+static bool s_jack_in;
+static int64_t s_conn_since;  // when s_conn last changed (the check page)
+static conn_t s_conn_seen = CONN_CONNECTING;
 static phone_kind_t s_logged_kind = PH_IDLE;
 static prov_t s_prov;  // the Wi-Fi setup network (prov_core.c decides)
 // Updates: when to check, whether one is installed and waiting for the phone to be idle, and a
@@ -151,6 +158,7 @@ static void end_call(void) {
 static tone_t tone_for(const phone_state_t *p) {
   switch (p->kind) {
     case PH_OFFHOOK:
+      if (p->held[0]) return TONE_HOLD;  // a call on hold: a soft reminder
       return !p->last_end[0] || !strcmp(p->last_end, "hangup") ? TONE_DIAL : TONE_BUSY;
     case PH_DIALING: return TONE_RINGBACK;
     case PH_INCALL: return p->held_by_them ? TONE_HOLD : TONE_NONE;
@@ -163,6 +171,7 @@ static bool media_wanted(void) {
   if (!media_active()) return false;
   const char *id = media_call_id();
   if (s_phone.kind == PH_INCALL) return !strcmp(s_phone.call_id, id);
+  if (s_phone.kind == PH_OFFHOOK && s_phone.held[0]) return !strcmp(s_phone.held, id);
   if (s_phone.kind == PH_DIALING) return !s_phone.call_id[0] || !strcmp(s_phone.call_id, id);
   return false;
 }
@@ -187,14 +196,21 @@ static void sync_media(void) {
     s_local_sdp = NULL;
   }
   send_local_sdp();
+  audio_hold(s_phone.kind == PH_OFFHOOK && s_phone.held[0]);
   audio_set_offhook(s_hook_up);
-  audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
+  if (!selftest_active()) audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
 }
 
 // --- rendering ---------------------------------------------------------------------------
 
+static void draw_check(int w, int h, int64_t now);
+
 static void render(void) {
   int64_t now = now_ms();
+  if (s_conn != s_conn_seen) {
+    s_conn_seen = s_conn;
+    s_conn_since = now;
+  }
   if (s_phone.kind != s_logged_kind) {
     ESP_LOGI(TAG, "STATE %s", phone_kind_name(s_phone.kind));
     s_logged_kind = s_phone.kind;
@@ -251,6 +267,7 @@ static void render(void) {
         .active_label = s_active_label,
         .call_started_ms = s_call_started,
         .now_ms = now,
+        .local_minute = ota_local_minute(),
     };
     char ssid[33], ip[16];
     int rssi;
@@ -286,7 +303,7 @@ static void render(void) {
       net_server_url(url, sizeof url);
       if (!strcmp(url, PROV_HUB_URL)) snprintf(host, sizeof host, "PUBLIC HUB");
       else if (url[0]) prov_server_host(url, host, sizeof host);
-      else host[0] = ' ';
+      else host[0] = '\0';
       screen_about(fb, w, h, FW_VERSION, CONFIG_OLP_BOARD_ID, host, identity_fingerprint());
       display_pixels(fb);
       free(fb);
@@ -296,7 +313,31 @@ static void render(void) {
     s_about_px = false;
     if (!snake_active() && !s_setup_qr) display_pixels(NULL);
   }
-  if (snake_active() || s_boot_until || s_setup_qr || s_about_px) {
+  // MENU → 7: the phone check page, redrawn every 10 s while open (signal, uptime, memory).
+  bool check = s_menu.screen == MENU_CHECK;
+  if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= 10000)) {
+    draw_check(w, h, now);
+    s_check_px = true;
+    s_check_drawn = now;
+  } else if (!check && s_check_px) {
+    s_check_px = false;
+    if (!snake_active() && !s_setup_qr && !s_about_px && !selftest_active()) display_pixels(NULL);
+  }
+  if (selftest_active()) {
+    if (selftest_dirty() || !s_selftest_px) {
+      uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
+      if (fb) {
+        selftest_draw(fb, w, h);
+        display_pixels(fb);
+        free(fb);
+      }
+      s_selftest_px = true;
+    }
+  } else if (s_selftest_px) {
+    s_selftest_px = false;
+    display_pixels(NULL);
+  }
+  if (snake_active() || s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px) {
     s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
@@ -320,6 +361,51 @@ static void render(void) {
   else led = LED_DIM;
   signals_led(led);
   signals_ring(s_phone.kind == PH_INCOMING);
+}
+
+/** "2H05" or "14 MIN" for durations on the check page. */
+static void span(char *buf, size_t n, int64_t ms) {
+  long m = (long)(ms / 60000);
+  if (m >= 60) snprintf(buf, n, "%ldH%02ld", m / 60, m % 60);
+  else snprintf(buf, n, "%ld MIN", m);
+}
+
+static void draw_check(int w, int h, int64_t now) {
+  uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
+  if (!fb) return;
+  char ssid[33], ip[16], url[PROV_SERVER_MAX];
+  int rssi;
+  net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
+  net_server_url(url, sizeof url);
+  char wifi[48], server[48], issue[40], handset[32], up[40], mem[40], t[16];
+  if (!ssid[0]) snprintf(wifi, sizeof wifi, "NOT SET");
+  else if (!net_wifi_up()) snprintf(wifi, sizeof wifi, "%.14s, NOT JOINED", ssid);
+  else snprintf(wifi, sizeof wifi, "%.12s %d DBM CH %d", ssid, rssi, net_wifi_channel());
+  static const char *conns[] = {"CONNECTING", "ONLINE", "OFFLINE"};
+  span(t, sizeof t, now - s_conn_since);
+  if (!url[0]) snprintf(server, sizeof server, "NOT SET");
+  else snprintf(server, sizeof server, "%s, %s", s_code[0] ? "PAIRING" : conns[s_conn], t);
+  int reason;
+  const char *why = net_last_wifi_problem(&reason);
+  if (why) snprintf(issue, sizeof issue, "%s (%d)", why, reason);
+  else snprintf(issue, sizeof issue, "NONE");
+  snprintf(handset, sizeof handset, "%s, JACK %s", s_hook_up ? "UP" : "DOWN",
+           s_jack_in ? "IN" : "OUT");
+  span(t, sizeof t, now);
+  int minute = ota_local_minute();
+  if (minute >= 0) snprintf(up, sizeof up, "%s, CLOCK %02d:%02d", t, minute / 60, minute % 60);
+  else snprintf(up, sizeof up, "%s, CLOCK NOT SET", t);
+  snprintf(mem, sizeof mem, "%u KB FREE, LOW %u KB", (unsigned)(esp_get_free_heap_size() / 1024),
+           (unsigned)(esp_get_minimum_free_heap_size() / 1024));
+  const char *rows[][2] = {
+      {"WI-FI", wifi},   {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server}, {"LAST ISSUE", issue},
+      {"HANDSET", handset}, {"RUNNING", up},          {"MEMORY", mem},
+  };
+  screen_page(fb, w, h, "PHONE CHECK", rows, 7, "1 SELF-TEST      BACK: MENU");
+  display_pixels(fb);
+  free(fb);
+  ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] up=[%s] mem=[%s]", wifi,
+           ip[0] ? ip : "-", server, issue, handset, up, mem);
 }
 
 void app_print_status(void) {
@@ -485,6 +571,8 @@ static void on_config(const cJSON *m) {
   }
   const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
   if (cJSON_IsNumber(off)) ota_set_utc_offset(off->valueint);
+  const cJSON *srv_now = cJSON_GetObjectItemCaseSensitive(m, "now");
+  if (cJSON_IsNumber(srv_now)) ota_set_time((int64_t)srv_now->valuedouble);
   if (first) {
     // What the server speaks (additive `config.server`; older servers don't send it).
     const cJSON *server = cJSON_GetObjectItemCaseSensitive(m, "server");
@@ -617,15 +705,19 @@ done:
 static void on_key(int index) {
   int64_t now = now_ms();
   signals_beep(BEEP_KEY);
+  if (selftest_active()) {  // the self-test takes every key, MENU and BACK too
+    selftest_key(index, now);
+    return;
+  }
   if (snake_key(index, now)) return;
   if (index == KEY_MENU_INDEX && snake_menu_press(now)) {
     menu_close(&s_menu);
     return;
   }
   menu_screen_t was = s_menu.screen;
-  // MENU opens the menu when nothing is going on (in a call it is TODO: hold/transfer).
-  bool menu_ok = s_phone.kind == PH_IDLE || s_phone.kind == PH_OFFHOOK;
-  if ((was != MENU_CLOSED || (index == KEY_MENU_INDEX && menu_ok)) && menu_key(&s_menu, index, now)) {
+  // MENU opens the menu in every state; in a call or a room it opens the call screen.
+  s_menu.n_actions = phone_actions(&s_phone, s_menu.actions);
+  if ((was != MENU_CLOSED || index == KEY_MENU_INDEX) && menu_key(&s_menu, index, now)) {
     ESP_LOGI(TAG, "MENU %s", menu_screen_name(s_menu.screen));
     if (s_menu.screen == MENU_ABOUT) {
       const char *const *w = identity_fingerprint();
@@ -638,6 +730,11 @@ static void on_key(int index) {
     ESP_LOGI(TAG, "key %d: not signed in yet", index);
     return;
   }
+  if (s_phone.kind == PH_OFFHOOK && s_phone.held[0]) {
+    // One call has audio at a time here: resume the held call first (MENU 1).
+    ESP_LOGI(TAG, "key %d: a call is on hold", index);
+    return;
+  }
   phone_kind_t before = s_phone.kind;
   phone_button(&s_phone, index, emit);
   if (before == PH_OFFHOOK && s_phone.kind == PH_DIALING)
@@ -646,6 +743,7 @@ static void on_key(int index) {
 
 static void on_hook(bool up) {
   s_hook_up = up;
+  selftest_hook(up, now_ms());
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
   phone_hook(&s_phone, up, emit);
@@ -687,8 +785,21 @@ static void ota_tick(int64_t now) {
   }
 }
 
+static void finish_selftest(void) {
+  audio_force_tone(TONE_NONE);
+  bool ok = selftest_passed();
+  signals_beep(ok ? BEEP_OK : BEEP_ERROR);
+  ESP_LOGI(TAG, "SELFTEST %s", ok ? "passed" : "ended unfinished");
+}
+
 static void tick(void) {
   int64_t now = now_ms();
+  if (selftest_active() && s_phone.kind == PH_INCOMING) {  // a call comes first
+    selftest_stop();
+    finish_selftest();
+  } else if (selftest_tick(now)) {
+    finish_selftest();
+  }
   ota_tick(now);
   menu_tick(&s_menu, now);
   if (s_reopen_at >= 0 && now >= s_reopen_at) {
@@ -774,7 +885,22 @@ void app_main(void) {
       switch (ev.type) {
         case EV_KEY: on_key(ev.a); break;
         case EV_HOOK: on_hook(ev.a); break;
-        case EV_JACK: break;  // nothing to switch: the mic is only read in a call anyway
+        case EV_JACK:  // nothing to switch (the mic is only read in a call); shown by MENU 7
+          s_jack_in = ev.a;
+          selftest_jack(ev.a, now_ms());
+          break;
+        case EV_CALL_ACTION:
+          ESP_LOGI(TAG, "CALL ACTION %s", phone_action_name((phone_action_t)ev.a));
+          phone_action(&s_phone, (phone_action_t)ev.a, emit);
+          break;
+        case EV_SELFTEST:
+          if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {
+            selftest_start(now_ms(), s_hook_up, s_jack_in);
+            audio_force_tone(TONE_TEST);  // the earpiece: a 1 kHz tone with the handset up
+            signals_beep(BEEP_OK);        // the piezo
+            ESP_LOGI(TAG, "SELFTEST started");
+          }
+          break;
         case EV_WIFI_UP:
           prov_event(PROV_EV_STA_UP, false);
           if (ota_enabled()) ota_time_start();  // the clock is only for the update window

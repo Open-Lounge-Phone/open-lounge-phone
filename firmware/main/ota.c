@@ -137,6 +137,12 @@ void ota_set_utc_offset(int minutes) {
   s_offset_known = true;
 }
 
+void ota_set_time(int64_t epoch_ms) {
+  if (epoch_ms < 1700000000000LL) return;
+  struct timeval tv = {.tv_sec = (time_t)(epoch_ms / 1000), .tv_usec = (epoch_ms % 1000) * 1000};
+  settimeofday(&tv, NULL);
+}
+
 int ota_local_minute(void) {
   time_t now = time(NULL);
   if (now < 1700000000 || !s_offset_known) return -1;  // no SNTP yet, or no offset from the server

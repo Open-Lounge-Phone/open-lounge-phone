@@ -85,6 +85,9 @@ describe("statusLines", () => {
   it("shows ready with battery, quiet hours, and low battery", () => {
     expect(lines({ battery: { pct: 87, charging: true } })).toEqual(["READY 87%"]);
     expect(lines({})).toEqual(["READY"]);
+    expect(lines({ clock: "14:05", battery: { pct: 87, charging: true } })).toEqual([
+      "READY 14:05",
+    ]);
     expect(lines({ config: { buttons: [], quiet: true } })).toEqual(["QUIET HOURS"]);
     expect(lines({ battery: { pct: 14, charging: false } })).toEqual([
       "READY 14%",

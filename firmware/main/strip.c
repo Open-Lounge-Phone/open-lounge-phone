@@ -83,6 +83,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
       return 2;
     }
     case PH_INCALL:
+      if (s->transfer_pending) return set2(out, "TRANSFER TO?", "PRESS A KEY");
       if (s->held_by_them) return *name ? set2(out, "ON HOLD", name) : set1(out, "ON HOLD");
       if (!s->connected || in->call_started_ms < 0)
         return *name ? set2(out, "CONNECTING", name) : set1(out, "CONNECTING");
@@ -96,6 +97,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
       if (!s->room_id[0]) return set1(out, "JOINING ROOM");
       return set2(out, s->recorded ? "REC IN ROOM" : "IN ROOM", s->muted ? "MUTED" : "");
     case PH_OFFHOOK: {
+      if (s->held[0]) return *name ? set2(out, "ON HOLD", name) : set2(out, "CALL ON HOLD", "MENU 1 RESUMES");
       const char *t = end_text(s->last_end);
       return t ? set2(out, t, "PRESS A KEY") : set1(out, "PRESS A KEY");
     }
@@ -132,7 +134,10 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_WIDTH + 1]) {
     const char *who = c->missed[(in->now_ms / MISSED_CYCLE_MS) % shown];
     return set2(out, summary, who);
   }
-  const char *first = quiet[0] ? quiet : "READY";
+  char ready[32] = "READY";
+  if (in->local_minute >= 0 && in->local_minute < 24 * 60)
+    snprintf(ready, sizeof ready, "READY %02d:%02d", in->local_minute / 60, in->local_minute % 60);
+  const char *first = quiet[0] ? quiet : ready;
   if (c && c->owner_mode[0]) {
     char owner[STATUS_WIDTH + 1];
     owner_line(owner, c);

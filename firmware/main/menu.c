@@ -6,15 +6,19 @@
 
 #include "app.h"
 #include "audio.h"
+#include "display.h"
 #include "identity.h"
 #include "net.h"
+#include "ota.h"
 #include "prov_core.h"
+#include "signals.h"
 
 /** Digit key index (protocol order: 1-9 → 0-8, 0 → 9) to the digit it shows. */
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
-  static const char *names[] = {"closed", "root", "about", "wifi", "volume", "server", "voicemail"};
+  static const char *names[] = {"closed", "root",      "about", "wifi", "volume",
+                                "server", "voicemail", "call",  "check"};
   return names[s];
 }
 
@@ -23,7 +27,7 @@ void menu_close(menu_t *m) { m->screen = MENU_CLOSED; }
 bool menu_key(menu_t *m, int key, int64_t now_ms) {
   if (m->screen == MENU_CLOSED) {
     if (key != 10) return false;
-    m->screen = MENU_ROOT;
+    m->screen = m->n_actions ? MENU_CALL : MENU_ROOT;  // in a call: what can be done there
     m->last_input_ms = now_ms;
     return true;
   }
@@ -31,7 +35,9 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
   if (key == 10) {  // MENU closes it from anywhere
     m->screen = MENU_CLOSED;
   } else if (key == 11) {  // BACK steps out
-    m->screen = m->screen == MENU_ROOT ? MENU_CLOSED : MENU_ROOT;
+    m->screen = m->screen == MENU_ROOT || m->screen == MENU_CALL ? MENU_CLOSED
+                : m->screen == MENU_VOLUME && m->n_actions ? MENU_CALL
+                                                            : MENU_ROOT;
   } else if (m->screen == MENU_ROOT) {
     int d = digit_of(key);
     if (d == 0) m->screen = MENU_ABOUT;
@@ -42,6 +48,20 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     else if (d == 2) m->screen = MENU_VOICEMAIL;
     else if (d == 3) m->screen = MENU_WIFI;
     else if (d == 4) m->screen = MENU_SERVER;
+    else if (d == 7) m->screen = MENU_CHECK;
+  } else if (m->screen == MENU_CALL) {
+    int d = digit_of(key);
+    if (d >= 1 && d <= m->n_actions) {
+      app_post(EV_CALL_ACTION, m->actions[d - 1], NULL);
+      m->screen = MENU_CLOSED;
+    } else if (d == 9) {
+      m->screen = MENU_VOLUME;
+    }
+  } else if (m->screen == MENU_CHECK) {
+    if (digit_of(key) == 1) {
+      app_post(EV_SELFTEST, 0, NULL);
+      m->screen = MENU_CLOSED;
+    }
   } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
     if (digit_of(key) == 1) {
       app_post(EV_PROV_OPEN, 0, NULL);  // 1 = the setup page (Wi-Fi and server)
@@ -51,6 +71,13 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     int d = digit_of(key);
     if (d == 1) audio_set_volume(audio_volume() - 1);
     else if (d == 2) audio_set_volume(audio_volume() + 1);
+    else if (d == 4) {  // ringer loudness: soft, medium, loud, round again; plays it
+      signals_set_ring_level(signals_ring_level() % RING_LEVELS + 1);
+      signals_ring_preview();
+    } else if (d == 5) {  // ring style
+      signals_set_ring_style((ring_style_t)((signals_ring_style() + 1) % RING_STYLES));
+      signals_ring_preview();
+    }
   }
   return true;
 }
@@ -66,21 +93,47 @@ static void upper(char *s) {
 
 int menu_lines(const menu_t *m, char out[4][25]) {
   switch (m->screen) {
-    case MENU_ROOT:
+    case MENU_ROOT: {
+      int w, h;
+      display_size(&w, &h);
       snprintf(out[0], 25, "MENU");
       snprintf(out[1], 25, "1 VOLUME 2 VOICEMAIL");
       snprintf(out[2], 25, "3 WI-FI 4 SERVER");
-      snprintf(out[3], 25, "9 UPDATE 0 ABOUT");
+      // 9 still works where it doesn't fit (20 characters on the 2.13-inch screen).
+      bool update = ota_enabled() && (w - 8) / 12 >= 23;
+      snprintf(out[3], 25, "7 CHECK%s 0 ABOUT", update ? " 9 UPDATE" : "");
       return 4;
+    }
+    case MENU_CALL: {
+      // One call has audio at a time on this phone, so "hold" doesn't add a caller here (the
+      // browser phone and the app can: merge and attended transfer follow from that).
+      static const char *labels[] = {"HOLD", "RESUME", "MERGE", "TRANSFER", "MUTE", "UNMUTE"};
+      bool room = m->n_actions && (m->actions[0] == ACT_MUTE || m->actions[0] == ACT_UNMUTE);
+      snprintf(out[0], 25, "%s", room ? "ROOM" : "CALL");
+      int n = 1;
+      for (int i = 0; i < m->n_actions; i++)
+        snprintf(out[n++], 25, "%d %s", i + 1, labels[m->actions[i]]);
+      snprintf(out[n++], 25, "9 VOLUME");
+      return n;
+    }
+    case MENU_CHECK:  // drawn as a page (main.c); these lines are the fallback
+      snprintf(out[0], 25, "PHONE CHECK");
+      snprintf(out[1], 25, "1 SELF-TEST");
+      return 2;
     case MENU_VOICEMAIL:
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
       else snprintf(out[0], 25, "NO NEW VOICEMAIL");
       snprintf(out[1], 25, "%s", m->voicemail > 0 ? "PLAY IN APP" : "");
       return m->voicemail > 0 ? 2 : 1;
-    case MENU_VOLUME:
+    case MENU_VOLUME: {
+      static const char *levels[] = {"", "SOFT", "MEDIUM", "LOUD"};
       snprintf(out[0], 25, "VOLUME %d/%d", audio_volume(), VOLUME_MAX);
       snprintf(out[1], 25, "1 LOWER 2 LOUDER");
-      return 2;
+      snprintf(out[2], 25, "RING %s %s", levels[signals_ring_level()],
+               signals_ring_style_name(signals_ring_style()));
+      snprintf(out[3], 25, "4 RING 5 STYLE");
+      return 4;
+    }
     case MENU_ABOUT: {
       const char *const *w = identity_fingerprint();
       snprintf(out[0], 25, "FW %.21s", FW_VERSION);

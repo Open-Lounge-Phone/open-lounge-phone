@@ -7,6 +7,7 @@
 #include "driver/ledc.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "nvs.h"
 
 static const char *TAG = "signals";
 
@@ -19,6 +20,11 @@ static const char *TAG = "signals";
 static volatile led_pattern_t s_led = LED_OFF;
 static volatile bool s_ring;
 static uint32_t s_t;  // ticks since start
+static volatile int s_ring_level = RING_LEVELS;
+static volatile ring_style_t s_ring_style = RING_CLASSIC;
+static volatile uint32_t s_preview_until, s_preview_from;  // ticks
+// Piezo duty per level: a square wave is loudest at 50 %, much quieter at a few percent.
+static const uint32_t RING_DUTY[RING_LEVELS + 1] = {0, DUTY_MAX / 25, DUTY_MAX / 8, DUTY_MAX / 2};
 
 // A beep is a list of on/off durations in ticks, 0-terminated.
 static const uint8_t BEEPS[][8] = {
@@ -57,10 +63,18 @@ static uint32_t led_duty(uint32_t t) {
   return 0;
 }
 
-/** Ring cadence: 1 s of warble (the tone switched at 25 Hz), 2 s of silence. */
+/**
+ * Ring cadences, 3 s each. Classic: 1 s of warble (the tone switched at 25 Hz), 2 s of silence.
+ * Double: two 0.4 s warbles 0.2 s apart. Beeps: three 0.15 s beeps.
+ */
 static bool ring_on(uint32_t t) {
   uint32_t ms = (t * TICK_MS) % 3000;
-  return ms < 1000 && (ms / 20) % 2 == 0;
+  bool warble = (ms / 20) % 2 == 0;
+  switch (s_ring_style) {
+    case RING_DOUBLE: return (ms < 400 || (ms >= 600 && ms < 1000)) && warble;
+    case RING_BEEPS: return ms < 750 && (ms % 250) < 150;
+    default: return ms < 1000 && warble;
+  }
 }
 
 static void tick(void *arg) {
@@ -83,14 +97,61 @@ static void tick(void *arg) {
       tone = (s_beep_step % 2) == 1;  // odd steps are "on"
       s_beep_left--;
     }
-  } else if (s_ring) {
-    tone = ring_on(s_t);
   }
-  ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZ_CH, tone ? DUTY_MAX / 2 : 0);
+  uint32_t duty = DUTY_MAX / 2;  // beeps: always the same
+  if (s_beep < 0 && (s_ring || s_t < s_preview_until)) {
+    tone = ring_on(s_ring ? s_t : s_t - s_preview_from);
+    duty = RING_DUTY[s_ring_level];
+  }
+  ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZ_CH, tone ? duty : 0);
   ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZ_CH);
 }
 
+static void load_settings(void) {
+  nvs_handle_t h;
+  if (nvs_open("olp", NVS_READONLY, &h) != ESP_OK) return;
+  uint8_t v;
+  if (nvs_get_u8(h, "ring_level", &v) == ESP_OK && v >= 1 && v <= RING_LEVELS) s_ring_level = v;
+  if (nvs_get_u8(h, "ring_style", &v) == ESP_OK && v < RING_STYLES) s_ring_style = v;
+  nvs_close(h);
+}
+
+static void save_u8(const char *key, uint8_t v) {
+  nvs_handle_t h;
+  if (nvs_open("olp", NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_u8(h, key, v);
+  nvs_commit(h);
+  nvs_close(h);
+}
+
+int signals_ring_level(void) { return s_ring_level; }
+ring_style_t signals_ring_style(void) { return s_ring_style; }
+
+const char *signals_ring_style_name(ring_style_t style) {
+  static const char *names[] = {"CLASSIC", "DOUBLE", "BEEPS"};
+  return style < RING_STYLES ? names[style] : "?";
+}
+
+void signals_set_ring_level(int level) {
+  if (level < 1) level = 1;
+  if (level > RING_LEVELS) level = RING_LEVELS;
+  s_ring_level = level;
+  save_u8("ring_level", (uint8_t)level);
+}
+
+void signals_set_ring_style(ring_style_t style) {
+  if (style >= RING_STYLES) style = RING_CLASSIC;
+  s_ring_style = style;
+  save_u8("ring_style", (uint8_t)style);
+}
+
+void signals_ring_preview(void) {
+  s_preview_from = s_t;
+  s_preview_until = s_t + 1500 / TICK_MS;  // the ringing part of one cycle
+}
+
 void signals_start(void) {
+  load_settings();
   ledc_timer_config_t led_timer = {
       .speed_mode = LEDC_LOW_SPEED_MODE,
       .duty_resolution = LEDC_TIMER_10_BIT,

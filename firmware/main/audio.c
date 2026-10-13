@@ -24,7 +24,7 @@ static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static int16_t s_ring[RING];
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
-static bool s_offhook, s_call;
+static bool s_offhook, s_call, s_held;
 static tone_t s_tone_want;
 static audio_sender_t s_sender;
 static int s_volume = VOLUME_DEFAULT;
@@ -125,6 +125,12 @@ static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+void audio_hold(bool held) {
+  taskENTER_CRITICAL(&s_lock);
+  s_held = held;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
 static void task(void *arg) {
   int16_t mic[DSP_FRAME], out[DSP_FRAME];
   uint8_t ulaw[DSP_FRAME];
@@ -134,7 +140,7 @@ static void task(void *arg) {
   int64_t last_log = 0;
   for (;;) {
     taskENTER_CRITICAL(&s_lock);
-    bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty;
+    bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
     bool forced = s_forced_tone != TONE_NONE;
     audio_sender_t sender = s_sender;
@@ -143,7 +149,7 @@ static void task(void *arg) {
     taskEXIT_CRITICAL(&s_lock);
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
-    bool mic_want = call || loop_ms > 0;
+    bool mic_want = (call && !held) || loop_ms > 0;
     if (mic_want != mic_now) {
       s_dev->mic(mic_want);
       mic_now = mic_want;
@@ -169,6 +175,7 @@ static void task(void *arg) {
       measure(&s_mic_meter, mic, DSP_FRAME, false);
     }
     if (call && sender) {
+      if (held) memset(mic, 0, sizeof mic);  // on hold: silence keeps the connection alive
       dsp_ulaw_encode_buf(mic, ulaw, DSP_FRAME);
       sender(ulaw, DSP_FRAME, pts);
       taskENTER_CRITICAL(&s_lock);
@@ -185,6 +192,7 @@ static void task(void *arg) {
       ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
     } else if (call) {
       if (ring_pop(out, DSP_FRAME, START_FILL)) measure(&s_rx_meter, out, DSP_FRAME, true);
+      if (held) memset(out, 0, sizeof out);
     }
     tone_mix(&s_tone, out, DSP_FRAME);
     s_dev->write(out, DSP_FRAME);  // blocks ~20 ms

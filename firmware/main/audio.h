@@ -22,6 +22,8 @@ void audio_set_offhook(bool up);
 void audio_set_tone(tone_t tone);
 /** Call media on/off: the mic is captured and sent only while on. */
 void audio_call(bool on, audio_sender_t sender);
+/** This phone put the call on hold: the mic is off and silence is sent; nothing plays. */
+void audio_hold(bool held);
 /** A received mu-law frame (any length) from the call. Safe from any task. */
 void audio_rx_ulaw(const uint8_t *data, size_t n);
 

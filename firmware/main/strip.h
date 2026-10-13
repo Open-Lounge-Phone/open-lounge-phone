@@ -32,6 +32,7 @@ typedef struct {
   const char *active_label;   // the other party on the current or last call
   int64_t call_started_ms;    // -1 = not connected yet
   int64_t now_ms;
+  int local_minute;           // minutes since local midnight for the ready clock, -1 = unknown
 } strip_input_t;
 
 /** Returns the number of lines (1 or 2) written to out. */

@@ -23,6 +23,8 @@ void ota_server_ok(void);
 void ota_time_start(void);
 /** The space's UTC offset from `config` (minutes). */
 void ota_set_utc_offset(int minutes);
+/** The server's clock from `config.now` (ms since the epoch): sets the system time. */
+void ota_set_time(int64_t epoch_ms);
 /** Local minutes since midnight, or -1 if the clock isn't set. */
 int ota_local_minute(void);
 

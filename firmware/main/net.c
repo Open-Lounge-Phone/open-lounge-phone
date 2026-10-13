@@ -84,11 +84,11 @@ static void retry_now(void *arg) {
   if (s_ssid[0]) esp_wifi_connect();
 }
 
-static int s_reason;  // the last disconnect reason (0 = none since the last join)
+static int s_reason;       // the last disconnect reason (0 = none since the last join)
+static int s_last_reason;  // the last one ever (diagnostics), kept after a join
 
-/** Why the phone couldn't join, in words for the screen (≤ 16 characters), or NULL. */
-const char *net_wifi_problem(void) {
-  switch (s_reason) {
+static const char *problem_text(int reason) {
+  switch (reason) {
     case WIFI_REASON_AUTH_FAIL:
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
@@ -111,6 +111,22 @@ const char *net_wifi_problem(void) {
   }
 }
 
+/** Why the phone couldn't join, in words for the screen (≤ 16 characters), or NULL. */
+const char *net_wifi_problem(void) { return problem_text(s_reason); }
+
+const char *net_last_wifi_problem(int *reason) {
+  if (reason) *reason = s_last_reason;
+  return problem_text(s_last_reason);
+}
+
+int net_wifi_channel(void) {
+#if !CONFIG_OLP_QEMU
+  wifi_ap_record_t ap;
+  if (s_wifi_up && esp_wifi_sta_get_ap_info(&ap) == ESP_OK) return ap.primary;
+#endif
+  return 0;
+}
+
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
   static int retries;
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
@@ -125,6 +141,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     retries++;
     const wifi_event_sta_disconnected_t *d = data;
     s_reason = d ? d->reason : -1;
+    s_last_reason = s_reason;
     const char *why = net_wifi_problem();
     ESP_LOGW(TAG, "wifi disconnected (reason %d%s%s%s, rssi %d dBm); retry in %d ms", s_reason,
              why ? ": " : "", why ? why : "",

@@ -1225,6 +1225,7 @@ function renderDisplay(): void {
           ...(recordedNow() ? { recording: true } : {}),
           battery,
           power: powerStatus(variant, powerSource),
+          clock: new Date().toTimeString().slice(0, 5),
           now: Date.now(),
         });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.
@@ -1299,3 +1300,12 @@ brightnessEl.addEventListener("input", () =>
 );
 
 render();
+
+// The ready screen's clock: redraw when the minute changes.
+let clockMinute = new Date().getMinutes();
+setInterval(() => {
+  const minute = new Date().getMinutes();
+  if (minute === clockMinute) return;
+  clockMinute = minute;
+  render();
+}, 5000);

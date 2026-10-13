@@ -24,6 +24,8 @@ export interface StatusInput {
   leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
   /** The call or room is recorded (announced): the strip says REC, next to the recording light. */
   recording?: boolean;
+  /** Local time "HH:MM" for the ready screen, once the phone knows it. */
+  clock?: string;
   now: number;
 }
 
@@ -153,7 +155,8 @@ export function statusLines(input: StatusInput): StatusLines {
     return [clip(summary), clip(who)];
   }
 
-  const first = quiet ?? (battery ? `READY ${battery.pct}%` : "READY");
+  const first =
+    quiet ?? (input.clock ? `READY ${input.clock}` : battery ? `READY ${battery.pct}%` : "READY");
   if (input.power?.reduced) return [first, WEAK_CHARGER];
   if (lowLine) return [first, lowLine];
   const owner = config?.owner ? ownerLine(config.owner) : undefined;

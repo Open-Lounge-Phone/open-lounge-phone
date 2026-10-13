@@ -1,6 +1,6 @@
 // A C mirror of `deviceStep` (packages/core/src/device.ts): the handset state machine every
-// Open Lounge Phone runs. v0 covers hook, keys, incoming/outgoing calls, rooms and the voicemail
-// offer; hold / merge / transfer (MENU during a call) are TODO.
+// Open Lounge Phone runs: hook, keys, incoming/outgoing calls, rooms, the voicemail offer, and the
+// call actions MENU offers in a call (hold / add caller, resume, merge, transfer, mute).
 #pragma once
 #include <stdbool.h>
 #include "cJSON.h"
@@ -26,7 +26,12 @@ typedef struct {
   char room_id[65];    // inroom ("" while joining)
   bool muted;          // inroom
   bool recorded;       // incall / inroom: announced as recorded (status LED + REC)
+  char held[65];       // offhook / dialing / incall: a call this phone put on hold ("" = none)
+  bool transfer_pending;  // incall: the next key transfers the call to that key's person
 } phone_state_t;
+
+/** What MENU offers in a call or a room (core `CallAction`). */
+typedef enum { ACT_HOLD, ACT_RESUME, ACT_MERGE, ACT_TRANSFER, ACT_MUTE, ACT_UNMUTE } phone_action_t;
 
 /** Messages the step produces are passed here (the caller sends and frees them). */
 typedef void (*phone_emit_fn)(cJSON *msg);
@@ -39,3 +44,8 @@ void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit);
 /** call.ringing / call.state / room.state / room.ended. Returns false for other messages. */
 bool phone_server(phone_state_t *s, const cJSON *msg, phone_emit_fn emit);
 const char *phone_kind_name(phone_kind_t k);
+/** The actions MENU offers now (core `callActions`), in order; returns how many (≤ 2). */
+int phone_actions(const phone_state_t *s, phone_action_t out[2]);
+/** Do one (ignored unless phone_actions offers it). */
+void phone_action(phone_state_t *s, phone_action_t a, phone_emit_fn emit);
+const char *phone_action_name(phone_action_t a);

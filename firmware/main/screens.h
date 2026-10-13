@@ -1,4 +1,4 @@
-// Pixel screens beyond text: the boot logo and the setup QR code (docs/phone-ux.md).
+// Pixel screens beyond text: the boot logo, the setup QR code, About and the diagnostics page (docs/phone-ux.md).
 #pragma once
 #include <stdint.h>
 
@@ -7,5 +7,8 @@ void screen_boot(uint8_t *fb, int w, int h, const char *version);
 /** MENU → 0: firmware, board, server and the public key part (the four fingerprint words). */
 void screen_about(uint8_t *fb, int w, int h, const char *fw, const char *board, const char *server,
                   const char *const *words);
+/** A page of label / value rows under a title bar (MENU → 7 diagnostics), an optional footer. */
+void screen_page(uint8_t *fb, int w, int h, const char *title, const char *const rows[][2], int n,
+                 const char *footer);
 /** The setup screen: a QR code that joins the setup network, and the same steps in words. */
 void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass);

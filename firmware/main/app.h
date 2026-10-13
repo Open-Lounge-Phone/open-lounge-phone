@@ -27,6 +27,8 @@ typedef enum {
   EV_PROV_SAVED,   // the setup page saved new Wi-Fi: restart
   EV_OTA_NOW,      // MENU -> 9 / console: check and install an update now
   EV_OTA_DONE,     // a = -1 failed/refused, 0 up to date, 1 available, 2 installed (restart when idle)
+  EV_CALL_ACTION,  // MENU in a call: a = phone_action_t
+  EV_SELFTEST,     // MENU -> 7 -> 1: start the self-test
 } ev_type_t;
 
 typedef struct {

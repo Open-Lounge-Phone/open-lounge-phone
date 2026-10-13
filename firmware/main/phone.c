@@ -71,6 +71,8 @@ void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit) {
   if ((s->kind == PH_DIALING || s->kind == PH_INCALL) && s->call_id[0]) {
     emit_call(emit, "call.hangup", s->call_id);
   }
+  if ((s->kind == PH_DIALING || s->kind == PH_INCALL || s->kind == PH_OFFHOOK) && s->held[0])
+    emit_call(emit, "call.hangup", s->held);  // a held call too
   if (s->kind == PH_INROOM && s->room_id[0]) emit_room_leave(emit, s->room_id);
   emit_hook(emit, false);
   to_idle(s);
@@ -78,19 +80,34 @@ void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit) {
 
 void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit) {
   if ((s->kind == PH_DIALING || s->kind == PH_INCALL) && s->call_id[0]) {
+    char held[65];
+    CPY(held, s->held);
     emit_call(emit, "call.hangup", s->call_id);
     to_offhook(s, reason);
+    CPY(s->held, held);
   }
 }
 
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
   if (s->kind == PH_OFFHOOK) {
+    char held[65];
+    CPY(held, s->held);
     cJSON *m = msg("button");
     cJSON_AddNumberToObject(m, "index", index);
     emit(m);
     phone_init(s);
     s->kind = PH_DIALING;
     s->button = index;
+    CPY(s->held, held);
+    return;
+  }
+  if (s->kind == PH_INCALL && s->transfer_pending) {
+    s->transfer_pending = false;
+    cJSON *m = msg("call.transfer");
+    cJSON_AddStringToObject(m, "callId", s->call_id);
+    cJSON *to = cJSON_AddObjectToObject(m, "to");
+    cJSON_AddNumberToObject(to, "button", index);
+    emit(m);
     return;
   }
   // In a room any key says "still here" (the answer to the idle warning).
@@ -132,7 +149,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       if (id && you && !strcmp(id, you)) muted = cJSON_IsTrue(cJSON_GetObjectItem(p, "muted"));
     }
     if ((s->kind == PH_INROOM && (!s->room_id[0] || !strcmp(s->room_id, room ? room : ""))) ||
-        (s->kind == PH_DIALING && !s->call_id[0])) {
+        (s->kind == PH_DIALING && !s->call_id[0] && !s->held[0])) {
       phone_init(s);
       s->kind = PH_INROOM;
       CPY(s->room_id, room);
@@ -175,20 +192,31 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
   const char *reason = str(m, "reason");
   if (!id || !state) return true;
   bool ended = !strcmp(state, "ended");
+  // The call on hold: it can only end (the other person hung up) while we're elsewhere.
+  if (s->held[0] && !strcmp(s->held, id)) {
+    if (!ended) return true;
+    s->held[0] = '\0';
+    if (s->kind == PH_OFFHOOK) to_offhook(s, "hangup");
+    return true;
+  }
+  char held[65];
+  CPY(held, s->held);
   switch (s->kind) {
     case PH_DIALING: {
       if (s->call_id[0] && strcmp(s->call_id, id)) break;
       const cJSON *vm = cJSON_GetObjectItemCaseSensitive(m, "voicemail");
-      if (ended && cJSON_IsObject(vm)) {
+      if (ended && cJSON_IsObject(vm) && !held[0]) {
         phone_init(s);
         s->kind = PH_VOICEMAIL;
         CPY(s->from, str(vm, "name"));
       } else if (ended) {
         to_offhook(s, reason ? reason : "hangup");
+        CPY(s->held, held);
       } else if (!strcmp(state, "active") || !strcmp(state, "connecting")) {
         phone_init(s);
         s->kind = PH_INCALL;
         CPY(s->call_id, id);
+        CPY(s->held, held);
         s->connected = !strcmp(state, "active");
         s->recorded = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "recording"));
       } else {
@@ -216,6 +244,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
           CPY(s->call_id, next);
         } else {
           to_offhook(s, reason ? reason : "hangup");
+          CPY(s->held, held);
         }
       } else if (!strcmp(state, "active")) {
         const char *hold = str(m, "hold");
@@ -229,4 +258,92 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       break;
   }
   return true;
+}
+
+int phone_actions(const phone_state_t *s, phone_action_t out[2]) {
+  if (s->kind == PH_INCALL && s->connected) {
+    if (s->held[0]) {
+      out[0] = ACT_MERGE;
+      out[1] = ACT_TRANSFER;
+      return 2;
+    }
+    if (s->held_by_them) return 0;
+    out[0] = ACT_HOLD;
+    out[1] = ACT_TRANSFER;
+    return 2;
+  }
+  if (s->kind == PH_OFFHOOK && s->held[0]) {
+    out[0] = ACT_RESUME;
+    return 1;
+  }
+  if (s->kind == PH_INROOM && s->room_id[0]) {
+    out[0] = s->muted ? ACT_UNMUTE : ACT_MUTE;
+    return 1;
+  }
+  return 0;
+}
+
+const char *phone_action_name(phone_action_t a) {
+  static const char *names[] = {"hold", "resume", "merge", "transfer", "mute", "unmute"};
+  return names[a];
+}
+
+static void emit_hold(phone_emit_fn emit, const char *call_id, bool hold) {
+  cJSON *m = msg("call.hold");
+  cJSON_AddStringToObject(m, "callId", call_id);
+  cJSON_AddBoolToObject(m, "hold", hold);
+  emit(m);
+}
+
+void phone_action(phone_state_t *s, phone_action_t a, phone_emit_fn emit) {
+  phone_action_t offered[2];
+  int n = phone_actions(s, offered);
+  bool ok = false;
+  for (int i = 0; i < n; i++) ok |= offered[i] == a;
+  if (!ok) return;
+  char id[65];
+  switch (a) {
+    case ACT_HOLD:
+      CPY(id, s->call_id);
+      emit_hold(emit, id, true);
+      to_offhook(s, "");
+      CPY(s->held, id);
+      break;
+    case ACT_RESUME:
+      CPY(id, s->held);
+      emit_hold(emit, id, false);
+      phone_init(s);
+      s->kind = PH_INCALL;
+      s->connected = true;
+      CPY(s->call_id, id);
+      break;
+    case ACT_MERGE: {
+      cJSON *m = msg("call.merge");
+      cJSON_AddStringToObject(m, "callId", s->held);
+      cJSON_AddStringToObject(m, "with", s->call_id);
+      emit(m);
+      phone_init(s);
+      s->kind = PH_INROOM;
+      break;
+    }
+    case ACT_TRANSFER:
+      if (s->held[0]) {  // with a consult call: connect the two others (attended)
+        cJSON *m = msg("call.transfer");
+        cJSON_AddStringToObject(m, "callId", s->held);
+        cJSON_AddStringToObject(m, "toCall", s->call_id);
+        emit(m);
+      } else {
+        s->transfer_pending = true;  // blind: the next key picks who
+      }
+      break;
+    case ACT_MUTE:
+    case ACT_UNMUTE: {
+      s->muted = a == ACT_MUTE;
+      cJSON *m = msg("room.mute");
+      cJSON_AddStringToObject(m, "roomId", s->room_id);
+      cJSON_AddBoolToObject(m, "muted", s->muted);
+      emit(m);
+      break;
+    }
+  }
 }

@@ -107,3 +107,22 @@ void screen_about(uint8_t *fb, int w, int h, const char *fw, const char *board, 
   gfx_text_at(fb, w, h, 8, 86, key, s, true);
   gfx_text_at(fb, w, h, 8, h - 11, "SAME WORDS IN THE APP = THIS PHONE", 1, true);
 }
+
+void screen_page(uint8_t *fb, int w, int h, const char *title, const char *const rows[][2], int n,
+                 const char *footer) {
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
+  gfx_rect(fb, w, h, 0, 0, w, 22, true);  // title bar
+  gfx_text_at(fb, w, h, (w - gfx_text_width(title, 2)) / 2, 4, title, 2, false);
+  int room = (footer ? h - 14 : h) - 28;
+  int pitch = n > 0 && room / n < 12 ? room / n : 12;
+  for (int i = 0; i < n; i++) {
+    char v[48];
+    snprintf(v, sizeof v, "%.29s", rows[i][1] ? rows[i][1] : "");
+    for (char *c = v; *c; c++) *c = (char)toupper((unsigned char)*c);
+    row(fb, w, h, 28 + i * pitch, rows[i][0], v);
+  }
+  if (footer) {
+    for (int x = 8; x < w - 8; x += 3) gfx_rect(fb, w, h, x, h - 15, 1, 1, true);  // dotted rule
+    gfx_text_at(fb, w, h, 8, h - 10, footer, 1, true);
+  }
+}

@@ -23,5 +23,9 @@ bool net_ws_send(const char *text);
 bool net_wifi_up(void);
 /** Why the last Wi-Fi join failed, in words for the screen (≤ 16 chars), or NULL. */
 const char *net_wifi_problem(void);
+/** The last Wi-Fi failure since power-on, even after a later join (NULL = none). */
+const char *net_last_wifi_problem(int *reason);
+/** The joined network's channel (0 = not joined). */
+int net_wifi_channel(void);
 /** Wi-Fi status for MENU and the console: SSID, RSSI (dBm) and IP. */
 void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_len);
