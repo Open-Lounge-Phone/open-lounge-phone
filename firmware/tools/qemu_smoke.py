@@ -5,7 +5,7 @@
 
 Build it WITHOUT OLP_SIM_SERVER: the defaults (no server, no update key) are what's tested.
 Checks the boot banner, the test audio device, the DTLS certificate (esp_peer), an IP on QEMU's
-Ethernet, the "SET UP: CHOOSE A SERVER" screen, MENU 4 (Server) and `server`, that updates are
+Ethernet, the "SET UP: CHOOSE A SERVER" screen, MENU 4 (Network: Wi-Fi and server) and `server`, that updates are
 off (`ota now` makes no calls), and that `status`, `audio`, `rtc` and `volume` answer. Then it
 reads the phone's network traffic (QEMU_PCAP): apart from DHCP, the phone sent nothing at all —
 no DNS lookup, no TCP connection, no UDP (NTP included) to anyone, project hosts included.
@@ -116,9 +116,9 @@ def main() -> int:
         wait(r"server: none")
         send("key menu")
         wait(r"MENU root")
-        send("key 4")
-        wait(r"MENU server")
-        wait(r"STRIP \[SERVER\|NOT SET\|1 CHANGE\]", True)
+        send("key 4")                   # 4 opens the Network screen (Wi-Fi and server together)
+        wait(r"MENU wifi")
+        wait(r"STRIP \[NETWORK\|[^|\]]*\|NOT SET\|1 CHANGE\]", True)
         send("key back")
         wait(r"MENU root")
         send("key back")
