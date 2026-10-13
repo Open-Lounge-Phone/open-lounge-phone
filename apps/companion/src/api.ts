@@ -325,8 +325,49 @@ export interface Directory {
     strategy: HuntStrategy;
     extension: string | null;
     members: string[];
+    /** Its public line's address, if it has one that is on. */
+    address?: string;
   }[];
   you: { id: string; role: SpaceRole };
+}
+
+/** A ring group's public line (`GET /groups/:id/line`). */
+export interface LineSettings {
+  handle: string;
+  address: string;
+  enabled: boolean;
+  displayName: string | null;
+  description: string | null;
+  who: "anyone" | "connections" | "allowlist";
+  allow: string[];
+  queue: boolean;
+  queueMax: number;
+  queueWaitSeconds: number;
+  showPosition: boolean;
+  offerVoicemail: boolean;
+  atMaxWait:
+    | { kind: "voicemail" }
+    | { kind: "group"; groupId: string }
+    | { kind: "user"; userId: string }
+    | { kind: "end"; message?: string };
+  voicemail: boolean;
+  callerPerHour: number | null;
+  serverPerHour: number | null;
+  greeting: "default" | "name" | "custom";
+  /** The server's caps (a line can only be stricter). */
+  limits: { callerPerHour: number; serverPerHour: number };
+}
+
+export type LinePatch = Partial<Omit<LineSettings, "address" | "greeting" | "limits">> & {
+  confirm?: true;
+};
+
+export interface LineCaller {
+  address: string;
+  server: string;
+  name: string;
+  at: number;
+  outcome: string;
 }
 
 export interface RingGroupInfo {
@@ -338,6 +379,7 @@ export interface RingGroupInfo {
   hours: HoursRule[] | null;
   afterHours: AfterHours | null;
   extension: string | null;
+  line: { handle: string; address: string; enabled: boolean } | null;
 }
 
 export interface SpaceCall {
@@ -635,6 +677,7 @@ export function createApi(opts: ApiOptions) {
         buttons: Record<string, string>;
         remote?: RemoteContactInfo[];
         rooms?: { id: string; roomId: string; label: string }[];
+        lines?: { id: string; address: string; label: string }[];
       }>("GET", `/devices/${enc(deviceId)}/contacts`),
     addRoomToPhone: (deviceId: string, roomId: string, label: string) =>
       request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/rooms/${enc(roomId)}`, { label }),
@@ -771,6 +814,41 @@ export function createApi(opts: ApiOptions) {
       patch: Partial<Omit<RingGroupInfo, "id" | "extension">> & { extension?: string },
     ) => request<RingGroupInfo>("PATCH", `/groups/${enc(id)}`, patch),
     deleteGroup: (id: string) => request<void>("DELETE", `/groups/${enc(id)}`),
+    // Public lines (a group's own address, callable from any server)
+    line: (groupId: string) =>
+      request<{ line: LineSettings | null; warning: string }>(
+        "GET",
+        `/groups/${enc(groupId)}/line`,
+      ),
+    setLine: (groupId: string, patch: LinePatch) =>
+      request<{ line: LineSettings }>("PUT", `/groups/${enc(groupId)}/line`, patch),
+    deleteLine: (groupId: string) => request<void>("DELETE", `/groups/${enc(groupId)}/line`),
+    lineCallers: (groupId: string) =>
+      request<LineCaller[]>("GET", `/groups/${enc(groupId)}/line/callers`),
+    setLineGreeting: async (groupId: string, kind: "custom", audio: Blob, durationMs: number) => {
+      await send(
+        "PUT",
+        `/groups/${enc(groupId)}/line/greeting?kind=${kind}&durationMs=${Math.round(durationMs)}`,
+        { body: audio },
+      );
+    },
+    resetLineGreeting: (groupId: string) =>
+      request<void>("DELETE", `/groups/${enc(groupId)}/line/greeting`),
+    lineBlocks: () =>
+      request<{ kind: "address" | "server"; value: string; createdAt: number }[]>(
+        "GET",
+        "/space/line-blocks",
+      ),
+    blockForLines: (entry: string) =>
+      request<{ kind: "address" | "server"; value: string }>("POST", "/space/line-blocks", {
+        entry,
+      }),
+    unblockForLines: (kind: "address" | "server", value: string) =>
+      request<void>("DELETE", `/space/line-blocks/${kind}/${enc(value)}`),
+    addLineToPhone: (deviceId: string, address: string, label: string) =>
+      request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/lines`, { address, label }),
+    removeLineFromPhone: (deviceId: string, contactId: string) =>
+      request<void>("DELETE", `/devices/${enc(deviceId)}/lines/${enc(contactId)}`),
     spaceHours: () =>
       request<{ timeZone: string; hours: HoursRule[] | null; afterHours: AfterHours | null }>(
         "GET",

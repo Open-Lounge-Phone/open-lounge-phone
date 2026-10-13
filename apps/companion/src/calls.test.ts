@@ -275,3 +275,56 @@ describe("recording notices", () => {
     expect(callStep(rec, msg({ recording: { by: "Acme" } })).view).toBe(rec);
   });
 });
+
+describe("public lines", () => {
+  const line = { name: "Acme support", address: "help@acme.example" };
+  const ev = (msg: Extract<CallEvent, { type: "server" }>["msg"]): CallEvent => ({
+    type: "server",
+    now: 1000,
+    msg,
+  });
+
+  it("shows the line's name, the caller's place in line, then ringing again", () => {
+    const steps = [
+      { type: "dial", label: "help@acme.example", person: true } as CallEvent,
+      ev({ t: "call.state", callId: "c1", state: "ringing" }),
+      ev({ t: "call.state", callId: "c1", state: "ringing", line }),
+      ev({
+        t: "call.state",
+        callId: "c1",
+        state: "ringing",
+        queue: { position: 2, size: 3, voicemail: true },
+      }),
+    ];
+    const queued = run(steps).view;
+    expect(queued).toMatchObject({
+      phase: "outgoing",
+      label: "Acme support",
+      line,
+      queue: { position: 2, size: 3, voicemail: true },
+    });
+    expect(toneFor(queued)).toBe("hold");
+    const again = run([...steps, ev({ t: "call.state", callId: "c1", state: "ringing" })]).view;
+    expect(again).toMatchObject({ phase: "outgoing", label: "Acme support", ringing: true });
+    expect(again).not.toHaveProperty("queue");
+    expect(toneFor(again)).toBe("ringback");
+  });
+
+  it("members see who calls the line, with their verified address", () => {
+    const { view } = run([
+      ev({
+        t: "call.ringing",
+        callId: "c2",
+        from: { label: "Ann", address: "ann@far.example" },
+        line,
+      }),
+    ]);
+    expect(view).toEqual({
+      phase: "incoming",
+      callId: "c2",
+      label: "Ann",
+      address: "ann@far.example",
+      line: "Acme support",
+    });
+  });
+});

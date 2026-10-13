@@ -320,3 +320,25 @@ describe("recording", () => {
     ).toEqual(["DESK", "REC 3 IN ROOM"]);
   });
 });
+
+describe("public lines on the strip", () => {
+  const dialing = (queue: { position?: number; size?: number; voicemail?: boolean }) =>
+    ({ kind: "dialing", button: 1, callId: "c1", queue }) as const;
+
+  it("shows the place in line and how to leave a voicemail instead", () => {
+    expect(
+      lines({
+        deviceState: dialing({ position: 2, size: 3, voicemail: true }),
+        activeLabel: "Help",
+      }),
+    ).toEqual(["IN LINE 2", "1 VOICEMAIL"]);
+    expect(lines({ deviceState: dialing({ position: 1, size: 1 }), activeLabel: "Help" })).toEqual([
+      "IN LINE 1",
+      "HELP",
+    ]);
+    expect(lines({ deviceState: dialing({}) })).toEqual(["WAITING IN LINE", "PLEASE WAIT"]);
+    for (const l of lines({ deviceState: dialing({ position: 12, voicemail: true }) })) {
+      expect(l.length).toBeLessThanOrEqual(STATUS_WIDTH);
+    }
+  });
+});

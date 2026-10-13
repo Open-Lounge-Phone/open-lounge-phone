@@ -75,6 +75,11 @@ export function statusLines(input: StatusInput): StatusLines {
 
   switch (s.kind) {
     case "dialing":
+      // Waiting in a public line's queue (key 1 leaves a voicemail instead, when offered).
+      if (s.queue) {
+        const place = s.queue.position ? `IN LINE ${s.queue.position}` : "WAITING IN LINE";
+        return [clip(place), clip(s.queue.voicemail ? "1 VOICEMAIL" : name || "PLEASE WAIT")];
+      }
       return withName("CALLING", name);
     case "incoming": {
       const who = withName("", s.from.trim(), "CALLING");

@@ -232,11 +232,34 @@ export class Connection {
     await this.dialWith({ type: "dial", label, person: true }, { t: "call.extension", number });
   }
 
+  /** Calls a public line by its address (`support@example.org`). */
+  async callLine(address: string): Promise<void> {
+    await this.dialWith(
+      { type: "dial", label: address, person: true },
+      { t: "call.line", address },
+    );
+  }
+
+  /** Waiting in a public line's queue: leave a voicemail instead (the line's offer follows). */
+  leaveVoicemailInstead(): void {
+    const call = this.snap.call;
+    if (call.phase !== "outgoing" || !call.callId || !call.queue?.voicemail) return;
+    this.socket.send({ t: "call.voicemail", callId: call.callId });
+  }
+
   private async dialWith(
     event: Extract<CallEvent, { type: "dial" }>,
     msg: Extract<
       AppToServer,
-      { t: "call.dial" | "call.user" | "call.connection" | "call.phone" | "call.extension" }
+      {
+        t:
+          | "call.dial"
+          | "call.user"
+          | "call.connection"
+          | "call.phone"
+          | "call.extension"
+          | "call.line";
+      }
     >,
   ): Promise<void> {
     if (!this.canDial()) return;

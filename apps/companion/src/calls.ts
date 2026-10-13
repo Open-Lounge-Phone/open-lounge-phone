@@ -1,5 +1,13 @@
 import type { Tone } from "@openloungephone/client";
-import type { EndReason, ServerToApp, VoicemailOffer } from "@openloungephone/protocol";
+import type { EndReason, LineInfo, ServerToApp, VoicemailOffer } from "@openloungephone/protocol";
+
+/** Waiting in a public line's queue (`call.state.queue`). */
+export interface QueueView {
+  position?: number;
+  size?: number;
+  /** "Leave a voicemail instead" is offered. */
+  voicemail?: boolean;
+}
 
 /** What the call UI shows. At most one call at a time. */
 export type CallView =
@@ -14,8 +22,19 @@ export type CallView =
       person?: boolean;
       /** Dialled through a connection (another household or server): its id. */
       via?: string;
+      /** Calling a public line: what it is. */
+      line?: LineInfo;
+      /** Waiting in the line's queue (nobody free yet). */
+      queue?: QueueView;
     }
-  | { phase: "incoming"; callId: string; label: string }
+  | {
+      phase: "incoming";
+      callId: string;
+      label: string;
+      /** A public line's call: the caller's verified address, and which line. */
+      address?: string;
+      line?: string;
+    }
   | {
       phase: "connecting" | "active";
       callId: string;
@@ -101,7 +120,15 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
   const msg = e.msg;
   if (msg.t === "call.ringing") {
     if (view.phase === "idle" || view.phase === "ended") {
-      return { view: { phase: "incoming", callId: msg.callId, label: msg.from.label } };
+      return {
+        view: {
+          phase: "incoming",
+          callId: msg.callId,
+          label: msg.from.label,
+          ...(msg.from.address ? { address: msg.from.address } : {}),
+          ...(msg.line ? { line: msg.line.name } : {}),
+        },
+      };
     }
     if (callIdOf(view) === msg.callId) return { view };
     return { view, decline: msg.callId };
@@ -156,9 +183,20 @@ function stateFor(
         },
       };
     case "requesting":
-    case "ringing":
-      if (view.phase === "outgoing") return { view: { ...view, callId, ringing: true } };
-      return { view };
+    case "ringing": {
+      if (view.phase !== "outgoing") return { view };
+      // A public line: its name, then the caller's place in its queue (none = ringing again).
+      const { queue: _q, ...rest } = view;
+      return {
+        view: {
+          ...rest,
+          callId,
+          ringing: true,
+          ...(msg.line ? { line: msg.line, label: msg.line.name } : {}),
+          ...(msg.queue ? { queue: msg.queue } : {}),
+        },
+      };
+    }
     case "connecting":
       if (view.phase === "connecting" || view.phase === "active") return { view };
       return { view: { phase: "connecting", callId, label, offerer } };
@@ -188,6 +226,8 @@ function stateFor(
 export function toneFor(view: CallView): Tone {
   if (view.phase === "incoming") return "ring";
   if (view.phase === "active" && view.hold === "them") return "hold";
+  // Waiting in a public line's queue: the soft waiting tone, not ringback.
+  if (view.phase === "outgoing" && view.queue) return "hold";
   if (view.phase === "outgoing" && view.ringing) return "ringback";
   return "none";
 }

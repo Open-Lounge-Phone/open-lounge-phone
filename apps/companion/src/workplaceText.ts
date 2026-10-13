@@ -1,5 +1,7 @@
-/** Words for team and org spaces' ring groups, hours and audit trail. Pure. */
-import type { AfterHours, Directory, HoursRule, HuntStrategy } from "./api.ts";
+/** Words for team and org spaces' ring groups, hours, public lines and audit trail. Pure. */
+import { ordinal } from "@openloungephone/core";
+import type { AfterHours, Directory, HoursRule, HuntStrategy, LineSettings } from "./api.ts";
+import type { QueueView } from "./calls.ts";
 
 export const STRATEGY_TEXT: Record<HuntStrategy, string> = {
   simultaneous: "Everyone at once",
@@ -66,7 +68,47 @@ export function auditText(action: string, d: Record<string, unknown> | null): st
       return "exported the call log";
     case "recording.update":
       return d?.enabled ? "turned call recording on" : "turned call recording off";
+    case "line.address":
+      return `set a public line's address to ${s("to")}`;
+    case "line.enable":
+      return `made ${s("address")} public (confirmed the warning)`;
+    case "line.disable":
+      return `turned public line ${s("address")} off`;
+    case "line.update":
+      return "changed a public line's settings";
+    case "line.delete":
+      return `removed public line ${s("handle")}`;
+    case "line.greeting":
+      return "changed a public line's greeting";
+    case "line.block":
+      return `blocked ${s("value")} from the public lines`;
+    case "line.unblock":
+      return `unblocked ${s("value")}`;
     default:
       return action;
   }
+}
+
+/** Waiting in a public line's queue: "You're 2nd in line", or just "Waiting in line". */
+export function queueText(q: QueueView): string {
+  if (!q.position) return "Waiting in line";
+  if (q.position === 1) return "You're next in line";
+  return `You're ${ordinal(q.position)} in line`;
+}
+
+/** Who may call a public line, in words. */
+export const WHO_TEXT: Record<LineSettings["who"], string> = {
+  anyone: "Anyone (on a server you haven't blocked)",
+  connections: "Only people connected to someone here",
+  allowlist: "Only these servers and addresses",
+};
+
+/** What happens at the longest wait, in words. */
+export function maxWaitText(
+  a: LineSettings["atMaxWait"],
+  dir: Pick<Directory, "groups" | "members">,
+) {
+  if (a.kind === "voicemail") return "offer voicemail";
+  if (a.kind === "end") return "end the call";
+  return afterHoursText(a, dir);
 }
