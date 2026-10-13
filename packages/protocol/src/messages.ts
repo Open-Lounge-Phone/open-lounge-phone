@@ -594,7 +594,15 @@ export const Config = z
       .max(840)
       .optional()
       .describe(
-        "The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock (SNTP) knows local time: hardware phones install updates overnight.",
+        "The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock knows local time: hardware phones install updates overnight.",
+      ),
+    now: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        "The server's time (ms since the Unix epoch) when it sent this, so a phone can show a clock without asking a time server: hardware phones set their clock from it.",
       ),
     missed: z
       .array(z.object({ from: z.string().min(1).max(24) }))

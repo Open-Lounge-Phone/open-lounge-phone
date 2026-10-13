@@ -1593,6 +1593,7 @@ export class HouseholdHub {
       quiet,
       ...(quietUntil ? { quietUntil } : {}),
       utcOffsetMin: utcOffsetMinutes(now, schedule.timeZone),
+      now: now.getTime(),
       ...(missed.length ? { missed: missed.map((from) => ({ from: from.slice(0, 24) })) } : {}),
       ...(greeting
         ? {

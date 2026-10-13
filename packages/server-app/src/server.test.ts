@@ -278,6 +278,8 @@ describe("pairing and device auth", () => {
       owner: { mode: "kids", space: "Home" },
       // The space's UTC offset (the test household's time zone is UTC).
       utcOffsetMin: 0,
+      // The server's clock, for phones without one (the test clock).
+      now: 1772452800000,
       // What the server speaks: protocol range and features.
       server: SERVER_INFO,
     });

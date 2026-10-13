@@ -929,6 +929,11 @@
             "minimum": -720,
             "maximum": 840
           },
+          "now": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
           "missed": {
             "maxItems": 8,
             "type": "array",
