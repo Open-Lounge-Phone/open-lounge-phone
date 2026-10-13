@@ -134,6 +134,14 @@ CRADLE_Z = U_Z0 + NECK / 2 + 10.0   # where the cup's weight lands, roughly
 DENSITY = {"aluminium (AlSi10Mg, cast A356)": 2.68, "stainless 316L": 7.98, "bronze / brass": 8.6,
            "glass-filled nylon (PA12-GF)": 1.22}
 HANDSET_G = 200.0          # MEASURE: your handset's weight
+# Return spring: a compression spring in a boss under the tongue pushes it up, so with nothing on
+# the hook the rocker sits up against its stop (the end of the shank's slot in the housing) and
+# the hook key is free, whatever the rocker is made of. The handset's weight beats it.
+SPRING_ARM = 18.0          # from the pin, along the tongue
+SPRING_OD, SPRING_FREE = 5.0, 20.0   # compression spring, ~0.6 N/mm: ~2.5 N at its 16 mm fitted length
+SPRING_N = 2.5
+BOSS_TOP = 12.0            # the boss's top; the spring sits in a 6 mm deep pocket
+STOP_GAP = 0.5             # the shank's clearance to its slot's end: the rocker's up-stop
 
 
 def xbar(x0, x1, y, z, d):
@@ -184,7 +192,8 @@ def pivot_housing():
     h += mid + xbar(s0 - 0.5, s1 + 0.5, y, PIV_Z, LUG_W)
     h -= xbar(s0, s1, y, PIV_Z, HUB_D + 1.6)                         # the hub turns in here
     # the shank's way out, open downward: the rocker slides in from below, then the pin
-    h -= rrect(PIV_X, y - LUG_W / 2 + 2.25, ROD_D + 1.6, LUG_W + 4.5, (ROD_D + 1.6) / 2 - 0.01,
+    top = ROD_D / 2 + STOP_GAP                                      # its end is the up-stop
+    h -= rrect(PIV_X, y + (top - LUG_W - 4.0) / 2, ROD_D + 1.6, LUG_W + 4.0 + top, (ROD_D + 1.6) / 2 - 0.01,
                PIV_Z, PIV_Z + LUG_W)
     h -= bx(s0, s1, y - LUG_W, y, FACE_Z - 0.5, PIV_Z)                # the nook below the pivot
     plinth = rrect((-2.0 + s1 + LUG_T + 3.0) / 2, (by0 + Y(BZ[1] + GRILLE_D / 2 + 0.5)) / 2,
@@ -201,6 +210,11 @@ def build_hook_face():
     # keep the piezo grille and its hollow open (the housing's base runs round them)
     gx, gy = BZ[0], Y(BZ[1])
     shell -= cyl(gx, gy, FACE_Z - FACE_T - 1, BZ_H + 0.4, BZ_D + 0.8)
+    # the return spring's boss under the tongue
+    sy = y - SPRING_ARM
+    boss = cyl(PIV_X, sy, FACE_Z - 0.5, BOSS_TOP, SPRING_OD + 4.0)
+    shell += round_top(boss, BOSS_TOP, 1.0)
+    shell -= cyl(PIV_X, sy, BOSS_TOP - 6.0, BOSS_TOP + 1, SPRING_OD + 0.4)
     xl, xr = HUB_X[0] - LUG_GAP - LUG_T, HUB_X[1] + LUG_GAP + LUG_T
     shell -= xbar(xl - 1, xl + BUSH_L, y, PIV_Z, BUSH_OD)
     shell -= xbar(xr - BUSH_L, xr + 1, y, PIV_Z, BUSH_OD)
@@ -253,7 +267,8 @@ def build_rocker():
     # a web where the tongue leaves the hub (it carries the whole key force)
     web = bx(cx - TONGUE_W / 2, cx + TONGUE_W / 2, y - 16.0, y, KEYCAP_TOP, PIV_Z)
     web -= Pos(cx, y - 16.0, PIV_Z) * Rot(0, 90, 0) * Cylinder(10.0, TONGUE_W + 2)
-    r = r + shank + hub + tongue + web
+    peg = cyl(cx, y - SPRING_ARM, KEYCAP_TOP - 2.5, KEYCAP_TOP + 0.5, SPRING_OD - 1.8)   # locates the spring
+    r = r + shank + hub + tongue + web + peg
     r -= xbar(HUB_X[0] - 1, HUB_X[1] + 1, y, PIV_Z, PIN_D)
     return r
 
@@ -267,12 +282,17 @@ def balance(r) -> list[str]:
     out = [f"rocker {r.volume / 1000:.1f} cm3, centre of mass {cg.Z - PIV_Z:.1f} mm out from the pin; "
            f"tongue {arm_key:.1f} mm; cradle centre {CRADLE_Z - PIV_Z:.1f} mm out"]
     hs = HANDSET_G * (CRADLE_Z - PIV_Z) / arm_key
+    spring = SPRING_N * 102.0 * SPRING_ARM / arm_key          # gf at the key
+    stop = math.degrees(math.atan2(STOP_GAP, HUB_D / 2 + 3.0))
+    out.append(f"  spring {SPRING_N} N at {SPRING_ARM} mm = {spring:.0f} gf at the key; up-stop ~{stop:.1f} deg "
+               f"(tongue {arm_key * math.sin(math.radians(stop)):.1f} mm over the key)")
     for name, rho in DENSITY.items():
         m = r.volume / 1000 * rho
         own = m * (cg.Z - PIV_Z) / arm_key
-        out.append(f"  {name:32s} {m:6.0f} g; rests on the key with {own:4.0f} gf; "
-                   f"with the handset {own + hs:4.0f} gf")
-    out.append("  MX switch: ~35-40 gf to start moving, 45-60 gf to switch; heavier switches up to ~100 gf")
+        on = own + hs - spring
+        out.append(f"  {name:32s} {m:6.0f} g; empty hook: held up with {spring - own:4.0f} gf; "
+                   f"handset on: {on:4.0f} gf on the key")
+    out.append("  MX switch: 45-60 gf to switch (keep 'handset on' well above, 'held up' above 0)")
     return out
 
 
