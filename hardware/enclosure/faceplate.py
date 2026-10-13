@@ -102,72 +102,157 @@ def display():
 
 
 # ---------------------------------------------------------------- switchhook (wall)
-# The phone hangs on a wall, top up. One printed rocker, like an old payphone switchhook: a fork
-# whose two paddles stick out from the wall and carry the handset's earpiece (the handle hangs
-# down between them, the cup over the top edge), a pivot block, and a long tongue that runs down
-# the face to SW15's keycap. The handset's weight tips the fork down, the tongue presses the hook
-# switch. Lift it: SW15's own spring pushes the tongue back up and the fork rises. No other spring.
-# The pivot is an M3 x 35 screw (or a 3 mm rod) through two lugs on the face, above the piezo
-# grille (sound comes out under the rocker).
+# The phone hangs on a wall, top up. One rocker, like an old payphone switchhook: a cradle whose
+# two arms stand out from the wall and curl up round the earpiece cup (the handle hangs down
+# between them, slid in from the front), a pivot hub, and a long tongue that runs down the face to
+# SW15's keycap. The handset's weight tips the cradle down, the tongue presses the hook switch.
+# Lift it: SW15's own spring lifts the tongue back. No other spring.
+#
+# Made for hard use: the rocker is a one-off in metal (316L or AlSi10Mg metal printing, or cast
+# bronze/aluminium from a printed pattern; every edge rounded, walls >= 3 mm, no undercuts on the
+# parting line y = pivot) or glass-filled nylon / PC. The faceplate's pivot mount is two thick
+# lugs with gussets and a rib into the H4 screw boss, so the load goes into a screw, not the face.
+# The pin is a 3 mm stainless dowel (ISO 2338, 3 x 36) in two flanged bushings (3 x 5 x 6,
+# bronze or PTFE-lined) pressed into the lugs; the rocker turns on the pin (3.1 hole, ream 3 H8).
 KEYCAP_TOP = P.PLATE_ABOVE_PCB + P.CAP_TOP   # 22: SW15's keycap top, not pressed (MEASURE yours)
 PIV_X, PIV_KY = P.HOOK[0], P.BZ1_C[1]        # over the piezo, in line with SW15 (KiCad x, y)
-PIV_Z = KEYCAP_TOP + 4.0                      # the tongue's underside sits on the keycap
-HUB_D, HUB_X = 9.0, (6.0, 26.0)               # the pivot block, between the lugs
-PIN_D = 3.4                                   # the rocker turns on the pin
-LUG_T, LUG_GAP, LUG_W = 4.4, 0.6, 8.0
-TONGUE_W, TONGUE_T = 8.0, 4.0
-FORK_T = 5.0               # the fork's thickness (wall up-down)
-FORK_GAP = 44.0            # MEASURE: the handle's neck under the earpiece + clearance
-FORK_W = 7.0               # the fork's bar width
-FORK_Z0 = 40.0             # where the shank meets the U
-PRONG_TIP = 88.0           # how far the paddles stand off the board top
-PADDLE_D = 18.0
+PIV_Z = KEYCAP_TOP + 5.0                      # the tongue's underside sits on the keycap
+HUB_D, HUB_X = 12.0, (6.0, 26.0)              # the pivot hub, between the lugs
+PIN_D = 3.1
+BUSH_OD, BUSH_L = 5.0, 6.0
+LUG_T, LUG_GAP, LUG_W = 6.5, 0.5, 16.0
+TONGUE_W, TONGUE_T = 9.0, 5.0
+FOOT = 16.0                # the tongue's foot on the hook keycap
+NECK = 40.0                # MEASURE: the handle's width under the cup (passes between the arms)
+ROD_D = 8.0                # the cradle bar: a round bar, like a bent-rod switchhook
+U_Z0 = 44.0                # the U's back, out from the board top
+U_LIFT = 4.0               # the U's sides rise this much: a shallow bowl for the cup
+ARM_L = 30.0               # the arms run straight out ...
+CURL = 14.0                # ... and curl up this much at the tips, cupping the earpiece
+PAD_D, PAD_T = 17.0, 5.0   # spoon pads on the tips
+CRADLE_Z = U_Z0 + NECK / 2 + 10.0   # where the cup's weight lands, roughly
+DENSITY = {"aluminium (AlSi10Mg, cast A356)": 2.68, "stainless 316L": 7.98, "bronze / brass": 8.6,
+           "glass-filled nylon (PA12-GF)": 1.22}
+HANDSET_G = 200.0          # MEASURE: your handset's weight
 
 
 def xbar(x0, x1, y, z, d):
     return Pos((x0 + x1) / 2, y, z) * Rot(0, 90, 0) * Cylinder(d / 2, x1 - x0)
 
 
+def ybar(x, z, y0, y1, d):
+    return Pos(x, (y0 + y1) / 2, z) * Rot(90, 0, 0) * Cylinder(d / 2, y1 - y0)
+
+
+def bx(x0, x1, y0, y1, z0, z1):
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+    z0, z1 = sorted((z0, z1))
+    return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
+
+
+def soften(part, r):
+    try:
+        return fillet(part.edges(), r)
+    except Exception:
+        return part
+
+
 def build_hook_face():
-    """The faceplate with the two pivot lugs (one print)."""
+    """The faceplate with the pivot mount: two gusseted lugs, bushing bores, a rib into H4."""
     shell = build()
     y = Y(PIV_KY)
+    lugs = []
     for x0 in (HUB_X[0] - LUG_GAP - LUG_T, HUB_X[1] + LUG_GAP):
-        lug = rrect(x0 + LUG_T / 2, y, LUG_T, LUG_W, 1.0, FACE_Z - 0.5, PIV_Z)
+        lug = rrect(x0 + LUG_T / 2, y, LUG_T, LUG_W, 2.0, FACE_Z - 0.5, PIV_Z)
         lug += xbar(x0, x0 + LUG_T, y, PIV_Z, LUG_W)
+        # gussets fore and aft: a wide foot that tapers up to the lug
+        for side in (-1, 1):
+            g = bx(x0, x0 + LUG_T, y + side * LUG_W / 2, y + side * (LUG_W / 2 + 7), FACE_Z - 0.5, FACE_Z + 9)
+            g -= Pos(x0 + LUG_T / 2, y + side * (LUG_W / 2 + 7), FACE_Z + 9) * Rot(0, 90, 0) * Cylinder(7.5, LUG_T + 2)
+            lug += g
+        lugs.append((x0, lug))
+    for _, lug in lugs:
         shell += lug
-    shell -= xbar(HUB_X[0] - LUG_GAP - LUG_T - 1, HUB_X[1] + LUG_GAP + LUG_T + 1, y, PIV_Z, 3.0)
+    # the right lug's rib runs down to the H4 insert boss (31, 31): the pin's load goes to a screw
+    hx, hy = P.HOLES[3]
+    x0 = lugs[1][0]
+    shell += bx(x0 + 1.0, x0 + LUG_T - 1.0, Y(hy), y - LUG_W / 2, FACE_Z - 0.5, FACE_Z + 5.0)
+    shell += cyl(hx, Y(hy), FACE_Z - 0.5, FACE_Z + 5.0, 9.0)
+    # bushing bores from outside, a pin hole through
+    xl, xr = lugs[0][0], lugs[1][0] + LUG_T
+    shell -= xbar(xl - 1, xl + BUSH_L, y, PIV_Z, BUSH_OD)
+    shell -= xbar(xr - BUSH_L, xr + 1, y, PIV_Z, BUSH_OD)
     return shell
 
 
+def cradle():
+    """The cradle: one round bar swept along a U whose arms curl up, spoon pads on the tips."""
+    from build123d import Circle, Plane, Spline, sweep
+    y0, cx = Y(PIV_KY), PIV_X
+    half = NECK / 2 + ROD_D / 2                     # arm centre lines (the gap between = NECK)
+    zc = U_Z0 + half                                 # the U's centre
+    pts = []
+    for k in range(5, 0, -1):                        # left arm, from the tip in
+        t = k / 5
+        pts.append((cx - half, y0 + U_LIFT + CURL * t ** 2, zc + ARM_L * t))
+    for k in range(-6, 7):                           # the U round the wall side
+        ph = math.radians(90 * k / 6)
+        pts.append((cx + half * math.sin(ph), y0 + U_LIFT * (k / 6) ** 2, zc - half * math.cos(ph)))
+    for k in range(1, 6):                            # right arm, out to the tip
+        t = k / 5
+        pts.append((cx + half, y0 + U_LIFT + CURL * t ** 2, zc + ARM_L * t))
+    path = Spline(*pts)
+    start = Plane(origin=path @ 0, x_dir=(0, 1, 0), z_dir=path % 0)
+    bar = sweep(start * Circle(ROD_D / 2), path=path)
+    for u in (0.0, 1.0):                             # spoon pads, tilted with the curl
+        tip = path @ u
+        tan = path % u
+        pad = Plane(origin=tip, z_dir=(0, 1, 0)) * Cylinder(PAD_D / 2, PAD_T)
+        pad = soften(pad, 1.4)
+        tilt = math.degrees(math.atan2(tan.Y, abs(tan.Z)))
+        pad = Pos(tip.X, tip.Y, tip.Z) * Rot(-tilt, 0, 0) * Pos(-tip.X, -tip.Y, -tip.Z) * pad
+        bar += pad
+    return bar, zc - half
+
+
 def build_rocker():
-    """The switchhook: pivot block, tongue down to SW15, fork out from the wall. One print."""
+    """The switchhook: cradle, shank, hub and tongue in one piece."""
     y, cx = Y(PIV_KY), PIV_X
-    r = xbar(*HUB_X, y, PIV_Z, HUB_D)
-    # the tongue: from the pivot down the face to past SW15's keycap centre, a round end
+    r, z_join = cradle()
+    # the shank: from the hub out to the U's back, the bar's own size
+    shank = cyl(cx, y, PIV_Z, z_join + 2.0, ROD_D)
+    hub = soften(xbar(*HUB_X, y, PIV_Z, HUB_D), 1.0)
     y_end = Y(P.HOOK[1] + 4.0)
-    r += rrect(cx, (y + y_end) / 2, TONGUE_W, y - y_end, TONGUE_W / 2 - 0.01, KEYCAP_TOP, KEYCAP_TOP + TONGUE_T)
-    # the shank out from the wall, then a U whose arms run on out to round paddles
-    half = FORK_GAP / 2 + FORK_W / 2
-    yt = (y - FORK_T / 2, y + FORK_T / 2)
-
-    def ycyl(x, z, d):
-        return Pos(x, y, z) * Rot(90, 0, 0) * Cylinder(d / 2, FORK_T)
-
-    r += bx(cx - FORK_W / 2, cx + FORK_W / 2, *yt, PIV_Z, FORK_Z0 + FORK_W / 2)
-    zc = FORK_Z0 + half
-    ring = ycyl(cx, zc, 2 * half + FORK_W) - ycyl(cx, zc, 2 * half - FORK_W)
-    r += ring - bx(cx - half - FORK_W, cx + half + FORK_W, y - FORK_T, y + FORK_T, zc, zc + half + FORK_W)
-    for side in (-1, 1):
-        px = cx + side * half
-        r += bx(px - FORK_W / 2, px + FORK_W / 2, *yt, zc, PRONG_TIP)
-        r += ycyl(px, PRONG_TIP, PADDLE_D)
+    tongue = rrect(cx, (y + y_end) / 2, TONGUE_W, y - y_end, TONGUE_W / 2 - 0.01,
+                   KEYCAP_TOP, KEYCAP_TOP + TONGUE_T)
+    # a broad foot on the end: it covers the hook key's keycap (18.2 square)
+    tongue += rrect(cx, Y(P.HOOK[1]), FOOT, FOOT, 4.0, KEYCAP_TOP, KEYCAP_TOP + TONGUE_T)
+    tongue = soften(tongue, 1.2)
+    # a web where the tongue leaves the hub (it carries the whole key force)
+    web = bx(cx - TONGUE_W / 2, cx + TONGUE_W / 2, y - 16.0, y, KEYCAP_TOP, PIV_Z)
+    web -= Pos(cx, y - 16.0, PIV_Z) * Rot(0, 90, 0) * Cylinder(10.0, TONGUE_W + 2)
+    r = r + shank + hub + tongue + web
     r -= xbar(HUB_X[0] - 1, HUB_X[1] + 1, y, PIV_Z, PIN_D)
     return r
 
 
-def bx(x0, x1, y0, y1, z0, z1):
-    return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
+def balance(r) -> list[str]:
+    """The rocker's own pull on the hook key, by material, and the handset's."""
+    from build123d import CenterOf
+    y = Y(PIV_KY)
+    cg = r.center(CenterOf.MASS)
+    arm_key = y - Y(P.HOOK[1])                      # pivot to SW15 along the tongue
+    out = [f"rocker {r.volume / 1000:.1f} cm3, centre of mass {cg.Z - PIV_Z:.1f} mm out from the pin; "
+           f"tongue {arm_key:.1f} mm; cradle centre {CRADLE_Z - PIV_Z:.1f} mm out"]
+    hs = HANDSET_G * (CRADLE_Z - PIV_Z) / arm_key
+    for name, rho in DENSITY.items():
+        m = r.volume / 1000 * rho
+        own = m * (cg.Z - PIV_Z) / arm_key
+        out.append(f"  {name:32s} {m:6.0f} g; rests on the key with {own:4.0f} gf; "
+                   f"with the handset {own + hs:4.0f} gf")
+    out.append("  MX switch: ~35-40 gf to start moving, 45-60 gf to switch; heavier switches up to ~100 gf")
+    return out
 
 
 def build():
@@ -256,7 +341,9 @@ def report(shell) -> list[str]:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     if os.environ.get("OLP_FACEPLATE") == "hook":
-        for name, part in {"faceplate-hook": build_hook_face(), "hook-rocker": build_rocker()}.items():
+        rocker = build_rocker()
+        print("\n".join(balance(rocker)))
+        for name, part in {"faceplate-hook": build_hook_face(), "hook-rocker": rocker}.items():
             export_step(part, str(OUT / f"{name}.step"))
             export_stl(part, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
             bb = part.bounding_box()
