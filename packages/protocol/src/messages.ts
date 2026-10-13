@@ -528,6 +528,23 @@ export const VoicemailHeard = z
   .object({ t: z.literal("voicemail.heard"), ...Ref, id: Id })
   .describe("The phone played this message to the end: mark it heard (as the app's Heard does).");
 
+export const CheckinOk = z
+  .object({ t: z.literal("checkin.ok"), ...Ref })
+  .describe("Labs daily check-in: the person at the phone pressed I'm OK today.");
+
+export const CheckinMissed = z
+  .object({
+    t: z.literal("checkin.missed"),
+    ...Ref,
+    by: z
+      .string()
+      .regex(/^[0-2][0-9]:[0-5][0-9]$/)
+      .describe("The time it was due (local HH:MM)."),
+  })
+  .describe(
+    "Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.",
+  );
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   CallExtension,
@@ -544,6 +561,8 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   GreetingReset,
   VoicemailFetch,
   VoicemailHeard,
+  CheckinOk,
+  CheckinMissed,
   CallAnswer,
   CallHangup,
   CallHold,

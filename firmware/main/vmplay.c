@@ -31,7 +31,7 @@ typedef enum { VP_IDLE, VP_FETCHING, VP_LOADING, VP_PLAYING, VP_CANT_PLAY, VP_NO
 typedef struct {
   char id[48];
   char from[25];
-  char ticket[129];
+  char ticket[200];     // a play ticket, or (vmplay_play_url) the whole http(s) URL
   int duration_ms;
 } item_t;
 
@@ -89,7 +89,9 @@ static void download_task(void *arg) {
   else snprintf(base, sizeof base, "%s", srv);
   size_t bl = strlen(base);
   if (bl && base[bl - 1] == '/') base[bl - 1] = '\0';
-  snprintf(url, sizeof url, "%s/api/vm/play?ticket=%s", base, (const char *)arg);
+  const char *t = (const char *)arg;
+  if (!strncmp(t, "http://", 7) || !strncmp(t, "https://", 8)) snprintf(url, sizeof url, "%s", t);
+  else snprintf(url, sizeof url, "%s/api/vm/play?ticket=%s", base, t);
   bool ok = false;
   esp_http_client_config_t cfg = {
       .url = url,
@@ -137,7 +139,7 @@ static void play_current(int64_t now_ms) {
   s_stage = VP_LOADING;
   s_at = now_ms;
   // The ticket is single use: hand the task its own copy, then forget it.
-  static char ticket[129];
+  static char ticket[200];
   snprintf(ticket, sizeof ticket, "%s", it->ticket);
   it->ticket[0] = '\0';
   s_downloading = true;
@@ -146,6 +148,18 @@ static void play_current(int64_t now_ms) {
     release();
     note("COULDN'T PLAY", "TRY AGAIN", now_ms);
   }
+}
+
+void vmplay_play_url(const char *url, const char *title, int64_t now_ms) {
+  if (s_downloading || !url) return;
+  vmplay_stop();
+  s_clear = false;
+  s_n = 1;
+  s_cur = 0;
+  memset(&s_items[0], 0, sizeof s_items[0]);
+  snprintf(s_items[0].from, sizeof s_items[0].from, "%s", title ? title : "STORY");
+  snprintf(s_items[0].ticket, sizeof s_items[0].ticket, "%s", url);
+  play_current(now_ms);
 }
 
 void vmplay_items(const cJSON *msg, int64_t now_ms) {
@@ -242,7 +256,7 @@ void vmplay_tick(int64_t now_ms) {
       break;
     case VP_PLAYING:
       if (audio_played() >= s_wav.count) {
-        send_simple("voicemail.heard", s_items[s_cur].id);  // played to the end: heard
+        if (s_items[s_cur].id[0]) send_simple("voicemail.heard", s_items[s_cur].id);  // heard
         next(now_ms);
       }
       break;
@@ -277,7 +291,8 @@ int vmplay_lines(char out[4][25], int64_t now_ms) {
     case VP_PLAYING:
     case VP_CANT_PLAY: {
       item_t *it = &s_items[s_cur];
-      snprintf(out[0], 25, "MESSAGE %d OF %d", s_cur + 1, s_n);
+      if (it->id[0]) snprintf(out[0], 25, "MESSAGE %d OF %d", s_cur + 1, s_n);
+      else snprintf(out[0], 25, "NOW PLAYING");     // a story (labs)
       snprintf(out[1], 25, "%.20s", it->from[0] ? it->from : "SOMEONE");
       if (s_stage == VP_LOADING) {
         snprintf(out[2], 25, "LOADING");

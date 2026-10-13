@@ -1,0 +1,7 @@
+dependencies:
+  idf: ">=5.3"
+  espressif/esp_websocket_client: "^1.4.0"
+  espressif/qrcode: "^0.1.0"
+  espressif/esp_peer: "~1.5.6"
+  espressif/mdns: "^1.4.0"          # olp-<room>.local for the settings page
+  espressif/esp_tinyusb: "^2.0.0"   # the USB macro pad

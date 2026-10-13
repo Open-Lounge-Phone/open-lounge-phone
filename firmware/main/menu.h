@@ -12,7 +12,7 @@
 
 typedef enum {
   MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME, MENU_SERVER, MENU_VOICEMAIL,
-  MENU_CALL, MENU_CHECK, MENU_EXT
+  MENU_CALL, MENU_CHECK, MENU_EXT, MENU_LABS
 } menu_screen_t;
 
 /** Who may open the setup network from MENU 3: anyone, after a second press (kids' phones), or

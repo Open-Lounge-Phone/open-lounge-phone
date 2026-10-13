@@ -35,6 +35,7 @@ typedef enum {
   EV_EXT_DIAL,     // MENU -> 6: data = the extension's digits (malloc'd)
   EV_LOUNGE_CHAT,  // MENU -> 5 on a Lounge phone: a = 1 open to chat
   EV_LOUNGE_LEAVE, // MENU -> 8 on a Lounge phone: log out
+  EV_LABS,         // labs build: from the intercom / Home Assistant tasks (data, see labs.h)
 } ev_type_t;
 
 typedef struct {

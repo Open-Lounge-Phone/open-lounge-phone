@@ -40,6 +40,9 @@
 #include "vmplay.h"
 #include "marquee.h"
 #include "lounge.h"
+#if CONFIG_OLP_LABS
+#include "labs.h"   // the labs build (firmware/labs) only
+#endif
 #include <sys/time.h>
 #include <time.h>
 
@@ -157,6 +160,11 @@ static void emit(cJSON *m) {
   cJSON_Delete(m);
 }
 
+#if CONFIG_OLP_LABS
+/** Labs: a message to the server (check-in). */
+void app_emit(cJSON *m) { emit(m); }
+#endif
+
 static void end_call(void) {
   media_stop();
   phone_init(&s_phone);
@@ -211,7 +219,13 @@ static void sync_media(void) {
   send_local_sdp();
   audio_hold(s_phone.kind == PH_OFFHOOK && s_phone.held[0]);
   audio_set_offhook(s_hook_up);
-  if (!selftest_active()) audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
+  // No call tone over a message playing (the handset is up for it) or the self-test's tone.
+  bool quiet = selftest_active() || vmplay_active();
+#if CONFIG_OLP_LABS
+  quiet = quiet || labs_busy();
+#endif
+  if (!quiet) audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
+  else if (!selftest_active()) audio_set_tone(TONE_NONE);
 }
 
 // --- rendering ---------------------------------------------------------------------------
@@ -324,6 +338,10 @@ static void render(void) {
     int ln = s_authed && s_conn == CONN_ONLINE && !s_code[0]
                  ? lounge_lines(&s_lounge, idle, s_phone.kind == PH_OFFHOOK, ll, now)
                  : 0;
+#if CONFIG_OLP_LABS
+    if (!ln && net_wifi_up() && !s_code[0])
+      ln = labs_lines(ll, idle, s_phone.kind == PH_OFFHOOK, now);
+#endif
     if (ln) {
       for (int i = 0; i < ln; i++) snprintf(strip[i], sizeof strip[i], "%.40s", ll[i]);
       n = ln;
@@ -383,6 +401,10 @@ static void render(void) {
     else snprintf(footer, sizeof footer, "PRESS A KEY TO CALL");
     const char *labels[10];
     for (int i = 0; i < 10; i++) labels[i] = s_cfg.labels[i];
+#if CONFIG_OLP_LABS
+    for (int i = 0; i < 10; i++)
+      if (labs_label(i)) labels[i] = labs_label(i);
+#endif
     // Long names scroll: then each step is a new picture.
     long kstep = screen_keys_scrolls(w, h, title, labels, footer) ? step : 0;
     int at = snprintf(sig, sizeof sig, "%ld|%s|%s", kstep, title, footer);
@@ -483,7 +505,14 @@ static void render(void) {
   else if (s_phone.kind == PH_IDLE && s_cfg.missed_count > 0) led = LED_BREATHE;
   else led = LED_DIM;
   signals_led(led);
+#if CONFIG_OLP_LABS
+  if (labs_ringing()) led = LED_RINGING;
+  else if (labs_busy()) led = LED_ON;
+  signals_led(led);
+  signals_ring(s_phone.kind == PH_INCOMING || labs_ringing());
+#else
   signals_ring(s_phone.kind == PH_INCOMING);
+#endif
 }
 
 /** "2H05" or "14 MIN" for durations on the check page. */
@@ -900,6 +929,9 @@ static void on_key(int index) {
     }
     return;
   }
+#if CONFIG_OLP_LABS
+  if (labs_key(index, s_hook_up, now)) return;   // intercom, home, stories, macro, check-in…
+#endif
   if (index >= 10) return;  // MENU/BACK outside the menu
   if (s_lounge.on && s_lounge.challenge >= 0 && s_authed) {
     // The takeover proof: the key the screen names (any key is sent; the server checks it).
@@ -934,6 +966,9 @@ static void on_hook(bool up) {
   selftest_hook(up, now_ms());
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
+#if CONFIG_OLP_LABS
+  if (labs_hook(up, now_ms())) return;   // the intercom answered / hung up
+#endif
   phone_hook(&s_phone, up, emit);
 }
 
@@ -995,6 +1030,9 @@ static void tick(void) {
   if (lounge_wants_refresh(&s_lounge, idle_screen, s_menu.screen != MENU_CLOSED, now))
     emit(msg("lounge.refresh"));
   vmplay_tick(now);
+#if CONFIG_OLP_LABS
+  labs_tick(now);
+#endif
   ota_tick(now);
   menu_tick(&s_menu, now);
   if (s_reopen_at >= 0 && now >= s_reopen_at) {
@@ -1069,6 +1107,9 @@ void app_main(void) {
   audio_start(false);
 #endif
   media_init();
+#if CONFIG_OLP_LABS
+  labs_start();
+#endif
   vmplay_init(emit);
   input_start();
   console_start();
@@ -1130,6 +1171,13 @@ void app_main(void) {
         case EV_LOUNGE_LEAVE:
           emit(msg("lounge.leave"));
           break;
+        case EV_LABS:
+#if CONFIG_OLP_LABS
+          labs_event(ev.a, ev.data, now_ms());
+#else
+          free(ev.data);   // only the labs build posts these
+#endif
+          break;
         case EV_SELFTEST:
           if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {
             selftest_start(now_ms(), s_hook_up, s_jack_in);
@@ -1140,6 +1188,9 @@ void app_main(void) {
           break;
         case EV_WIFI_UP:
           prov_event(PROV_EV_STA_UP, false);
+#if CONFIG_OLP_LABS
+          labs_net_up();
+#endif
           if (ota_enabled()) ota_time_start();  // the clock is only for the update window
           if (s_next_ota_check < 0) s_next_ota_check = now_ms() + 60 * 1000;  // first check
           if (!started) {

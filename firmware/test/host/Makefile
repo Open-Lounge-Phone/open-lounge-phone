@@ -3,12 +3,14 @@
 IDF_PATH ?= $(HOME)/esp/esp-idf
 CJSON := $(IDF_PATH)/components/json/cJSON
 MAIN := ../../main
+LABS := ../../labs/main
 SAN := -fsanitize=address,undefined -fno-omit-frame-pointer
-BASE := -std=gnu11 -O1 -g -I$(MAIN) -I$(CJSON) -I. -D_DEFAULT_SOURCE $(SAN)
+BASE := -std=gnu11 -O1 -g -I$(MAIN) -I$(LABS) -I$(CJSON) -I. -D_DEFAULT_SOURCE $(SAN)
 CFLAGS := $(BASE) -Wall -Wextra -Werror
-# test_<module>.c tests main/<module>.c.
+# test_<module>.c tests main/<module>.c (or labs/main/<module>.c, the labs firmware's).
 TESTS := $(wildcard test_*.c)
-MODULES := $(patsubst test_%.c,$(MAIN)/%.c,$(filter-out test_main.c,$(TESTS)))
+MODULES := $(foreach t,$(patsubst test_%.c,%,$(filter-out test_main.c,$(TESTS))),\
+             $(firstword $(wildcard $(MAIN)/$(t).c $(LABS)/$(t).c)))
 SRCS := $(TESTS) $(MODULES)
 
 all: run

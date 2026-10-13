@@ -1,0 +1,10 @@
+# The phone's options (shared), then the labs ones.
+rsource "../../main/Kconfig.projbuild"
+
+menu "Open Lounge Phone labs"
+config OLP_LABS
+    bool "Labs features (house intercom, check-in, macro pad, home panel, stories, doorbell)"
+    default y
+    help
+        Only in the labs project (firmware/labs). The phone firmware never has this set.
+endmenu

@@ -143,6 +143,13 @@ void ota_set_time(int64_t epoch_ms) {
   settimeofday(&tv, NULL);
 }
 
+long ota_local_day(void) {
+  time_t now = time(NULL);
+  if (now < 1700000000 || !s_offset_known) return -1;
+  long m = (long)(now / 60) + s_utc_offset_min;
+  return m / 1440;
+}
+
 int ota_local_minute(void) {
   time_t now = time(NULL);
   if (now < 1700000000 || !s_offset_known) return -1;  // no SNTP yet, or no offset from the server

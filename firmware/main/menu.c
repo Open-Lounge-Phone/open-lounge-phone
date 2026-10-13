@@ -12,13 +12,16 @@
 #include "ota.h"
 #include "prov_core.h"
 #include "signals.h"
+#if CONFIG_OLP_LABS
+#include "labs.h"
+#endif
 
 /** Digit key index (protocol order: 1-9 → 0-8, 0 → 9) to the digit it shows. */
 static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
   static const char *names[] = {"closed",    "root", "about", "wifi", "volume", "server",
-                                "voicemail", "call", "check", "ext"};
+                                "voicemail", "call", "check", "ext",  "labs"};
   return names[s];
 }
 
@@ -77,6 +80,10 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     } else if (d == 5 && m->lounge_session) {
       app_post(EV_LOUNGE_CHAT, !m->open_to_chat, NULL);
       m->screen = MENU_CLOSED;
+#if CONFIG_OLP_LABS
+    } else if (d == 5 && !m->lounge) {
+      m->screen = MENU_LABS;                 // labs: the settings page's address and PIN
+#endif
     } else if (d == 8 && m->lounge_session) {
       app_post(EV_LOUNGE_LEAVE, 0, NULL);
       m->screen = MENU_CLOSED;
@@ -155,6 +162,9 @@ int menu_lines(const menu_t *m, char out[4][25]) {
         items[n++] = "2 VOICEMAIL";
       }
       items[n++] = "3 NETWORK";
+#if CONFIG_OLP_LABS
+      if (!m->lounge) items[n++] = "5 LABS";
+#endif
       if (m->extensions) items[n++] = "6 EXT";
       items[n++] = "7 CHECK";
       items[n++] = "0 ABOUT";
@@ -237,6 +247,10 @@ int menu_lines(const menu_t *m, char out[4][25]) {
       else snprintf(out[3], 25, "1 CHANGE");
       return 4;
     }
+#if CONFIG_OLP_LABS
+    case MENU_LABS:
+      return labs_menu_lines(out);
+#endif
     case MENU_EXT:
       snprintf(out[0], 25, "%s %s_", m->ext_transfer ? "TO EXT" : "EXT", m->ext);
       snprintf(out[1], 25, "%s", m->ext_transfer ? "MENU TRANSFERS" : "MENU DIALS");

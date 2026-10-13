@@ -428,6 +428,34 @@ describe("phones play their owner's voicemail", () => {
   });
 });
 
+describe("labs: the daily check-in", () => {
+  it("a missed check-in becomes an alert in each guardian's inbox, once a day", async () => {
+    const { jesse, bobToken, jApp } = await household();
+    const paired = await s.pairDevice(jesse.token, "Grandma");
+    const phone = await s.connectDevice(
+      paired.deviceId as string,
+      paired.key?.pair as CryptoKeyPair,
+    );
+    phone.write({ t: "checkin.ok" });
+    phone.write({ t: "checkin.missed", by: "10:00" });
+    expect(await jApp.next("voicemail.inbox")).toMatchObject({ from: "Grandma" });
+    const inbox = await s.http("/voicemails", { token: jesse.token });
+    expect(inbox.json).toMatchObject([
+      { fromLabel: "Grandma", transcript: "Grandma didn't check in by 10:00.", mime: "audio/wav" },
+    ]);
+    const audio = await s.api.request(`/voicemails/${inbox.json[0].id}/audio`, {
+      headers: { authorization: `Bearer ${jesse.token}` },
+    });
+    expect((await audio.arrayBuffer()).byteLength).toBe(44 + 6400 * 2);
+    // Bob isn't a guardian; and a second alert the same day is dropped.
+    expect((await s.http("/voicemails", { token: bobToken })).json).toEqual([]);
+    phone.write({ t: "checkin.missed", by: "10:00" });
+    phone.write({ t: "voicemail.fetch" });
+    await phone.next("voicemail.items");
+    expect((await s.http("/voicemails", { token: jesse.token })).json).toHaveLength(1);
+  });
+});
+
 describe("greetings", () => {
   it("record just your name: the caller gets it; reset brings back the default", async () => {
     const { bob, bobToken, jApp, bApp } = await household();

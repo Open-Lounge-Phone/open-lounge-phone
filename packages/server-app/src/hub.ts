@@ -286,6 +286,8 @@ const userKey = (id: string) => `usr:${id}`;
  */
 export class HouseholdHub {
   private readonly devices = new Map<string, DevicePeer>();
+  /** Labs check-in alerts sent, by phone (at most one in 12 hours each). */
+  private readonly checkinAlerts = new Map<string, number>();
   private readonly apps = new Map<string, Set<Peer>>();
   private readonly rooms = new Map<string, Room>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -678,6 +680,10 @@ export class HouseholdHub {
           return this.greetingFromPhone(device, msg);
         case "voicemail.fetch":
           return this.voicemailFetch(device);
+        case "checkin.ok":
+          return; // fine today: nothing to tell anyone
+        case "checkin.missed":
+          return this.checkinMissed(device, msg.by);
         case "voicemail.heard":
           return this.voicemailHeard(device, msg.id);
         case "status":
@@ -1563,6 +1569,55 @@ export class HouseholdHub {
       });
     }
     device.conn.send({ t: "voicemail.items", items });
+  }
+
+  /**
+   * Labs check-in: nobody pressed I'm OK in time. Every guardian of the space (but the person whose
+   * phone it is) gets an alert in their voicemail inbox: a short chime with the words as its
+   * transcript; their apps hear about it now and their own phones show it as missed. Once a day.
+   */
+  private async checkinMissed(device: DevicePeer, by: string): Promise<void> {
+    const { store } = this.env;
+    const now = this.env.now();
+    const last = this.checkinAlerts.get(device.id) ?? 0;
+    if (now - last < 12 * 3_600_000) return;
+    this.checkinAlerts.set(device.id, now);
+    const name = device.label;
+    const text = `${name} didn't check in by ${by}.`;
+    const audio = checkinChime();
+    for (const u of await store.listUsers(this.householdId)) {
+      if (u.role !== "guardian" || u.id === device.owner) continue;
+      const blobKey = `voicemail/${this.householdId}/${newId("vmb")}`;
+      await this.env.blobs.put(blobKey, audio.buffer as ArrayBuffer, "audio/wav");
+      const vm = await store.createVoicemail({
+        householdId: this.householdId,
+        deviceId: null,
+        toUser: u.id,
+        groupId: null,
+        fromUser: null,
+        fromLabel: name.slice(0, 24),
+        fromAddress: `device:${device.id}`,
+        createdAt: now,
+        durationMs: 800,
+        mime: "audio/wav",
+        blobKey,
+        transcriptStatus: "done",
+      });
+      await store.setTranscript(vm.id, "done", text);
+      for (const app of this.apps.get(u.id) ?? []) {
+        app.conn.send({ t: "voicemail.inbox", id: vm.id, from: name.slice(0, 24) });
+      }
+      for (const m of await store.listMemberships(u.accountId)) {
+        for (const d of await store.listDevices(m.household.id)) {
+          if (d.ownerUserId !== m.user.id) continue;
+          if (m.household.id === this.householdId) {
+            const peer = this.devices.get(d.id);
+            if (peer) await this.sendConfig(peer, true);
+          } else await this.env.calls?.refreshDevice(m.household.id, d.id);
+        }
+      }
+    }
+    this.env.log("info", "check-in missed", { device: device.id, by });
   }
 
   /** The phone played a message to the end: heard, everywhere the owner sees it. */
@@ -4249,3 +4304,32 @@ type BranchPlan =
 
 /** How a guest from another server is known in a Lounge session here. */
 const guestKey = (g: LoungeGuest) => `guest:${g.host}:${g.id}`;
+
+/** The check-in alert's sound: two soft tones (8 kHz 16-bit mono WAV, 0.8 s), so it plays anywhere. */
+function checkinChime(): Uint8Array {
+  const rate = 8000;
+  const n = rate * 0.8;
+  const out = new Uint8Array(44 + n * 2);
+  const v = new DataView(out.buffer);
+  const text = (at: number, t: string) => {
+    for (let i = 0; i < t.length; i++) v.setUint8(at + i, t.charCodeAt(i));
+  };
+  text(0, "RIFF");
+  v.setUint32(4, 36 + n * 2, true);
+  text(8, "WAVEfmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  text(36, "data");
+  v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const hz = i < n / 2 ? 660 : 880;
+    const env = Math.min(1, (i % (n / 2)) / 200, (n / 2 - (i % (n / 2))) / 400);
+    v.setInt16(44 + i * 2, Math.round(9000 * env * Math.sin((2 * Math.PI * hz * i) / rate)), true);
+  }
+  return out;
+}

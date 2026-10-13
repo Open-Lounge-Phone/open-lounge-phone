@@ -25,6 +25,8 @@ void ota_time_start(void);
 void ota_set_utc_offset(int minutes);
 /** The server's clock from `config.now` (ms since the epoch): sets the system time. */
 void ota_set_time(int64_t epoch_ms);
+/** Local days since the epoch, or -1 if the clock isn't set. */
+long ota_local_day(void);
 /** Local minutes since midnight, or -1 if the clock isn't set. */
 int ota_local_minute(void);
 

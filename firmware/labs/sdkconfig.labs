@@ -1,0 +1,9 @@
+# Labs: the phone's settings plus these.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../partitions.csv"
+CONFIG_OLP_LABS=y
+CONFIG_OLP_SNAKE=y
+# The settings page on the phone (http://olp-<room>.local) and the intercom's sockets
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_LWIP_MAX_SOCKETS=20
+# USB macro pad: TinyUSB takes the USB port in macro mode (the console moves off USB then)
+CONFIG_TINYUSB_HID_COUNT=1

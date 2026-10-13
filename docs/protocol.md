@@ -186,6 +186,23 @@ The phone played this message to the end: mark it heard (as the app's Heard does
 |---|---|---|---|
 | `id` | string (len ≤64) | yes |  |
 
+### `checkin.ok`
+
+Labs daily check-in: the person at the phone pressed I'm OK today.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
+### `checkin.missed`
+
+Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `by` | string (`^[0-2][0-9]:[0-5][0-9]$`) | yes | The time it was due (local HH:MM). |
+
 ### `call.answer`
 
 Accept an incoming call.

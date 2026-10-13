@@ -9,6 +9,9 @@
 - **MENU 3 Network** shows Wi-Fi and server together (4 opens it too); kids' phones ask for a
   second press before the setup network, Lounge phones don't offer it at all.
 - The root menu fits whatever applies into three lines; console `lounge` prints the takeover link.
+- Fixed: the dial tone no longer plays over a voicemail you're listening to.
+- The labs firmware (`firmware/labs/`, 0.0.0) builds from the same sources; nothing changes for
+  this build.
 
 ## 0.9.0 — 2026-10-13: listen on the phone
 
