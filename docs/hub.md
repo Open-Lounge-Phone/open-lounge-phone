@@ -1,5 +1,12 @@
 # The public hub
 
+**Social media is dead, but being social isn't.** You still need a way to reach your group and
+your friends. The hub gives you an address (`name@hub.openloungephone.app`) that people knock on,
+and you decide who gets through and when. You don't need the hardware: the companion app and the
+browser phone work on any phone or computer. The hardware is the always-on desk phone you can be
+called on, when you choose, by the people you choose. It's intentional phone time, rather than a
+phone that goes everywhere with you.
+
 `hub.openloungephone.app` is a public Open Lounge Phone server with open sign-up, run by the
 project owner so anyone can try the service without running their own. It is **free, funded by
 donations**, and it federates with every other server as an equal — there is no paid plan and
