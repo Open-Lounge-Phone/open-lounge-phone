@@ -174,6 +174,19 @@ def pivot_housing():
         crown = Plane.XY.offset(PIV_Z) * Pos((tx0 + tx1) / 2, y) * RectangleRounded(tx1 - tx0, LUG_W, 2.5)
         cheek = loft([foot, crown]) + soften(xbar(tx0, tx1, y, PIV_Z, LUG_W), 1.6)
         h = cheek if h is None else h + cheek
+    # close the top and the upper side between the cheeks: the crown runs across, a filler drops
+    # to the face above the pivot; the only openings face down (the nook where the tongue leaves),
+    # so the piezo's sound comes out there
+    mid = loft([Plane.XY.offset(FACE_Z - 0.6) * Pos((s0 + s1) / 2, (y + HUB_D / 2 + 1.0 + by1) / 2)
+                * RectangleRounded(s1 - s0 + 1.0, by1 - y - HUB_D / 2 - 1.0, 1.0),
+                Plane.XY.offset(PIV_Z) * Pos((s0 + s1) / 2, y + HUB_D / 4 + LUG_W / 4 + 0.5)
+                * RectangleRounded(s1 - s0 + 1.0, LUG_W / 2 - HUB_D / 2 - 1.0, 0.4)])
+    h += mid + xbar(s0 - 0.5, s1 + 0.5, y, PIV_Z, LUG_W)
+    h -= xbar(s0, s1, y, PIV_Z, HUB_D + 1.6)                         # the hub turns in here
+    # the shank's way out, open downward: the rocker slides in from below, then the pin
+    h -= rrect(PIV_X, y - LUG_W / 2 + 2.25, ROD_D + 1.6, LUG_W + 4.5, (ROD_D + 1.6) / 2 - 0.01,
+               PIV_Z, PIV_Z + LUG_W)
+    h -= bx(s0, s1, y - LUG_W, y, FACE_Z - 0.5, PIV_Z)                # the nook below the pivot
     plinth = rrect((-2.0 + s1 + LUG_T + 3.0) / 2, (by0 + Y(BZ[1] + GRILLE_D / 2 + 0.5)) / 2,
                    s1 + LUG_T + 5.0, Y(BZ[1] + GRILLE_D / 2 + 0.5) - by0, 3.0, FACE_Z - 0.6, FACE_Z + 2.5)
     h += round_top(plinth, FACE_Z + 2.5, 1.5)
