@@ -7,3 +7,4 @@ trimesh[easy]==5.1.0
 manifold3d==3.5.4
 fast-simplification==0.2.0
 PyYAML==6.0.3
+DracoPy

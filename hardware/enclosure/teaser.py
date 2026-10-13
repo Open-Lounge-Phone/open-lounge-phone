@@ -32,7 +32,10 @@ OUT = HERE / "build" / "teaser"
 KICAD = Path.home() / "Applications/KiCad/KiCad.app"
 if not KICAD.exists():
     KICAD = Path("/Applications/KiCad/KiCad.app")
-FACES = {"tray": 26000, "lid": 16000, "bezel": 4000, "cradle": 7000, "board": 45000}
+# Face budgets: only meshes above these are thinned (the shell and cradles are well under them).
+FACES = {"tray": 120000, "lid": 80000, "bezel": 20000, "cradle": 24000, "board": 260000}
+STEP_TOL = 0.02          # mm: how closely STEP models (ESP32, display module) are meshed
+CREASE = math.radians(32)  # edges sharper than this stay sharp in the shading
 
 
 def tm(man: m3d.Manifold) -> trimesh.Trimesh:
@@ -79,14 +82,14 @@ def handset() -> tuple[trimesh.Trimesh, float]:
 
 def step_solids(path: Path):
     """[(mesh, bbox)] for each solid of a STEP file, in its own frame (mm)."""
-    cache = OUT / "cache" / (path.stem + ".npz")       # converting STEP is slow: keep the meshes
+    cache = OUT / "cache" / (path.stem + f"-{STEP_TOL}.npz")  # converting STEP is slow: keep it
     if cache.exists():
         d = np.load(cache)
         return [trimesh.Trimesh(d[f"v{i}"], d[f"f{i}"], process=False) for i in range(int(d["n"]))]
     from build123d import import_step
     out = []
     for so in import_step(str(path)).solids():
-        v, f = P.mesh_of(so, tol=0.25, ang=0.6)          # coarse: plenty for a render
+        v, f = P.mesh_of(so, tol=STEP_TOL, ang=0.15)     # fine: no faceting on round parts
         if len(f):
             out.append(trimesh.Trimesh(v, f, process=True))
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -173,17 +176,101 @@ def weact_module() -> dict[str, trimesh.Trimesh]:
     return {k: trimesh.util.concatenate(v) for k, v in out.items()}
 
 
-def switch() -> trimesh.Trimesh:
-    """MX switch above the plate: top housing and stem (the part you see under a clear cap)."""
-    top = m3d.Manifold.batch_hull([m3d.Manifold.cube([15.6, 15.6, 0.1], True).translate([0, 0, 0.05]),
-                                   m3d.Manifold.cube([11.6, 11.6, 0.1], True).translate([0, 0, 6.5])])
-    stem = (m3d.Manifold.cube([4.1, 1.2, 4.0], True) + m3d.Manifold.cube([1.2, 4.1, 4.0], True)).translate([0, 0, 8.4])
-    return tm(top + m3d.Manifold.cylinder(2.0, 3.2, 3.2).translate([0, 0, 6.5]) + stem)
+def helix_tube(r_coil: float, wire: float, z0: float, z1: float, turns: float,
+               closed_ends: float = 0.6, seg: int = 28, ring: int = 10) -> trimesh.Trimesh:
+    """A coil spring: a round wire swept along a helix (closed, flat-ground ends like a real
+    MX spring: the pitch tightens to zero over the last `closed_ends` turns at each end)."""
+    n = int(turns * seg)
+    pts = []
+    for i in range(n + 1):
+        t = i / n * turns                      # turns travelled
+        a = 2 * math.pi * t
+        # pitch profile: flat at both ends, even in between
+        lo, hi = closed_ends, turns - closed_ends
+        u = (min(max(t, lo), hi) - lo) / (hi - lo)
+        z = z0 + wire / 2 + u * (z1 - z0 - wire)
+        pts.append((r_coil * math.cos(a), r_coil * math.sin(a), z))
+    pts = np.array(pts)
+    verts, faces = [], []
+    for i, p in enumerate(pts):                # a ring of the wire's cross-section at each point
+        tng = pts[min(i + 1, n)] - pts[max(i - 1, 0)]
+        tng /= np.linalg.norm(tng)
+        nrm = np.array([p[0], p[1], 0.0]); nrm /= np.linalg.norm(nrm)
+        bin_ = np.cross(tng, nrm)
+        for k in range(ring):
+            th = 2 * math.pi * k / ring
+            verts.append(p + wire / 2 * (math.cos(th) * nrm + math.sin(th) * bin_))
+    for i in range(n):
+        for k in range(ring):
+            a, b = i * ring + k, i * ring + (k + 1) % ring
+            c, d = a + ring, b + ring
+            faces += [[a, b, d], [a, d, c]]
+    for end_i, flip in ((0, True), (n, False)):  # cap the two wire ends
+        centre = len(verts)
+        verts.append(pts[end_i])
+        for k in range(ring):
+            a, b = end_i * ring + k, end_i * ring + (k + 1) % ring
+            faces.append([centre, b, a] if flip else [centre, a, b])
+    return trimesh.Trimesh(np.array(verts), np.array(faces), process=True)
+
+
+def rbox(w: float, d: float, h: float, r: float, z0: float = 0.0, segs: int = 24) -> m3d.Manifold:
+    """A box with rounded vertical edges (radius r), from z0 up h, centred on x = y = 0."""
+    m3d.set_circular_segments(segs)
+    r = max(0.01, min(r, w / 2 - 0.01, d / 2 - 0.01))
+    cs = m3d.CrossSection.square([w - 2 * r, d - 2 * r], center=True).offset(r, m3d.JoinType.Round, 2, segs)
+    return m3d.Manifold.extrude(cs, h).translate([0, 0, z0])
+
+
+def tapered(w0, d0, w1, d1, z0, z1, r=1.0) -> m3d.Manifold:
+    """A rounded box tapering from w0 x d0 at z0 to w1 x d1 at z1."""
+    return m3d.Manifold.batch_hull([rbox(w0, d0, 0.01, r, z0), rbox(w1, d1, 0.01, r, z1 - 0.01)])
+
+
+def switch() -> dict[str, trimesh.Trimesh]:
+    """A Cherry MX-style switch in its parts, plate top at z = 0 (the lid is the plate): the
+    bottom housing under the plate (centre post, two pins, two PCB pegs), the top housing above
+    it (LED window, stem opening, latch tabs), the stem (cross, slider, rails), the steel spring
+    around the post, and the two contact pins. Dimensions after the MX datasheet."""
+    m3d.set_circular_segments(48)
+    plate_t = 1.5
+    # Bottom housing: 14 x 14 under the plate (it clips into the 14 mm hole), 5 mm deep.
+    bot = rbox(13.9, 13.9, 5.0, 0.6, -5.0)
+    bot = bot - rbox(12.6, 12.6, 4.4, 0.4, -4.4)                     # hollow inside
+    bot = bot + m3d.Manifold.cylinder(3.3, 1.98, 1.98).translate([0, 0, -8.3])   # centre post
+    bot = bot + m3d.Manifold.cylinder(5.0, 1.0, 1.0).translate([0, 0, -5.0])     # spring guide
+    for sx in (-5.08, 5.08):                                         # PCB pegs (5-pin)
+        bot = bot + m3d.Manifold.cylinder(3.0, 0.85, 0.75).translate([sx, 0, -8.0])
+    for sx in (-1, 1):                                               # latch clips on the sides
+        bot = bot + m3d.Manifold.cube([0.8, 4.0, 1.4], True).translate([sx * 7.2, 0, -plate_t - 0.7])
+    # Top housing: sits on the plate, 15.6 square flange tapering to the stem's top face.
+    top = rbox(15.6, 15.6, 0.9, 1.0, 0.0)
+    top = top + tapered(14.6, 14.6, 11.6, 10.6, 0.9, 6.0, 1.4)
+    top = top - rbox(7.4, 5.6, 7.0, 0.5, 2.0)                        # stem opening
+    top = top - tapered(13.6, 13.6, 10.0, 9.0, -0.2, 5.2, 1.0)        # hollow: 0.8 mm walls
+    top = top - m3d.Manifold.cube([5.4, 2.6, 3.0], True).translate([0, 4.6, 4.2])  # LED window
+    for sx in (-1, 1):                                               # latch tabs on the flange
+        top = top + m3d.Manifold.cube([0.9, 5.0, 1.0], True).translate([sx * 7.4, 0, 0.5])
+    # Stem: the slider inside, rails, and the cross the keycap fits on.
+    stem = rbox(7.0, 5.3, 4.2, 0.5, 2.2)
+    stem = stem - m3d.Manifold.cylinder(4.0, 2.7, 2.7).translate([0, 0, 2.0])     # spring seat
+    for sx in (-1, 1):
+        stem = stem + m3d.Manifold.cube([1.0, 2.4, 3.6], True).translate([sx * 3.9, 0, 3.9])  # rails
+    stem = stem + m3d.Manifold.cube([1.6, 1.0, 4.0], True).translate([0, -3.0, 1.2])          # leg
+    cross = rbox(4.1, 1.17, 4.2, 0.15, 6.0) + rbox(1.31, 4.1, 4.2, 0.15, 6.0)
+    stem = stem + cross + m3d.Manifold.cylinder(1.2, 2.7, 2.6).translate([0, 0, 6.0])
+    spring = helix_tube(2.55, 0.42, -5.0, 2.6, turns=7.5)
+    pins = []
+    for (px, py) in ((-3.81, 2.54), (2.54, 5.08)):                   # the two contact pins
+        pins.append(tm(m3d.Manifold.cube([1.5, 0.3, 3.6], True).translate([px, py, -6.8])))
+    return {"switch_bottom": tm(bot), "switch_top": tm(top), "switch_stem": tm(stem),
+            "switch_spring": spring, "switch_pins": trimesh.util.concatenate(pins)}
 
 
 def keycap() -> trimesh.Trimesh:
-    """Clear XDA 1u cap, 18.2 square at the base, 9 tall, a shallow dish on top."""
-    m3d.set_circular_segments(32)
+    """Clear XDA 1u cap, 18.2 square at the base, 9 tall, a shallow dish on top, hollow underneath
+    with the MX stem socket."""
+    m3d.set_circular_segments(96)
     r = 1.6
     corners = []
     for w, z in ((18.2, 0.0), (14.4, 8.4)):
@@ -192,8 +279,11 @@ def keycap() -> trimesh.Trimesh:
                 corners.append(m3d.Manifold.sphere(r).translate([sx * (w / 2 - r), sy * (w / 2 - r), z + r * 0.2]))
     cap = m3d.Manifold.batch_hull(corners)
     cap = cap ^ m3d.Manifold.cube([30, 30, 9.0], True).translate([0, 0, 4.5])
-    dish = m3d.Manifold.sphere(60).translate([0, 0, 9.0 + 60 - 0.7])
-    return tm(cap - dish)
+    dish = m3d.Manifold.sphere(60, 256).translate([0, 0, 9.0 + 60 - 0.7])
+    inside = m3d.Manifold.batch_hull([rbox(16.6, 16.6, 0.01, 1.2, -0.1), rbox(13.0, 13.0, 0.01, 1.0, 7.4)])
+    socket = m3d.Manifold.cylinder(7.5, 2.8, 2.8).translate([0, 0, 0.3]) - (
+        rbox(4.15, 1.25, 8.0, 0.1, 0.0) + rbox(1.35, 4.15, 8.0, 0.1, 0.0))
+    return tm(cap - dish - inside + socket)
 
 
 def board() -> dict[str, trimesh.Trimesh]:
@@ -202,7 +292,9 @@ def board() -> dict[str, trimesh.Trimesh]:
     glb = OUT / "board.glb"
     cli = KICAD / "Contents/MacOS/kicad-cli"
     # board body and parts only: silkscreen, mask and pad layers are coplanar and flicker
-    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
+    # STEP models (finer than KiCad's VRML ones), copper pads and tracks (raised, so no flicker)
+    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "--subst-models", "--include-pads",
+                    "--include-tracks", "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
                     "-o", str(glb), str(HERE.parent / "kicad/main/main.kicad_pcb")],
                    check=True, capture_output=True)
     sc = trimesh.load(glb)
@@ -242,9 +334,9 @@ def board() -> dict[str, trimesh.Trimesh]:
         trimesh.creation.box(bounds=[[cxq - 1.5, cyq - 1.5, P.Z_BB - 0.9], [cxq + 1.5, cyq + 1.5, P.Z_BB]])])
     out.update(esp32())
     whole = sum(len(m.faces) for m in out.values())
-    for k, m in out.items():                   # keep the board's share of faces
-        target = max(200, int(FACES["board"] * len(m.faces) / whole))
-        out[k] = H.decimate(m, target)
+    if whole > FACES["board"]:                 # thin only if over budget, each by its share
+        for k, m in out.items():
+            out[k] = H.decimate(m, max(2000, int(FACES["board"] * len(m.faces) / whole)))
     return out
 
 
@@ -253,7 +345,9 @@ def main() -> None:
     scene = trimesh.Scene()
 
     def add(name, mesh):
-        mesh = mesh.copy()
+        # Normals that keep hard edges hard and curves smooth (merged vertices averaged across
+        # 90-degree edges and shaded flat faces wobbly).
+        mesh = trimesh.graph.smooth_shade(mesh.copy(), angle=CREASE, facet_minarea=None)
         mesh.visual = trimesh.visual.ColorVisuals(mesh)
         scene.add_geometry(mesh, node_name=name, geom_name=name)
 
@@ -282,12 +376,13 @@ def main() -> None:
             add(f"cradle-{key}", H.decimate(m, FACES["cradle"]))
     for k, m in board().items():
         add(k, m)
-    add("switch", switch())
+    for k, m in switch().items():
+        add(k, m)
     add("keycap", keycap())
     w, hgt = P.DISP_W, P.DISP_H                # display module (2.9"): green board + panel
     cx, cy = P.bx2x(P.DISP_X0 + w / 2), P.by2y(P.DISP_MID)
     for k, m in weact_module().items():
-        add(k, H.decimate(m, 6000))
+        add(k, H.decimate(m, 60000))
     gx = P.bx2x(P.DISP_X0 + P.DSP["view_cx"])
     add("panel", trimesh.creation.box(bounds=[[gx - 39.5, cy - 15.5, P.Z_DISP + P.MODULE_PCB_T],
                                               [gx + 39.5, cy + 15.5, P.Z_DISP + P.MODULE_PCB_T + 1.0]]))
@@ -301,7 +396,7 @@ def main() -> None:
         hs.apply_transform(R)
         hs.apply_scale(210.0 / hs.extents[1])
         hs.apply_translation([-hs.centroid[0], -hs.centroid[1], -hs.bounds[0][2]])
-        hs = H.decimate(hs, 20000)
+        hs = H.decimate(hs, 80000)
         v = hs.vertices                        # the handle's underside, mid-length
         mid = np.abs(v[:, 1]) < 12
         under_mid = float(v[mid, 2].min()) if mid.any() else hs.extents[2] * 0.55
@@ -315,12 +410,19 @@ def main() -> None:
     hg.apply_scale(s_g)
     hg.apply_translation([g["lx"], g["yc"], g["hb"] - under_g * s_g])
     add("handset-g", hg)
-    scene.export(OUT / "scene.glb")
+    # Draco-compressed (the page loads three's DRACOLoader), at Draco's strongest (lossless)
+    # level. No normals stored: hard edges have split vertices, so the page's
+    # computeVertexNormals() gives the same crisp-edged, smooth-curved shading.
+    import trimesh.exchange.gltf.extensions as gltf_ext
+    gltf_ext._DRACO_COMPRESSION = 10
+    (OUT / "scene.glb").write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=False,
+                                                                      extension_draco=True))
     keys = [{"x": P.bx2x(bx), "y": P.by2y(by), "label": lab} for bx, by, lab in P.keys()]
     meta = {"keys": keys, "rides": rides, "plate": P.Z_LT, "cap_z": P.Z_LT + 6.6,
             "center": [P.OUT_W / 2, P.OUT_H / 2], "panel": [gx, cy, P.Z_DISP + P.MODULE_PCB_T + 1.01, 79, 31],
-            "explode": {"tray": 0, "board": 34, "switch": 62, "lid": 56, "module": 86, "panel": 86,
-                        "keycap": 104, "bezel": 122, "cradle": 150, "handset": 200}}
+            "explode": {"tray": 0, "board": 34, "switch": 62, "spring": 70, "swtop": 82, "stem": 96,
+                        "lid": 56, "module": 86, "panel": 86, "keycap": 114, "bezel": 132,
+                        "cradle": 160, "handset": 210}}
     (OUT / "scene.json").write_text(json.dumps(meta))
     print("scene.glb", round((OUT / "scene.glb").stat().st_size / 1e6, 2), "MB;", len(scene.geometry), "meshes")
 
