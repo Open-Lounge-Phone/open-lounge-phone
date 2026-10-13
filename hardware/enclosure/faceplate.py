@@ -101,48 +101,73 @@ def display():
     return (cx, Y(P.DISP_MID), d["w"], d["h"]), (wx, Y(P.DISP_MID), WIN[0], WIN[1])
 
 
-# ---------------------------------------------------------------- handset rest
-# The handset lies on the left strip as it does on the bare board: the earpiece cup hangs over the
-# top edge, the handle runs down over the piezo and the hook switch. Two rests printed with the face
-# hold the handle's flat underside at REST_Z, 3 mm under SW15's keycap top, so the handset's own
-# weight holds the hook switch down (MX: actuates at 2, bottoms at 4). Lift it, the switch springs
-# up. No moving parts. The top rest is a bridge over the piezo grille (sound comes out under it);
-# a lip on the right keeps the handle off the 1 and 6 keys.
-HANDLE_W = 45.0           # MEASURE: the handle's width where it lies on the rests
-KEYCAP_TOP = P.PLATE_ABOVE_PCB + P.CAP_TOP   # 22: SW15's keycap top (MEASURE yours, not pressed)
-PRESS = 3.0               # how far the handset holds the hook key down
-REST_Z = KEYCAP_TOP - PRESS
-LIP_X = (34.7, 36.2)      # right lip, clear of the 1/6 keycaps (they start at 36.9)
-LIP_TOP = REST_Z + 2.5
-REST_X0 = -(0.3 + 2.2)    # the face's left edge (skirt)
-TOP_REST_Y = (8.0, 22.0)  # KiCad y: the bridge over the piezo (centre y 15)
-MID_REST_Y = (47.0, 55.0)  # KiCad y: above the hook key, clear of the LED hole (y 59.3)
-REST_R = 3.0
+# ---------------------------------------------------------------- switchhook (wall)
+# The phone hangs on a wall, top up. One printed rocker, like an old payphone switchhook: a fork
+# whose two paddles stick out from the wall and carry the handset's earpiece (the handle hangs
+# down between them, the cup over the top edge), a pivot block, and a long tongue that runs down
+# the face to SW15's keycap. The handset's weight tips the fork down, the tongue presses the hook
+# switch. Lift it: SW15's own spring pushes the tongue back up and the fork rises. No other spring.
+# The pivot is an M3 x 35 screw (or a 3 mm rod) through two lugs on the face, above the piezo
+# grille (sound comes out under the rocker).
+KEYCAP_TOP = P.PLATE_ABOVE_PCB + P.CAP_TOP   # 22: SW15's keycap top, not pressed (MEASURE yours)
+PIV_X, PIV_KY = P.HOOK[0], P.BZ1_C[1]        # over the piezo, in line with SW15 (KiCad x, y)
+PIV_Z = KEYCAP_TOP + 4.0                      # the tongue's underside sits on the keycap
+HUB_D, HUB_X = 9.0, (6.0, 26.0)               # the pivot block, between the lugs
+PIN_D = 3.4                                   # the rocker turns on the pin
+LUG_T, LUG_GAP, LUG_W = 4.4, 0.6, 8.0
+TONGUE_W, TONGUE_T = 8.0, 4.0
+FORK_T = 5.0               # the fork's thickness (wall up-down)
+FORK_GAP = 44.0            # MEASURE: the handle's neck under the earpiece + clearance
+FORK_W = 7.0               # the fork's bar width
+FORK_Z0 = 40.0             # where the shank meets the U
+PRONG_TIP = 88.0           # how far the paddles stand off the board top
+PADDLE_D = 18.0
 
 
-def rest(y0, y1, arch=False):
-    """One rest from the face up to REST_Z, the right lip, soft edges; `arch` bridges the grille."""
-    yc = Y((y0 + y1) / 2)
-    w = LIP_X[0] - REST_X0
-    part = rrect(REST_X0 + w / 2, yc, w, y1 - y0, REST_R, FACE_Z - 0.5, REST_Z)
-    part = round_top(part, REST_Z, 1.2)
-    lip = rrect(sum(LIP_X) / 2, yc, LIP_X[1] - LIP_X[0], y1 - y0, 0.7, FACE_Z - 0.5, LIP_TOP)
-    part += round_top(lip, LIP_TOP, 0.7)
-    if arch:   # open underneath over the grille, front to back
-        gx = BZ[0]
-        span = GRILLE_D + 2.0
-        part -= Pos(gx, yc, FACE_Z - 1) * Box(span, y1 - y0 + 2, 2 * (REST_Z - 4.0 - FACE_Z + 1))
-    return part
+def xbar(x0, x1, y, z, d):
+    return Pos((x0 + x1) / 2, y, z) * Rot(0, 90, 0) * Cylinder(d / 2, x1 - x0)
 
 
-def build_rest():
-    """The faceplate with the two handset rests (one print)."""
+def build_hook_face():
+    """The faceplate with the two pivot lugs (one print)."""
     shell = build()
-    shell += rest(*TOP_REST_Y, arch=True)
-    shell += rest(*MID_REST_Y)
-    # keep the grille slots and the LED hole open
-    shell -= cyl(P.LED[0], Y(P.LED[1]), FACE_Z - 3, LIP_TOP + 1, LED_HOLE)
+    y = Y(PIV_KY)
+    for x0 in (HUB_X[0] - LUG_GAP - LUG_T, HUB_X[1] + LUG_GAP):
+        lug = rrect(x0 + LUG_T / 2, y, LUG_T, LUG_W, 1.0, FACE_Z - 0.5, PIV_Z)
+        lug += xbar(x0, x0 + LUG_T, y, PIV_Z, LUG_W)
+        shell += lug
+    shell -= xbar(HUB_X[0] - LUG_GAP - LUG_T - 1, HUB_X[1] + LUG_GAP + LUG_T + 1, y, PIV_Z, 3.0)
     return shell
+
+
+def build_rocker():
+    """The switchhook: pivot block, tongue down to SW15, fork out from the wall. One print."""
+    y, cx = Y(PIV_KY), PIV_X
+    r = xbar(*HUB_X, y, PIV_Z, HUB_D)
+    # the tongue: from the pivot down the face to past SW15's keycap centre, a round end
+    y_end = Y(P.HOOK[1] + 4.0)
+    r += rrect(cx, (y + y_end) / 2, TONGUE_W, y - y_end, TONGUE_W / 2 - 0.01, KEYCAP_TOP, KEYCAP_TOP + TONGUE_T)
+    # the shank out from the wall, then a U whose arms run on out to round paddles
+    half = FORK_GAP / 2 + FORK_W / 2
+    yt = (y - FORK_T / 2, y + FORK_T / 2)
+
+    def ycyl(x, z, d):
+        return Pos(x, y, z) * Rot(90, 0, 0) * Cylinder(d / 2, FORK_T)
+
+    r += bx(cx - FORK_W / 2, cx + FORK_W / 2, *yt, PIV_Z, FORK_Z0 + FORK_W / 2)
+    zc = FORK_Z0 + half
+    ring = ycyl(cx, zc, 2 * half + FORK_W) - ycyl(cx, zc, 2 * half - FORK_W)
+    r += ring - bx(cx - half - FORK_W, cx + half + FORK_W, y - FORK_T, y + FORK_T, zc, zc + half + FORK_W)
+    for side in (-1, 1):
+        px = cx + side * half
+        r += bx(px - FORK_W / 2, px + FORK_W / 2, *yt, zc, PRONG_TIP)
+        r += ycyl(px, PRONG_TIP, PADDLE_D)
+    r -= xbar(HUB_X[0] - 1, HUB_X[1] + 1, y, PIV_Z, PIN_D)
+    return r
+
+
+def bx(x0, x1, y0, y1, z0, z1):
+    return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
 
 
 def build():
@@ -230,13 +255,13 @@ def report(shell) -> list[str]:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    if os.environ.get("OLP_FACEPLATE") == "rest":
-        part = build_rest()
-        export_step(part, str(OUT / "faceplate-rest.step"))
-        export_stl(part, str(OUT / "faceplate-rest.stl"), tolerance=0.02, angular_tolerance=0.15)
-        bb = part.bounding_box()
-        print(f"faceplate-rest: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm, "
-              f"{part.volume / 1000:.1f} cm3; handle at z {REST_Z}, hook key held {PRESS} down")
+    if os.environ.get("OLP_FACEPLATE") == "hook":
+        for name, part in {"faceplate-hook": build_hook_face(), "hook-rocker": build_rocker()}.items():
+            export_step(part, str(OUT / f"{name}.step"))
+            export_stl(part, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
+            bb = part.bounding_box()
+            print(f"{name}: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm, "
+                  f"{part.volume / 1000:.1f} cm3")
         return
     shell = build()
     export_step(shell, str(OUT / "faceplate.step"))
