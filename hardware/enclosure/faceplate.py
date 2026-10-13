@@ -170,11 +170,10 @@ TONGUE_W, TONGUE_T = 9.0, 5.0
 FOOT = 16.0                # the tongue's foot on the hook keycap
 NECK = 40.0                # MEASURE: the handle's width under the cup (passes between the arms)
 ROD_D = 8.0                # the cradle bar: a round bar, like a bent-rod switchhook
-U_Z0 = 44.0                # the U's back, out from the board top
-U_LIFT = 4.0               # the U's sides rise this much: a shallow bowl for the cup
-ARM_L = 30.0               # the arms run straight out ...
-CURL = 14.0                # ... and curl up this much at the tips, cupping the earpiece
-PAD_D, PAD_T = 17.0, 5.0   # spoon pads on the tips
+U_Z0 = 44.0                # the U's back, out from the board top: clear of the pivot housing's crown
+ARM_L = 2.0                # the arms run straight out a little ...
+CURL_R, CURL_DEG = 15.0, 40.0   # ... then curl up the same arc at each tip, cupping the earpiece
+PAD_D, PAD_T = 16.0, 5.0   # palms on the tips: upright, faces turned in toward the cup
 CRADLE_Z = U_Z0 + NECK / 2 + 10.0   # where the cup's weight lands, roughly
 DENSITY = {"aluminium (AlSi10Mg, cast A356)": 2.68, "stainless 316L": 7.98, "bronze / brass": 8.6,
            "glass-filled nylon (PA12-GF)": 1.22}
@@ -257,32 +256,36 @@ def build_hook_face():
 
 
 def cradle():
-    """The cradle: one round bar swept along a U whose arms curl up, spoon pads on the tips."""
-    from build123d import Circle, Plane, Spline, sweep
+    """The cradle, from exact pieces so both sides match: a semicircle round the back, two straight
+    parallel arms, each curling up the same circular arc at its tip, and a flat paddle carrying on
+    from each tip (the earpiece cup sits in the U, the curls and paddles keep it from sliding off)."""
+    from build123d import Circle, Line, Plane, ThreePointArc, Transition, Wire, sweep
     y0, cx = Y(PIV_KY), PIV_X
     half = NECK / 2 + ROD_D / 2                     # arm centre lines (the gap between = NECK)
     zc = U_Z0 + half                                 # the U's centre
-    pts = []
-    for k in range(5, 0, -1):                        # left arm, from the tip in
-        t = k / 5
-        pts.append((cx - half, y0 + U_LIFT + CURL * t ** 2, zc + ARM_L * t))
-    for k in range(-6, 7):                           # the U round the wall side
-        ph = math.radians(90 * k / 6)
-        pts.append((cx + half * math.sin(ph), y0 + U_LIFT * (k / 6) ** 2, zc - half * math.cos(ph)))
-    for k in range(1, 6):                            # right arm, out to the tip
-        t = k / 5
-        pts.append((cx + half, y0 + U_LIFT + CURL * t ** 2, zc + ARM_L * t))
-    path = Spline(*pts)
-    start = Plane(origin=path @ 0, x_dir=(0, 1, 0), z_dir=path % 0)
-    bar = sweep(start * Circle(ROD_D / 2), path=path)
-    for u in (0.0, 1.0):                             # spoon pads, tilted with the curl
-        tip = path @ u
-        tan = path % u
-        pad = Plane(origin=tip, z_dir=(0, 1, 0)) * Cylinder(PAD_D / 2, PAD_T)
-        pad = soften(pad, 1.4)
-        tilt = math.degrees(math.atan2(tan.Y, abs(tan.Z)))
-        pad = Pos(tip.X, tip.Y, tip.Z) * Rot(-tilt, 0, 0) * Pos(-tip.X, -tip.Y, -tip.Z) * pad
-        bar += pad
+    th = math.radians(CURL_DEG)
+    def side(sg):
+        x = cx + sg * half
+        a0 = (x, y0, zc)
+        a1 = (x, y0, zc + ARM_L)
+        mid = (x, y0 + CURL_R * (1 - math.cos(th / 2)), zc + ARM_L + CURL_R * math.sin(th / 2))
+        tip = (x, y0 + CURL_R * (1 - math.cos(th)), zc + ARM_L + CURL_R * math.sin(th))
+        return a0, a1, mid, tip
+    l0, l1, lm, lt = side(-1)
+    r0, r1, rm, rt = side(1)
+    back = (cx, y0, zc - half)
+    edges = [ThreePointArc(lt, lm, l1), Line(l1, l0), ThreePointArc(l0, back, r0), Line(r0, r1),
+             ThreePointArc(r1, rm, rt)]
+    path = Wire(edges)
+    start = Plane(origin=path @ 0, z_dir=path % 0)
+    bar = sweep(start * Circle(ROD_D / 2), path=path, transition=Transition.ROUND)
+    # paddles: upright discs at the tips, their faces turned in toward the cup
+    for t in (lt, rt):
+        k = PAD_D / 2 - 2.5                            # the bar ends 2.5 into the palm
+        c = (t[0], t[1] + math.sin(th) * k, t[2] + math.cos(th) * k)
+        pad = Cylinder(PAD_D / 2, PAD_T)
+        pad = soften(pad, PAD_T / 2 - 0.4)
+        bar += Pos(*c) * Rot(0, 90, 0) * pad          # upright, faces turned in: palms holding the cup
     return bar, zc - half
 
 
