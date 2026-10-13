@@ -12,8 +12,8 @@ earpiece and mic on the 3.5 mm jack. No speaker, no per-key lights, no battery.
 
 ## Screen
 
-- **Text**, upper case, a 5 × 7 pixel font scaled up, each line centred. Two screens are drawn
-  as pictures: the boot logo and the setup QR code.
+- **Text**, upper case, a 5 × 7 pixel font scaled up, each line centred. Three screens are drawn
+  as pictures: the boot logo, the setup QR code and About.
 - **Status screens: 1 or 2 lines of at most 16 characters**, at 3× (18 px per character,
   288 px wide). This is the protocol's strip: the server never sends more.
 - **Menus and setup: 3 or 4 lines of at most 20 characters**, at 2× (12 px per character).
@@ -83,7 +83,7 @@ The menu closes by itself after 20 s without a key.
 | 6 | Dial an extension (team and organization spaces) | planned |
 | 8 | Lounge: log out | planned |
 | 9 | Update now (official firmware with updates on) | yes |
-| 0 | About: firmware version and the four fingerprint words | yes |
+| 0 | About: a page with the firmware, board and server, and the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone | yes |
 
 Root screen: `MENU` / `1 VOLUME 2 VOICEMAIL` / `3 WI-FI 4 SERVER` / `9 UPDATE 0 ABOUT` (items
 that don't apply are left out).

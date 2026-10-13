@@ -4,8 +4,8 @@
 
 - Display: the WeAct 2.13" e-paper (250 × 122) is the default; the 2.9" is `CONFIG_OLP_EPD_213=n`.
   Each refresh logs its time; the console's `epd` checks the module answers.
-- Screens follow `docs/phone-ux.md`: a boot logo, a QR code that joins the setup network, a
-  MENU title, the recording light (double flash) and `REC`, Voicemail in the menu (2), plain
+- Screens follow `docs/phone-ux.md`: a boot logo, a QR code that joins the setup network, an
+  About page (firmware, board, server, `PUBLIC KEY PART` words), a MENU title, the recording light (double flash) and `REC`, Voicemail in the menu (2), plain
   pairing and Wi-Fi texts.
 - Wi-Fi: WPA3 and mixed WPA2/WPA3 routers, mesh systems (strongest access point), and why a
   join fails (`WEAK WI-FI`, `WRONG PASSWORD?`, `NETWORK NOT SEEN`, `SECURITY NOT OK`) in the log

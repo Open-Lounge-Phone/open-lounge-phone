@@ -63,6 +63,7 @@ static char s_shown[4][25];
 static int s_shown_n = -1;
 static int64_t s_boot_until;  // the boot logo stays this long
 static bool s_setup_qr;       // the setup QR screen is up
+static bool s_about_px;       // MENU → 0 drawn as a page
 static phone_kind_t s_logged_kind = PH_IDLE;
 static prov_t s_prov;  // the Wi-Fi setup network (prov_core.c decides)
 // Updates: when to check, whether one is installed and waiting for the phone to be idle, and a
@@ -277,7 +278,25 @@ static void render(void) {
     s_setup_qr = false;
     if (!snake_active()) display_pixels(NULL);
   }
-  if (snake_active() || s_boot_until || s_setup_qr) {
+  bool about = s_menu.screen == MENU_ABOUT;
+  if (about && !s_about_px && !snake_active() && !s_boot_until) {
+    uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
+    if (fb) {
+      char url[PROV_SERVER_MAX], host[PROV_SERVER_MAX];
+      net_server_url(url, sizeof url);
+      if (!strcmp(url, PROV_HUB_URL)) snprintf(host, sizeof host, "PUBLIC HUB");
+      else if (url[0]) prov_server_host(url, host, sizeof host);
+      else host[0] = ' ';
+      screen_about(fb, w, h, FW_VERSION, CONFIG_OLP_BOARD_ID, host, identity_fingerprint());
+      display_pixels(fb);
+      free(fb);
+      s_about_px = true;
+    }
+  } else if (!about && s_about_px) {
+    s_about_px = false;
+    if (!snake_active() && !s_setup_qr) display_pixels(NULL);
+  }
+  if (snake_active() || s_boot_until || s_setup_qr || s_about_px) {
     s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);

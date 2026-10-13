@@ -1,5 +1,6 @@
 #include "screens.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -76,4 +77,33 @@ void screen_setup(uint8_t *fb, int w, int h, const char *ssid, const char *pass)
   snprintf(line, sizeof line, "PW %s", pass);
   gfx_text_at(fb, w, h, x, y + 74, line, 1, true);
   gfx_text_at(fb, w, h, x, y + 90, "OPEN 192.168.4.1", 1, true);
+}
+
+static void row(uint8_t *fb, int w, int h, int y, const char *label, const char *value) {
+  gfx_text_at(fb, w, h, 8, y, label, 1, true);
+  gfx_text_at(fb, w, h, 8 + 6 * 11, y, value, 1, true);
+}
+
+void screen_about(uint8_t *fb, int w, int h, const char *fw, const char *board, const char *server,
+                  const char *const *words) {
+  memset(fb, 0, (size_t)(w * h + 7) / 8);
+  gfx_rect(fb, w, h, 0, 0, w, 22, true);  // title bar
+  gfx_text_at(fb, w, h, (w - gfx_text_width("ABOUT THIS PHONE", 2)) / 2, 4, "ABOUT THIS PHONE", 2, false);
+  char v[48];
+  snprintf(v, sizeof v, "%.30s", fw);
+  row(fb, w, h, 30, "FIRMWARE", v);
+  snprintf(v, sizeof v, "%.30s", board);
+  for (char *c = v; *c; c++) *c = (char)toupper((unsigned char)*c);
+  row(fb, w, h, 42, "BOARD", v);
+  snprintf(v, sizeof v, "%.30s", server && server[0] ? server : "NOT SET");
+  for (char *c = v; *c; c++) *c = (char)toupper((unsigned char)*c);
+  row(fb, w, h, 54, "SERVER", v);
+  for (int x = 8; x < w - 8; x += 3) gfx_rect(fb, w, h, x, 67, 1, 1, true);  // dotted rule
+  gfx_text_at(fb, w, h, 8, 74, "PUBLIC KEY PART", 1, true);
+  char key[64];
+  snprintf(key, sizeof key, "%s-%s-%s-%s", words[0], words[1], words[2], words[3]);
+  for (char *c = key; *c; c++) *c = (char)toupper((unsigned char)*c);
+  int s = gfx_text_width(key, 2) <= w - 16 ? 2 : 1;  // big when it fits
+  gfx_text_at(fb, w, h, 8, 86, key, s, true);
+  gfx_text_at(fb, w, h, 8, h - 11, "SAME WORDS IN THE APP = THIS PHONE", 1, true);
 }
