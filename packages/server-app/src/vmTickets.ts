@@ -325,6 +325,23 @@ export function publicVoicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coo
     return c.json({ ok: true }, 201);
   });
 
+  /**
+   * A phone plays one of its owner's messages (after `voicemail.items`). Uses the ticket up;
+   * marking it heard is the phone's `voicemail.heard`, once it played to the end.
+   */
+  api.get("/vm/play", async (c) => {
+    const token = c.req.query("ticket") ?? "";
+    const t = (await store.takeVoicemailTicket(token, "play", env.now())) as
+      | { voicemailId: string }
+      | undefined;
+    const vm = t && (await store.getVoicemail(t.voicemailId));
+    const blob = vm && (await env.blobs.get(vm.blobKey));
+    if (!blob) return noTicket();
+    return new Response(blob.data, {
+      headers: { "content-type": blob.contentType, "cache-control": "no-store" },
+    });
+  });
+
   /** A phone saves the greeting it just recorded (after `greeting.ticket`). */
   api.post("/vm/greeting", async (c) => {
     const token = c.req.query("ticket") ?? "";

@@ -676,6 +676,10 @@ export class HouseholdHub {
         case "greeting.begin":
         case "greeting.reset":
           return this.greetingFromPhone(device, msg);
+        case "voicemail.fetch":
+          return this.voicemailFetch(device);
+        case "voicemail.heard":
+          return this.voicemailHeard(device, msg.id);
         case "status":
           device.status = msg;
           this.remember(device);
@@ -1525,6 +1529,63 @@ export class HouseholdHub {
       householdId: this.householdId,
     });
     device.conn.send({ t: "greeting.ticket", kind: msg.kind, ticket, maxMs });
+  }
+
+  /**
+   * A person's own phone plays their unheard messages (from every space they're in), oldest
+   * first; each playable one (WAV) gets a single-use ticket for `GET /api/vm/play`. Kids' and
+   * Lounge phones get none: a grown-up listens in the app.
+   */
+  private async voicemailFetch(device: DevicePeer): Promise<void> {
+    const { store } = this.env;
+    const owner = device.owner && !device.lounge ? await store.getUser(device.owner) : undefined;
+    if (!owner) {
+      device.conn.send({ t: "voicemail.items", items: [] });
+      return;
+    }
+    const unheard = (await store.listPersonalVoicemails(owner.accountId))
+      .filter((v) => v.heardAt === null)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, 8);
+    const now = this.env.now();
+    const items = [];
+    for (const v of unheard) {
+      const playable = /^audio\/(wav|x-wav)$/.test(v.mime);
+      const ticket = playable
+        ? await store.createVoicemailTicket("play", { voicemailId: v.id, deviceId: device.id }, now)
+        : undefined;
+      items.push({
+        id: v.id,
+        from: v.fromLabel.slice(0, 24),
+        at: v.createdAt,
+        durationMs: v.durationMs,
+        ...(ticket ? { ticket } : {}),
+      });
+    }
+    device.conn.send({ t: "voicemail.items", items });
+  }
+
+  /** The phone played a message to the end: heard, everywhere the owner sees it. */
+  private async voicemailHeard(device: DevicePeer, id: string): Promise<void> {
+    const { store } = this.env;
+    const owner = device.owner && !device.lounge ? await store.getUser(device.owner) : undefined;
+    const vm = owner ? await store.getVoicemail(id) : undefined;
+    const to = vm?.toUser ? await store.getUser(vm.toUser) : undefined;
+    if (!owner || !vm || to?.accountId !== owner.accountId) return;
+    await store.markVoicemailHeard(vm.id, this.env.now(), to.id);
+    await this.sendConfig(device, true);
+    // The owner's other phones, here and in their other spaces.
+    for (const m of await store.listMemberships(owner.accountId)) {
+      for (const d of await store.listDevices(m.household.id)) {
+        if (d.ownerUserId !== m.user.id || d.id === device.id) continue;
+        if (m.household.id === this.householdId) {
+          const peer = this.devices.get(d.id);
+          if (peer) await this.sendConfig(peer, true);
+        } else {
+          await this.env.calls?.refreshDevice(m.household.id, d.id);
+        }
+      }
+    }
   }
 
   // --- config & status ----------------------------------------------------------

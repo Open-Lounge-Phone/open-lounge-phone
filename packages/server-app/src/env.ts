@@ -38,6 +38,8 @@ export interface CallLinks {
   place(host: string, body: CallBody, callerHousehold: string): Promise<RingResult>;
   register(host: string, callId: string, householdId: string): Promise<void>;
   signal(to: { host: string; householdId?: string }, msg: FedSignal): Promise<void>;
+  /** Sends a phone in any household here a fresh config (e.g. its owner heard a message). */
+  refreshDevice(householdId: string, deviceId: string): Promise<void>;
   /** Rings a person in another household on this server, for a call owned here. */
   ringLocal(householdId: string, req: import("./fedCalls.ts").RemoteRing): Promise<RingResult>;
   /** Someone at `host` asks into one of our phone rooms (`/fed/v1/rooms/join`). */

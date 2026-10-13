@@ -310,7 +310,7 @@ export interface SpacePrivacy {
 /** Whose voicemail settings: a person (their account) or a household phone. */
 export type VoicemailOwner = { accountId: string } | { deviceId: string };
 export type GreetingKind = "name" | "custom";
-export type TicketPurpose = "voicemail" | "greeting";
+export type TicketPurpose = "voicemail" | "greeting" | "play";
 
 export interface VoicemailPrefs {
   /** How long calls ring before they go to voicemail. */

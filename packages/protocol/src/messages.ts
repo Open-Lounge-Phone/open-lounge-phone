@@ -518,6 +518,16 @@ export const GreetingReset = z
   .object({ t: z.literal("greeting.reset"), ...Ref })
   .describe("MENU → Voicemail → Default: back to the spoken default greeting.");
 
+export const VoicemailFetch = z
+  .object({ t: z.literal("voicemail.fetch"), ...Ref })
+  .describe(
+    "MENU → Voicemail → Play: the phone asks for its unheard messages (a person's own phone: theirs, from every space they're in). Answered with `voicemail.items`.",
+  );
+
+export const VoicemailHeard = z
+  .object({ t: z.literal("voicemail.heard"), ...Ref, id: Id })
+  .describe("The phone played this message to the end: mark it heard (as the app's Heard does).");
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   CallExtension,
@@ -532,6 +542,8 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   LoungeChat,
   GreetingBegin,
   GreetingReset,
+  VoicemailFetch,
+  VoicemailHeard,
   CallAnswer,
   CallHangup,
   CallHold,
@@ -816,6 +828,31 @@ export const GreetingTicket = z
     "Go ahead: record up to `maxMs` (name 3 s, greeting 30 s) and `POST /api/vm/greeting?ticket=&durationMs=` with a raw `audio/*` body. Single use, expires in 10 minutes.",
   );
 
+export const VoicemailItem = z.object({
+  id: Id,
+  from: z.string().max(24).describe("Who left it."),
+  at: z.number().int().describe("When (ms since the Unix epoch)."),
+  durationMs: z.number().int().nonnegative(),
+  ticket: z
+    .string()
+    .min(16)
+    .max(128)
+    .optional()
+    .describe(
+      "`GET /api/vm/play?ticket=` returns the audio (8 kHz 16-bit mono WAV). Single use, expires in 10 minutes. Absent: the message is in a format phones can't play (an older recording): play it in the app.",
+    ),
+});
+
+export const VoicemailItems = z
+  .object({
+    t: z.literal("voicemail.items"),
+    ...Ref,
+    items: z.array(VoicemailItem).max(8).describe("Unheard messages, oldest first."),
+  })
+  .describe(
+    "The answer to `voicemail.fetch`. Empty for phones that don't play messages (a kids' phone: a grown-up listens in the app).",
+  );
+
 export const GreetingDone = z
   .object({
     t: z.literal("greeting.done"),
@@ -850,6 +887,7 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   LoungeEnded,
   GreetingTicket,
   GreetingDone,
+  VoicemailItems,
   Wipe,
   CallRinging,
   CallStateMsg,

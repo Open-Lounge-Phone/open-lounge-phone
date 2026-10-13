@@ -22,6 +22,7 @@ export const DEVICE_FEATURES = [
   "extensions",
   "lounge",
   "recording",
+  "voicemail-play",
 ] as const;
 export type DeviceFeature = (typeof DEVICE_FEATURES)[number];
 

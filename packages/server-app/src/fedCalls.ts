@@ -192,6 +192,10 @@ export class FedCalls implements CallLinks {
     }
   }
 
+  refreshDevice(householdId: string, deviceId: string): Promise<void> {
+    return this.live.refreshDevice(householdId, deviceId);
+  }
+
   ringLocal(householdId: string, req: RemoteRing): Promise<RingResult> {
     return this.live.ringRemote(householdId, req);
   }

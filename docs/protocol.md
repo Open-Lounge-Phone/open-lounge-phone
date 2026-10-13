@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -169,6 +169,22 @@ MENU → Voicemail → Default: back to the spoken default greeting.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
+
+### `voicemail.fetch`
+
+MENU → Voicemail → Play: the phone asks for its unheard messages (a person's own phone: theirs, from every space they're in). Answered with `voicemail.items`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
+### `voicemail.heard`
+
+The phone played this message to the end: mark it heard (as the app's Heard does).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
 
 ### `call.answer`
 
@@ -434,6 +450,15 @@ The phone asked to record (`greeting.begin`) and may not, or its greeting was re
 | `id` | string (len ≤64) |  |  |
 | `result` | `"reset"` \| `"not_allowed"` | yes |  |
 | `kind` | `"default"` \| `"name"` \| `"custom"` | yes | The greeting callers hear now. |
+
+### `voicemail.items`
+
+The answer to `voicemail.fetch`. Empty for phones that don't play messages (a kids' phone: a grown-up listens in the app).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `items` | { id: string (len ≤64), from: string (len ≤24), at: integer, durationMs: integer (≥0), ticket?: string (len ≥16, len ≤128) }[] | yes | Unheard messages, oldest first. |
 
 ### `wipe`
 

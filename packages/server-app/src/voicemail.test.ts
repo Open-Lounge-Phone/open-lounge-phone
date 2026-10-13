@@ -345,6 +345,89 @@ describe("kids' phones", () => {
   });
 });
 
+describe("phones play their owner's voicemail", () => {
+  const WAV = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4]);
+
+  /** A message for `toUser`, stored as the server stores it. */
+  async function message(
+    householdId: string,
+    toUser: string,
+    from: string,
+    at: number,
+    mime: string,
+  ) {
+    const blobKey = `voicemail/${householdId}/${from}`;
+    await s.env.blobs.put(blobKey, WAV.buffer as ArrayBuffer, mime);
+    return s.store.createVoicemail({
+      householdId,
+      deviceId: null,
+      toUser,
+      groupId: null,
+      fromUser: null,
+      fromLabel: from,
+      fromAddress: null,
+      createdAt: at,
+      durationMs: 4000,
+      mime,
+      blobKey,
+      transcriptStatus: "unavailable",
+    });
+  }
+
+  it("lists unheard messages from every space, plays WAV once, and marks heard", async () => {
+    const { jesse, bob } = await household();
+    const { household: other, guardian: jesseThere } = await s.store.createHousehold(
+      { name: "Other", timeZone: "UTC", guardianName: "Jesse", accountId: jesse.user.accountId },
+      0,
+    );
+    const paired = await s.pairDevice(jesse.token, "Desk", { forMe: true });
+    const phone = await s.connectDevice(
+      paired.deviceId as string,
+      paired.key?.pair as CryptoKeyPair,
+    );
+    const old = await message(jesse.household.id, jesse.user.id, "Gran", 1, "audio/webm");
+    const wav = await message(other.id, jesseThere.id, "Test phone", 2, "audio/wav");
+    const bobs = await message(jesse.household.id, bob.id, "Ana", 3, "audio/wav");
+
+    phone.write({ t: "voicemail.fetch" });
+    const { items } = await phone.next("voicemail.items");
+    expect(items.map((i) => [i.id, i.from, !!i.ticket])).toEqual([
+      [old.id, "Gran", false], // an older Opus message: play it in the app
+      [wav.id, "Test phone", true],
+    ]);
+    const ticket = items[1]?.ticket as string;
+    // Not an upload ticket; plays once.
+    expectStatus(await leave(s, ticket), 404);
+    const res = await s.api.request(`/vm/play?ticket=${encodeURIComponent(ticket)}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/wav");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(WAV);
+    expect((await s.api.request(`/vm/play?ticket=${encodeURIComponent(ticket)}`)).status).toBe(404);
+
+    phone.write({ t: "voicemail.heard", id: wav.id });
+    const config = await phone.next("config");
+    expect(config.missed?.map((m) => m.from)).toEqual(["Gran"]);
+    expect((await s.store.getVoicemail(wav.id))?.heardAt).not.toBeNull();
+    // Someone else's message: ignored.
+    phone.write({ t: "voicemail.heard", id: bobs.id });
+    phone.write({ t: "voicemail.fetch" }); // handled in order: after this answer, so was that
+    await phone.next("voicemail.items");
+    expect((await s.store.getVoicemail(bobs.id))?.heardAt).toBeNull();
+  });
+
+  it("kids' phones get no messages: a grown-up listens in the app", async () => {
+    const { jesse } = await household();
+    const paired = await s.pairDevice(jesse.token, "Lily");
+    const phone = await s.connectDevice(
+      paired.deviceId as string,
+      paired.key?.pair as CryptoKeyPair,
+    );
+    await message(jesse.household.id, jesse.user.id, "Gran", 1, "audio/wav");
+    phone.write({ t: "voicemail.fetch" });
+    expect((await phone.next("voicemail.items")).items).toEqual([]);
+  });
+});
+
 describe("greetings", () => {
   it("record just your name: the caller gets it; reset brings back the default", async () => {
     const { bob, bobToken, jApp, bApp } = await household();

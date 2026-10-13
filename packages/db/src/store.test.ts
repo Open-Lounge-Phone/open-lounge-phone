@@ -827,7 +827,7 @@ describe("0020_server_info", () => {
     old.db.exec(`
       INSERT INTO server_keys (host, public_key, first_seen, last_seen) VALUES ('a.example', 'K1', 1, 2);
     `);
-    expect(migrate(old.db)).toEqual(["0020_server_info.sql"]);
+    expect(migrate(old.db)).toContain("0020_server_info.sql");
     expect(await s.connections.pinnedKey("a.example")).toBe("K1");
     expect(await s.connections.serverInfo("a.example")).toBeUndefined();
     await s.connections.saveServerInfo("a.example", '{"version":1}', 10, 310);
@@ -845,6 +845,23 @@ describe("0020_server_info", () => {
     expect(await s.connections.serverInfos()).toEqual([
       { host: "a.example", doc: '{"version":2}', fetchedAt: 20 },
     ]);
+    old.db.close();
+  });
+});
+
+describe("0021_voicemail_play", () => {
+  it("keeps live tickets and allows play tickets", async () => {
+    const old = openBefore("0021");
+    const s = new Store(old.sql);
+    const t = await s.createVoicemailTicket("voicemail", { a: 1 }, T0);
+    expect(migrate(old.db)).toContain("0021_voicemail_play.sql");
+    expect(await s.peekVoicemailTicket(t, "voicemail", T0)).toEqual({ a: 1 });
+    const p = await s.createVoicemailTicket("play", { voicemailId: "vm_x" }, T0);
+    // A play ticket is no upload ticket, and the other way round.
+    expect(await s.peekVoicemailTicket(p, "voicemail", T0)).toBeUndefined();
+    expect(await s.takeVoicemailTicket(t, "play", T0)).toBeUndefined();
+    expect(await s.takeVoicemailTicket(p, "play", T0)).toEqual({ voicemailId: "vm_x" });
+    expect(await s.takeVoicemailTicket(p, "play", T0)).toBeUndefined();
     old.db.close();
   });
 });
