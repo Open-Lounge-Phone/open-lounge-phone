@@ -86,6 +86,32 @@ SLOT_W, SLOT_PITCH = 1.4, 3.0
 LED_HOLE = 3.0          # status LED (D2 shines up through the board); a tube under the face holds
 LIGHT_PIPE = 3.0        # a 3 mm clear acrylic rod as a light pipe up to the face
 WIN_BEVEL = 1.2         # the window's bevel at the face
+# A clear lens closes the window: polycarbonate, set in from behind against a lip in the face and
+# held with a ring of VHB tape; nothing to grip from the front, it wipes clean, and the frame
+# under it stops short of the panel's glass (e-paper glass cracks under a point load).
+LENS = (74.0, 36.0, 2.0)  # w, h, thickness (the window shows 68 x 30)
+LENS_LIP = 1.2
+
+# ---------------------------------------------------------------- wall unit: housing + bracket
+# On a wall the faceplate is the whole housing: its sides run back to the wall, a bay over the
+# board's top edge holds the two right-angle plugs (USB-C power and the handset's 3.5 mm, both on
+# the board's underside at its top-left edge), and it hangs on a wall bracket: a French cleat at
+# the top, two tamper-resistant M4 screws up through its bottom. The handset cord leaves through
+# the bottom (the side facing the floor) in an armoured sleeve, its steel lanyard bolted inside.
+BAY = 18.0                # the housing over the board's top edge (model y up): right-angle plugs
+REAR = 21.5               # board underside -> wall: the cord fitting's nut (~20 across), the cords
+BRACKET_T = 3.0
+DROP = 8.0                # lift to hang it on the cleat: the bracket stops this short at the bottom
+CLEAT = 6.0               # the cleat's depth and bevel
+GLAND = 12.2              # M12 x 1.5 bulkhead: a cable gland or flexible-conduit fitting for the
+                          # handset cord's armoured sleeve (8-10 mm)
+GLAND_X = 22.0            # clear of the H3 screw head and the hook key's socket
+POWER_HOLE, POWER_X = 7.0, 46.0   # a second way out for surface-run power (else into the wall box)
+BOTTOM_SCREWS = (60.0, 120.0)     # x of the two M4 screws up into the bracket
+M4_INSERT = (5.6, 6.0)            # M4 heat-set insert OD, length
+LANYARD = (GLAND_X + 14.0, 4.0)   # the sleeve's steel lanyard: an M4 insert inside, near the gland
+BOSS_TOP_Y = 3.0                  # the housing's bottom screw bosses reach this far up
+BOX_US, BOX_EU = 83.3, 60.0       # single-gang box screw spacing (US, EU)
 
 
 def Y(by: float) -> float:
@@ -220,7 +246,7 @@ def pivot_housing():
 
 def build_hook_face():
     """The faceplate with the pivot housing: bushing bores and a pin hole."""
-    shell = build()
+    shell = build(wall=True)
     y = Y(PIV_KY)
     shell += pivot_housing()
     shell -= grille_slots(FACE_Z - FACE_T - 1, FACE_Z + 0.01)   # the grille stays open in the nook
@@ -316,27 +342,36 @@ def grille_slots(z0, z1):
     return cut
 
 
-def build():
-    """The faceplate: a shallow cover over the board, captive caps' buttons through the face."""
-    cx, cy = BOARD_W / 2, BOARD_H / 2
+def Z_WALL() -> float:
+    return -BOARD_T - REAR
+
+
+def build(wall: bool = False):
+    """The faceplate: a cover over the board, captive caps' buttons through the face. `wall`: the
+    whole housing of the wall unit (sides back to the wall, the plug bay over the top edge)."""
+    bay = BAY if wall else 0.0
+    cx, cy = BOARD_W / 2, (BOARD_H + bay) / 2
     edge = SKIRT_GAP + SKIRT_WALL
-    out_w, out_h = BOARD_W + 2 * edge, BOARD_H + 2 * edge
+    out_w, out_h = BOARD_W + 2 * edge, BOARD_H + bay + 2 * edge
     out_r = BOARD_R + edge
     z_top, z_under = FACE_Z, FACE_Z - FACE_T
-    # Shell: the face plus the skirt down to the board's underside, with a rounded top edge.
-    shell = rrect(cx, cy, out_w, out_h, out_r, -BOARD_T, z_top)
+    z_bot = Z_WALL() if wall else -BOARD_T
+    # Shell: the face plus the skirt down to the board's underside (or the wall), rounded top edge.
+    shell = rrect(cx, cy, out_w, out_h, out_r, z_bot, z_top)
     shell = round_top(shell, z_top, EDGE_ROUND)
-    shell -= rrect(cx, cy, BOARD_W + 2 * SKIRT_GAP, BOARD_H + 2 * SKIRT_GAP, BOARD_R + SKIRT_GAP,
-                   -BOARD_T - 1, z_under)
-    # Display: a window in the face, and a chimney under it down to the glass (it holds the module
-    # down and closes the gap round the window).
+    shell -= rrect(cx, cy, BOARD_W + 2 * SKIRT_GAP, BOARD_H + bay + 2 * SKIRT_GAP, BOARD_R + SKIRT_GAP,
+                   z_bot - 1, z_under)
+    # Display: a window with a lip, the lens behind it, and a frame under the lens down to just
+    # over the glass (it closes the gap round the panel and never presses it).
     (mx, my, mw, mh), (wx, wy, ww, wh) = display()
     module_top = P.STANDOFF_L + P.MODULE_PCB_T
-    chim = rrect(wx, wy, ww + 2 * HOOD_LIP + 2 * HOOD_WALL, wh + 2 * HOOD_LIP + 2 * HOOD_WALL, HOOD_R,
+    lw, lh, lt = LENS
+    chim = rrect(wx, wy, lw + 0.4 + 2 * HOOD_WALL, lh + 0.4 + 2 * HOOD_WALL, HOOD_R,
                  DISP_TOP + 0.2, z_under + 0.01)
     for bx, by in P.MODULE_FAR_HOLES:                                      # screw heads
         chim -= cyl(bx, Y(by), module_top - 0.1, module_top + SCREW_HEAD_H + 0.4, SCREW_HEAD_D)
     shell += chim
+    shell -= rrect(wx, wy, lw + 0.4, lh + 0.4, 1.5, DISP_TOP, z_top - LENS_LIP)   # lens + the way in
     shell -= rrect(wx, wy, ww, wh, WIN_R, DISP_TOP, z_top + 1)
     shell -= rrect(wx, wy, ww + 2 * WIN_BEVEL, wh + 2 * WIN_BEVEL, WIN_R + WIN_BEVEL, z_top - WIN_BEVEL, z_top + 1)
     # Piezo grille: slots in the face over it, in a shallow round dish.
@@ -356,7 +391,85 @@ def build():
         shell -= cyl(bx, Y(by), -0.01, INSERT_L, INSERT_D)
     for bx, by, _ in SWITCHES:      # nothing under the face may meet a flange on its way down
         shell -= rrect(bx, Y(by), FLANGE + 0.8, FLANGE + 0.8, FLANGE_R + 0.4, MX_HOUSING_TOP, z_under)
+    if wall:
+        shell = wall_housing(shell)
     return shell
+
+
+def cleat_rail(x0, x1, y_top, z_front, depth, hang=False):
+    """A French cleat along x. The bracket's: its top slopes down toward the wall. The housing's
+    (`hang`): it hangs from above, its underside the same slope, sitting in the bracket's."""
+    from build123d import Plane, Polygon
+    if hang:
+        pts = [(y_top - depth + 0.4, z_front - depth + 0.3), (y_top + 0.4, z_front), (y_top + 30, z_front),
+               (y_top + 30, z_front - depth + 0.3)]
+    else:
+        pts = [(y_top - 12.0, z_front - depth), (y_top - depth, z_front - depth), (y_top, z_front),
+               (y_top - 12.0, z_front)]
+    prof = Plane.YZ.offset(x0) * Polygon(*pts, align=None)
+    return extrude(prof, amount=x1 - x0)
+
+
+def bracket_top_y() -> float:
+    return BOARD_H + BAY - 10.0       # the cleat's crest
+
+
+def wall_housing(shell):
+    """The wall unit's housing extras: the hanging cleat, bottom screw bosses, the cord ways out."""
+    zw = Z_WALL()
+    zf = zw + BRACKET_T                     # the bracket's front face
+    inner_top = BOARD_H + BAY + SKIRT_GAP
+    # the hanging cleat, from the bay's ceiling, across the bay right of the plugs
+    hang = cleat_rail(36.0, BOARD_W - 6.0, bracket_top_y(), zf + CLEAT, CLEAT, hang=True)
+    shell += hang & bx(30, BOARD_W, bracket_top_y() - CLEAT, inner_top + 0.5, zf, zf + CLEAT + 1)
+    # bottom: bosses inside the skirt, M4 screws (tamper-resistant) up into the bracket
+    zs = zf + 4.0
+    for x in BOTTOM_SCREWS:
+        shell += bx(x - 6, x + 6, -SKIRT_GAP - 0.5, BOSS_TOP_Y, zf - 1.0, zf + 8.0)
+        shell -= ybar(x, zs, -SKIRT_GAP - SKIRT_WALL - 1, BOSS_TOP_Y + 1.0, 4.5)
+        shell -= ybar(x, zs, -SKIRT_GAP - SKIRT_WALL - 1, -SKIRT_GAP - SKIRT_WALL + 1.2, 8.5)   # head
+    # the handset cord: an M12 bulkhead through the bottom, a flat seat inside for its nut; the
+    # lanyard's M4 insert beside it
+    zc = zw + 10.5
+    shell += bx(GLAND_X - 10.5, GLAND_X + 10.5, -SKIRT_GAP - 0.5, 1.0, zw + 0.5, -BOARD_T - 4.2)
+    shell -= ybar(GLAND_X, zc, -SKIRT_GAP - SKIRT_WALL - 1, 3.0, GLAND)
+    lx, ly = LANYARD                        # off the skirt, in front of the bracket plate
+    shell += bx(lx - 5, lx + 5, -SKIRT_GAP - 0.5, ly + 5, zf + 0.5, zf + 7.0)
+    shell -= cyl(lx, ly, zf + 7.0 - M4_INSERT[1], zf + 7.01, M4_INSERT[0])
+    # surface-run power: a second hole through the bottom (or the cable goes into the wall box)
+    shell -= ybar(POWER_X, zc, -SKIRT_GAP - SKIRT_WALL - 1, 1.0, POWER_HOLE)
+    return shell
+
+
+def build_bracket():
+    """The wall bracket: a plate on the wall (4 screws, or a single-gang box), the cleat at the
+    top, two tabs with M4 inserts at the bottom; open behind the plug bay and the box."""
+    zw = Z_WALL()
+    zf = zw + BRACKET_T
+    x0, x1 = 0.0, BOARD_W
+    y0, y1 = BOSS_TOP_Y + DROP + 1.0, bracket_top_y()   # its bottom clears the bosses while hanging it
+    plate = rrect((x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0, 4.0, zw, zf)
+    plate += cleat_rail(36.0, BOARD_W - 6.0, y1, zf + CLEAT, CLEAT)
+    for x in BOTTOM_SCREWS:                 # tabs: the screws come up into them
+        tab = bx(x - 6, x + 6, y0, y0 + 10, zf - 0.01, zf + 8.0)
+        tab -= ybar(x, zf + 4.0, y0 - 1, y0 + M4_INSERT[1], M4_INSERT[0])
+        plate += tab
+    # the plug bay: open to the wall (a right-angle USB-C plug can point into a box behind it)
+    plate -= rrect(17.0, BOARD_H + BAY / 2, 34.0, BAY + 8.0, 3.0, zw - 1, zf + 1)
+    # wall screws (countersunk, 4.5) and a single-gang box (US 83.3 slotted, EU 60) with a cable hole
+    cx, cy = BOARD_W / 2, (y0 + y1) / 2
+    for (hx, hy) in ((24.0, 24.0), (BOARD_W - 24.0, 24.0), (48.0, y1 - 8.0), (BOARD_W - 24.0, y1 - 8.0)):
+        plate -= cyl(hx, hy, zw - 1, zf + 1, 4.5)
+        plate -= Pos(hx, hy, zf - 2.2) * Cylinder(4.6, 2.21, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    for dy in (-BOX_US / 2, BOX_US / 2):
+        plate -= rrect(cx, cy + dy, 4.0, 8.0, 1.99, zw - 1, zf + 1)
+    for dy in (-BOX_EU / 2, BOX_EU / 2):
+        plate -= cyl(cx, cy + dy, zw - 1, zf + 1, 4.0)
+    plate -= cyl(cx, cy, zw - 1, zf + 1, 28.0)
+    # ribs for stiffness, clear of the board's underside parts
+    for rx in (cx - 40.0, cx + 40.0):
+        plate += bx(rx - 1.0, rx + 1.0, y0 + 12.0, y1 - 14.0, zf - 0.01, zf + 4.0)
+    return plate
 
 
 def build_cap(label: str):
@@ -427,7 +540,8 @@ def main() -> None:
     if os.environ.get("OLP_FACEPLATE") == "hook":
         rocker = build_rocker()
         print("\n".join(balance(rocker)))
-        for name, part in {"faceplate-hook": build_hook_face(), "hook-rocker": rocker}.items():
+        for name, part in {"faceplate-hook": build_hook_face(), "hook-rocker": rocker,
+                           "wall-bracket": build_bracket()}.items():
             export_step(part, str(OUT / f"{name}.step"))
             export_stl(part, str(OUT / f"{name}.stl"), tolerance=0.02, angular_tolerance=0.15)
             bb = part.bounding_box()
