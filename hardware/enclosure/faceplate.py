@@ -170,18 +170,19 @@ TONGUE_W, TONGUE_T = 9.0, 5.0
 FOOT = 16.0                # the tongue's foot on the hook keycap
 NECK = 40.0                # MEASURE: the handle's width under the cup (passes between the arms)
 ROD_D = 8.0                # the cradle bar: a round bar, like a bent-rod switchhook
-U_Z0 = 44.0                # the U's back, out from the board top: clear of the pivot housing's crown
+ARM_START = 2.0            # the arms start inside the hub, this far over the pin
+FORK_R = 12.0              # each arm's S-curve: out of the hub, round, and forward (2 x FORK_R = half the span)
 ARM_L = 2.0                # the arms run straight out a little ...
 CURL_R, CURL_DEG = 15.0, 40.0   # ... then curl up the same arc at each tip, cupping the earpiece
 PAD_D, PAD_T = 16.0, 5.0   # palms on the tips: upright, faces turned in toward the cup
-CRADLE_Z = U_Z0 + NECK / 2 + 10.0   # where the cup's weight lands, roughly
+CRADLE_Z = PIV_Z + LUG_W / 2 + 2 * FORK_R          # where the handset's weight acts, roughly
 DENSITY = {"aluminium (AlSi10Mg, cast A356)": 2.68, "stainless 316L": 7.98, "bronze / brass": 8.6,
            "glass-filled nylon (PA12-GF)": 1.22}
 HANDSET_G = 200.0          # MEASURE: your handset's weight
-# Return spring: the hook switch's own. A heavy linear MX switch (or a ~120 gf spring swapped into
-# the hook switch) pushes its captive cap up, and the cap holds the tongue and the rocker up: with
-# nothing on the hook the key is up, whatever the rocker is made of. The handset's weight beats it.
-HOOK_SPRING_GF = (75.0, 120.0)   # the heavy spring: at the top of travel, at the bottom (4 mm)
+# Return spring: the hook switch's own. A standard linear MX switch pushes its captive cap up, and
+# the cap holds the tongue and the light rocker up: with nothing on the hook the key is up. The
+# handset's weight beats it.
+HOOK_SPRING_GF = (30.0, 60.0)    # a standard linear MX switch: at the top of travel, at the bottom (4 mm)
 STOP_GAP = 0.5             # the shank's clearance to its slot's end: a backstop if the rocker is lifted
 
 
@@ -207,38 +208,31 @@ def soften(part, r):
         return part
 
 
+SLOT_W = 2 * ROD_D        # the arms' way out of the housing's top (open downward)
+
+
 def pivot_housing():
-    """The pivot mount as one sculpted piece: two cheeks, each lofted from a broad rounded foot
-    that flares into the face up to a rounded crown round the pin, on a low plinth that runs
-    forward over the H4 insert boss (the pin's load goes to a screw). The slot between the
-    cheeks opens onto the piezo grille. Rounded by construction (no fillets on the loft)."""
+    """The pivot mount as one rounded loaf over the hub: a broad foot flaring into the face, rising
+    to a round top along the pin; inside, room for the hub, a slot the arms leave by and the nook
+    below where the tongue comes out and the piezo's sound with it (both open downward). A low
+    plinth runs forward over the H4 insert boss so the pin's load goes into a screw."""
     from build123d import Plane, loft
     y = Y(PIV_KY)
     hy = Y(P.HOLES[3][1])
-    s0, s1 = HUB_X[0] - LUG_GAP, HUB_X[1] + LUG_GAP           # the slot
-    by0, by1 = hy - 5.0, min(y + LUG_W / 2 + 9.0, BOARD_H + 1.5)
-    h = None
-    for (fx0, fx1), (tx0, tx1) in (((-2.0, s0), (s0 - LUG_T, s0)), ((s1, s1 + LUG_T + 3.0), (s1, s1 + LUG_T))):
-        foot = Plane.XY.offset(FACE_Z - 0.6) * Pos((fx0 + fx1) / 2, (by0 + by1) / 2) * RectangleRounded(fx1 - fx0, by1 - by0, 3.0)
-        crown = Plane.XY.offset(PIV_Z) * Pos((tx0 + tx1) / 2, y) * RectangleRounded(tx1 - tx0, LUG_W, 2.5)
-        cheek = loft([foot, crown]) + soften(xbar(tx0, tx1, y, PIV_Z, LUG_W), 1.6)
-        h = cheek if h is None else h + cheek
-    # close the top and the upper side between the cheeks: the crown runs across, a filler drops
-    # to the face above the pivot; the only openings face down (the nook where the tongue leaves),
-    # so the piezo's sound comes out there
-    mid = loft([Plane.XY.offset(FACE_Z - 0.6) * Pos((s0 + s1) / 2, (y + HUB_D / 2 + 1.0 + by1) / 2)
-                * RectangleRounded(s1 - s0 + 1.0, by1 - y - HUB_D / 2 - 1.0, 1.0),
-                Plane.XY.offset(PIV_Z) * Pos((s0 + s1) / 2, y + HUB_D / 4 + LUG_W / 4 + 0.5)
-                * RectangleRounded(s1 - s0 + 1.0, LUG_W / 2 - HUB_D / 2 - 1.0, 0.4)])
-    h += mid + xbar(s0 - 0.5, s1 + 0.5, y, PIV_Z, LUG_W)
-    h -= xbar(s0, s1, y, PIV_Z, HUB_D + 1.6)                         # the hub turns in here
-    # the shank's way out, open downward: the rocker slides in from below, then the pin
-    top = ROD_D / 2 + STOP_GAP                                      # its end is the up-stop
-    h -= rrect(PIV_X, y + (top - LUG_W - 4.0) / 2, ROD_D + 1.6, LUG_W + 4.0 + top, (ROD_D + 1.6) / 2 - 0.01,
+    s0, s1 = HUB_X[0] - LUG_GAP, HUB_X[1] + LUG_GAP           # between the cheeks
+    xl, xr = s0 - LUG_T, s1 + LUG_T
+    fy0, fy1 = y - LUG_W / 2 - 8.0, min(y + LUG_W / 2 + 8.0, BOARD_H + 1.5)
+    fx0, fx1 = max(xl - 3.0, -SKIRT_GAP), xr + 3.0                     # inside the face's edge
+    foot = Plane.XY.offset(FACE_Z - 0.6) * Pos((fx0 + fx1) / 2, (fy0 + fy1) / 2) * RectangleRounded(fx1 - fx0, fy1 - fy0, 6.0)
+    top = Plane.XY.offset(PIV_Z) * Pos((xl + xr) / 2, y) * RectangleRounded(xr - xl, LUG_W, 3.0)
+    h = loft([foot, top]) + soften(xbar(xl, xr, y, PIV_Z, LUG_W), 2.5)
+    h -= xbar(s0, s1, y, PIV_Z, HUB_D + 1.6)                           # the hub turns in here
+    top_y = ROD_D / 2 + STOP_GAP                                        # the slot's end: the up-stop
+    h -= rrect(PIV_X, y + (top_y - LUG_W - 12.0) / 2, SLOT_W, LUG_W + 12.0 + top_y, SLOT_W / 2 - 0.01,
                PIV_Z, PIV_Z + LUG_W)
-    h -= bx(s0, s1, y - LUG_W, y, FACE_Z - 0.5, PIV_Z)                # the nook below the pivot
-    plinth = rrect((-2.0 + s1 + LUG_T + 3.0) / 2, (by0 + Y(BZ[1] + GRILLE_D / 2 + 0.5)) / 2,
-                   s1 + LUG_T + 5.0, Y(BZ[1] + GRILLE_D / 2 + 0.5) - by0, 3.0, FACE_Z - 0.6, FACE_Z + 2.5)
+    h -= bx(s0, s1, fy0 - 1, y, FACE_Z - 0.5, PIV_Z)                  # the nook below the pivot
+    plinth = rrect((fx0 + fx1) / 2, (hy - 5.0 + fy0 + 2.0) / 2, fx1 - fx0, fy0 + 2.0 - hy + 5.0, 3.0,
+                   FACE_Z - 0.6, FACE_Z + 2.5)
     h += round_top(plinth, FACE_Z + 2.5, 1.5)
     return h
 
@@ -256,45 +250,47 @@ def build_hook_face():
 
 
 def cradle():
-    """The cradle, from exact pieces so both sides match: a semicircle round the back, two straight
-    parallel arms, each curling up the same circular arc at its tip, and a flat paddle carrying on
-    from each tip (the earpiece cup sits in the U, the curls and paddles keep it from sliding off)."""
+    """The cradle, two mirror-image arms out of the top of the hub, like a tuning fork: one stem
+    rises from the hub through the housing's slot and splits at its top; each arm rounds outward
+    and back in an S (two equal arcs) to run forward parallel to the other, curls up the same arc
+    at its tip and ends in an upright palm facing in."""
     from build123d import Circle, Line, Plane, ThreePointArc, Transition, Wire, sweep
     y0, cx = Y(PIV_KY), PIV_X
-    half = NECK / 2 + ROD_D / 2                     # arm centre lines (the gap between = NECK)
-    zc = U_Z0 + half                                 # the U's centre
+    R = FORK_R
+    z0 = PIV_Z + ARM_START
+    zs = PIV_Z + LUG_W / 2 - 2.0                       # the fork splits at the housing's top
     th = math.radians(CURL_DEG)
-    def side(sg):
-        x = cx + sg * half
-        a0 = (x, y0, zc)
-        a1 = (x, y0, zc + ARM_L)
-        mid = (x, y0 + CURL_R * (1 - math.cos(th / 2)), zc + ARM_L + CURL_R * math.sin(th / 2))
-        tip = (x, y0 + CURL_R * (1 - math.cos(th)), zc + ARM_L + CURL_R * math.sin(th))
-        return a0, a1, mid, tip
-    l0, l1, lm, lt = side(-1)
-    r0, r1, rm, rt = side(1)
-    back = (cx, y0, zc - half)
-    edges = [ThreePointArc(lt, lm, l1), Line(l1, l0), ThreePointArc(l0, back, r0), Line(r0, r1),
-             ThreePointArc(r1, rm, rt)]
-    path = Wire(edges)
-    start = Plane(origin=path @ 0, z_dir=path % 0)
-    bar = sweep(start * Circle(ROD_D / 2), path=path, transition=Transition.ROUND)
-    # paddles: upright discs at the tips, their faces turned in toward the cup
-    for t in (lt, rt):
+    s45 = math.sqrt(0.5)
+    bar = None
+    for sg in (-1, 1):
+        p0 = (cx, y0, z0)
+        ps = (cx, y0, zs)                              # one stem up through the housing's slot
+        m1 = (cx + sg * R * (1 - s45), y0, zs + R * s45)
+        p1 = (cx + sg * R, y0, zs + R)
+        m2 = (cx + sg * R * (1 + s45), y0, zs + 2 * R - R * s45)
+        p2 = (cx + sg * 2 * R, y0, zs + 2 * R)
+        p3 = (cx + sg * 2 * R, y0, zs + 2 * R + ARM_L)
+        cm = (p3[0], y0 + CURL_R * (1 - math.cos(th / 2)), p3[2] + CURL_R * math.sin(th / 2))
+        tip = (p3[0], y0 + CURL_R * (1 - math.cos(th)), p3[2] + CURL_R * math.sin(th))
+        edges = [Line(p0, ps), ThreePointArc(ps, m1, p1), ThreePointArc(p1, m2, p2)]
+        if ARM_L > 0:
+            edges.append(Line(p2, p3))
+        edges.append(ThreePointArc(p3, cm, tip))
+        path = Wire(edges)
+        arm = sweep(Plane(origin=path @ 0, z_dir=path % 0) * Circle(ROD_D / 2), path=path,
+                    transition=Transition.ROUND)
         k = PAD_D / 2 - 2.5                            # the bar ends 2.5 into the palm
-        c = (t[0], t[1] + math.sin(th) * k, t[2] + math.cos(th) * k)
-        pad = Cylinder(PAD_D / 2, PAD_T)
-        pad = soften(pad, PAD_T / 2 - 0.4)
-        bar += Pos(*c) * Rot(0, 90, 0) * pad          # upright, faces turned in: palms holding the cup
-    return bar, zc - half
+        c = (tip[0], tip[1] + math.sin(th) * k, tip[2] + math.cos(th) * k)
+        pad = soften(Cylinder(PAD_D / 2, PAD_T), PAD_T / 2 - 0.4)
+        arm += Pos(*c) * Rot(0, 90, 0) * pad           # upright, faces turned in: palms holding the cup
+        bar = arm if bar is None else bar + arm
+    return bar
 
 
 def build_rocker():
-    """The switchhook: cradle, shank, hub and tongue in one piece."""
+    """The switchhook: cradle, hub and tongue in one piece."""
     y, cx = Y(PIV_KY), PIV_X
-    r, z_join = cradle()
-    # the shank: from the hub out to the U's back, the bar's own size
-    shank = cyl(cx, y, PIV_Z, z_join + 2.0, ROD_D)
+    r = cradle()
     hub = soften(xbar(*HUB_X, y, PIV_Z, HUB_D), 1.0)
     y_end = Y(P.HOOK[1] + 4.0)
     tongue = rrect(cx, (y + y_end) / 2, TONGUE_W, y - y_end, TONGUE_W / 2 - 0.01,
@@ -305,7 +301,7 @@ def build_rocker():
     # a web where the tongue leaves the hub (it carries the whole key force)
     web = bx(cx - TONGUE_W / 2, cx + TONGUE_W / 2, y - 16.0, y, KEYCAP_TOP, PIV_Z)
     web -= Pos(cx, y - 16.0, PIV_Z) * Rot(0, 90, 0) * Cylinder(10.0, TONGUE_W + 2)
-    r = r + shank + hub + tongue + web
+    r = r + hub + tongue + web
     r -= xbar(HUB_X[0] - 1, HUB_X[1] + 1, y, PIV_Z, PIN_D)
     return r
 
