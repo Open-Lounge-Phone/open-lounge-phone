@@ -669,6 +669,9 @@ export function createApi(opts: ApiOptions) {
         "/devices/pair/preview",
         { code },
       ),
+    /** Rename the active space or change its time zone (guardians; owner and admins). */
+    updateSpace: (patch: { name?: string; timeZone?: string }) =>
+      request<Household>("PATCH", "/space", patch),
     spacePrivacy: () => request<SpacePrivacyInfo>("GET", "/space/privacy"),
     setSpacePrivacy: (patch: {
       history?: SpacePrivacyInfo["history"];

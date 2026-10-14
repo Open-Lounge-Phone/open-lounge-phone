@@ -1,4 +1,4 @@
-/** Words for team and org spaces' ring groups, hours, public lines and audit trail. Pure. */
+/** Words for team and org spaces' ring groups, hours and public lines. Pure. */
 import { ordinal } from "@openloungephone/core";
 import type { AfterHours, Directory, HoursRule, HuntStrategy, LineSettings } from "./api.ts";
 import type { QueueView } from "./calls.ts";
@@ -34,59 +34,6 @@ export function afterHoursText(a: AfterHours | null, dir: Pick<Directory, "group
     return `forward to ${dir.groups.find((g) => g.id === a.groupId)?.name ?? "a group"}`;
   }
   return `forward to ${dir.members.find((m) => m.id === a.userId)?.name ?? "someone"}`;
-}
-
-/** One audit entry in words ("set extension 201"). */
-export function auditText(action: string, d: Record<string, unknown> | null): string {
-  const s = (k: string) => (d && typeof d[k] === "string" ? (d[k] as string) : "");
-  switch (action) {
-    case "extension.set":
-      return `set extension ${s("number")}`;
-    case "extension.delete":
-      return `removed extension ${s("number")}`;
-    case "group.create":
-      return `made ring group ${s("name")} (${s("extension")})`;
-    case "group.update":
-      return "changed a ring group";
-    case "group.delete":
-      return `deleted ring group ${s("name")}`;
-    case "hours.update":
-      return "changed business hours";
-    case "role.change":
-      return `made ${s("name")} ${s("role") === "admin" ? "an admin" : "a member"}`;
-    case "invite.create":
-      return `invited ${s("name")}`;
-    case "member.remove":
-      return `removed ${s("name")}`;
-    case "privacy.update":
-      return "changed privacy settings";
-    case "phone.add":
-      return `added phone ${s("name")}`;
-    case "phone.remove":
-      return `removed phone ${s("name")}`;
-    case "calls.export":
-      return "exported the call log";
-    case "recording.update":
-      return d?.enabled ? "turned call recording on" : "turned call recording off";
-    case "line.address":
-      return `set a public line's address to ${s("to")}`;
-    case "line.enable":
-      return `made ${s("address")} public (confirmed the warning)`;
-    case "line.disable":
-      return `turned public line ${s("address")} off`;
-    case "line.update":
-      return "changed a public line's settings";
-    case "line.delete":
-      return `removed public line ${s("handle")}`;
-    case "line.greeting":
-      return "changed a public line's greeting";
-    case "line.block":
-      return `blocked ${s("value")} from the public lines`;
-    case "line.unblock":
-      return `unblocked ${s("value")}`;
-    default:
-      return action;
-  }
 }
 
 /** Waiting in a public line's queue: "You're 2nd in line", or just "Waiting in line". */

@@ -28,6 +28,7 @@ import { QuietHours } from "./QuietHours.tsx";
 import { quietStatus } from "./quietStatus.ts";
 import { RoomPanel, Rooms } from "./Rooms.tsx";
 import { Setup } from "./Setup.tsx";
+import { SpaceSettings } from "./SpaceSettings.tsx";
 import { Start } from "./Start.tsx";
 import { loadToken, readHashLinks, readInviteToken, readSetupToken, saveToken } from "./session.ts";
 import { kidSafe } from "./spaces.ts";
@@ -50,7 +51,8 @@ export type Route =
   | { name: "rooms" }
   | { name: "admin" }
   | { name: "directory" }
-  | { name: "voicemail" };
+  | { name: "voicemail" }
+  | { name: "settings" };
 
 function clearHash() {
   history.replaceState(null, "", location.pathname + location.search);
@@ -456,6 +458,11 @@ function SignedIn({
             <span className="narrow-only">Connect</span>
             {knocks > 0 && <span className="count">{knocks}</span>}
           </Tab>
+          {me && (
+            <Tab route={route} name="settings" onGo={setRoute}>
+              Settings
+            </Tab>
+          )}
           <Tab route={route} name="account" onGo={setRoute}>
             Account
           </Tab>
@@ -660,6 +667,15 @@ function SignedIn({
         )}
         {me && !home && route.name === "directory" && (
           <Workplace api={api} conn={conn} onBack={() => setRoute({ name: "home" })} />
+        )}
+        {me && route.name === "settings" && (
+          <SpaceSettings
+            api={api}
+            household={me.household}
+            canEdit={guardian}
+            onChanged={loadMe}
+            onBack={() => setRoute({ name: "home" })}
+          />
         )}
         {meInfo?.operator && route.name === "admin" && (
           <Admin api={baseApi} sessionToken={token} onBack={() => setRoute({ name: "home" })} />

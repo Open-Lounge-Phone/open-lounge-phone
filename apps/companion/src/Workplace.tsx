@@ -11,6 +11,7 @@ import type {
   RingGroupInfo,
   SpaceCall,
 } from "./api.ts";
+import { auditText } from "./auditText.ts";
 import type { Connection } from "./connection.ts";
 import {
   extensionDigits,
@@ -22,7 +23,7 @@ import {
 import { PublicLineEditor } from "./PublicLine.tsx";
 import { formatDuration } from "./text.ts";
 import { Player } from "./Voicemail.tsx";
-import { afterHoursText, auditText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
+import { afterHoursText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** The server's range for a ring group's ring time. */
