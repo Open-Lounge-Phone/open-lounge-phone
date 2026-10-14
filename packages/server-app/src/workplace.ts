@@ -12,7 +12,6 @@ import {
   type Weekday,
 } from "@openloungephone/core";
 import {
-  type Account,
   type AfterHours,
   deviceMode,
   type ExtensionKind,
