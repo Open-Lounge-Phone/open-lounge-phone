@@ -365,3 +365,15 @@ describe("public lines on the strip", () => {
     ).toEqual(["SUPPORT", "CALLS YOU BACK"]);
   });
 });
+
+describe("notices on the strip", () => {
+  it("show on the ready screen, over missed calls, until dismissed", () => {
+    const config = { buttons: [], quiet: false, missed: [{ from: "Mom", at: 1 }] };
+    expect(lines({ notice: { lines: ["BUS IS HERE"] }, config })).toEqual(["BUS IS HERE"]);
+    expect(lines({ notice: { lines: ["KITCHEN CLOSES", "AT 10"] } })).toEqual([
+      "KITCHEN CLOSES",
+      "AT 10",
+    ]);
+    expect(lines({ config })[0]).not.toBe("BUS IS HERE");
+  });
+});

@@ -18,6 +18,14 @@ On `main`, not tagged yet.
   line (here or on another server) as the space: the line sees the phone's name and the space
   owner's verified address. A member signed in at a Lounge phone gets the lines on their own
   phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Notices**: a space's guardians (in a team: the owner and admins) post a short notice to its
+  phones, all of them or some: one or two lines of 16 characters, an optional 30-second
+  recording, an hour unless they choose otherwise (up to a day). Phones show it on the ready
+  screen with a chime (none during quiet hours), lifting the handset plays the recording, any key
+  dismisses it on that phone; it leaves every phone when it expires or is taken down. Audited in
+  team and org spaces; never federated. `/api/notices`; additive protocol: `notice`,
+  `notice.cleared`, `notice.dismiss`, device feature `notices`. Companion: Home → Notice to the
+  phones. Migration 0024. See [docs/notices.md](docs/notices.md).
 - **Call me back** (public lines): a caller waiting in a line's queue can hang up and keep their
   place; when it's their turn the line rings their apps and phones, and answering calls the line
   again in their place. A missed call back gets one more try later or the line's voicemail offer

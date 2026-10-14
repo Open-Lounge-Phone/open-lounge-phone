@@ -552,6 +552,7 @@ function SignedIn({
             onAvailable={changeAvailable}
             meId={me?.user.id}
             onAddingPhone={() => setPairingSince(Date.now())}
+            api={api}
             onManage={(d) => setRoute({ name: "device", id: d.id })}
             onPair={() => setRoute({ name: "pair" })}
           />

@@ -39,6 +39,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { lineRoutes } from "./lines.ts";
+import { noticeRoutes, publicNoticeRoutes } from "./notices.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
@@ -236,6 +237,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   publicHubRoutes(api, env);
   publicVoicemailRoutes(api, env, live);
   publicRecordingRoutes(api, env);
+  publicNoticeRoutes(api, env);
 
   // --- authenticated --------------------------------------------------------
 
@@ -783,6 +785,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   workplaceRoutes(api, env, live);
   lineRoutes(api, env, live);
+  noticeRoutes(api, env, live);
   recordingRoutes(api, env);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);

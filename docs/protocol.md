@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -202,6 +202,14 @@ Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `by` | string (`^[0-2][0-9]:[0-5][0-9]$`) | yes | The time it was due (local HH:MM). |
+
+### `notice.dismiss`
+
+Notices (device feature `notices`): this phone dismissed the notice (a key while it shows). It isn't shown on this phone again.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
 
 ### `call.answer`
 
@@ -503,6 +511,27 @@ The phone must wipe itself: forget its device id, owner and settings, delete its
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `reason` | `"removed"` | yes | `removed` = its owner removed it in the app (the server has forgotten its key). |
+
+### `notice`
+
+Notices (device feature `notices`): a short notice for the phones of a space, posted by its owner, admins or guardians. Show it with a chime (no chime during quiet hours); lifting the handset plays its audio; a key dismisses it (`notice.dismiss`). Sent again with the same `id` when its audio is added (no second chime). The newest one replaces any earlier.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+| `lines` | string (len ≤16)[] | yes | One or two lines of at most 16 characters ("BUS IS HERE"). |
+| `from` | string (len ≤24) | yes | Who posted it. |
+| `at` | integer | yes | When it was posted (ms since the Unix epoch). |
+| `expiresAt` | integer | yes | When it goes away by itself (`notice.cleared` follows). |
+| `audio` | { token: string (len ≥16, len ≤128), durationMs: integer (≥0) } |  | A recorded message: `GET /api/notices/<id>/audio?token=` returns it (8 kHz 16-bit mono WAV) while the notice lasts. Play it when the handset is lifted. |
+
+### `notice.cleared`
+
+The notice expired or was taken down: stop showing it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
 
 ### `call.ringing`
 

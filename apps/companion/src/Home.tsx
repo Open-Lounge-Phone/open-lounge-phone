@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { DeviceSummary, User } from "./api.ts";
+import type { Api, DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
 import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
+import { Notices } from "./Notices.tsx";
 import { UseOldDeviceHint } from "./Pair.tsx";
 import { OFFLINE_HINT, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
@@ -22,6 +23,8 @@ interface Props {
   meId: string | undefined;
   /** Called when the user opens a new virtual phone to pair. */
   onAddingPhone(): void;
+  /** For notices to the phones (guardians). */
+  api?: Api;
 }
 
 function useNow(intervalMs: number) {
@@ -48,6 +51,7 @@ export function Home({
   onAvailable,
   meId,
   onAddingPhone,
+  api,
 }: Props) {
   const now = useNow(30_000);
   const myPhone = devices.find((d) => meId && d.ownerUserId === meId);
@@ -127,6 +131,7 @@ export function Home({
       <button type="button" className="add" onClick={onPair}>
         {guardian ? "+ Pair a phone" : "+ Pair my phone"}
       </button>
+      {guardian && api && devices.length > 0 && <Notices api={api} devices={devices} />}
       <GrownUps people={people} members={members} onCall={onCallPerson} />
     </section>
   );

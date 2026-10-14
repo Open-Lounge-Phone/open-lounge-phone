@@ -25,9 +25,11 @@ import {
   mayOfferCallback,
   NO_EXTENSION_NOTE,
   newRoom,
+  nextNoticeExpiry,
   nextQuietChange,
   nextRoundRobin,
   noQueueOutcome,
+  noticeFor,
   type PartyCall,
   pickRecorder,
   queueAdmit,
@@ -56,6 +58,7 @@ import {
   newId,
   type PublicLine,
   type RingGroup,
+  type Notice as StoredNotice,
   type Room as StoredRoom,
   type User,
   type VoicemailOwner,
@@ -134,6 +137,8 @@ export interface Peer extends PeerInfo {
 interface DevicePeer extends Peer {
   kind: "device";
   hook: "up" | "down";
+  /** The notice this phone was last sent (`<id>:<audio token>`), "" = none. Not persisted. */
+  noticeSig?: string;
 }
 
 const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
@@ -608,6 +613,7 @@ export class HouseholdHub {
         conn.send({ t: "lounge.session", name: resumed.name, openToChat: resumed.openToChat });
       }
       await this.sendConfig(peer, true);
+      await this.refreshNotice(peer);
       this.remember(peer);
       if (peer.lounge) this.issueNonce(peer);
       this.broadcastStatus(peer, true);
@@ -792,6 +798,9 @@ export class HouseholdHub {
           return this.lineVoicemail(peer, msg.callId);
         case "call.callback":
           return this.lineCallback(peer, msg.callId);
+        case "notice.dismiss":
+          await this.env.store.notices.dismiss(msg.id, device.id, this.env.now());
+          return this.refreshNotice(device);
         case "room.leave":
         case "room.mute":
         case "room.remove":
@@ -959,6 +968,8 @@ export class HouseholdHub {
       // Call backs: a ring that ran out, a place that expired, someone free to call back.
       this.callbacksPending = true;
       await this.pumpLines();
+      // Notices: one that expired leaves the phones.
+      await this.updateNotices();
       await this.scheduleWake();
     });
   }
@@ -1913,6 +1924,9 @@ export class HouseholdHub {
     // Rooms: the next idle warning or drop.
     const roomDue = this.conf.nextDeadline(now);
     if (roomDue !== undefined) at = at === undefined ? roomDue : Math.min(at, roomDue);
+    // Notices: the next one to expire leaves the phones then.
+    const noticeDue = nextNoticeExpiry(await store.notices.live(this.householdId, now), now);
+    if (noticeDue !== undefined) at = at === undefined ? noticeDue : Math.min(at, noticeDue);
     // Public lines' call backs: a ring running out, a place expiring.
     const callbackDue = this.callbacksPending
       ? await store.lines.nextCallbackDeadline(this.householdId)
@@ -3839,6 +3853,58 @@ export class HouseholdHub {
     state.done = true;
     this.roomsDirty = true;
     await this.apply(room, { type: "end", reason: "voicemail" });
+  }
+
+  // --- notices (docs/notices.md) ------------------------------------------------------------
+
+  /** Notices changed (posted, recorded, taken down): every phone gets what it should show. */
+  refreshNotices(): Promise<void> {
+    return this.run(async () => {
+      await this.updateNotices();
+      await this.scheduleWake();
+    });
+  }
+
+  private async updateNotices(): Promise<void> {
+    const now = this.env.now();
+    const live = await this.env.store.notices.live(this.householdId, now);
+    for (const d of this.devices.values()) await this.refreshNotice(d, live);
+    // Recordings of notices that are over go (and rows a week after).
+    for (const key of await this.env.store.notices.sweep(this.householdId, now)) {
+      await this.env.blobs.delete(key);
+    }
+  }
+
+  /**
+   * What one phone should show: the newest live notice meant for it that it hasn't dismissed.
+   * Sent when that changes (a new notice, or its recording added); `notice.cleared` when it goes.
+   */
+  private async refreshNotice(device: DevicePeer, known?: StoredNotice[]): Promise<void> {
+    const { store } = this.env;
+    const now = this.env.now();
+    const live = known ?? (await store.notices.live(this.householdId, now));
+    const dismissed = await store.notices.dismissed(
+      device.id,
+      live.map((n) => n.id),
+    );
+    const n = noticeFor(live, device.id, dismissed, now);
+    const sig = n ? `${n.id}:${n.audio?.token ?? ""}` : "";
+    const before = device.noticeSig ?? "";
+    if (sig === before) return;
+    device.noticeSig = sig;
+    if (n) {
+      device.conn.send({
+        t: "notice",
+        id: n.id,
+        lines: n.lines,
+        from: n.authorName.slice(0, 24),
+        at: n.createdAt,
+        expiresAt: n.expiresAt,
+        ...(n.audio ? { audio: { token: n.audio.token, durationMs: n.audio.durationMs } } : {}),
+      });
+    } else if (before) {
+      device.conn.send({ t: "notice.cleared", id: before.split(":")[0] as string });
+    }
   }
 
   // --- call me back (feature `line-callback`) ------------------------------------------------

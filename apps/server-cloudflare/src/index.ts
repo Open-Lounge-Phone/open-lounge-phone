@@ -425,6 +425,10 @@ export class HouseholdObject extends GatewayObject {
     return this.gateway.roomPeople(this.householdId);
   }
 
+  noticesChanged(): Promise<void> {
+    return this.gateway.noticesChanged(this.householdId);
+  }
+
   callbackRing(req: CallbackRing): Promise<void> {
     return this.gateway.callbackRing(this.householdId, req);
   }
@@ -583,6 +587,7 @@ function coordinator(env: Env): Coordinator {
     roomPeople: (hh) => env.HOUSEHOLD.getByName(hh).roomPeople(),
     closeRoom: (hh, roomId) => env.HOUSEHOLD.getByName(hh).closeRoom(roomId),
     callbackRing: (hh, req) => env.HOUSEHOLD.getByName(hh).callbackRing(req),
+    noticesChanged: (hh) => env.HOUSEHOLD.getByName(hh).noticesChanged(),
     lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));

@@ -1035,3 +1035,67 @@ describe("0023_line_callbacks", () => {
     old.db.close();
   });
 });
+
+describe("0024_notices", () => {
+  it("keeps spaces and phones; notices come, are dismissed per phone, and are swept", async () => {
+    const old = openBefore("0024");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: owner?.id },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const kitchen = await s.claimPairing({ code, householdId: hh.id, name: "Kitchen" }, T0);
+    if (!kitchen) throw new Error("pairing failed");
+    expect(migrate(old.db)).toContain("0024_notices.sql");
+    expect((await s.getDevice(kitchen.id))?.name).toBe("Kitchen");
+    const n = await s.notices.create(
+      {
+        householdId: hh.id,
+        createdBy: guardian.id,
+        authorName: "Mom",
+        lines: ["DINNER'S READY"],
+        deviceIds: null,
+        expiresAt: T0 + 60_000,
+      },
+      T0,
+    );
+    expect(n).toMatchObject({ lines: ["DINNER'S READY"], deviceIds: null, audio: null });
+    const two = await s.notices.create(
+      {
+        householdId: hh.id,
+        createdBy: guardian.id,
+        authorName: "Mom",
+        lines: ["BUS IS", "HERE"],
+        deviceIds: [kitchen.id],
+        expiresAt: T0 + 120_000,
+      },
+      T0 + 1,
+    );
+    expect((await s.notices.live(hh.id, T0 + 2)).map((x) => x.id)).toEqual([two.id, n.id]);
+    const { token } = await s.notices.setAudio(two.id, {
+      blobKey: "notice/a",
+      mime: "audio/wav",
+      durationMs: 2000,
+    });
+    expect((await s.notices.get(two.id))?.audio).toEqual({
+      blobKey: "notice/a",
+      mime: "audio/wav",
+      durationMs: 2000,
+      token,
+    });
+    expect((await s.notices.get(two.id))?.deviceIds).toEqual([kitchen.id]);
+    await s.notices.dismiss(two.id, kitchen.id, T0 + 3);
+    await s.notices.dismiss(two.id, kitchen.id, T0 + 4);
+    expect(await s.notices.dismissed(kitchen.id, [n.id, two.id])).toEqual(new Set([two.id]));
+    // Taken down early (once); its recording is let go, and a week later the row too.
+    expect(await s.notices.end(two.id, T0 + 5)).toBe(true);
+    expect(await s.notices.end(two.id, T0 + 6)).toBe(false);
+    expect(await s.notices.sweep(hh.id, T0 + 7)).toEqual(["notice/a"]);
+    expect((await s.notices.get(two.id))?.audio).toBeNull();
+    await s.notices.sweep(hh.id, T0 + 8 * 24 * 60 * 60 * 1000);
+    expect(await s.notices.ofSpace(hh.id)).toEqual([]);
+    old.db.close();
+  });
+});

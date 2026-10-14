@@ -364,6 +364,19 @@ export interface LineSettings {
   limits: { callerPerHour: number; serverPerHour: number };
 }
 
+/** A notice to the space's phones (docs/notices.md). */
+export interface NoticeView {
+  id: string;
+  lines: string[];
+  from: string;
+  at: number;
+  expiresAt: number;
+  endedAt: number | null;
+  live: boolean;
+  deviceIds: string[] | null;
+  audio: { durationMs: number } | null;
+}
+
 export type LinePatch = Partial<Omit<LineSettings, "address" | "greeting" | "limits">> & {
   confirm?: true;
 };
@@ -838,6 +851,15 @@ export function createApi(opts: ApiOptions) {
         { body: audio },
       );
     },
+    notices: () => request<NoticeView[]>("GET", "/notices"),
+    postNotice: (b: { text: string; minutes?: number; deviceIds?: string[] }) =>
+      request<NoticeView>("POST", "/notices", b),
+    setNoticeAudio: async (id: string, audio: Blob, durationMs: number) => {
+      await send("PUT", `/notices/${enc(id)}/audio?durationMs=${Math.round(durationMs)}`, {
+        body: audio,
+      });
+    },
+    deleteNotice: (id: string) => request<void>("DELETE", `/notices/${enc(id)}`),
     resetLineGreeting: (groupId: string) =>
       request<void>("DELETE", `/groups/${enc(groupId)}/line/greeting`),
     lineBlocks: () =>

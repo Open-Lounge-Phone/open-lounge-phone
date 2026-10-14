@@ -8,6 +8,7 @@ import type {
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
+import { NoticeStore } from "./notices.ts";
 import { RecordingStore } from "./recordings.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
@@ -598,6 +599,8 @@ export class Store {
   readonly lines: LineStore;
   /** Call recording: the per-space switch, upload tickets, recordings. */
   readonly recordings: RecordingStore;
+  /** Notices to a space's phones. */
+  readonly notices: NoticeStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -606,6 +609,7 @@ export class Store {
     this.workplace = new WorkplaceStore(sql);
     this.lines = new LineStore(sql, HANDLE_RESERVE_MS);
     this.recordings = new RecordingStore(sql);
+    this.notices = new NoticeStore(sql);
   }
 
   // --- settings -----------------------------------------------------------

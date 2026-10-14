@@ -588,6 +588,12 @@ export const CheckinMissed = z
     "Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.",
   );
 
+export const NoticeDismiss = z
+  .object({ t: z.literal("notice.dismiss"), ...Ref, id: Id })
+  .describe(
+    "Notices (device feature `notices`): this phone dismissed the notice (a key while it shows). It isn't shown on this phone again.",
+  );
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   CallExtension,
@@ -606,6 +612,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   VoicemailHeard,
   CheckinOk,
   CheckinMissed,
+  NoticeDismiss,
   CallAnswer,
   CallHangup,
   CallHold,
@@ -968,6 +975,40 @@ export const Wipe = z
     'The phone must wipe itself: forget its device id, owner and settings, delete its device key and make a new one, then show "Set me up" again (Wi-Fi is kept so it can be claimed again; a factory reset clears that too). Sent to a removed phone that is connected, or when it next connects and proves it holds the removed key.',
   );
 
+/** The longest line of a notice: what fits the phones' screens. */
+export const NOTICE_LINE_MAX = 16;
+
+export const Notice = z
+  .object({
+    t: z.literal("notice"),
+    ...Ref,
+    id: Id,
+    lines: z
+      .array(z.string().min(1).max(NOTICE_LINE_MAX))
+      .min(1)
+      .max(2)
+      .describe('One or two lines of at most 16 characters ("BUS IS HERE").'),
+    from: z.string().max(24).describe("Who posted it."),
+    at: z.number().int().describe("When it was posted (ms since the Unix epoch)."),
+    expiresAt: z.number().int().describe("When it goes away by itself (`notice.cleared` follows)."),
+    audio: z
+      .object({
+        token: z.string().min(16).max(128),
+        durationMs: z.number().int().nonnegative(),
+      })
+      .optional()
+      .describe(
+        "A recorded message: `GET /api/notices/<id>/audio?token=` returns it (8 kHz 16-bit mono WAV) while the notice lasts. Play it when the handset is lifted.",
+      ),
+  })
+  .describe(
+    "Notices (device feature `notices`): a short notice for the phones of a space, posted by its owner, admins or guardians. Show it with a chime (no chime during quiet hours); lifting the handset plays its audio; a key dismisses it (`notice.dismiss`). Sent again with the same `id` when its audio is added (no second chime). The newest one replaces any earlier.",
+  );
+
+export const NoticeCleared = z
+  .object({ t: z.literal("notice.cleared"), ...Ref, id: Id })
+  .describe("The notice expired or was taken down: stop showing it.");
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -981,6 +1022,8 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   GreetingDone,
   VoicemailItems,
   Wipe,
+  Notice,
+  NoticeCleared,
   CallRinging,
   CallStateMsg,
   RtcConfig,

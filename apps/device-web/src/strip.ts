@@ -26,6 +26,8 @@ export interface StatusInput {
   recording?: boolean;
   /** Local time "HH:MM" for the ready screen, once the phone knows it. */
   clock?: string;
+  /** A notice from the space (docs/notices.md): shown on the ready screen until dismissed. */
+  notice?: { lines: string[] };
   now: number;
 }
 
@@ -141,6 +143,10 @@ export function statusLines(input: StatusInput): StatusLines {
   if (input.leave?.stage === "sending") return ["SENDING MESSAGE"];
   if (input.leave?.stage === "sent") return ["MESSAGE SENT"];
   if (input.leave?.stage === "failed") return ["MESSAGE NOT SENT"];
+  // A notice from the space, until a key dismisses it or it expires.
+  const notice = input.notice?.lines.filter(Boolean).map(clip);
+  if (notice?.length)
+    return notice.length > 1 ? [notice[0] ?? "", notice[1] ?? ""] : [notice[0] ?? ""];
 
   const low = battery && !battery.charging && battery.pct < 20;
   const lowLine = low ? `LOW BATTERY ${battery.pct}%` : undefined;

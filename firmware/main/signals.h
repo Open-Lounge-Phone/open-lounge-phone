@@ -13,7 +13,7 @@ typedef enum {
   LED_RECORDING, // double flash every second: this call or room is recorded
 } led_pattern_t;
 
-typedef enum { BEEP_KEY, BEEP_PAIR, BEEP_ERROR, BEEP_OK } beep_t;
+typedef enum { BEEP_KEY, BEEP_PAIR, BEEP_ERROR, BEEP_OK, BEEP_NOTICE } beep_t;
 
 /** Ringer loudness (piezo duty) and ring cadence, saved in NVS. */
 #define RING_LEVELS 3  // 1 soft, 2 medium, 3 loud

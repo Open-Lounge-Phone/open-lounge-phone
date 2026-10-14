@@ -129,6 +129,8 @@ export interface Coordinator {
   roomPeople(householdId: string): Promise<Record<string, string[]>>;
   /** A room was deleted: everyone in it is out. */
   closeRoom(householdId: string, roomId: string): Promise<void>;
+  /** The household's notices changed: its phones get what they should show. */
+  noticesChanged(householdId: string): Promise<void>;
   /** A public line calls one of the household's people back (they asked). */
   callbackRing(householdId: string, req: CallbackRing): Promise<void>;
   /** Someone didn't take a call back from one of the household's public lines. */
@@ -270,6 +272,10 @@ export class Gateway implements Coordinator {
 
   async closeRoom(householdId: string, roomId: string): Promise<void> {
     await this.hubs.get(householdId)?.closeRoom(roomId);
+  }
+
+  async noticesChanged(householdId: string): Promise<void> {
+    await this.hubs.get(householdId)?.refreshNotices();
   }
 
   async callbackRing(householdId: string, req: CallbackRing): Promise<void> {
