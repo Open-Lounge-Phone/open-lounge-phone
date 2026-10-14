@@ -480,3 +480,20 @@ describe("public lines (waiting in a queue)", () => {
     expect(run([button(0)], ringingOnly).sent).toEqual([]);
   });
 });
+
+describe("an add-on calling", () => {
+  it("rings like any call, marked as an add-on", () => {
+    const { state } = run([
+      {
+        type: "server",
+        msg: {
+          t: "call.ringing",
+          callId: "c1",
+          from: { label: "seat", address: "jo+seat@x.example", kind: "addon" },
+        },
+      },
+    ]);
+    expect(state).toEqual({ kind: "incoming", callId: "c1", from: "seat", addon: true });
+    expect(run([ringing("c2")]).state).toEqual({ kind: "incoming", callId: "c2", from: "Mom" });
+  });
+});

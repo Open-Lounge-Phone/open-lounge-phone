@@ -64,6 +64,15 @@ function withName(prefix: string, name: string, suffix = ""): StatusLines {
   return prefix ? [clip(prefix), clip(name)] : [clip(name), clip(suffix)];
 }
 
+/**
+ * An add-on's name with its label, `SEAT · ADD-ON`, when that fits on one line; else just the
+ * name (the other line then says it's an add-on).
+ */
+export function addonLabel(name: string): string {
+  const labelled = `${name.trim()} · ADD-ON`;
+  return labelled.length <= STATUS_WIDTH ? clip(labelled) : clip(name.trim());
+}
+
 function clock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const mm = Math.floor(total / 60);
@@ -102,6 +111,12 @@ export function statusLines(input: StatusInput): StatusLines {
       return withName("CALLING", name);
     case "incoming": {
       if (s.callback) return [clip(s.from.trim()), "CALLS YOU BACK"];
+      if (s.addon) {
+        const labelled = addonLabel(s.from);
+        return labelled === clip(s.from.trim())
+          ? [labelled, "ADD-ON CALLING"]
+          : [labelled, "LIFT TO ANSWER"];
+      }
       const who = withName("", s.from.trim(), "CALLING");
       return who.length === 1 ? [who[0], "LIFT TO ANSWER"] : who;
     }

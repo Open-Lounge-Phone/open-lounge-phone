@@ -33,8 +33,11 @@ export type DeviceState =
       held?: string;
       queue?: { position?: number; size?: number; voicemail?: boolean; callback?: boolean };
     }
-  /** Ringing, handset down. `callback`: a public line calling you back, as you asked. */
-  | { kind: "incoming"; callId: string; from: string; callback?: true }
+  /**
+   * Ringing, handset down. `callback`: a public line calling you back, as you asked. `addon`: the
+   * caller is an add-on (shown as `SEAT · ADD-ON`).
+   */
+  | { kind: "incoming"; callId: string; from: string; callback?: true; addon?: true }
   | {
       kind: "incall";
       callId: string;
@@ -206,6 +209,7 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
         callId: msg.callId,
         from: msg.from.label,
         ...(msg.callback ? { callback: true as const } : {}),
+        ...(msg.from.kind === "addon" ? { addon: true as const } : {}),
       });
     }
     // Busy: decline so the caller hears it immediately instead of waiting for a timeout.

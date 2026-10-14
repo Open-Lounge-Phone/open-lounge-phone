@@ -93,7 +93,7 @@ import {
 import { type PowerSource, powerStatus, type Variant } from "./power.ts";
 import { renderSegments } from "./segments.ts";
 import { forgetKind, loadKind, saveKind, startScreen } from "./setup.ts";
-import { MISSED_CYCLE_MS, ownerLine, STATUS_WIDTH, statusLines } from "./strip.ts";
+import { addonLabel, MISSED_CYCLE_MS, ownerLine, STATUS_WIDTH, statusLines } from "./strip.ts";
 import { type VmEvent, type VmPlayer, vmLines, vmStart, vmStep } from "./vmplay.ts";
 import { ScreenAwake, type WakeLockLike } from "./wake.ts";
 
@@ -653,7 +653,8 @@ function step(input: DeviceInput): void {
   if (s.kind === "dialing") {
     activeLabel = labelFor(s.button);
   } else if (s.kind === "incoming") {
-    activeLabel = s.from;
+    // An add-on keeps its label in the call too ("IN CALL 00:12" / "SEAT · ADD-ON").
+    activeLabel = s.addon ? addonLabel(s.from) : s.from;
   } else if (s.kind === "idle") {
     activeLabel = undefined;
   }

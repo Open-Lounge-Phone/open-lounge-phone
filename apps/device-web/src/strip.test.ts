@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceConfig } from "./leds.ts";
 import {
+  addonLabel,
   MISSED_CYCLE_MS,
   ownerLine,
   STATUS_WIDTH,
@@ -45,6 +46,19 @@ describe("statusLines", () => {
     expect(
       lines({ deviceState: { kind: "incoming", callId: "c", from: "Grandma Josephine" } }),
     ).toEqual(["GRANDMA JOSEPHIN", "CALLING"]);
+  });
+
+  it("labels an add-on calling: SEAT · ADD-ON when it fits", () => {
+    const incoming = (from: string) =>
+      lines({ deviceState: { kind: "incoming", callId: "c", from, addon: true } });
+    expect(incoming("Seat")).toEqual(["SEAT · ADD-ON", "LIFT TO ANSWER"]);
+    expect(incoming("Notes taker")).toEqual(["NOTES TAKER", "ADD-ON CALLING"]);
+    expect(addonLabel("seat")).toBe("SEAT · ADD-ON");
+    expect(addonLabel("thinking-room")).toBe("THINKING-ROOM");
+    expect(lines({ deviceState: { kind: "incoming", callId: "c", from: "Seat" } })).toEqual([
+      "SEAT CALLING",
+      "LIFT TO ANSWER",
+    ]);
   });
 
   it("runs a call timer once connected", () => {
