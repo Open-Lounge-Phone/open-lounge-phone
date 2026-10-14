@@ -44,11 +44,17 @@ export function defaultTimeZone(): string {
   }
 }
 
+/** `#recover`: open "Lost your passkey?" (the server's recovery page). */
+export function readRecover(hash: string): boolean {
+  return /^#?recover$/.test(hash);
+}
+
 /** Everything a link can carry in the page's hash: setup, invite and Lounge-phone links. */
 export interface HashLinks {
   setup?: string;
   invite?: string;
   lounge?: LoungeLink;
+  recover?: boolean;
 }
 
 /**
@@ -63,5 +69,6 @@ export function readHashLinks(pathname: string, hash: string): HashLinks {
     ...(setup ? { setup } : {}),
     ...(invite ? { invite } : {}),
     ...(lounge ? { lounge } : {}),
+    ...(readRecover(hash) ? { recover: true } : {}),
   };
 }

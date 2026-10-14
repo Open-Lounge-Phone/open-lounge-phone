@@ -10,6 +10,48 @@ export interface User {
   accountId?: string;
   name: string;
   role: Role;
+  /** They own this space (the founder, or who it was handed to). */
+  owner?: boolean;
+  /** Guardians see: this is their only space here (a sign-in link works; removing deletes them). */
+  onlyHere?: boolean;
+}
+
+/** How a session started. */
+export type SessionVia = "passkey" | "signup" | "setup" | "invite" | "link" | "recovery";
+
+/** This app's own sign-in session (never the token). */
+export interface SessionInfo {
+  id: string;
+  via: SessionVia | null;
+  /** A passkey backs it (it keeps going while used); else it ends on `expiresAt`. */
+  passkey: boolean;
+  /** A recovery code's session: it may only add a passkey. */
+  limited: boolean;
+  expiresAt: number;
+}
+
+/** One place you're signed in. */
+export interface SessionSummary {
+  id: string;
+  label: string | null;
+  via: SessionVia | null;
+  passkey: boolean;
+  createdAt: number;
+  lastUsedAt: number | null;
+  expiresAt: number;
+  current: boolean;
+}
+
+/** An invite or sign-in link that can still be used (guardians/admins). */
+export interface OutstandingLink {
+  id: string;
+  kind: "invite" | "signin";
+  name: string;
+  role: Role;
+  userId?: string;
+  createdBy: string;
+  createdAt: number;
+  expiresAt: number;
 }
 
 /** You on this server: `handle@host`. */
@@ -41,6 +83,16 @@ export interface Me {
   openSignup?: boolean;
   /** You run this server (the admin view). */
   operator?: boolean;
+  /** "Add a household / team" works for you on this server. */
+  canAddSpace?: boolean;
+  /** Your account has a recovery code. */
+  recoveryCode?: boolean;
+  /** How many passkeys your account has. */
+  passkeys?: number;
+  /** This app's session. */
+  session?: SessionInfo;
+  /** You own the active space. */
+  owner?: boolean;
 }
 
 export interface Household {
@@ -186,9 +238,12 @@ export interface InvitePreview {
 
 export interface SignedInResult {
   token: string;
-  user: User;
-  household: Household;
+  /** Null for someone in no space yet. */
+  user: User | null;
+  household: Household | null;
   account?: AccountInfo;
+  /** An invite made a brand-new account (its recovery code comes next). */
+  newAccount?: boolean;
 }
 
 /** Someone you're connected with, knocked on, or blocked. */
@@ -520,11 +575,21 @@ export type CeremonyOptions = { challengeId: string; options: any };
 
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** The server's machine-readable reason, when it gave one (e.g. `suspended`). */
+  readonly code: string | undefined;
+  /** The whole error body (e.g. the spaces to hand on before deleting an account). */
+  readonly body: Record<string, unknown> | undefined;
+  constructor(status: number, message: string, code?: string, body?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.body = body;
   }
 }
+
+/** The server's reason code on a failed request, if any. */
+export const errorCode = (e: unknown): string | undefined =>
+  e instanceof ApiError ? e.code : undefined;
 
 /** The operator's view of federation keys: this server's (fingerprints only) and pinned ones. */
 export interface AdminFederation {
@@ -814,11 +879,30 @@ export function createApi(opts: ApiOptions) {
       request<InviteCreated>("POST", "/invites", input),
     invitePreview: (token: string) => request<InvitePreview>("GET", `/invites/${enc(token)}`),
     acceptInvite: (token: string) => request<SignedInResult>("POST", "/invites/accept", { token }),
-    removeUser: (userId: string) => request<void>("DELETE", `/users/${enc(userId)}`),
+    removeUser: (userId: string) =>
+      request<{ accountDeleted: boolean }>("DELETE", `/users/${enc(userId)}`),
 
     // Passkeys
     passkeys: () => request<PasskeySummary[]>("GET", "/passkeys"),
-    removePasskey: (id: string) => request<void>("DELETE", `/passkeys/${enc(id)}`),
+    removePasskey: (id: string) => request<{ remaining: number }>("DELETE", `/passkeys/${enc(id)}`),
+
+    // Sessions and recovery
+    sessions: () => request<SessionSummary[]>("GET", "/sessions"),
+    endSession: (id: string) => request<void>("DELETE", `/sessions/${enc(id)}`),
+    signOutOthers: () => request<{ signedOut: number }>("POST", "/sessions/sign-out-others"),
+    /** A new recovery code (the old one stops working): shown once. */
+    newRecoveryCode: () => request<{ code: string }>("POST", "/account/recovery-code"),
+    /** Signed out: a handle and recovery code give a session that may only add a passkey. */
+    recover: (handle: string, code: string) =>
+      request<{ token: string; account: AccountInfo }>("POST", "/recover", { handle, code }),
+
+    // Spaces: owners, leaving, names, outstanding links
+    transferOwnership: (userId: string) => request<void>("POST", "/space/owner", { userId }),
+    leaveSpace: () => request<{ deletedSpace: boolean }>("POST", "/space/leave", {}),
+    renameUser: (userId: string, name: string) =>
+      request<void>("PATCH", `/users/${enc(userId)}`, { name }),
+    outstandingLinks: () => request<OutstandingLink[]>("GET", "/invites"),
+    cancelLink: (id: string) => request<void>("DELETE", `/invites/${enc(id)}`),
     passkeyRegisterOptions: () => request<CeremonyOptions>("POST", "/passkeys/register/options"),
     passkeyRegisterVerify: (challengeId: string, response: unknown, name: string) =>
       request<void>("POST", "/passkeys/register/verify", { challengeId, response, name }),
@@ -895,7 +979,7 @@ export function createApi(opts: ApiOptions) {
       ),
     setSpaceHours: (v: { hours?: HoursRule[] | null; afterHours?: AfterHours | null }) =>
       request<void>("PUT", "/space/hours", v),
-    setRole: (userId: string, role: "admin" | "member") =>
+    setRole: (userId: string, role: "admin" | "member" | "guardian" | "contact") =>
       request<void>("PATCH", `/users/${enc(userId)}/role`, { role }),
     spaceCalls: (before?: number) =>
       request<SpaceCall[]>("GET", `/space/calls${before ? `?before=${before}` : ""}`),
@@ -965,13 +1049,19 @@ export type Api = ReturnType<typeof createApi>;
 
 async function errorFrom(res: Response): Promise<ApiError> {
   let said: string | undefined;
+  let code: string | undefined;
+  let body: Record<string, unknown> | undefined;
   try {
-    const json = (await res.json()) as { error?: unknown };
-    if (json && typeof json === "object" && typeof json.error === "string") said = json.error;
+    const json = (await res.json()) as { error?: unknown; code?: unknown };
+    if (json && typeof json === "object") {
+      body = json as Record<string, unknown>;
+      if (typeof json.error === "string") said = json.error;
+      if (typeof json.code === "string") code = json.code;
+    }
   } catch {
     // not JSON (a proxy's error page, say)
   }
-  return new ApiError(res.status, readableError(res.status, said));
+  return new ApiError(res.status, readableError(res.status, said), code, body);
 }
 
 /** Network failures (offline, server down) as an ApiError with status 0 and plain words. */

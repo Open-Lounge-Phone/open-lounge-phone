@@ -5,6 +5,7 @@ declare global {
     turnstile?: {
       render(el: HTMLElement, opts: Record<string, unknown>): string;
       remove(id: string): void;
+      reset(id: string): void;
     };
   }
 }
@@ -28,19 +29,29 @@ function loadScript(): Promise<void> {
 
 /**
  * Cloudflare Turnstile ("are you a person?"), shown on sign-up only when the server has keys.
- * `onToken` gets the response to send with the sign-up (undefined when it expires).
+ * `onToken` gets the response to send with the sign-up (undefined when it expires). Each
+ * response works once: change `reset` after every sign-up try to get a fresh one.
  */
 export function Turnstile({
   siteKey,
   onToken,
   onFail,
+  reset = 0,
 }: {
   siteKey: string;
   onToken(token: string | undefined): void;
   /** The check couldn't load or run (blocked script, network, misconfigured key). */
   onFail?(): void;
+  /** Bump to run the check again (the last answer was used). */
+  reset?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const widget = useRef<string>(undefined);
+  useEffect(() => {
+    if (reset === 0 || !widget.current) return;
+    onToken(undefined);
+    window.turnstile?.reset(widget.current);
+  }, [reset, onToken]);
   useEffect(() => {
     let id: string | undefined;
     let gone = false;
@@ -56,6 +67,7 @@ export function Turnstile({
             onFail?.();
           },
         });
+        widget.current = id;
       },
       () => {
         onToken(undefined);
@@ -64,6 +76,7 @@ export function Turnstile({
     );
     return () => {
       gone = true;
+      widget.current = undefined;
       if (id) window.turnstile?.remove(id);
     };
   }, [siteKey, onToken, onFail]);

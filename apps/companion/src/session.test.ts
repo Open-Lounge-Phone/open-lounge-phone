@@ -60,5 +60,8 @@ describe("session", () => {
       lounge: { deviceId: "dev_1", nonce: "0123456789abcdef" },
     });
     expect(readHashLinks("/", "")).toEqual({});
+    // "Lost your passkey?" has its own address.
+    expect(readHashLinks("/", "#recover")).toEqual({ recover: true });
+    expect(readHashLinks("/", "#recovery")).toEqual({});
   });
 });

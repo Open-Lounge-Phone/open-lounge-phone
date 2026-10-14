@@ -106,6 +106,8 @@ export interface Snapshot {
   voicemail?: { seq: number; id: string; deviceId?: string; from: string };
   /** Latest `room.opened` (a party line with hours just opened); `seq` changes each time. */
   roomOpened?: { seq: number; roomId: string; name: string; closesAt: number };
+  /** Latest `account.notice`: your account was signed in to without a passkey. */
+  accountNotice?: { seq: number; kind: "recovered" | "signin_link"; at: number };
 }
 
 type Rtc = Extract<ServerToApp, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -115,6 +117,8 @@ const ENDED_DISPLAY_MS = 3000;
 const CONNECT_WAIT_MS = 8000;
 const UNAUTHORIZED = 4401;
 const BAD_HANDSHAKE = 4400;
+/** You left or were removed from this space, or your role there changed: reload. */
+const REMOVED = 4403;
 
 /** One call's audio (the current one, or one on hold). */
 interface CallAudio {
@@ -166,7 +170,12 @@ export class Connection {
   private ready = false;
   private readonly readyWaiters = new Set<(ok: boolean) => void>();
 
-  constructor(token: string, householdId: string, onUnauthorized: () => void) {
+  constructor(
+    token: string,
+    householdId: string,
+    onUnauthorized: () => void,
+    onRemoved: () => void = () => {},
+  ) {
     this.socket = new ProtocolSocket<ServerToApp, AppToServer>({
       url: socketUrl(`/ws/app?household=${encodeURIComponent(householdId)}`),
       decode: decodeServerToApp,
@@ -177,8 +186,10 @@ export class Connection {
         if (status !== "open") this.ready = false;
         this.set({ status });
         if (detail?.code === UNAUTHORIZED) onUnauthorized();
+        if (detail?.code === REMOVED) onRemoved();
       },
-      shouldReconnect: (code) => code !== UNAUTHORIZED && code !== BAD_HANDSHAKE,
+      shouldReconnect: (code) =>
+        code !== UNAUTHORIZED && code !== BAD_HANDSHAKE && code !== REMOVED,
     });
   }
 
@@ -690,6 +701,15 @@ export class Connection {
         return;
       case "connections.changed":
         this.set({ connectionsSeq: (this.snap.connectionsSeq ?? 0) + 1 });
+        return;
+      case "account.notice":
+        this.set({
+          accountNotice: {
+            seq: (this.snap.accountNotice?.seq ?? 0) + 1,
+            kind: msg.kind,
+            at: msg.at,
+          },
+        });
         return;
       case "error":
         // A refused hold, merge or transfer: the calls stay as they were.

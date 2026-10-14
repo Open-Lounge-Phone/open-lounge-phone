@@ -5,6 +5,7 @@ import {
   type Api,
   createApi,
   type DeviceSummary,
+  errorCode,
   type Me,
   type Role,
   type Schedule,
@@ -16,7 +17,7 @@ import { Connection, type Snapshot } from "./connection.ts";
 import { groupConnections } from "./connectionGroups.ts";
 import { Home } from "./Home.tsx";
 import { AddHousehold, GetStarted, HouseholdSwitcher } from "./Households.tsx";
-import { Invite } from "./Invite.tsx";
+import { Invite, type InviteResult } from "./Invite.tsx";
 import { GuestLounge, LoungePhones, LoungeScan } from "./Lounge.tsx";
 import { type LoungeLink, parseLoungeLink } from "./loungeLink.ts";
 import { ManageDevice } from "./ManageDevice.tsx";
@@ -26,11 +27,19 @@ import { People } from "./People.tsx";
 import { phoneLed } from "./phoneLed.ts";
 import { QuietHours } from "./QuietHours.tsx";
 import { quietStatus } from "./quietStatus.ts";
+import { RecoveryCodeStep } from "./RecoveryCode.tsx";
 import { RoomPanel, Rooms } from "./Rooms.tsx";
 import { Setup } from "./Setup.tsx";
 import { SpaceSettings } from "./SpaceSettings.tsx";
-import { Start } from "./Start.tsx";
-import { loadToken, readHashLinks, readInviteToken, readSetupToken, saveToken } from "./session.ts";
+import { Start, type StartedHow } from "./Start.tsx";
+import {
+  loadToken,
+  readHashLinks,
+  readInviteToken,
+  readRecover,
+  readSetupToken,
+  saveToken,
+} from "./session.ts";
 import { kidSafe } from "./spaces.ts";
 import { VoicemailInbox } from "./Voicemail.tsx";
 import { Welcome } from "./Welcome.tsx";
@@ -66,8 +75,26 @@ export function App() {
   /** Bumped to reload everything, e.g. after switching household. */
   const [generation, setGeneration] = useState(0);
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
-  /** A fresh session from first-run setup, waiting on the passkey offer. */
-  const [offerFor, setOfferFor] = useState<string>();
+  /**
+   * A fresh session waiting on steps before the app opens: a passkey offer ("another": signed
+   * in from another device) and the new account's recovery code.
+   */
+  const [pending, setPendingState] = useState<{
+    token: string;
+    steps: ("passkey" | "another" | "code")[];
+  }>();
+  /** Saved at once, so closing the page mid-way doesn't lose a session that has no passkey yet. */
+  const setPending = useCallback(
+    (p: { token: string; steps: ("passkey" | "another" | "code")[] } | undefined) => {
+      if (p) saveToken(localStorage, p.token);
+      setPendingState(p);
+    },
+    [],
+  );
+  /** `#recover`: "Lost your passkey?" opens first. */
+  const [recover, setRecover] = useState(() => readRecover(location.hash));
+  /** An invite to come back to after "I already have an account here: sign in first". */
+  const [inviteAfterSignIn, setInviteAfterSignIn] = useState<string>();
   /** Opened from a Lounge phone's QR code (survives signing in first). */
   const [loungeLink, setLoungeLink] = useState(() =>
     parseLoungeLink(location.pathname, location.hash),
@@ -80,6 +107,7 @@ export function App() {
       if (links.setup) setSetupToken(links.setup);
       if (links.invite) setInviteToken(links.invite);
       if (links.lounge) setLoungeLink(links.lounge);
+      if (links.recover) setRecover(true);
     };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
@@ -89,9 +117,21 @@ export function App() {
     setLoungeLink(undefined);
   }, []);
 
-  const signIn = useCallback((t: string | null) => {
-    saveToken(localStorage, t);
-    setToken(t);
+  const signIn = useCallback(
+    (t: string | null) => {
+      saveToken(localStorage, t);
+      setToken(t);
+      // Back to an invite opened before signing in.
+      if (t && inviteAfterSignIn) {
+        setInviteToken(inviteAfterSignIn);
+        setInviteAfterSignIn(undefined);
+      }
+    },
+    [inviteAfterSignIn],
+  );
+  const forgetStaleToken = useCallback(() => {
+    saveToken(localStorage, null);
+    setToken(null);
   }, []);
 
   useEffect(() => {
@@ -101,12 +141,21 @@ export function App() {
     }
   }, [token, setupToken]);
 
-  const finishOffer = useCallback(() => {
-    if (offerFor) signIn(offerFor);
-    setOfferFor(undefined);
-  }, [offerFor, signIn]);
+  const nextStep = useCallback(() => {
+    if (!pending) return;
+    const steps = pending.steps.slice(1);
+    if (steps.length > 0) setPending({ ...pending, steps });
+    else {
+      signIn(pending.token);
+      setPending(undefined);
+    }
+  }, [pending, signIn, setPending]);
 
-  if (offerFor) return <PasskeyOffer token={offerFor} onDone={finishOffer} />;
+  if (pending) {
+    const step = pending.steps[0];
+    if (step === "code") return <RecoveryCodeStep token={pending.token} onDone={nextStep} />;
+    return <PasskeyOffer token={pending.token} another={step === "another"} onDone={nextStep} />;
+  }
 
   // An invite link works even when signed in (e.g. a sign-in link for another person).
   if (inviteToken) {
@@ -114,17 +163,27 @@ export function App() {
       <Invite
         inviteToken={inviteToken}
         sessionToken={token}
-        onDone={(t, joinedAsMe) => {
+        onDone={(r: InviteResult) => {
           clearHash();
           setInviteToken(undefined);
-          if (joinedAsMe) reload();
-          else {
-            markWelcomePending(localStorage);
-            signIn(t);
+          if (r.joinedAsMe) {
+            reload();
+            return;
           }
+          markWelcomePending(localStorage);
+          // Always keep the session the server gave back.
+          saveToken(localStorage, r.token);
+          if (r.newAccount) setPending({ token: r.token, steps: ["passkey", "code"] });
+          else signIn(r.token);
         }}
         onCancel={() => {
           clearHash();
+          setInviteToken(undefined);
+        }}
+        onStaleSession={forgetStaleToken}
+        onSignInFirst={() => {
+          clearHash();
+          setInviteAfterSignIn(inviteToken);
           setInviteToken(undefined);
         }}
       />
@@ -138,7 +197,7 @@ export function App() {
           clearHash();
           setSetupToken(undefined);
           markWelcomePending(localStorage);
-          setOfferFor(t);
+          setPending({ token: t, steps: ["passkey", "code"] });
         }}
       />
     );
@@ -148,9 +207,18 @@ export function App() {
       <>
         {loungeLink && !loungeLink.host && <GuestLounge link={loungeLink} />}
         <Start
-          onToken={(t, fresh) => {
-            if (fresh) markWelcomePending(localStorage);
-            signIn(t);
+          key={recover ? "recover" : "menu"}
+          initial={recover ? "recover" : "menu"}
+          onToken={(t, how?: StartedHow) => {
+            if (recover) {
+              clearHash();
+              setRecover(false);
+            }
+            if (how?.fresh) {
+              markWelcomePending(localStorage);
+              setPending({ token: t, steps: ["code"] });
+            } else if (how?.offerPasskey) setPending({ token: t, steps: ["another"] });
+            else signIn(t);
           }}
           onInvite={setInviteToken}
         />
@@ -178,15 +246,20 @@ const EMPTY: Snapshot = {
 };
 const noop = () => () => {};
 
-function useConnection(token: string, householdId: string | undefined, onUnauthorized: () => void) {
+function useConnection(
+  token: string,
+  householdId: string | undefined,
+  onUnauthorized: () => void,
+  onRemoved: () => void,
+) {
   const [conn, setConn] = useState<Connection>();
   useEffect(() => {
     // The household id routes the socket to its hub (a Durable Object on Cloudflare).
     if (!householdId) return;
-    const c = new Connection(token, householdId, onUnauthorized);
+    const c = new Connection(token, householdId, onUnauthorized, onRemoved);
     setConn(c);
     return () => c.close();
-  }, [token, householdId, onUnauthorized]);
+  }, [token, householdId, onUnauthorized, onRemoved]);
   const snap = useSyncExternalStore(conn?.subscribe ?? noop, conn?.getSnapshot ?? (() => EMPTY));
   return { conn, snap };
 }
@@ -227,7 +300,19 @@ function SignedIn({
       ? { user: meInfo.user, household: meInfo.household }
       : undefined;
   const memberships = meInfo?.memberships ?? [];
-  const { conn, snap } = useConnection(token, householdId, onSignOut);
+  const [suspended, setSuspended] = useState(false);
+  // The socket was closed as signed out: ask the server why (a suspension shows as such; an
+  // ended session signs this app out through the API's 401).
+  const onSocketSignedOut = useCallback(() => {
+    baseApi.me().then(
+      () => {},
+      (e: Error) => {
+        if (errorCode(e) === "suspended") setSuspended(true);
+      },
+    );
+  }, [baseApi]);
+  // Left or removed from this space, or a role changed there: reload with fresh data.
+  const { conn, snap } = useConnection(token, householdId, onSocketSignedOut, onReload);
   const [people, setPeople] = useState<User[]>([]);
   // Your own "taking calls" flag; the server persists it and /api/me reports it.
   const [available, setAvailable] = useState(true);
@@ -276,7 +361,10 @@ function SignedIn({
         setMeInfo(m);
         setAvailable(m.available ?? true);
       },
-      (e: Error) => setLoadError(e.message),
+      (e: Error) => {
+        if (errorCode(e) === "suspended") setSuspended(true);
+        else setLoadError(e.message);
+      },
     );
   }, [baseApi]);
   useEffect(() => loadMe(), [loadMe]);
@@ -396,6 +484,23 @@ function SignedIn({
     return () => clearTimeout(t);
   }, [openedSeq, snap.roomOpened]);
 
+  if (suspended) {
+    return (
+      <div className="centered">
+        <div className="card stack">
+          <h1>This account is suspended</h1>
+          <p>
+            The people who run this server have suspended this account, so it can't be used here for
+            now. They can tell you why.
+          </p>
+          <button type="button" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -408,6 +513,7 @@ function SignedIn({
           activeId={householdId}
           onSwitch={(id) => void switchTo(id)}
           onAdd={() => setRoute({ name: "add-household" })}
+          canAdd={meInfo?.canAddSpace !== false}
         />
         <button
           type="button"
@@ -474,6 +580,11 @@ function SignedIn({
         </nav>
       </header>
 
+      <AccountBanners
+        me={meInfo}
+        notice={snap.accountNotice}
+        onAccount={() => setRoute({ name: "account" })}
+      />
       {(loadError || snap.error) && (
         <div className="banner" role="alert">
           <span>{snap.error ?? loadError}</span>
@@ -493,12 +604,19 @@ function SignedIn({
       <main>
         {meInfo && !me && route.name !== "add-household" && route.name !== "account" && (
           <section className="card stack">
-            <h2>You're not in a household yet</h2>
+            <h2>You're not in a household or team yet</h2>
             <p className="muted">
-              Ask someone in a household or team here to invite you, or start your own.
+              {meInfo.canAddSpace
+                ? "Ask someone in a household or team here to invite you, or start your own."
+                : "Ask someone in a household or team here to invite you. Your account is still here: you can take your data or delete it under Account."}
             </p>
-            <button type="button" onClick={() => setRoute({ name: "add-household" })}>
-              Add a household
+            {meInfo.canAddSpace && (
+              <button type="button" onClick={() => setRoute({ name: "add-household" })}>
+                Add a household or team
+              </button>
+            )}
+            <button type="button" onClick={() => setRoute({ name: "account" })}>
+              Account
             </button>
             <button type="button" onClick={() => void signOut()}>
               Sign out
@@ -544,6 +662,7 @@ function SignedIn({
             onAddKidPhone={() => setRoute({ name: "pair" })}
             onInviteGuardian={() => setRoute({ name: "people", role: "guardian" })}
             onAddHousehold={() => setRoute({ name: "add-household" })}
+            canAdd={meInfo?.canAddSpace !== false}
           />
         )}
         {me && !loungeLink && !welcome && route.name === "home" && (
@@ -631,6 +750,10 @@ function SignedIn({
         )}
         {meInfo && route.name === "account" && (
           <Account
+            info={meInfo}
+            spaceType={spaceType}
+            onLeft={onReload}
+            onPeople={() => setRoute({ name: "people" })}
             account={meInfo.account}
             memberships={memberships}
             onSwitch={(id) => void switchTo(id)}
@@ -751,5 +874,68 @@ function Tab({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Lasting reminders about getting back in: no recovery code yet, a session with no passkey
+ * behind it (it ends on a date), and a sign-in to this account that didn't use a passkey.
+ */
+function AccountBanners({
+  me,
+  notice,
+  onAccount,
+}: {
+  me: Me | undefined;
+  notice: Snapshot["accountNotice"];
+  onAccount(): void;
+}) {
+  const [seenNotice, setSeenNotice] = useState(0);
+  if (!me) return null;
+  const ends = me.session && !me.session.passkey ? new Date(me.session.expiresAt) : undefined;
+  return (
+    <>
+      {notice && notice.seq > seenNotice && (
+        <div className="banner" role="alert">
+          <span>
+            {notice.kind === "recovered"
+              ? "Someone just signed in to your account with its recovery code."
+              : "Someone just signed in to your account with a sign-in link."}{" "}
+            If that wasn't you, check where you're signed in.
+          </span>
+          <span className="row">
+            <button type="button" className="link" onClick={onAccount}>
+              Check
+            </button>
+            <button type="button" className="link" onClick={() => setSeenNotice(notice.seq)}>
+              Dismiss
+            </button>
+          </span>
+        </div>
+      )}
+      {ends && (
+        <div className="banner notice" role="status">
+          <span>
+            This device has no passkey. You'll be signed out on{" "}
+            {ends.toLocaleDateString(undefined, { dateStyle: "medium" })}; add a passkey or keep
+            your recovery code.
+          </span>
+          <button type="button" className="link" onClick={onAccount}>
+            Add a passkey
+          </button>
+        </div>
+      )}
+      {me.recoveryCode === false && (
+        <div className="banner notice" role="status">
+          <span>
+            Your account has no recovery code yet. Make one, so you can get back in if you lose your
+            passkeys.
+          </span>
+          <button type="button" className="link" onClick={onAccount}>
+            Make one
+          </button>
+        </div>
+      )}
+    </>
   );
 }

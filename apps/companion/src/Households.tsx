@@ -2,7 +2,7 @@ import { type FormEvent, useState } from "react";
 import type { Api, Membership } from "./api.ts";
 import { requiredProblem } from "./fields.ts";
 import { defaultTimeZone } from "./session.ts";
-import { type SpaceType, spaceNoun } from "./spaces.ts";
+import { roleNoun, type SpaceType, spaceNoun } from "./spaces.ts";
 import { TimeZonePicker } from "./TimeZonePicker.tsx";
 import { zoneProblem } from "./timeZones.ts";
 
@@ -12,11 +12,14 @@ export function HouseholdSwitcher({
   activeId,
   onSwitch,
   onAdd,
+  canAdd = true,
 }: {
   memberships: Membership[];
   activeId: string | undefined;
   onSwitch(householdId: string): void;
   onAdd(): void;
+  /** This server lets you start another space. */
+  canAdd?: boolean;
 }) {
   if (memberships.length < 2) return null;
   return (
@@ -35,7 +38,7 @@ export function HouseholdSwitcher({
           {m.spaceType && m.spaceType !== "home" ? ` (${spaceNoun(m.spaceType)})` : ""}
         </option>
       ))}
-      <option value="+">+ Add a household or team…</option>
+      {canAdd && <option value="+">+ Add a household or team…</option>}
     </select>
   );
 }
@@ -46,11 +49,14 @@ export function GetStarted({
   onInviteGuardian,
   onAddHousehold,
   spaceType,
+  canAdd = true,
 }: {
   onAddKidPhone(): void;
   onInviteGuardian(): void;
   onAddHousehold(): void;
   spaceType?: SpaceType | undefined;
+  /** This server lets you start another space. */
+  canAdd?: boolean;
 }) {
   const home = (spaceType ?? "home") === "home";
   return (
@@ -65,9 +71,11 @@ export function GetStarted({
         <button type="button" onClick={onInviteGuardian}>
           {home ? "Invite a co-guardian" : `Invite someone to this ${spaceNoun(spaceType)}`}
         </button>
-        <button type="button" onClick={onAddHousehold}>
-          Add a household
-        </button>
+        {canAdd && (
+          <button type="button" onClick={onAddHousehold}>
+            Add a household
+          </button>
+        )}
       </div>
     </section>
   );
@@ -197,11 +205,14 @@ export function YourHouseholds({
   activeId,
   onSwitch,
   onAdd,
+  canAdd = true,
 }: {
   memberships: Membership[];
   activeId: string | undefined;
   onSwitch(householdId: string): void;
   onAdd(): void;
+  /** This server lets you start another space. */
+  canAdd?: boolean;
 }) {
   return (
     <>
@@ -213,7 +224,7 @@ export function YourHouseholds({
               <div className="device-name">{m.householdName}</div>
               <div className="muted small">
                 {m.spaceType && m.spaceType !== "home" ? `${spaceNoun(m.spaceType)} · ` : ""}
-                {m.role === "guardian" ? "Guardian" : "Member"} as {m.name}
+                {roleNoun(m.role, m.spaceType)} as {m.name}
               </div>
             </div>
             {m.householdId === activeId ? (
@@ -226,9 +237,16 @@ export function YourHouseholds({
           </li>
         ))}
       </ul>
-      <button type="button" onClick={onAdd}>
-        Add a household or team
-      </button>
+      {canAdd ? (
+        <button type="button" onClick={onAdd}>
+          Add a household or team
+        </button>
+      ) : (
+        <p className="muted small">
+          On this server, only people who already run a household or team can start one (or you've
+          reached its limit).
+        </p>
+      )}
     </>
   );
 }

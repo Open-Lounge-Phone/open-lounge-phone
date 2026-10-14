@@ -1,10 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import type { Api, Role, User } from "./api.ts";
+import type { Api, OutstandingLink, Role, User } from "./api.ts";
 import type { MemberLive } from "./connection.ts";
 import { requiredProblem } from "./fields.ts";
 import { presenceOf } from "./presence.ts";
 import { inviteLink } from "./session.ts";
-import { kidSafe, roleNoun, type SpaceType } from "./spaces.ts";
+import { kidSafe, roleNoun, type SpaceType, spaceNoun } from "./spaces.ts";
+import { formatWhen } from "./text.ts";
 
 interface Props {
   api: Api;
@@ -44,14 +45,24 @@ export function People({
   const [nameProblem, setNameProblem] = useState<string>();
   const [shared, setShared] = useState<Shared>();
   const [confirmRemove, setConfirmRemove] = useState<string>();
+  const [confirmOwner, setConfirmOwner] = useState<string>();
+  const [renaming, setRenaming] = useState<{ id: string; name: string }>();
+  const [links, setLinks] = useState<OutstandingLink[]>([]);
+  const [notice, setNotice] = useState<string>();
 
   const load = useCallback(async () => {
     try {
       setUsers(await api.users());
+      setLinks(await api.outstandingLinks());
     } catch (e) {
       setError((e as Error).message);
     }
   }, [api]);
+  const home = kidSafe(spaceType);
+  const noun = spaceNoun(spaceType);
+  const iOwn = users.some((u) => u.id === me?.id && u.owner);
+  /** Admins (guardians) other than the owner can't act on the owner, nor (teams) other admins. */
+  const mayManage = (u: User) => !u.owner && (iOwn || home || u.role !== "guardian");
 
   useEffect(() => {
     void load();
@@ -83,13 +94,64 @@ export function People({
     } catch (err) {
       setError((err as Error).message);
     }
+    await load();
   };
 
   const remove = async (u: User) => {
     setError(undefined);
+    setNotice(undefined);
     setConfirmRemove(undefined);
     try {
-      await api.removeUser(u.id);
+      const { accountDeleted } = await api.removeUser(u.id);
+      setNotice(
+        accountDeleted
+          ? `${u.name} was removed, and their account deleted.`
+          : `${u.name} was removed from this ${noun}.`,
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await load();
+  };
+
+  const changeRole = async (u: User, to: Role) => {
+    setError(undefined);
+    try {
+      await api.setRole(u.id, to);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await load();
+  };
+
+  const handOver = async (u: User) => {
+    setError(undefined);
+    setConfirmOwner(undefined);
+    try {
+      await api.transferOwnership(u.id);
+      setNotice(`${u.name} now owns this ${noun}.`);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await load();
+  };
+
+  const rename = async () => {
+    if (!renaming) return;
+    setError(undefined);
+    try {
+      await api.renameUser(renaming.id, renaming.name.trim());
+      setRenaming(undefined);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await load();
+  };
+
+  const cancelLink = async (l: OutstandingLink) => {
+    setError(undefined);
+    try {
+      await api.cancelLink(l.id);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -108,6 +170,7 @@ export function People({
         </p>
       )}
 
+      {notice && <p className="ok">{notice}</p>}
       {shared && <ShareLink shared={shared} onDone={() => setShared(undefined)} />}
 
       <ul className="stack">
@@ -124,9 +187,65 @@ export function People({
                     {self && <span className="muted small"> (you)</span>}
                   </div>
                   <div className="muted small">
-                    {roleNoun(u.role, spaceType)}
+                    {u.owner ? "Owner" : roleNoun(u.role, spaceType)}
                     {!self && ` · ${p.label}`}
                   </div>
+                  {renaming?.id === u.id && (
+                    <form
+                      className="row"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void rename();
+                      }}
+                    >
+                      <input
+                        aria-label={`New name for ${u.name}`}
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ id: u.id, name: e.target.value })}
+                        maxLength={24}
+                        required
+                      />
+                      <button type="submit" disabled={!renaming.name.trim()}>
+                        Save
+                      </button>
+                      <button type="button" className="link" onClick={() => setRenaming(undefined)}>
+                        Cancel
+                      </button>
+                    </form>
+                  )}
+                  {confirmOwner === u.id && (
+                    <div className="stack">
+                      <p className="small">
+                        Make {u.name} the owner of {householdName}? You'll stay a{" "}
+                        {home ? "guardian" : "admin"}, but only {u.name} can then change roles, hand
+                        it on again, or remove you.
+                      </p>
+                      <div className="row">
+                        <button type="button" className="danger" onClick={() => void handOver(u)}>
+                          Yes, make {u.name} the owner
+                        </button>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setConfirmOwner(undefined)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {confirmRemove === u.id && (
+                    <p className="small warning">
+                      {u.onlyHere
+                        ? `This is ${u.name}'s only space here, so removing them deletes their account: their connections are told, and they'd need a new invite to come back.`
+                        : `${u.name} stays in their other spaces; only this ${noun} goes.`}
+                    </p>
+                  )}
+                  {!self && u.onlyHere === false && !u.owner && (
+                    <div className="muted small">
+                      In other spaces too: signs in with a passkey or recovery code, not a link.
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="device-actions">
@@ -140,10 +259,35 @@ export function People({
                     Call
                   </button>
                 )}
-                <button type="button" onClick={() => void signInLink(u)}>
-                  Sign-in link
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => setRenaming({ id: u.id, name: u.name })}
+                >
+                  Rename
                 </button>
-                {u.id !== me?.id &&
+                {!self && u.onlyHere && mayManage(u) && (
+                  <button type="button" onClick={() => void signInLink(u)}>
+                    Sign-in link
+                  </button>
+                )}
+                {!self && iOwn && home && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void changeRole(u, u.role === "guardian" ? "contact" : "guardian")
+                    }
+                  >
+                    {u.role === "guardian" ? "Make contact" : "Make guardian"}
+                  </button>
+                )}
+                {!self && iOwn && u.role === "guardian" && confirmOwner !== u.id && (
+                  <button type="button" onClick={() => setConfirmOwner(u.id)}>
+                    Make owner
+                  </button>
+                )}
+                {!self &&
+                  mayManage(u) &&
                   (confirmRemove === u.id ? (
                     <>
                       <button type="button" className="danger" onClick={() => void remove(u)}>
@@ -167,6 +311,30 @@ export function People({
           );
         })}
       </ul>
+
+      {links.length > 0 && (
+        <section className="stack">
+          <h3>Links not used yet</h3>
+          <ul className="stack">
+            {links.map((l) => (
+              <li key={l.id} className="card person">
+                <div>
+                  <div className="device-name">
+                    {l.kind === "signin" ? `Sign-in link for ${l.name}` : `Invite for ${l.name}`}
+                  </div>
+                  <div className="muted small">
+                    Made by {l.createdBy || "someone who left"} · expires{" "}
+                    {formatWhen(l.expiresAt, Date.now())}
+                  </div>
+                </div>
+                <button type="button" className="danger" onClick={() => void cancelLink(l)}>
+                  Cancel link
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <form className="card stack" noValidate onSubmit={(e) => void invite(e)}>
         <h3>Invite someone</h3>
@@ -203,17 +371,19 @@ export function People({
               ? "Contact — can call and be called by the phones they're allowed on"
               : "Member — in the directory, can call and be called"}
           </label>
-          <label className="check">
-            <input
-              type="radio"
-              name="role"
-              checked={role === "guardian"}
-              onChange={() => setRole("guardian")}
-            />
-            {kidSafe(spaceType)
-              ? "Guardian — can also manage phones, people and quiet hours"
-              : "Admin — can also manage people, extensions, ring groups and hours (only the owner makes admins)"}
-          </label>
+          {(home || iOwn) && (
+            <label className="check">
+              <input
+                type="radio"
+                name="role"
+                checked={role === "guardian"}
+                onChange={() => setRole("guardian")}
+              />
+              {home
+                ? "Guardian — can also manage phones, people and quiet hours"
+                : "Admin — can also manage people, extensions, ring groups and hours"}
+            </label>
+          )}
         </fieldset>
         <button type="submit" className="primary" disabled={busy}>
           {busy ? "Creating link…" : "Create invite link"}

@@ -263,6 +263,33 @@ main {
   margin-bottom: 0.5rem;
 }
 
+.banner.notice {
+  background: color-mix(in srgb, var(--warn) 18%, var(--surface));
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+}
+
+.recovery-code {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: center;
+  user-select: all;
+}
+
+.bullets {
+  list-style: disc;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .centered {
   min-height: 100dvh;
   display: grid;

@@ -43,7 +43,9 @@ export function PasskeyHelp({ open = false }: { open?: boolean }) {
       </ul>
       <p>
         Add a second passkey on another device under <strong>Account</strong>, so losing one device
-        doesn't lock you out. <a href={PASSKEY_HELP_URL}>More about passkeys</a>
+        doesn't lock you out, and keep your <strong>recovery code</strong> somewhere safe: with your
+        handle, it gets you back in if every passkey is lost.{" "}
+        <a href={PASSKEY_HELP_URL}>More about passkeys</a>
       </p>
     </details>
   );
