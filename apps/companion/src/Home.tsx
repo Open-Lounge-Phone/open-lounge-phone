@@ -107,6 +107,12 @@ export function Home({
                     </div>
                   )}
                   {!online && <p className="hint offline-hint">{offlineHint(d)}</p>}
+                  {!canCall && (
+                    <p className="hint">
+                      This phone doesn't take your calls
+                      {guardian ? ": change that under Manage." : "."}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="device-actions">
@@ -120,7 +126,7 @@ export function Home({
                   className="primary"
                   onClick={() => onCall(d)}
                   disabled={!canCall}
-                  title={canCall ? `Call ${d.name}` : "You're not on this phone's allow-list"}
+                  title={canCall ? `Call ${d.name}` : "This phone doesn't take your calls"}
                 >
                   Call
                 </button>
