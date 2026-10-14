@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -203,6 +203,14 @@ Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's
 | `id` | string (len ≤64) |  |  |
 | `by` | string (`^[0-2][0-9]:[0-5][0-9]$`) | yes | The time it was due (local HH:MM). |
 
+### `notice.dismiss`
+
+Notices (device feature `notices`): this phone dismissed the notice (a key while it shows). It isn't shown on this phone again.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+
 ### `call.answer`
 
 Accept an incoming call.
@@ -255,6 +263,15 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 ### `call.voicemail`
 
 Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+
+### `call.callback`
+
+Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -495,6 +512,27 @@ The phone must wipe itself: forget its device id, owner and settings, delete its
 | `id` | string (len ≤64) |  |  |
 | `reason` | `"removed"` | yes | `removed` = its owner removed it in the app (the server has forgotten its key). |
 
+### `notice`
+
+Notices (device feature `notices`): a short notice for the phones of a space, posted by its owner, admins or guardians. Show it with a chime (no chime during quiet hours); lifting the handset plays its audio; a key dismisses it (`notice.dismiss`). Sent again with the same `id` when its audio is added (no second chime). The newest one replaces any earlier.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+| `lines` | string (len ≤16)[] | yes | One or two lines of at most 16 characters ("BUS IS HERE"). |
+| `from` | string (len ≤24) | yes | Who posted it. |
+| `at` | integer | yes | When it was posted (ms since the Unix epoch). |
+| `expiresAt` | integer | yes | When it goes away by itself (`notice.cleared` follows). |
+| `audio` | { token: string (len ≥16, len ≤128), durationMs: integer (≥0) } |  | A recorded message: `GET /api/notices/<id>/audio?token=` returns it (8 kHz 16-bit mono WAV) while the notice lasts. Play it when the handset is lifted. |
+
+### `notice.cleared`
+
+The notice expired or was taken down: stop showing it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes |  |
+
 ### `call.ringing`
 
 Incoming call; device rings until answered, hung up, or ended.
@@ -505,6 +543,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`
 
@@ -522,7 +561,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
-| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean, callback?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `callback` | { until: integer } |  | With `ended` (reason `hangup`): you asked to be called back and keep your place in line. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`
@@ -595,13 +635,14 @@ Rooms with a relay (`media: sfu`): the one peer connection to the relay. The cli
 
 ### `room.idle`
 
-10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `dropAt` | integer (≥0) | yes |  |
+| `closing` | boolean |  | The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do. |
 
 ### `room.ended`
 
@@ -783,6 +824,15 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 ### `call.voicemail`
 
 Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+
+### `call.callback`
+
+Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -993,6 +1043,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`
 
@@ -1010,7 +1061,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
-| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean, callback?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `callback` | { until: integer } |  | With `ended` (reason `hangup`): you asked to be called back and keep your place in line. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`
@@ -1083,13 +1135,14 @@ Rooms with a relay (`media: sfu`): the one peer connection to the relay. The cli
 
 ### `room.idle`
 
-10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `dropAt` | integer (≥0) | yes |  |
+| `closing` | boolean |  | The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do. |
 
 ### `room.ended`
 
@@ -1111,6 +1164,17 @@ Someone came into or left one of your space's rooms ("members see who's in").
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `people` | string (len ≤24)[] | yes | Who's in the room now (names), for members who aren't in it. |
+
+### `room.opened`
+
+A room of your space with opening hours just opened ("party line open"): join it like any room. Sent once per opening to the members' apps; phones with the room on a key get a notice.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `name` | string (len ≤40) | yes |  |
+| `closesAt` | integer (≥0) | yes | When its hours end. |
 
 ### `error`
 

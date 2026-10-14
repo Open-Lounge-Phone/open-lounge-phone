@@ -327,4 +327,58 @@ describe("public lines", () => {
       line: "Acme support",
     });
   });
+
+  it("call me back: the place is kept; the line calls back; answering goes on as a new call", () => {
+    const waiting = run([
+      { type: "dial", label: "help@acme.example", person: true },
+      ev({ t: "call.state", callId: "c1", state: "ringing", line }),
+      ev({
+        t: "call.state",
+        callId: "c1",
+        state: "ringing",
+        queue: { position: 3, callback: true },
+      }),
+    ]).view;
+    expect(waiting).toMatchObject({ queue: { position: 3, callback: true } });
+    const kept = callStep(
+      waiting,
+      ev({
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "hangup",
+        callback: { until: 5000 },
+      }),
+    ).view;
+    expect(kept).toMatchObject({ phase: "ended", label: "Acme support", callbackUntil: 5000 });
+    const back = run([
+      ev({
+        t: "call.ringing",
+        callId: "c1",
+        from: { label: "Acme support", address: "help@acme.example" },
+        callback: line,
+      }),
+    ]).view;
+    expect(back).toMatchObject({ phase: "incoming", callback: true, label: "Acme support" });
+    const answered = callStep(back, { type: "answer" }).view;
+    const step = callStep(
+      answered,
+      ev({
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "hangup",
+        transfer: { callId: "c2", ringing: true, offerer: true },
+      }),
+    );
+    expect(step.transferred).toBe("c1");
+    expect(step.view).toMatchObject({ phase: "outgoing", callId: "c2", ringing: true });
+    // Missed, with the line's voicemail offer: leave a message.
+    const offer = { ticket: "t1-ticket-123456789", name: "Support", maxMs: 120_000, prompts: [] };
+    const missed = callStep(
+      back,
+      ev({ t: "call.state", callId: "c1", state: "ended", reason: "timeout", voicemail: offer }),
+    ).view;
+    expect(missed).toMatchObject({ phase: "ended", voicemail: offer });
+  });
 });

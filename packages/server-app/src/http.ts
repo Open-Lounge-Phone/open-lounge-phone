@@ -17,7 +17,7 @@ import {
   sha256,
   type User,
 } from "@openloungephone/db";
-import { FEDERATION_VERSION } from "@openloungephone/federation";
+import { FEDERATION_VERSION, parseAddress } from "@openloungephone/federation";
 import { Id, PROTOCOL_VERSION } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -39,6 +39,7 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { lineRoutes } from "./lines.ts";
+import { noticeRoutes, publicNoticeRoutes } from "./notices.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
@@ -96,6 +97,7 @@ const HouseLineKeyBody = z.object({
     z.object({ kind: z.literal("user"), userId: Id }),
     z.object({ kind: z.literal("device"), deviceId: Id }),
     z.object({ kind: z.literal("group"), userIds: z.array(Id).min(1).max(10) }),
+    z.object({ kind: z.literal("line"), address: z.string().trim().toLowerCase().min(3).max(300) }),
   ]),
 });
 const LoungeSettingsBody = z
@@ -235,6 +237,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   publicHubRoutes(api, env);
   publicVoicemailRoutes(api, env, live);
   publicRecordingRoutes(api, env);
+  publicNoticeRoutes(api, env);
 
   // --- authenticated --------------------------------------------------------
 
@@ -704,6 +707,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       if (t.kind === "group" && !t.userIds.every((u) => members.has(u))) {
         return `key ${k.index}: not all members here`;
       }
+      if (t.kind === "line" && !parseAddress(t.address)) {
+        return `key ${k.index}: use a line's address like support@example.org`;
+      }
       if (t.kind === "device") {
         const d = await store.getDevice(t.deviceId);
         if (!d || d.householdId !== hh || deviceMode(d) !== "personal") {
@@ -779,6 +785,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   workplaceRoutes(api, env, live);
   lineRoutes(api, env, live);
+  noticeRoutes(api, env, live);
   recordingRoutes(api, env);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);

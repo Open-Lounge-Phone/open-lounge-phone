@@ -292,6 +292,12 @@
           "handle": {
             "type": "string",
             "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "callback": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
           }
         },
         "required": ["kind", "handle"]
@@ -386,6 +392,12 @@
               "handle": {
                 "type": "string",
                 "pattern": "^[a-z0-9._-]{2,30}$"
+              },
+              "callback": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
               }
             },
             "required": ["kind", "handle"]
@@ -1087,8 +1099,22 @@
                   },
                   "voicemail": {
                     "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
                   }
                 }
+              },
+              "callback": {
+                "type": "object",
+                "properties": {
+                  "until": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["until"]
               },
               "line": {
                 "type": "object",
@@ -1411,6 +1437,9 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "closing": {
+                        "type": "boolean"
                       }
                     },
                     "required": ["t", "roomId", "dropAt"]
@@ -1717,6 +1746,28 @@
               }
             },
             "required": ["t", "callId"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "string",
+                "const": "call.callback"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "callId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            },
+            "required": ["t", "callId"]
           }
         ]
       }
@@ -1821,5 +1872,126 @@
         "required": ["ok", "reason"]
       }
     ]
+  },
+  "LineCallbackBody": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "to": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]{2,30}$"
+      },
+      "line": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": ["handle", "name"]
+      }
+    },
+    "required": ["id", "to", "line"]
+  },
+  "LineCallbackMissedBody": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "from": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": ["handle", "id", "name"]
+      },
+      "line": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]{2,30}$"
+      }
+    },
+    "required": ["id", "from", "line"]
+  },
+  "LineCallbackMissedResult": {
+    "type": "object",
+    "properties": {
+      "retry": {
+        "type": "boolean"
+      },
+      "voicemail": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24
+          },
+          "maxMs": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "prompts": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "greeting",
+                "vm.person",
+                "vm.cant_take",
+                "vm.leave_message",
+                "vm.tone",
+                "vm.sent",
+                "vm.not_sent",
+                "greet.say_name",
+                "greet.say_greeting",
+                "greet.saved",
+                "greet.not_saved",
+                "greet.default",
+                "greet.not_allowed"
+              ]
+            }
+          }
+        },
+        "required": ["ticket", "name", "maxMs", "prompts"]
+      }
+    },
+    "required": ["retry"]
   }
 }

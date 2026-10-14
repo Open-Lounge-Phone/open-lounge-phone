@@ -13,6 +13,17 @@ export interface Room {
   access: "space" | "connections";
   locked: boolean;
   createdAt: number;
+  /** Open only in these weekly windows (the space's time zone); null = always (0025). */
+  hours: RoomHoursRule[] | null;
+  /** The end of the window whose opening was announced (0025). */
+  announcedUntil: number | null;
+}
+
+/** A weekly window: `days` 0 (Sunday) – 6, `start`/`end` "HH:MM" (past midnight if end ≤ start). */
+export interface RoomHoursRule {
+  days: number[];
+  start: string;
+  end: string;
 }
 
 /** A room on a phone's allow-list (`rk_…` id, usable on a speed-dial key). */
@@ -33,6 +44,18 @@ type Row = {
   access: "space" | "connections";
   locked: number;
   created_at: number;
+  hours: string | null;
+  announced_until: number | null;
+};
+
+const rulesOf = (s: string | null): RoomHoursRule[] | null => {
+  if (!s) return null;
+  try {
+    const v = JSON.parse(s) as RoomHoursRule[];
+    return Array.isArray(v) && v.length ? v : null;
+  } catch {
+    return null;
+  }
 };
 
 const toRoom = (r: Row): Room => ({
@@ -45,6 +68,8 @@ const toRoom = (r: Row): Room => ({
   access: r.access,
   locked: r.locked === 1,
   createdAt: r.created_at,
+  hours: rulesOf(r.hours ?? null),
+  announcedUntil: r.announced_until ?? null,
 });
 
 /** Room allow-list entries on phones have ids with this prefix. */
@@ -59,7 +84,7 @@ export class RoomStore {
 
   /** Creates a room. A phone room's handle must be free (checked by the caller); null if taken. */
   async create(
-    r: Omit<Room, "id" | "createdAt" | "locked">,
+    r: Omit<Room, "id" | "createdAt" | "locked" | "hours" | "announcedUntil">,
     now: number,
   ): Promise<Room | undefined> {
     const id = newId("rm");
@@ -121,6 +146,29 @@ export class RoomStore {
       patch.locked === undefined ? null : patch.locked ? 1 : 0,
       id,
     );
+  }
+
+  /** Sets (or with null clears) a room's opening hours; a new schedule announces afresh. */
+  async setHours(id: string, hours: RoomHoursRule[] | null): Promise<void> {
+    await this.sql.run(
+      "UPDATE rooms SET hours = ?, announced_until = NULL WHERE id = ?",
+      hours?.length ? JSON.stringify(hours) : null,
+      id,
+    );
+  }
+
+  /** The opening of the window ending at `until` was announced. */
+  async setAnnounced(id: string, until: number): Promise<void> {
+    await this.sql.run("UPDATE rooms SET announced_until = ? WHERE id = ?", until, id);
+  }
+
+  /** Phones with this room on their allow-list (its key). */
+  async phonesWith(roomId: string): Promise<string[]> {
+    const rows = await this.sql.all<{ device_id: string }>(
+      "SELECT device_id FROM room_contacts WHERE room_id = ?",
+      roomId,
+    );
+    return rows.map((r) => r.device_id);
   }
 
   async delete(id: string): Promise<void> {

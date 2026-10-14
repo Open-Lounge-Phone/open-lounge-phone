@@ -325,12 +325,20 @@ export class LiveRooms {
   }
 
   /** Takes someone out (left, removed, idle, …). Closes a 3-way call once one person is left. */
-  async leave(room: LiveRoom, p: Participant, reason: RoomEndReason, notify = true): Promise<void> {
+  async leave(
+    room: LiveRoom,
+    p: Participant,
+    reason: RoomEndReason,
+    notify = true,
+    note?: string,
+  ): Promise<void> {
     if (room.participants.get(p.id) !== p) return;
     room.participants.delete(p.id);
     this.waiting.get(p.id)?.reject(new Error("left"));
     const now = this.env.now();
-    if (notify) p.peer.conn.send({ t: "room.ended", roomId: room.id, reason });
+    if (notify) {
+      p.peer.conn.send({ t: "room.ended", roomId: room.id, reason, ...(note ? { note } : {}) });
+    }
     if (p.payer) {
       const minutes = Math.max(1, Math.ceil((now - p.joinedAt) / 60_000));
       await this.env.store
@@ -352,11 +360,12 @@ export class LiveRooms {
     if (room.stored) this.port.announce(room);
   }
 
-  /** Ends a room for everyone (the room was deleted). */
-  async close(roomId: string): Promise<void> {
+  /** Ends a room for everyone (the room was deleted, or its hours ended: `note` says when next). */
+  async close(roomId: string, note?: string): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room) return;
-    for (const p of [...room.participants.values()]) await this.leave(room, p, "closed");
+    for (const p of [...room.participants.values()])
+      await this.leave(room, p, "closed", true, note);
     this.rooms.delete(roomId);
   }
 

@@ -1,7 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, RoomSummary } from "./api.ts";
 import type { Connection, Snapshot } from "./connection.ts";
-import { idleSecondsLeft, roomKindText, whoIsIn } from "./roomText.ts";
+import { idleSecondsLeft, roomHoursText, roomKindText, whoIsIn } from "./roomText.ts";
+import { HoursEditor } from "./Workplace.tsx";
+import { hoursText } from "./workplaceText.ts";
 
 interface Props {
   api: Api;
@@ -12,8 +14,8 @@ interface Props {
 }
 
 /**
- * Rooms: the space's party lines (always open; drop in and out) and phone rooms (a name with an
- * address that any phone's key or anyone's app can dial). Members see who's in.
+ * Rooms: the space's party lines (always open or at set hours; drop in and out) and phone rooms
+ * (a name with an address that any phone's key or anyone's app can dial). Members see who's in.
  */
 export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -23,6 +25,8 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [open, setOpen] = useState(false);
+  /** The room whose opening hours are being edited. */
+  const [editing, setEditing] = useState<string>();
 
   const load = useCallback(async () => {
     try {
@@ -91,11 +95,27 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
               </div>
               {r.address && <div className="address small">{r.address}</div>}
               <div className="muted small">{whoIsIn(people(r))}</div>
+              {r.hours && (
+                <div className="muted small">
+                  {roomHoursText(r)} · {hoursText(r.hours)}
+                </div>
+              )}
+              {editing === r.id && (
+                <HoursEditor
+                  value={r.hours}
+                  inherit="Always open"
+                  onSave={(hours) => {
+                    setEditing(undefined);
+                    void run(() => api.updateRoom(r.id, { hours }));
+                  }}
+                />
+              )}
             </div>
             <div className="device-actions">
               <button
                 type="button"
-                disabled={inRoom || !conn}
+                disabled={inRoom || !conn || !r.open}
+                title={r.open ? undefined : r.opens}
                 onClick={() => void conn?.joinRoom({ roomId: r.id })}
               >
                 Join
@@ -108,6 +128,13 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
                     onClick={() => void run(() => api.updateRoom(r.id, { locked: !r.locked }))}
                   >
                     {r.locked ? "Unlock" : "Lock"}
+                  </button>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setEditing(editing === r.id ? undefined : r.id)}
+                  >
+                    Hours
                   </button>
                   {r.kind === "phone" && (
                     <button
@@ -175,7 +202,9 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
                   checked={kind === k}
                   onChange={() => setKind(k)}
                 />{" "}
-                {k === "party" ? "Party line (this space, always open)" : "Phone room (an address)"}
+                {k === "party"
+                  ? "Party line (this space; set hours if you like)"
+                  : "Phone room (an address)"}
               </label>
             ))}
           </div>
@@ -246,7 +275,12 @@ export function RoomPanel({ snap, conn }: { snap: Snapshot; conn: Connection }) 
             {room.recording}
           </div>
         )}
-        {room.idleDropAt && (
+        {room.idleDropAt && room.closing && (
+          <div className="warning" role="alert">
+            {roomKindText(room.kind)} closes in {idleSecondsLeft(room.idleDropAt, now)} s.
+          </div>
+        )}
+        {room.idleDropAt && !room.closing && (
           <div className="warning" role="alert">
             Still there? You'll leave in {idleSecondsLeft(room.idleDropAt, now)} s.{" "}
             <button type="button" onClick={() => conn.stillHere()}>

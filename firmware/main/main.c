@@ -40,6 +40,7 @@
 #include "vmplay.h"
 #include "marquee.h"
 #include "lounge.h"
+#include "notice.h"
 #if CONFIG_OLP_LABS
 #include "labs.h"   // the labs build (firmware/labs) only
 #endif
@@ -67,6 +68,7 @@ static int64_t s_code_at, s_reopen_at = -1, s_last_ping, s_last_status;
 static int s_unauthorized;
 static phone_state_t s_phone;
 static phone_config_t s_cfg;
+static notice_t s_notice;  // a notice from the space on the ready screen (docs/notices.md)
 static lounge_t s_lounge;      // a Lounge phone's takeover state (lounge.c)
 static bool s_extensions;      // config.extensions: MENU 6 dials one
 static bool s_lounge_qr_px;    // the takeover code owns the screen
@@ -355,6 +357,12 @@ static void render(void) {
     if (ln) {
       for (int i = 0; i < ln; i++) snprintf(strip[i], sizeof strip[i], "%.40s", ll[i]);
       n = ln;
+    }
+    // A notice from the space shows on the ready screen until a key dismisses it.
+    int nn = idle && s_menu.screen == MENU_CLOSED ? notice_lines(&s_notice, ll) : 0;
+    if (nn) {
+      for (int i = 0; i < nn; i++) snprintf(strip[i], sizeof strip[i], "%.40s", ll[i]);
+      n = nn;
     }
     n_status = n;
   }
@@ -874,6 +882,14 @@ static void on_message(char *text) {
     ESP_LOGI(TAG, "LOUNGE session ended (%s): forgot everything", or_q(jstr(m, "reason")));
   } else if (!strcmp(t, "voicemail.items")) {
     vmplay_items(m, now_ms());
+  } else if (!strcmp(t, "notice")) {
+    bool fresh = notice_set(&s_notice, m);
+    ESP_LOGI(TAG, "NOTICE %s [%s|%s]%s", s_notice.id, s_notice.lines[0], s_notice.lines[1],
+             s_notice.token[0] ? " recorded" : "");
+    // A chime for a new one, never during quiet hours, a call or with the handset up.
+    if (fresh && !s_cfg.quiet && s_phone.kind == PH_IDLE && !s_hook_up) signals_beep(BEEP_NOTICE);
+  } else if (!strcmp(t, "notice.cleared")) {
+    notice_clear(&s_notice, jstr(m, "id"));
   } else if (!strcmp(t, "rtc.config")) {
     // ICE servers for a call: start its peer connection now, so gathering (STUN/TURN) overlaps
     // with the signaling. The caller offers (it is still dialing here), the callee answers.
@@ -939,6 +955,15 @@ static void on_key(int index) {
     }
     return;
   }
+  // A notice on the ready screen: any key (BACK too) dismisses it on this phone.
+  if (s_notice.active && s_phone.kind == PH_IDLE && !s_hook_up && index != KEY_MENU_INDEX) {
+    cJSON *d = msg("notice.dismiss");
+    cJSON_AddStringToObject(d, "id", s_notice.id);
+    emit(d);
+    ESP_LOGI(TAG, "NOTICE %s dismissed", s_notice.id);
+    notice_init(&s_notice);
+    return;
+  }
 #if CONFIG_OLP_LABS
   if (labs_key(index, s_hook_up, now)) return;   // intercom, home, stories, macro, check-in…
 #endif
@@ -969,7 +994,24 @@ static void on_key(int index) {
     copy(s_active_label, sizeof s_active_label, s_cfg.labels[index]);
 }
 
+/** Lifting the handset with a recorded notice showing plays it in the earpiece. */
+static void play_notice(void) {
+  char path[300], srv[PROV_SERVER_MAX], base[PROV_SERVER_MAX + 8], url[PROV_SERVER_MAX + 320];
+  if (!notice_audio_path(&s_notice, path, sizeof path)) return;
+  net_server_url(srv, sizeof srv);
+  if (!strncmp(srv, "wss://", 6)) snprintf(base, sizeof base, "https://%s", srv + 6);
+  else if (!strncmp(srv, "ws://", 5)) snprintf(base, sizeof base, "http://%s", srv + 5);
+  else snprintf(base, sizeof base, "%s", srv);
+  size_t bl = strlen(base);
+  if (bl && base[bl - 1] == '/') base[bl - 1] = '\0';
+  snprintf(url, sizeof url, "%s%s", base, path);
+  ESP_LOGI(TAG, "NOTICE %s playing", s_notice.id);
+  vmplay_play_url(url, "NOTICE", now_ms());
+}
+
 static void on_hook(bool up) {
+  bool notice_audio = up && s_phone.kind == PH_IDLE && s_menu.screen == MENU_CLOSED &&
+                      s_notice.active && s_notice.token[0];
   s_hook_up = up;
   if (!up) vm_leave_finish(now_ms());  // hanging up sends a message being recorded
   if (!up) vmplay_stop();              // …and stops one playing
@@ -982,6 +1024,7 @@ static void on_hook(bool up) {
   if (labs_hook(up, now_ms()) && up) return;
 #endif
   phone_hook(&s_phone, up, emit);
+  if (notice_audio) play_notice();
 }
 
 // --- main loop ---------------------------------------------------------------------------

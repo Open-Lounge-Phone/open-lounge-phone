@@ -19,13 +19,22 @@ export interface StatusInput {
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
   /** In a room: its name, how many are in, whether you're muted, and an idle warning. */
-  room?: { name: string; people: number; muted: boolean; idleWarning?: boolean };
+  room?: {
+    name: string;
+    people: number;
+    muted: boolean;
+    idleWarning?: boolean;
+    /** Its hours end in a minute. */
+    closing?: boolean;
+  };
   /** Leaving a voicemail after an unanswered call (and its outcome, shortly after hang-up). */
   leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
   /** The call or room is recorded (announced): the strip says REC, next to the recording light. */
   recording?: boolean;
   /** Local time "HH:MM" for the ready screen, once the phone knows it. */
   clock?: string;
+  /** A notice from the space (docs/notices.md): shown on the ready screen until dismissed. */
+  notice?: { lines: string[] };
   now: number;
 }
 
@@ -75,13 +84,24 @@ export function statusLines(input: StatusInput): StatusLines {
 
   switch (s.kind) {
     case "dialing":
-      // Waiting in a public line's queue (key 1 leaves a voicemail instead, when offered).
+      // Waiting in a public line's queue: key 1 leaves a voicemail instead, key 2 asks for a
+      // call back (when the line offers them).
       if (s.queue) {
         const place = s.queue.position ? `IN LINE ${s.queue.position}` : "WAITING IN LINE";
-        return [clip(place), clip(s.queue.voicemail ? "1 VOICEMAIL" : name || "PLEASE WAIT")];
+        const { voicemail, callback } = s.queue;
+        const keys =
+          voicemail && callback
+            ? "1 VM 2 CALL BACK"
+            : voicemail
+              ? "1 VOICEMAIL"
+              : callback
+                ? "2 CALL ME BACK"
+                : name || "PLEASE WAIT";
+        return [clip(place), clip(keys)];
       }
       return withName("CALLING", name);
     case "incoming": {
+      if (s.callback) return [clip(s.from.trim()), "CALLS YOU BACK"];
       const who = withName("", s.from.trim(), "CALLING");
       return who.length === 1 ? [who[0], "LIFT TO ANSWER"] : who;
     }
@@ -101,6 +121,7 @@ export function statusLines(input: StatusInput): StatusLines {
     case "inroom": {
       const room = input.room;
       if (!s.roomId || !room) return ["JOINING ROOM"];
+      if (room.closing) return ["CLOSING SOON", clip(room.name)];
       if (room.idleWarning) return ["STILL THERE?", "PRESS ANY KEY"];
       const count = `${input.recording ? "REC " : ""}${room.people} IN ROOM${s.muted ? " MUTED" : ""}`;
       return [clip(room.name), clip(count)];
@@ -110,6 +131,8 @@ export function statusLines(input: StatusInput): StatusLines {
         const text = s.lastEnd && s.lastEnd !== "hangup" ? END_TEXT[s.lastEnd] : undefined;
         return [text ?? "CALLER ON HOLD", "PRESS A KEY"];
       }
+      // Asked a public line to call back: the place in line is kept.
+      if (s.callback) return ["PLACE KEPT", "WE'LL CALL BACK"];
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
     }
@@ -128,6 +151,10 @@ export function statusLines(input: StatusInput): StatusLines {
   if (input.leave?.stage === "sending") return ["SENDING MESSAGE"];
   if (input.leave?.stage === "sent") return ["MESSAGE SENT"];
   if (input.leave?.stage === "failed") return ["MESSAGE NOT SENT"];
+  // A notice from the space, until a key dismisses it or it expires.
+  const notice = input.notice?.lines.filter(Boolean).map(clip);
+  if (notice?.length)
+    return notice.length > 1 ? [notice[0] ?? "", notice[1] ?? ""] : [notice[0] ?? ""];
 
   const low = battery && !battery.charging && battery.pct < 20;
   const lowLine = low ? `LOW BATTERY ${battery.pct}%` : undefined;

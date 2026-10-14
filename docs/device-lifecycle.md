@@ -24,8 +24,10 @@ from `config.owner` and shows them on the strip.
 guardians). These are all **off by default**:
 - **house-line keys** (`houseLine: {enabled, keys}`): idle keys call *as the space* (the phone's
   name) — a member (rung wherever they are), someone's personal desk phone in the space, or a
-  **group** of members where the first to answer takes the call. Kids' phones and people outside
-  the space can't be targets. Party lines come with rooms (P3.5).
+  **group** of members where the first to answer takes the call, or a **public line** by its
+  address (`{kind: "line", address}`, here or on another server; the line sees the phone's name
+  and the space owner's verified address, and the phone can wait in its queue but not leave a
+  voicemail). Kids' phones and people outside the space can't be targets.
 - **who's here** (`whosHere`): shows who is signed in at the space's other Lounge phones and open
   to chat (`config.here`); people who aren't open to chat aren't listed.
 - ...and more configurations later

@@ -7,6 +7,8 @@ export interface QueueView {
   size?: number;
   /** "Leave a voicemail instead" is offered. */
   voicemail?: boolean;
+  /** "Call me back" is offered: hang up, keep the place, the line calls back. */
+  callback?: boolean;
 }
 
 /** What the call UI shows. At most one call at a time. */
@@ -34,6 +36,8 @@ export type CallView =
       /** A public line's call: the caller's verified address, and which line. */
       address?: string;
       line?: string;
+      /** A public line calling you back, as you asked (answering calls it in your place). */
+      callback?: boolean;
     }
   | {
       phase: "connecting" | "active";
@@ -58,6 +62,8 @@ export type CallView =
       note?: string;
       /** Unanswered: a message may be left (greeting, tone, record, hang up to send). */
       voicemail?: VoicemailOffer;
+      /** You asked a public line to call you back: your place is kept until then (epoch ms). */
+      callbackUntil?: number;
     };
 
 export type CallEvent =
@@ -127,6 +133,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           label: msg.from.label,
           ...(msg.from.address ? { address: msg.from.address } : {}),
           ...(msg.line ? { line: msg.line.name } : {}),
+          ...(msg.callback ? { callback: true } : {}),
         },
       };
     }
@@ -158,6 +165,12 @@ function stateFor(
   const label = labelOf(view);
   switch (msg.state) {
     case "ended":
+      // A line's call back you missed: its voicemail offer, if the line gave one.
+      if (view.phase === "incoming" && view.callback && msg.voicemail) {
+        return {
+          view: { phase: "ended", label, reason: msg.reason, voicemail: msg.voicemail },
+        };
+      }
       // An incoming call answered on another of our sessions just disappears.
       if (view.phase === "incoming") return { view: { phase: "idle" } };
       if (msg.merged) return { view: { phase: "idle" }, merged: msg.merged.roomId };
@@ -180,6 +193,7 @@ function stateFor(
           ...(view.phase === "outgoing" && view.via ? { via: view.via } : {}),
           ...(msg.note ? { note: msg.note } : {}),
           ...(msg.voicemail && view.phase === "outgoing" ? { voicemail: msg.voicemail } : {}),
+          ...(msg.callback ? { callbackUntil: msg.callback.until } : {}),
         },
       };
     case "requesting":

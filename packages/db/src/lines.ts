@@ -30,8 +30,47 @@ export interface PublicLine {
   voicemail: boolean;
   callerPerHour: number | null;
   serverPerHour: number | null;
+  /** Waiting callers may ask to be called back (migration 0023). */
+  callback: boolean;
+  /** A missed call back: one retry, or a voicemail offer at once. */
+  callbackMissed: "retry" | "voicemail";
   greeting: { kind: "name" | "custom"; mime: string; blobKey: string; durationMs: number } | null;
   updatedAt: number;
+}
+
+/** The line's side of "call me back": a caller holding their place (migration 0023). */
+export interface LineCallback {
+  /** The call they waited under. */
+  id: string;
+  groupId: string;
+  householdId: string;
+  /** Their place in line. */
+  since: number;
+  /** Their server; '' = this one. */
+  host: string;
+  accountId: string;
+  handle: string;
+  name: string;
+  /** Their verified address, `handle@host`. */
+  address: string;
+  /** Calls back nobody answered. */
+  attempts: number;
+  /** Set while the line is calling them back. */
+  ringingUntil: number | null;
+  expiresAt: number;
+}
+
+/** The caller's side: a call back this person asked a line for (default deny otherwise). */
+export interface LineCallbackGrant {
+  id: string;
+  accountId: string;
+  userId: string;
+  householdId: string;
+  /** The line's server; '' = this one. */
+  lineHost: string;
+  lineHandle: string;
+  lineName: string;
+  expiresAt: number;
 }
 
 /** What an admin may change (the handle has its own call: it must be free). */
@@ -80,6 +119,8 @@ type Row = {
   voicemail: number;
   caller_per_hour: number | null;
   server_per_hour: number | null;
+  callback: number | null;
+  callback_missed: "retry" | "voicemail" | null;
   greeting_kind: "name" | "custom" | null;
   greeting_mime: string | null;
   greeting_blob: string | null;
@@ -114,6 +155,8 @@ const toLine = (r: Row): PublicLine => ({
   voicemail: r.voicemail === 1,
   callerPerHour: r.caller_per_hour,
   serverPerHour: r.server_per_hour,
+  callback: r.callback !== 0,
+  callbackMissed: r.callback_missed === "voicemail" ? "voicemail" : "retry",
   greeting:
     r.greeting_kind && r.greeting_blob
       ? {
@@ -142,7 +185,38 @@ const COLUMNS: Record<keyof LinePatch, [string, (v: never) => string | number | 
   voicemail: ["voicemail", (v: boolean) => (v ? 1 : 0)],
   callerPerHour: ["caller_per_hour", (v: number | null) => v],
   serverPerHour: ["server_per_hour", (v: number | null) => v],
+  callback: ["callback", (v: boolean) => (v ? 1 : 0)],
+  callbackMissed: ["callback_missed", (v: "retry" | "voicemail") => v],
 };
+
+type CallbackRow = {
+  id: string;
+  group_id: string;
+  household_id: string;
+  since: number;
+  host: string;
+  account_id: string;
+  handle: string;
+  name: string;
+  address: string;
+  attempts: number;
+  ringing_until: number | null;
+  expires_at: number;
+};
+const toCallback = (r: CallbackRow): LineCallback => ({
+  id: r.id,
+  groupId: r.group_id,
+  householdId: r.household_id,
+  since: r.since,
+  host: r.host,
+  accountId: r.account_id,
+  handle: r.handle,
+  name: r.name,
+  address: r.address,
+  attempts: r.attempts,
+  ringingUntil: r.ringing_until,
+  expiresAt: r.expires_at,
+});
 
 export class LineStore {
   private readonly sql: Sql;
@@ -366,6 +440,143 @@ export class LineStore {
       peerAccount,
     );
     return (r?.n ?? 0) > 0;
+  }
+
+  // --- call me back: the line's side -----------------------------------------------------
+
+  /** Keeps a caller's place in line until the line calls them back (or replaces their row). */
+  async addCallback(c: Omit<LineCallback, "attempts" | "ringingUntil">, now: number) {
+    await this.sql.run(
+      `INSERT OR REPLACE INTO line_callbacks (id, group_id, household_id, since, host, account_id,
+         handle, name, address, attempts, ringing_until, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
+      c.id,
+      c.groupId,
+      c.householdId,
+      c.since,
+      c.host,
+      c.accountId,
+      c.handle,
+      c.name.slice(0, 64),
+      c.address.toLowerCase(),
+      c.expiresAt,
+      now,
+    );
+  }
+
+  async callback(id: string): Promise<LineCallback | undefined> {
+    const r = await this.sql.first<CallbackRow>("SELECT * FROM line_callbacks WHERE id = ?", id);
+    return r && toCallback(r);
+  }
+
+  /** A space's callers waiting to be called back, in line order. */
+  async callbacks(householdId: string): Promise<LineCallback[]> {
+    const rows = await this.sql.all<CallbackRow>(
+      "SELECT * FROM line_callbacks WHERE household_id = ? ORDER BY since, id",
+      householdId,
+    );
+    return rows.map(toCallback);
+  }
+
+  /** The line is calling them back until `until` (null: back to waiting, at `since`). */
+  async ringCallback(id: string, until: number | null, since?: number): Promise<void> {
+    if (since === undefined) {
+      await this.sql.run("UPDATE line_callbacks SET ringing_until = ? WHERE id = ?", until, id);
+      return;
+    }
+    await this.sql.run(
+      "UPDATE line_callbacks SET ringing_until = ?, since = ?, attempts = attempts + 1 WHERE id = ?",
+      until,
+      since,
+      id,
+    );
+  }
+
+  /** Takes a caller's row (single use: false if it was already gone). */
+  async takeCallback(id: string): Promise<boolean> {
+    const { changes } = await this.sql.run("DELETE FROM line_callbacks WHERE id = ?", id);
+    return changes === 1;
+  }
+
+  /** The next time a space's call backs need looking at (a ring running out, a place expiring). */
+  async nextCallbackDeadline(householdId: string): Promise<number | undefined> {
+    const r = await this.sql.first<{ at: number | null }>(
+      `SELECT MIN(MIN(expires_at, COALESCE(ringing_until, expires_at))) AS at
+       FROM line_callbacks WHERE household_id = ?`,
+      householdId,
+    );
+    return r?.at ?? undefined;
+  }
+
+  // --- call me back: the caller's side ----------------------------------------------------
+
+  async addGrant(g: LineCallbackGrant, now: number): Promise<void> {
+    await this.sql.run(
+      `INSERT OR REPLACE INTO line_callback_grants (id, account_id, user_id, household_id,
+         line_host, line_handle, line_name, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      g.id,
+      g.accountId,
+      g.userId,
+      g.householdId,
+      g.lineHost,
+      g.lineHandle.toLowerCase(),
+      g.lineName.slice(0, 64),
+      g.expiresAt,
+      now,
+    );
+  }
+
+  /**
+   * The grant for a call back from this line's server (`lineHost`, '' = here), if the person
+   * `handle` asked for it and it hasn't expired.
+   */
+  async grant(
+    id: string,
+    lineHost: string,
+    handle: string,
+    now: number,
+  ): Promise<LineCallbackGrant | undefined> {
+    const r = await this.sql.first<{
+      id: string;
+      account_id: string;
+      user_id: string;
+      household_id: string;
+      line_host: string;
+      line_handle: string;
+      line_name: string;
+      expires_at: number;
+    }>(
+      `SELECT g.* FROM line_callback_grants g JOIN accounts a ON a.id = g.account_id
+       WHERE g.id = ? AND g.line_host = ? AND a.handle = ? AND g.expires_at > ?`,
+      id,
+      lineHost,
+      handle.toLowerCase(),
+      now,
+    );
+    return (
+      r && {
+        id: r.id,
+        accountId: r.account_id,
+        userId: r.user_id,
+        householdId: r.household_id,
+        lineHost: r.line_host,
+        lineHandle: r.line_handle,
+        lineName: r.line_name,
+        expiresAt: r.expires_at,
+      }
+    );
+  }
+
+  async dropGrant(id: string): Promise<void> {
+    await this.sql.run("DELETE FROM line_callback_grants WHERE id = ?", id);
+  }
+
+  /** Forgets expired grants and rows (any space). */
+  async sweepCallbacks(now: number): Promise<void> {
+    await this.sql.batch([
+      { query: "DELETE FROM line_callback_grants WHERE expires_at <= ?", params: [now] },
+    ]);
   }
 
   // --- lines on phones ----------------------------------------------------------------

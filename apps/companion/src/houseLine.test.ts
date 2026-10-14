@@ -16,6 +16,8 @@ describe("house-line keys", () => {
       expect(parseTarget(targetValue(t))).toEqual(t);
     }
     expect(parseTarget("group", ["usr_1"])).toEqual({ kind: "group", userIds: ["usr_1"] });
+    expect(targetValue({ kind: "line", address: "help@acme.example" })).toBe("line");
+    expect(parseTarget("line")).toEqual({ kind: "line", address: "" });
     expect(parseTarget("")).toBeUndefined();
     expect(targetValue(undefined)).toBe("");
   });
@@ -29,6 +31,13 @@ describe("house-line keys", () => {
       [2, "Front"],
     ]);
     expect(incompleteKeys(keys)).toEqual([0]);
-    expect(setKey(keys, 0, undefined).map((k) => k.index)).toEqual([2]);
+    keys = setKey(keys, 4, { label: "Taxi", target: { kind: "line", address: "taxi" } });
+    expect(incompleteKeys(keys)).toEqual([0, 4]);
+    keys = setKey(keys, 4, {
+      label: "Taxi",
+      target: { kind: "line", address: "taxi@cabs.example" },
+    });
+    expect(incompleteKeys(keys)).toEqual([0]);
+    expect(setKey(keys, 0, undefined).map((k) => k.index)).toEqual([2, 4]);
   });
 });

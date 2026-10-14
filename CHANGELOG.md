@@ -14,6 +14,41 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Public lines on Lounge phones.** A house-line key on an idle Lounge phone can call a public
+  line (here or on another server) as the space: the line sees the phone's name and the space
+  owner's verified address. A member signed in at a Lounge phone gets the lines on their own
+  phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Party line hours**: a room can be open only at set weekly times (the space's time zone,
+  windows past midnight, the same rules as quiet hours). Outside them nobody gets in ("Closed.
+  Opens Fri 19:00"). At opening the space's apps get `room.opened` (the companion offers to join)
+  and phones with the room's key get a `PARTY LINE OPEN` notice with a chime (not a kids' phone
+  in its quiet hours); a minute before closing the people in it are warned (`room.idle` with
+  `closing`), and at closing it ends for everyone. `PATCH /api/rooms/:id {hours}`; companion:
+  Rooms → Hours; browser phone: `CLOSING SOON`. Additive protocol: `room.opened`,
+  `room.idle.closing`. Migration 0025.
+- **Notices**: a space's guardians (in a team: the owner and admins) post a short notice to its
+  phones, all of them or some: one or two lines of 16 characters, an optional 30-second
+  recording, an hour unless they choose otherwise (up to a day). Phones show it on the ready
+  screen with a chime (none during quiet hours), lifting the handset plays the recording, any key
+  dismisses it on that phone; it leaves every phone when it expires or is taken down. Audited in
+  team and org spaces; never federated. `/api/notices`; additive protocol: `notice`,
+  `notice.cleared`, `notice.dismiss`, device feature `notices`. Companion: Home → Notice to the
+  phones. Migration 0024. See [docs/notices.md](docs/notices.md).
+- **Call me back** (public lines): a caller waiting in a line's queue can hang up and keep their
+  place; when it's their turn the line rings their apps and phones, and answering calls the line
+  again in their place. A missed call back gets one more try later or the line's voicemail offer
+  (a per-line setting); the place is kept for up to two hours. On by default per line; works
+  across servers (federation feature `line-callback`: `call.callback` on the stream,
+  `/fed/v1/lines/callback` and `/fed/v1/lines/callback/missed`, the `line` target's `callback`).
+  Never for kids' phones or idle Lounge phones. Additive protocol: `call.callback`,
+  `call.state.queue.callback`, `call.state.callback`, `call.ringing.callback`, device feature
+  `line-callback`. Companion: "Call me back" in the call screen, the line's settings; browser
+  phone: key 2 while waiting. Migration 0023.
+- **Fix:** two people from the same household (or a phone and an app there) can wait in a public
+  line on another server or in another household at the same time; the second used to get "busy".
+- Companion: a public line's recent callers show who is already blocked, and "Block server" isn't
+  offered for the line's own server.
+
 ## 0.3.1 (2026-10-13, `server-v0.3.1`)
 
 - **Companion: phone status says what's true.** "My phone" no longer says "No phone yet" when the

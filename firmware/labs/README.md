@@ -51,7 +51,9 @@ again. Settings are the JSON in `main/labs_cfg.h`, for example:
 
 UDP broadcast on port 47100, one line per message, `OLP1|TYPE|…`: `HELLO|room` every 20 s,
 `RING|id|to|from|call|door` (`to` = a room or `*`), `ANSWER|id|from`, `BUSY|id|from`,
-`BYE|id|from`, `CHIME|from|text`. Audio: UDP 47101 straight to the other phone, a 4-byte sequence
+`BYE|id|from`, `CHIME|from|text`, and `TAKEN|id|room|winner`: when two rooms lift for an
+all-rooms ring at the same instant, the caller keeps the first answer it heard and tells the
+other room, which shows `ANSWERED ELSEWHERE` and goes back to idle. Audio: UDP 47101 straight to the other phone, a 4-byte sequence
 number and 160 bytes of G.711 µ-law (20 ms). It is meant for a home network: anyone on the Wi-Fi
 can ring a room, and the audio isn't encrypted (calls through the server are).
 
@@ -79,7 +81,8 @@ Proven in QEMU (the tests above, real firmware):
 
 - **Intercom**: rooms find each other (and a renamed room replaces its old name); room to room
   ring, lift to answer, G.711 audio both ways (each side hears the other's test tone), busy,
-  hang up on either side; every room rings and the first to lift answers; a door phone (any key
+  hang up on either side; every room rings and the first to lift answers (also when two lift at
+the same instant: the other one is told it was answered elsewhere); a door phone (any key
   rings the house with the handset down); a doorbell key for one room, ended with BACK; a chime
   shows the words and beeps on the other phones.
 - **Settings page**: the PIN (wrong PIN refused, five wrong tries lock it for a minute), saving,

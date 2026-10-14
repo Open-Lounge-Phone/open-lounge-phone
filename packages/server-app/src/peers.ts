@@ -101,6 +101,7 @@ export const UNAVAILABLE: Record<Feature, string> = {
   "presence-batch": "That server doesn't share availability yet",
   transfer: "Transfers aren't available with that server yet",
   "public-lines": "That server doesn't take calls to public lines yet",
+  "line-callback": "That server can't call you back yet",
 };
 
 /** Every peer's last known offer (for the operator's view), without fetching anything. */

@@ -513,6 +513,7 @@ function IdleOptions({
                       </option>
                     ))}
                     <option value="group">Several people…</option>
+                    <option value="line">A public line…</option>
                   </select>
                   {key && (
                     <input
@@ -524,6 +525,17 @@ function IdleOptions({
                     />
                   )}
                 </div>
+                {key?.target.kind === "line" && (
+                  <input
+                    aria-label={`Key ${digit} public line address`}
+                    value={key.target.address}
+                    maxLength={300}
+                    placeholder="orders@acme.example"
+                    onChange={(e) =>
+                      update(key.label, { kind: "line", address: e.target.value.trim() })
+                    }
+                  />
+                )}
                 {key?.target.kind === "group" && (
                   <div className="row wrap">
                     {people.map((p) => (
@@ -560,7 +572,9 @@ function IdleOptions({
         </button>
       )}
       {unfinished.length > 0 && (
-        <span className="hint">Give every key a label, and pick people for each group.</span>
+        <span className="hint">
+          Give every key a label, pick people for each group, and an address for each public line.
+        </span>
       )}
     </div>
   );

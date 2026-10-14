@@ -1,5 +1,9 @@
 import type { Device } from "@openloungephone/db";
-import type { FedSignal, RoomJoinResult } from "@openloungephone/federation";
+import type {
+  FedSignal,
+  LineCallbackMissedResult,
+  RoomJoinResult,
+} from "@openloungephone/federation";
 import {
   type AppToServer,
   type DecodeResult,
@@ -24,7 +28,13 @@ import {
   type RoomSnapshot,
   type ServerEnv,
 } from "./env.ts";
-import type { RelayDial, RemoteRing, RemoteRoomJoin } from "./fedCalls.ts";
+import type {
+  CallbackMissed,
+  CallbackRing,
+  RelayDial,
+  RemoteRing,
+  RemoteRoomJoin,
+} from "./fedCalls.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
 import { SERVER_INFO } from "./version.ts";
 
@@ -119,6 +129,14 @@ export interface Coordinator {
   roomPeople(householdId: string): Promise<Record<string, string[]>>;
   /** A room was deleted: everyone in it is out. */
   closeRoom(householdId: string, roomId: string): Promise<void>;
+  /** A room's opening hours changed. */
+  roomHoursChanged(householdId: string): Promise<void>;
+  /** The household's notices changed: its phones get what they should show. */
+  noticesChanged(householdId: string): Promise<void>;
+  /** A public line calls one of the household's people back (they asked). */
+  callbackRing(householdId: string, req: CallbackRing): Promise<void>;
+  /** Someone didn't take a call back from one of the household's public lines. */
+  lineCallbackMissed(householdId: string, req: CallbackMissed): Promise<LineCallbackMissedResult>;
 }
 
 export type GuestClaimResult =
@@ -256,6 +274,23 @@ export class Gateway implements Coordinator {
 
   async closeRoom(householdId: string, roomId: string): Promise<void> {
     await this.hubs.get(householdId)?.closeRoom(roomId);
+  }
+
+  async roomHoursChanged(householdId: string): Promise<void> {
+    if (this.allowed(householdId)) await this.hub(householdId).roomHoursChanged();
+  }
+
+  async noticesChanged(householdId: string): Promise<void> {
+    await this.hubs.get(householdId)?.refreshNotices();
+  }
+
+  async callbackRing(householdId: string, req: CallbackRing): Promise<void> {
+    if (this.allowed(householdId)) await this.hub(householdId).callbackRing(req);
+  }
+
+  lineCallbackMissed(householdId: string, req: CallbackMissed): Promise<LineCallbackMissedResult> {
+    if (!this.allowed(householdId)) return Promise.resolve({ retry: false });
+    return this.hub(householdId).lineCallbackMissed(req);
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */

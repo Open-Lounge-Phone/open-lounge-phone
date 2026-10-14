@@ -321,6 +321,36 @@ describe.runIf(want("intercom"))("intercom", () => {
     await saw(kitchen, k, /call media off/, "media off");
     kitchen.send("hook down");
 
+    // Every room, both lift at the same instant: one of them gets the call; the other is told
+    // (ANSWERED if it heard the winner first, ANSWERED ELSEWHERE if both answered at once) and
+    // is back to idle, not left talking to nobody.
+    kitchen.send("hook up");
+    keys(kitchen, "2");
+    await kitchen.waitFor(/IC -> OLP1\|RING\|\w+\|\*\|KITCHEN\|call/, 30_000, "ring all again");
+    await Promise.all([
+      shows(kids, /KITCHEN\|LIFT TO ANSWER\]/),
+      shows(door, /KITCHEN\|LIFT TO ANSWER\]/),
+    ]);
+    c = kids.log.length;
+    const dl = door.log.length;
+    kids.send("hook up");
+    door.send("hook up");
+    const won = (await kitchen.waitFor(/IC talking with (KIDS ROOM|FRONT DOOR)/, 30_000, "one"))[1];
+    const [winner, loser, from] = won === "KIDS ROOM" ? [kids, door, dl] : [door, kids, c];
+    await saw(
+      loser,
+      from,
+      /STRIP \[(KITCHEN\|ANSWERED|ANSWERED ELSEWHERE\|\w[\w ]*)\]/,
+      "the other is told",
+    );
+    await saw(loser, from, /IC state \d -> 0/, "the other is idle");
+    await audioFlows(winner);
+    k = kitchen.log.length;
+    winner.send("hook down");
+    await saw(kitchen, k, /call media off/, "media off after the race");
+    loser.send("hook down");
+    kitchen.send("hook down");
+
     // A door phone (mode doorbell): any key rings the house with the handset down; whoever lifts
     // talks to it; the visitor lifts and hangs up.
     keys(door, "5");

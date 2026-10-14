@@ -32,6 +32,8 @@ export const FEATURES = {
     "Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces).",
   "public-lines":
     "Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`.",
+  "line-callback":
+    "Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`.",
 } as const satisfies Record<string, string>;
 
 export type Feature = keyof typeof FEATURES;

@@ -77,3 +77,35 @@ TEST(strip_public_line_queue) {
   strip_lines(&in, out);
   CHECK_STR(out[0], "WAITING IN LINE");
 }
+
+TEST(strip_call_me_back) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_DIALING;
+  ph.queued = true;
+  ph.queue_pos = 3;
+  ph.queue_vm = true;
+  ph.queue_cb = true;
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1, .active_label = "Help"};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "IN LINE 3");
+  CHECK_STR(out[1], "1 VM 2 CALL BACK");
+  ph.queue_vm = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "2 CALL ME BACK");
+  phone_init(&ph);
+  ph.kind = PH_OFFHOOK;
+  ph.callback = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "PLACE KEPT");
+  CHECK_STR(out[1], "WE'LL CALL BACK");
+  phone_init(&ph);
+  ph.kind = PH_INCOMING;
+  ph.callback = true;
+  snprintf(ph.from, sizeof ph.from, "Support");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "SUPPORT");
+  CHECK_STR(out[1], "CALLS YOU BACK");
+}

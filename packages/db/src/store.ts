@@ -8,6 +8,7 @@ import type {
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
+import { NoticeStore } from "./notices.ts";
 import { RecordingStore } from "./recordings.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
@@ -216,7 +217,12 @@ export type HouseLineTarget =
   /** A personal (desk) phone in the space. */
   | { kind: "device"; deviceId: string }
   /** Several members at once (a front desk, a staff group): the first to answer takes it. */
-  | { kind: "group"; userIds: string[] };
+  | { kind: "group"; userIds: string[] }
+  /**
+   * A public line (`orders@acme.example`, here or on another server). The space calls it: the
+   * line sees the phone's name and the space owner's verified address.
+   */
+  | { kind: "line"; address: string };
 
 export interface HouseLineKey {
   /** Button index (0–9: digits 1–9, then 0). */
@@ -593,6 +599,8 @@ export class Store {
   readonly lines: LineStore;
   /** Call recording: the per-space switch, upload tickets, recordings. */
   readonly recordings: RecordingStore;
+  /** Notices to a space's phones. */
+  readonly notices: NoticeStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -601,6 +609,7 @@ export class Store {
     this.workplace = new WorkplaceStore(sql);
     this.lines = new LineStore(sql, HANDLE_RESERVE_MS);
     this.recordings = new RecordingStore(sql);
+    this.notices = new NoticeStore(sql);
   }
 
   // --- settings -----------------------------------------------------------

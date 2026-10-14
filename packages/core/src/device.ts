@@ -15,20 +15,24 @@ import type {
  */
 export type DeviceState =
   | { kind: "idle" } // handset on the cradle
-  /** Handset up, waiting for a key. `held`: a call this phone put on hold (MENU → Add caller). */
-  | { kind: "offhook"; lastEnd?: EndReason; held?: string }
+  /**
+   * Handset up, waiting for a key. `held`: a call this phone put on hold (MENU → Add caller).
+   * `callback`: you just asked a public line to call you back (your place is kept).
+   */
+  | { kind: "offhook"; lastEnd?: EndReason; held?: string; callback?: true }
   /**
    * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
-   * line, and whether key 1 leaves a voicemail instead).
+   * line, whether key 1 leaves a voicemail instead, and whether key 2 asks for a call back).
    */
   | {
       kind: "dialing";
       button: number;
       callId?: string;
       held?: string;
-      queue?: { position?: number; size?: number; voicemail?: boolean };
+      queue?: { position?: number; size?: number; voicemail?: boolean; callback?: boolean };
     }
-  | { kind: "incoming"; callId: string; from: string } // ringing, handset down
+  /** Ringing, handset down. `callback`: a public line calling you back, as you asked. */
+  | { kind: "incoming"; callId: string; from: string; callback?: true }
   | {
       kind: "incall";
       callId: string;
@@ -148,6 +152,10 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     if (s.kind === "dialing" && s.queue?.voicemail && s.callId && input.index === 0) {
       return stay(s, { t: "call.voicemail", callId: s.callId });
     }
+    // …and key 2 asks the line to call you back instead (you keep your place).
+    if (s.kind === "dialing" && s.queue?.callback && s.callId && input.index === 1) {
+      return stay(s, { t: "call.callback", callId: s.callId });
+    }
     if (s.kind === "incall" && s.transferPending) {
       const { transferPending: _t, ...rest } = s;
       return stay(rest, { t: "call.transfer", callId: s.callId, to: { button: input.index } });
@@ -190,8 +198,14 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     return stay(s);
   }
   if (msg.t === "call.ringing") {
-    if (s.kind === "idle")
-      return stay({ kind: "incoming", callId: msg.callId, from: msg.from.label });
+    if (s.kind === "idle") {
+      return stay({
+        kind: "incoming",
+        callId: msg.callId,
+        from: msg.from.label,
+        ...(msg.callback ? { callback: true as const } : {}),
+      });
+    }
     // Busy: decline so the caller hears it immediately instead of waiting for a timeout.
     if ("callId" in s && s.callId === msg.callId) return stay(s);
     return stay(s, { t: "call.hangup", callId: msg.callId });
@@ -210,6 +224,9 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
       const held = s.held ? { held: s.held } : {};
       if (msg.state === "ended" && msg.voicemail && !s.held) {
         return stay({ kind: "voicemail", offer: msg.voicemail });
+      }
+      if (msg.state === "ended" && msg.callback && !s.held) {
+        return stay({ kind: "offhook", lastEnd: "hangup", callback: true });
       }
       if (msg.state === "ended") {
         return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held });

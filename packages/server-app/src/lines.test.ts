@@ -258,10 +258,25 @@ describe("public lines: calls on one server", () => {
       description: "Help with orders",
       address: "acme-support@work.test",
     });
-    expect((await nextQueue(a1)).queue).toEqual({ position: 1, size: 1, voicemail: true });
+    expect((await nextQueue(a1)).queue).toEqual({
+      position: 1,
+      size: 1,
+      voicemail: true,
+      callback: true,
+    });
     a2.write({ t: "call.line", address: "acme-support@work.test" });
-    expect((await nextQueue(a2)).queue).toEqual({ position: 2, size: 2, voicemail: true });
-    expect((await nextQueue(a1)).queue).toEqual({ position: 1, size: 2, voicemail: true });
+    expect((await nextQueue(a2)).queue).toEqual({
+      position: 2,
+      size: 2,
+      voicemail: true,
+      callback: true,
+    });
+    expect((await nextQueue(a1)).queue).toEqual({
+      position: 1,
+      size: 2,
+      voicemail: true,
+      callback: true,
+    });
     // Cy comes online: the line rings her for Ann, showing Ann's verified address.
     const cy = await s.connectApp(t.cy.token);
     const ring = await cy.next("call.ringing");
@@ -269,7 +284,12 @@ describe("public lines: calls on one server", () => {
     expect(ring.line?.name).toBe("Acme support");
     const ringingAgain = await a1.nextState("ringing");
     expect(ringingAgain.queue).toBeUndefined();
-    expect((await nextQueue(a2)).queue).toEqual({ position: 1, size: 1, voicemail: true });
+    expect((await nextQueue(a2)).queue).toEqual({
+      position: 1,
+      size: 1,
+      voicemail: true,
+      callback: true,
+    });
     await talk(a1, cy, ringingAgain.callId, ring.callId);
     // Ann hangs up: Cy is free, Dan rings.
     a1.write({ t: "call.hangup", callId: ring.callId });
@@ -328,7 +348,7 @@ describe("public lines: calls on one server", () => {
     const app = await s.connectApp(ann.token);
     app.write({ t: "call.line", address: "acme-support@work.test" });
     const q = await nextQueue(app);
-    expect(q.queue).toEqual({ position: 1, size: 1 });
+    expect(q.queue).toEqual({ position: 1, size: 1, callback: true });
     app.write({ t: "call.voicemail", callId: q.callId });
     await settle();
     expect(app.all("call.state").filter((m) => m.state === "ended")).toEqual([]);
@@ -517,9 +537,74 @@ describe("public lines: calls on one server", () => {
     phone.write({ t: "hook", state: "up" });
     phone.write({ t: "button", index: 2 });
     const q = await nextQueue(phone);
-    expect(q.queue).toEqual({ position: 1, size: 1, voicemail: true });
+    expect(q.queue).toEqual({ position: 1, size: 1, voicemail: true, callback: true });
     phone.write({ t: "call.voicemail", callId: q.callId });
     expect(await phone.nextState("ended")).toMatchObject({ reason: "voicemail" });
+  });
+
+  it("a Lounge phone: a house-line key while idle, and the signed-in person's own keys", async () => {
+    await publish(s, t, groupId);
+    const lobby = await s.pairDevice(t.ada.token, "Lobby", { kind: "lounge" });
+    if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
+    const phone = await s.connectDevice(lobby.deviceId, lobby.key.pair);
+    const { nonce } = await phone.next("lounge.idle");
+    // Idle: key 1 calls the line as the space (the phone's name, the owner's address).
+    const keys = [
+      { index: 0, label: "Support", target: { kind: "line", address: "Acme-Support@work.test" } },
+    ];
+    const bad = [{ index: 1, label: "Oops", target: { kind: "line", address: "not an address" } }];
+    for (const [k, status] of [
+      [bad, 400],
+      [keys, 204],
+    ] as const) {
+      const r = await s.http("/lounge/settings", {
+        method: "PUT",
+        token: t.ada.token,
+        body: { houseLine: { enabled: true, keys: k } },
+      });
+      expectStatus(r, status);
+    }
+    expect((await phone.next("config")).buttons).toEqual([{ index: 0, label: "Support" }]);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    const q = await nextQueue(phone);
+    // Nobody to call back at an idle phone: it waits, but leaves no voicemail.
+    expect(q.queue).toEqual({ position: 1, size: 1 });
+    const cy = await s.connectApp(t.cy.token);
+    const ring = await cy.next("call.ringing");
+    expect(ring.from).toEqual({ label: "Lobby", address: "olga@work.test" });
+    phone.write({ t: "call.hangup", callId: q.callId });
+    await phone.nextState("ended");
+    phone.write({ t: "hook", state: "down" });
+    await cy.nextState("ended");
+
+    // Ben signs in: key 3 on his own desk phone is the line, so it is on the Lobby's key 3 too.
+    const desk = await s.pairDevice(t.ben.token, "Ben's desk", { forMe: true });
+    if (!desk.deviceId) throw new Error("pairing failed");
+    const add = await s.http(`/devices/${desk.deviceId}/lines`, {
+      method: "PUT",
+      token: t.ben.token,
+      body: { address: "acme-support@work.test", label: "Help" },
+    });
+    expectStatus(
+      await s.http(`/devices/${desk.deviceId}/buttons/2`, {
+        method: "PUT",
+        token: t.ben.token,
+        body: { userId: add.json.id },
+      }),
+      204,
+    );
+    const benApp = await s.connectApp(t.ben.token);
+    benApp.write({ t: "lounge.claim", deviceId: lobby.deviceId, nonce });
+    const { index } = await phone.next("lounge.challenge");
+    phone.write({ t: "lounge.press", index });
+    await phone.next("lounge.session");
+    const config = await phone.next("config");
+    expect(config.buttons).toContainEqual({ index: 2, label: "Help" });
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 2 });
+    const ring2 = await cy.next("call.ringing");
+    expect(ring2.from).toEqual({ label: "Ben", address: "ben@work.test" });
   });
 
   it("a waiting call survives the host sleeping: its place and its longest wait", async () => {
@@ -616,7 +701,7 @@ describe("public lines across servers", () => {
     expect(named.line?.name).toBe("Acme support");
     const q = await nextQueue(app);
     expect(q.callId).toBe(ringing.callId);
-    expect(q.queue).toEqual({ position: 1, size: 1, voicemail: true });
+    expect(q.queue).toEqual({ position: 1, size: 1, voicemail: true, callback: true });
     app.write({ t: "call.voicemail", callId: q.callId });
     const ended = await app.nextState("ended");
     expect(ended).toMatchObject({ reason: "voicemail", voicemail: { name: "Support" } });
@@ -628,6 +713,54 @@ describe("public lines across servers", () => {
     expectStatus(res, 201);
     const inbox = (await a.http("/voicemails", { token: t.cy.token })).json;
     expect(inbox).toMatchObject([{ box: "Support", fromLabel: "Bob" }]);
+  });
+
+  it("two people from the same household wait in the line at once", async () => {
+    await publish(a, t, groupId);
+    const sue = await b.store.createUser(
+      { householdId: bob.household.id, name: "Sue", role: "contact" },
+      b.timers.now,
+    );
+    const bobApp = await b.connectApp(bob.token);
+    const sueApp = await b.connectApp(await b.store.createSession(sue.id, b.timers.now));
+    bobApp.write({ t: "call.line", address: "acme-support@a.test" });
+    expect((await nextQueue(bobApp)).queue).toMatchObject({ position: 1, size: 1 });
+    sueApp.write({ t: "call.line", address: "acme-support@a.test" });
+    const sueQ = await nextQueue(sueApp);
+    expect(sueQ.queue).toMatchObject({ position: 2, size: 2 });
+    // Sue leaves a voicemail instead; Bob keeps his place.
+    sueApp.write({ t: "call.voicemail", callId: sueQ.callId });
+    expect(await sueApp.nextState("ended")).toMatchObject({ reason: "voicemail" });
+    await settle();
+    expect(bobApp.all("call.state").at(-1)).toMatchObject({ state: "ringing" });
+    const cy = await a.connectApp(t.cy.token);
+    expect((await cy.next("call.ringing")).from.address).toBe("bob@b.test");
+  });
+
+  it("an idle Lounge phone elsewhere calls the line as its space: the phone's name", async () => {
+    await publish(a, t, groupId);
+    const lobby = await b.pairDevice(bob.token, "Cafe phone", { kind: "lounge" });
+    if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
+    const phone = await b.connectDevice(lobby.deviceId, lobby.key.pair);
+    const keys = [
+      { index: 0, label: "Acme", target: { kind: "line", address: "acme-support@a.test" } },
+    ];
+    expectStatus(
+      await b.http("/lounge/settings", {
+        method: "PUT",
+        token: bob.token,
+        body: { houseLine: { enabled: true, keys } },
+      }),
+      204,
+    );
+    await phone.next("config");
+    const cy = await a.connectApp(t.cy.token);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    expect((await cy.next("call.ringing")).from).toEqual({
+      label: "Cafe phone",
+      address: "bob@b.test",
+    });
   });
 
   it("a member answers someone from another server; the call log names them", async () => {
@@ -692,5 +825,242 @@ describe("public lines across servers", () => {
       ["carl@b.test", "refused"],
       ["bob@b.test", "nobody free"],
     ]);
+  });
+});
+
+describe("public lines: call me back", () => {
+  let s: TestServer;
+  let t: Team;
+  let groupId: string;
+  let ann: Awaited<ReturnType<TestServer["person"]>>;
+  let dan: Awaited<ReturnType<TestServer["person"]>>;
+  beforeEach(async () => {
+    s = new (await import("./testkit.ts")).TestServer({ publicUrl: "https://work.test" });
+    t = await team(s);
+    groupId = await supportGroup(s, t, [t.cy.user.id], { ringSeconds: 10 });
+    ann = await s.person("ann", "Ann");
+    dan = await s.person("dan", "Dan");
+  });
+
+  /** Ann waits first and asks to be called back; Dan waits behind her. */
+  async function annAsks(settings: object = {}) {
+    await publish(s, t, groupId, settings);
+    const a = await s.connectApp(ann.token);
+    const d = await s.connectApp(dan.token);
+    a.write({ t: "call.line", address: "acme-support@work.test" });
+    const q = await nextQueue(a);
+    expect(q.queue).toMatchObject({ position: 1, size: 1, callback: true });
+    d.write({ t: "call.line", address: "acme-support@work.test" });
+    expect((await nextQueue(d)).queue).toMatchObject({ position: 2, size: 2 });
+    a.write({ t: "call.callback", callId: q.callId });
+    const ended = await a.nextState("ended");
+    expect(ended).toMatchObject({ reason: "hangup", callback: { until: expect.any(Number) } });
+    expect(ended.voicemail).toBeUndefined();
+    return { a, d, waited: q.callId };
+  }
+
+  it("keeps their place; at their turn the line calls them back, and answering calls in", async () => {
+    const { a, d, waited } = await annAsks();
+    await settle();
+    // Ann still holds the first place: Dan stays second.
+    expect(d.all("call.state").at(-1)?.queue).toMatchObject({ position: 2, size: 2 });
+    const callers = (await s.http(`/groups/${groupId}/line/callers`, { token: t.ada.token })).json;
+    expect(callers[0]).toMatchObject({ address: "ann@work.test", outcome: "call back" });
+    // Cy comes online: the line calls Ann back (not Dan), with the line's name.
+    const cy = await s.connectApp(t.cy.token);
+    const back = await a.next("call.ringing");
+    expect(back).toMatchObject({
+      callId: waited,
+      from: { label: "Support" },
+      callback: { name: "Support", address: "acme-support@work.test" },
+    });
+    expect(cy.all("call.ringing")).toEqual([]);
+    // Ann answers: her call to the line goes on as a new call, ringing Cy for her.
+    a.write({ t: "call.answer", callId: waited });
+    const handover = await a.nextState("ended");
+    expect(handover.transfer).toMatchObject({ ringing: true, offerer: true });
+    const ring = await cy.next("call.ringing");
+    expect(ring.from).toEqual({ label: "Ann", address: "ann@work.test" });
+    const mine = handover.transfer?.callId as string;
+    await talk(a, cy, mine, ring.callId);
+    // Dan is first now.
+    expect(d.all("call.state").at(-1)?.queue).toMatchObject({ position: 1, size: 1 });
+    // The call back was used once: calling in with it again goes nowhere.
+    expect(await s.store.lines.callback(waited)).toBeUndefined();
+  });
+
+  it("declined: one more try at the end of the line, then the line's voicemail", async () => {
+    const { a, d, waited } = await annAsks();
+    const cy = await s.connectApp(t.cy.token);
+    await a.next("call.ringing");
+    a.write({ t: "call.hangup", callId: waited });
+    expect(await a.nextState("ended")).toMatchObject({ reason: "declined" });
+    // Dan goes first now; Ann is behind him.
+    const forDan = await cy.next("call.ringing");
+    expect(forDan.from.address).toBe("dan@work.test");
+    expect(a.all("call.ringing")).toHaveLength(1);
+    // Dan gives up; the line tries Ann once more, and she doesn't answer this time.
+    const danCall = d.all("call.state").at(-1)?.callId as string;
+    d.write({ t: "call.hangup", callId: danCall });
+    const again = await a.next("call.ringing");
+    expect(again.callId).toBe(waited);
+    s.timers.advance(31_000);
+    const missed = await a.nextState("ended");
+    expect(missed).toMatchObject({ reason: "timeout", voicemail: { name: "Support" } });
+    const callers = (await s.http(`/groups/${groupId}/line/callers`, { token: t.ada.token })).json;
+    expect(callers[0]).toMatchObject({ address: "ann@work.test", outcome: "missed call back" });
+    expect(await s.store.lines.callback(waited)).toBeUndefined();
+  });
+
+  it("'voicemail' at once when missed, and nothing without voicemail", async () => {
+    const { a, waited } = await annAsks({ callbackMissed: "voicemail" });
+    await s.connectApp(t.cy.token);
+    await a.next("call.ringing");
+    a.write({ t: "call.hangup", callId: waited });
+    expect(await a.nextState("ended")).toMatchObject({
+      reason: "declined",
+      voicemail: { name: "Support" },
+    });
+    expect(await s.store.lines.callback(waited)).toBeUndefined();
+  });
+
+  it("a place expires after two hours", async () => {
+    const { a, d, waited } = await annAsks();
+    // Dan gives up; nobody frees up for two hours.
+    d.write({ t: "call.hangup", callId: d.all("call.state").at(-1)?.callId as string });
+    s.timers.advance(2 * 60 * 60_000 + 1_000);
+    await settle();
+    expect(await s.store.lines.callback(waited)).toBeUndefined();
+    const callers = (await s.http(`/groups/${groupId}/line/callers`, { token: t.ada.token })).json;
+    expect(callers[0]).toMatchObject({ address: "ann@work.test", outcome: "call back expired" });
+    // Ann's place is gone: someone new is first, and Ann isn't rung when Cy comes.
+    const eve = await s.person("eve", "Eve");
+    const e = await s.connectApp(eve.token);
+    e.write({ t: "call.line", address: "acme-support@work.test" });
+    expect((await nextQueue(e)).queue).toMatchObject({ position: 1, size: 1 });
+    const cy = await s.connectApp(t.cy.token);
+    expect((await cy.next("call.ringing")).from.address).toBe("eve@work.test");
+    expect(a.all("call.ringing")).toEqual([]);
+  });
+
+  it("is not offered when the line turns it off, and call.callback is then ignored", async () => {
+    await publish(s, t, groupId, { callback: false });
+    const a = await s.connectApp(ann.token);
+    a.write({ t: "call.line", address: "acme-support@work.test" });
+    const q = await nextQueue(a);
+    expect(q.queue?.callback).toBeUndefined();
+    a.write({ t: "call.callback", callId: q.callId });
+    await settle();
+    expect(a.all("call.state").filter((m) => m.state === "ended")).toEqual([]);
+  });
+
+  it("a desk phone: key 2 while waiting; the phone rings when it's its turn", async () => {
+    await publish(s, t, groupId);
+    const desk = await s.pairDevice(ann.token, "Desk", { forMe: true });
+    if (!desk.deviceId || !desk.key) throw new Error("pairing failed");
+    const add = await s.http(`/devices/${desk.deviceId}/lines`, {
+      method: "PUT",
+      token: ann.token,
+      body: { address: "acme-support@work.test", label: "Support" },
+    });
+    await s.http(`/devices/${desk.deviceId}/buttons/2`, {
+      method: "PUT",
+      token: ann.token,
+      body: { userId: add.json.id },
+    });
+    const phone = await s.connectDevice(desk.deviceId, desk.key.pair);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 2 });
+    const q = await nextQueue(phone);
+    expect(q.queue).toMatchObject({ callback: true });
+    phone.write({ t: "call.callback", callId: q.callId });
+    expect(await phone.nextState("ended")).toMatchObject({ callback: {} });
+    phone.write({ t: "hook", state: "down" });
+    await s.connectApp(t.cy.token);
+    const back = await phone.next("call.ringing");
+    expect(back.callback?.name).toBe("Support");
+  });
+});
+
+describe("public lines: call me back across servers", () => {
+  let net: Network;
+  let a: TestServer;
+  let b: TestServer;
+  let t: Team;
+  let groupId: string;
+  let bob: Awaited<ReturnType<TestServer["person"]>>;
+  beforeEach(async () => {
+    net = new Network();
+    a = await net.server("a.test");
+    b = await net.server("b.test");
+    t = await team(a);
+    groupId = await supportGroup(a, t, [t.cy.user.id], { ringSeconds: 10 });
+    bob = await b.person("bob", "Bob");
+  });
+
+  it("someone on another server is called back through their server", async () => {
+    await publish(a, t, groupId);
+    const app = await b.connectApp(bob.token);
+    app.write({ t: "call.line", address: "acme-support@a.test" });
+    const q = await nextQueue(app);
+    expect(q.queue).toMatchObject({ position: 1, callback: true });
+    app.write({ t: "call.callback", callId: q.callId });
+    expect(await app.nextState("ended")).toMatchObject({
+      reason: "hangup",
+      callback: { until: expect.any(Number) },
+    });
+    const cy = await a.connectApp(t.cy.token);
+    const back = await app.next("call.ringing");
+    expect(back.callback).toMatchObject({ name: "Support", address: "acme-support@a.test" });
+    app.write({ t: "call.answer", callId: back.callId });
+    const handover = await app.nextState("ended");
+    const ring = await cy.next("call.ringing");
+    expect(ring.from).toEqual({ label: "Bob", address: "bob@b.test" });
+    await talk(app, cy, handover.transfer?.callId as string, ring.callId);
+  });
+
+  it("a missed call back across servers: the line's voicemail, relayed by their server", async () => {
+    await publish(a, t, groupId, { callbackMissed: "voicemail" });
+    const app = await b.connectApp(bob.token);
+    app.write({ t: "call.line", address: "acme-support@a.test" });
+    const q = await nextQueue(app);
+    app.write({ t: "call.callback", callId: q.callId });
+    await app.nextState("ended");
+    await a.connectApp(t.cy.token);
+    const back = await app.next("call.ringing");
+    b.timers.advance(31_000);
+    const missed = await app.nextState("ended");
+    expect(missed).toMatchObject({ reason: "timeout", voicemail: { name: "Support" } });
+    expect(back.callId).toBe(q.callId);
+    // Bob's server issued the ticket; the message lands in the team's shared box.
+    const res = await b.http(`/vm/message?ticket=${missed.voicemail?.ticket}&durationMs=3000`, {
+      raw: new Uint8Array([1, 2, 3]),
+      type: "audio/wav",
+    });
+    expectStatus(res, 201);
+    expect((await a.http("/voicemails", { token: t.cy.token })).json).toMatchObject([
+      { box: "Support", fromLabel: "Bob" },
+    ]);
+  });
+
+  it("nobody rings without having asked; not offered by a server without the feature", async () => {
+    await publish(a, t, groupId);
+    const app = await b.connectApp(bob.token);
+    // A line "calling back" someone who never asked: nothing rings.
+    await b.env.calls?.receiveCallback("a.test", {
+      id: "call_nope",
+      to: "bob",
+      line: { handle: "acme-support", name: "Support" },
+    });
+    await settle();
+    expect(app.all("call.ringing")).toEqual([]);
+    // Bob's server is older: the line doesn't offer it.
+    await net.advertise("b.test", (d) => ({
+      ...d,
+      features: (d.features as string[]).filter((f) => f !== "line-callback"),
+    }));
+    app.write({ t: "call.line", address: "acme-support@a.test" });
+    const q = await nextQueue(app);
+    expect(q.queue?.callback).toBeUndefined();
   });
 });

@@ -947,3 +947,199 @@ describe("0022_public_lines", () => {
     old.db.close();
   });
 });
+
+describe("0023_line_callbacks", () => {
+  it("keeps lines (call me back on, one retry); call backs and grants come and go", async () => {
+    const old = openBefore("0023");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Olga", handle: "olga" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Acme", timeZone: "UTC", guardianName: "Olga", accountId: owner?.id, type: "team" },
+      T0,
+    );
+    const group = await s.workplace.createGroup(
+      {
+        householdId: hh.id,
+        name: "Support",
+        strategy: "simultaneous",
+        ringSeconds: 20,
+        members: [guardian.id],
+      },
+      T0,
+    );
+    expect(await s.lines.setHandle(group.id, hh.id, "acme-help", T0)).toBe(true);
+    old.db.exec(
+      `UPDATE public_lines SET enabled = 1, queue_max = 5 WHERE group_id = '${group.id}'`,
+    );
+    expect(migrate(old.db)).toContain("0023_line_callbacks.sql");
+    expect(await s.lines.get(group.id)).toMatchObject({
+      handle: "acme-help",
+      enabled: true,
+      queueMax: 5,
+      callback: true,
+      callbackMissed: "retry",
+    });
+    await s.lines.update(group.id, { callback: false, callbackMissed: "voicemail" }, T0);
+    expect(await s.lines.get(group.id)).toMatchObject({
+      callback: false,
+      callbackMissed: "voicemail",
+    });
+    // The line's side: a place in line, rung, missed (to the end of the line), taken once.
+    const row = {
+      id: "call_1",
+      groupId: group.id,
+      householdId: hh.id,
+      since: T0,
+      host: "far.example",
+      accountId: "acc_far",
+      handle: "ann",
+      name: "Ann",
+      address: "Ann@Far.Example",
+      expiresAt: T0 + 1000,
+    };
+    await s.lines.addCallback(row, T0);
+    expect(await s.lines.callbacks(hh.id)).toMatchObject([
+      { id: "call_1", address: "ann@far.example", attempts: 0, ringingUntil: null },
+    ]);
+    await s.lines.ringCallback("call_1", T0 + 300);
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBe(T0 + 300);
+    await s.lines.ringCallback("call_1", null, T0 + 500);
+    expect(await s.lines.callback("call_1")).toMatchObject({ since: T0 + 500, attempts: 1 });
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBe(T0 + 1000);
+    expect(await s.lines.takeCallback("call_1")).toBe(true);
+    expect(await s.lines.takeCallback("call_1")).toBe(false);
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBeUndefined();
+    // The caller's side: only the line they asked, only for them, only until it expires.
+    await s.lines.addGrant(
+      {
+        id: "call_2",
+        accountId: owner?.id as string,
+        userId: guardian.id,
+        householdId: hh.id,
+        lineHost: "shop.example",
+        lineHandle: "Orders",
+        lineName: "Orders",
+        expiresAt: T0 + 1000,
+      },
+      T0,
+    );
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0)).toMatchObject({
+      userId: guardian.id,
+      lineHandle: "orders",
+    });
+    expect(await s.lines.grant("call_2", "other.example", "olga", T0)).toBeUndefined();
+    expect(await s.lines.grant("call_2", "shop.example", "eve", T0)).toBeUndefined();
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0 + 1000)).toBeUndefined();
+    await s.lines.sweepCallbacks(T0 + 1000);
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0)).toBeUndefined();
+    old.db.close();
+  });
+});
+
+describe("0024_notices", () => {
+  it("keeps spaces and phones; notices come, are dismissed per phone, and are swept", async () => {
+    const old = openBefore("0024");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: owner?.id },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const kitchen = await s.claimPairing({ code, householdId: hh.id, name: "Kitchen" }, T0);
+    if (!kitchen) throw new Error("pairing failed");
+    expect(migrate(old.db)).toContain("0024_notices.sql");
+    expect((await s.getDevice(kitchen.id))?.name).toBe("Kitchen");
+    const n = await s.notices.create(
+      {
+        householdId: hh.id,
+        createdBy: guardian.id,
+        authorName: "Mom",
+        lines: ["DINNER'S READY"],
+        deviceIds: null,
+        expiresAt: T0 + 60_000,
+      },
+      T0,
+    );
+    expect(n).toMatchObject({ lines: ["DINNER'S READY"], deviceIds: null, audio: null });
+    const two = await s.notices.create(
+      {
+        householdId: hh.id,
+        createdBy: guardian.id,
+        authorName: "Mom",
+        lines: ["BUS IS", "HERE"],
+        deviceIds: [kitchen.id],
+        expiresAt: T0 + 120_000,
+      },
+      T0 + 1,
+    );
+    expect((await s.notices.live(hh.id, T0 + 2)).map((x) => x.id)).toEqual([two.id, n.id]);
+    const { token } = await s.notices.setAudio(two.id, {
+      blobKey: "notice/a",
+      mime: "audio/wav",
+      durationMs: 2000,
+    });
+    expect((await s.notices.get(two.id))?.audio).toEqual({
+      blobKey: "notice/a",
+      mime: "audio/wav",
+      durationMs: 2000,
+      token,
+    });
+    expect((await s.notices.get(two.id))?.deviceIds).toEqual([kitchen.id]);
+    await s.notices.dismiss(two.id, kitchen.id, T0 + 3);
+    await s.notices.dismiss(two.id, kitchen.id, T0 + 4);
+    expect(await s.notices.dismissed(kitchen.id, [n.id, two.id])).toEqual(new Set([two.id]));
+    // Taken down early (once); its recording is let go, and a week later the row too.
+    expect(await s.notices.end(two.id, T0 + 5)).toBe(true);
+    expect(await s.notices.end(two.id, T0 + 6)).toBe(false);
+    expect(await s.notices.sweep(hh.id, T0 + 7)).toEqual(["notice/a"]);
+    expect((await s.notices.get(two.id))?.audio).toBeNull();
+    await s.notices.sweep(hh.id, T0 + 8 * 24 * 60 * 60 * 1000);
+    expect(await s.notices.ofSpace(hh.id)).toEqual([]);
+    old.db.close();
+  });
+});
+
+describe("0025_room_hours", () => {
+  it("keeps rooms (always open); hours and the announced window come and go", async () => {
+    const old = openBefore("0025");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const { household: hh } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: owner?.id },
+      T0,
+    );
+    const room = await s.rooms.create(
+      {
+        householdId: hh.id,
+        kind: "party",
+        name: "Family line",
+        handle: null,
+        ownerAccount: owner?.id ?? null,
+        access: "space",
+      },
+      T0,
+    );
+    if (!room) throw new Error("no room");
+    const { code } = await s.createPairing(KEY, T0);
+    const kid = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    if (!kid) throw new Error("pairing failed");
+    const rk = await s.rooms.addToPhone(kid.id, room.id, "Family");
+    expect(migrate(old.db)).toContain("0025_room_hours.sql");
+    expect(await s.rooms.get(room.id)).toMatchObject({
+      name: "Family line",
+      hours: null,
+      announcedUntil: null,
+    });
+    expect(await s.rooms.phonesWith(room.id)).toEqual([kid.id]);
+    expect(rk.startsWith("rk_")).toBe(true);
+    const hours = [{ days: [1, 3], start: "19:00", end: "21:00" }];
+    await s.rooms.setHours(room.id, hours);
+    await s.rooms.setAnnounced(room.id, T0 + 1000);
+    expect(await s.rooms.get(room.id)).toMatchObject({ hours, announcedUntil: T0 + 1000 });
+    // New hours announce afresh; none = always open.
+    await s.rooms.setHours(room.id, null);
+    expect(await s.rooms.get(room.id)).toMatchObject({ hours: null, announcedUntil: null });
+    old.db.close();
+  });
+});

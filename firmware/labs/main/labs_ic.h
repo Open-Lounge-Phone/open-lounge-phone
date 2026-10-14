@@ -3,6 +3,8 @@
 //   HELLO|room                      who is here (every 20 s; peers drop after 90 s silent)
 //   RING|id|to|from|kind            to = a room or "*" (all); kind = call | door
 //   ANSWER|id|from                  the first to lift; the others stop ringing
+//   TAKEN|id|room|winner            the caller, to a room that lifted too late (two rooms
+//                                   answered an all-rooms ring at once): "answered elsewhere"
 //   BUSY|id|from   BYE|id|from      refused / hung up
 //   CHIME|from|text                 "DINNER'S READY" on every phone (a beep, no call)
 // Audio goes straight to the other phone (glue: G.711 u-law, 20 ms frames over UDP).
@@ -34,6 +36,7 @@ typedef struct {
   uint32_t peer_ip;    // where audio goes (known once answered / on ringing)
   bool door;           // a doorbell call
   bool to_all;
+  bool caller;         // we placed this call (we pick the one room that gets it)
   int64_t since;
   ic_peer_t peers[IC_PEERS];
   char note[2][41];    // "BUSY", "NO ANSWER", a chime's words

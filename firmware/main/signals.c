@@ -32,6 +32,7 @@ static const uint8_t BEEPS[][8] = {
     [BEEP_PAIR] = {12, 8, 12, 8, 12, 0},
     [BEEP_ERROR] = {40, 0},
     [BEEP_OK] = {6, 6, 6, 0},
+    [BEEP_NOTICE] = {20, 10, 20, 30, 40, 0},  // a notice from the space: short, short, long
 };
 static volatile int s_beep = -1;
 static int s_beep_step;

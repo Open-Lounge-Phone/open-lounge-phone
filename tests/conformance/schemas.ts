@@ -38,6 +38,9 @@ export const FEDERATION_SCHEMAS: Record<string, z.ZodType> = {
   StreamUnsupported: fed.StreamUnsupported,
   RoomJoinBody: fed.RoomJoinBody,
   RoomJoinResult: fed.RoomJoinResult,
+  LineCallbackBody: fed.LineCallbackBody,
+  LineCallbackMissedBody: fed.LineCallbackMissedBody,
+  LineCallbackMissedResult: fed.LineCallbackMissedResult,
 };
 
 export const PROTOCOL_SCHEMAS: Record<string, z.ZodType> = {

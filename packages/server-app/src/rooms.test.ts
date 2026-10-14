@@ -893,3 +893,148 @@ describe("the relay (Cloudflare Realtime SFU, faked)", () => {
     await vi.waitFor(() => expect(m.all("room.media").some((x) => x.type === "close")).toBe(true));
   });
 });
+
+describe("party line hours", () => {
+  let s: TestServer;
+  let fam: Awaited<ReturnType<typeof family>>;
+  beforeEach(async () => {
+    // Monday 12:00 UTC; the family's time zone is UTC.
+    s = new TestServer({ publicUrl: "https://home.test" });
+    fam = await family(s);
+  });
+
+  /** "Family line", open Mondays 13:00-14:00, on a kids' phone's key 2. */
+  async function scheduled() {
+    const line = await makeRoom(s, fam.mom.token, { kind: "party", name: "Family line" });
+    const { phone, deviceId } = await kidsPhone(s, fam.mom.token);
+    const put = await s.http(`/devices/${deviceId}/rooms/${line.id}`, {
+      method: "PUT",
+      token: fam.mom.token,
+      body: { label: "Family" },
+    });
+    await s.http(`/devices/${deviceId}/buttons/1`, {
+      method: "PUT",
+      token: fam.mom.token,
+      body: { userId: put.json.id },
+    });
+    expectStatus(
+      await s.http(`/rooms/${line.id}`, {
+        method: "PATCH",
+        token: fam.dadToken,
+        body: { hours: [{ days: [1], start: "13:00", end: "14:00" }] },
+      }),
+      403,
+    );
+    expectStatus(
+      await s.http(`/rooms/${line.id}`, {
+        method: "PATCH",
+        token: fam.mom.token,
+        body: { hours: [{ days: [1], start: "13:00", end: "14:00" }] },
+      }),
+      204,
+    );
+    return { line, phone, deviceId };
+  }
+
+  it("closed outside its hours; opening tells members once; a minute's warning; closes politely", async () => {
+    const { line, phone } = await scheduled();
+    const room = (await s.http("/rooms", { token: fam.mom.token })).json.rooms[0];
+    expect(room).toMatchObject({
+      id: line.id,
+      hours: [{ days: [1], start: "13:00", end: "14:00" }],
+      open: false,
+      opens: "Opens Mon 13:00",
+    });
+    const mom = await s.connectApp(fam.mom.token);
+    mom.write({ t: "room.join", roomId: line.id });
+    expect(await mom.next("room.ended")).toMatchObject({
+      roomId: line.id,
+      reason: "closed",
+      note: "Closed. Opens Mon 13:00",
+    });
+    // 13:00: it opens. The apps hear it; the phone with its key gets a notice, with a chime.
+    s.timers.advance(60 * 60_000);
+    const closesAt = s.timers.now + 60 * 60_000;
+    expect(await mom.next("room.opened")).toEqual({
+      t: "room.opened",
+      roomId: line.id,
+      name: "Family line",
+      closesAt,
+    });
+    expect(await phone.next("notice")).toMatchObject({
+      lines: ["PARTY LINE OPEN", "FAMILY LINE"],
+      from: "Family line",
+      expiresAt: closesAt,
+    });
+    // Anyone allowed joins: the app, and the phone by lifting and pressing its key.
+    mom.write({ t: "room.join", roomId: line.id });
+    await joined(mom);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 1 });
+    expect(await joined(phone)).toMatchObject({ roomId: line.id });
+    // They keep talking (no idle warnings); a minute before closing: warned (the idle warning,
+    // saying it closes).
+    for (let i = 0; i < 6; i++) {
+      s.timers.advance(9 * 60_000);
+      mom.write({ t: "room.here", roomId: line.id });
+      phone.write({ t: "room.here", roomId: line.id });
+      await settle();
+    }
+    s.timers.advance(5 * 60_000);
+    for (const c of [mom, phone]) {
+      expect(await c.next("room.idle")).toEqual({
+        t: "room.idle",
+        roomId: line.id,
+        dropAt: closesAt,
+        closing: true,
+      });
+    }
+    // 14:00: closed for everyone, and the notice leaves the phone.
+    s.timers.advance(60_000);
+    for (const c of [mom, phone]) {
+      expect(await c.next("room.ended")).toMatchObject({
+        roomId: line.id,
+        reason: "closed",
+        note: "Closed. Opens Mon 13:00",
+      });
+    }
+    expect(phone.all("notice.cleared")).toHaveLength(1);
+    expect(mom.all("room.opened")).toHaveLength(1);
+    // Next Monday it opens again, announced once more.
+    s.timers.advance(7 * 24 * 60 * 60_000 - 60 * 60_000);
+    await settle();
+    expect(mom.all("room.opened")).toHaveLength(2);
+  });
+
+  it("a kids' phone in its quiet hours isn't told and can't join; no hours = always open", async () => {
+    const { line, phone } = await scheduled();
+    expectStatus(
+      await s.http("/quiet-hours", {
+        method: "PUT",
+        token: fam.mom.token,
+        body: { rules: [{ days: [1], start: "12:30", end: "15:00" }] },
+      }),
+      204,
+    );
+    const mom = await s.connectApp(fam.mom.token);
+    s.timers.advance(60 * 60_000);
+    await mom.next("room.opened");
+    await settle();
+    expect(phone.all("notice")).toEqual([]);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 1 });
+    expect(await phone.nextState("ended")).toMatchObject({ reason: "denied" });
+    // Hours taken off: always open again.
+    expectStatus(
+      await s.http(`/rooms/${line.id}`, {
+        method: "PATCH",
+        token: fam.mom.token,
+        body: { hours: null },
+      }),
+      204,
+    );
+    s.timers.advance(3 * 60 * 60_000);
+    mom.write({ t: "room.join", roomId: line.id });
+    expect(await joined(mom)).toMatchObject({ roomId: line.id });
+  });
+});

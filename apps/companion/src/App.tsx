@@ -236,6 +236,8 @@ function SignedIn({
   /** Knocks waiting for this person's answer (Connections tab badge). */
   const [knocks, setKnocks] = useState(0);
   const [toast, setToast] = useState<string>();
+  /** A party line that just opened: its toast offers to join. */
+  const [opened, setOpened] = useState<{ roomId: string; name: string }>();
 
   const switchTo = useCallback(
     async (id: string) => {
@@ -381,6 +383,16 @@ function SignedIn({
     const t = setTimeout(() => setToast(undefined), 5000);
     return () => clearTimeout(t);
   }, [vmSeq, vmFrom, countUnheard]);
+
+  // A party line with hours just opened: offer to join.
+  const openedSeq = snap.roomOpened?.seq ?? 0;
+  useEffect(() => {
+    const o = snap.roomOpened;
+    if (!openedSeq || !o) return;
+    setOpened({ roomId: o.roomId, name: o.name });
+    const t = setTimeout(() => setOpened(undefined), 60_000);
+    return () => clearTimeout(t);
+  }, [openedSeq, snap.roomOpened]);
 
   return (
     <div className="app">
@@ -552,6 +564,7 @@ function SignedIn({
             onAvailable={changeAvailable}
             meId={me?.user.id}
             onAddingPhone={() => setPairingSince(Date.now())}
+            api={api}
             onManage={(d) => setRoute({ name: "device", id: d.id })}
             onPair={() => setRoute({ name: "pair" })}
           />
@@ -672,6 +685,22 @@ function SignedIn({
             }}
           >
             Listen
+          </button>
+        </div>
+      )}
+
+      {opened && !toast && (
+        <div className="toast" role="status">
+          <span>{opened.name} is open</span>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setOpened(undefined);
+              void conn?.joinRoom({ roomId: opened.roomId });
+            }}
+          >
+            Join
           </button>
         </div>
       )}

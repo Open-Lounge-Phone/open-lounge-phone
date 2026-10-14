@@ -193,7 +193,9 @@ let lingerTimer: ReturnType<typeof setTimeout> | undefined;
 /** The room this phone is in (a party line, a phone room or a 3-way call). */
 let roomAudio: RoomAudio | undefined;
 let roomPending: Extract<ServerToDevice, { t: "room.media" | "rtc.sdp" | "rtc.ice" }>[] = [];
-let room: { name: string; people: number; muted: boolean; idleWarning?: boolean } | undefined;
+let room:
+  | { name: string; people: number; muted: boolean; idleWarning?: boolean; closing?: boolean }
+  | undefined;
 /** The room's microphone copy and the others' audio (for a recording this phone makes). */
 let roomMic: MediaStream | undefined;
 let roomStreams: MediaStream[] = [];
@@ -204,6 +206,10 @@ let lastStatusText = "";
 let callStartedAt: number | undefined;
 let callTicker: ReturnType<typeof setInterval> | undefined;
 let noticeTicker: ReturnType<typeof setInterval> | undefined;
+/** A notice from the space (docs/notices.md), until it's dismissed or cleared. */
+let notice: Extract<ServerToDevice, { t: "notice" }> | undefined;
+/** Its recording, playing in the earpiece while the handset is up. */
+let noticeAudio: HTMLAudioElement | undefined;
 let menu: MenuState | undefined;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let menuTicker: ReturnType<typeof setInterval> | undefined;
@@ -435,6 +441,12 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
     }
     case "room.idle":
+      // A party line's hours end at `dropAt` (it closes for everyone), or the idle warning.
+      if (msg.closing) {
+        if (room) room = { ...room, closing: true };
+        speak(`${room?.name ?? "The party line"} closes in a minute.`);
+        break;
+      }
       if (room) room = { ...room, idleWarning: true };
       speak(CALL_PROMPT_TEXT["room.idle"]);
       break;
@@ -498,6 +510,21 @@ async function handle(msg: ServerToDevice): Promise<void> {
     }
     case "error":
       if (msg.code === "unauthorized" && getDeviceId(profile)) forgetDeviceId();
+      break;
+    case "notice": {
+      const fresh = notice?.id !== msg.id;
+      notice = msg;
+      // A chime for a new one (not for its recording arriving), never during quiet hours or over
+      // a call or a lifted handset.
+      if (fresh && !hookUp && deviceState.kind === "idle" && !config?.quiet) playChime();
+      log("•", `notice: ${msg.lines.join(" / ")}${msg.audio ? " (recorded)" : ""}`);
+      break;
+    }
+    case "notice.cleared":
+      if (notice?.id === msg.id) {
+        notice = undefined;
+        stopNoticeAudio();
+      }
       break;
     case "wipe":
       await wipe();
@@ -872,9 +899,29 @@ async function recordGreeting(kind: "name" | "custom", ticket: string, maxMs: nu
 
 // --- physical controls -----------------------------------------------------------
 
+/** Lifting the handset with a recorded notice showing plays it in the earpiece. */
+function playNoticeAudio(): void {
+  if (!notice?.audio) return;
+  stopNoticeAudio();
+  const el = new Audio(
+    `/api/notices/${encodeURIComponent(notice.id)}/audio?token=${encodeURIComponent(notice.audio.token)}`,
+  );
+  el.volume = settings.volume / 10;
+  void el.play().catch((e) => log("•", `notice audio: ${e}`));
+  noticeAudio = el;
+}
+
+function stopNoticeAudio(): void {
+  noticeAudio?.pause();
+  noticeAudio = undefined;
+}
+
 function toggleHook(): void {
   tones.unlock();
   unlockChime();
+  // A notice's recording plays when the handset comes up, and stops when it goes down.
+  if (!hookUp && deviceState.kind === "idle" && notice?.audio && !menu) playNoticeAudio();
+  else stopNoticeAudio();
   hookUp = !hookUp;
   if (hookUp && !micPromise) {
     micPromise = getMicrophone();
@@ -916,6 +963,7 @@ function pressKey(key: KeyId): void {
   }
   if (key === "back") {
     if (menu) applyMenu({ type: "back", now });
+    else if (notice && deviceState.kind === "idle") dismissNotice();
     return;
   }
   const digit = Number(key);
@@ -923,10 +971,23 @@ function pressKey(key: KeyId): void {
     applyMenu({ type: "digit", digit, now });
     return;
   }
+  // A notice showing on the ready screen: any key dismisses it (on this phone).
+  if (notice && !hookUp && deviceState.kind === "idle") {
+    dismissNotice();
+    return;
+  }
   // In a room any key answers "still there?".
   if (deviceState.kind === "inroom" && room?.idleWarning) room = { ...room, idleWarning: false };
   // Speed dial: digit 1–9 → slot 0–8, digit 0 → slot 9.
   step({ type: "button", index: slotOf(digit) });
+}
+
+function dismissNotice(): void {
+  if (!notice) return;
+  send({ t: "notice.dismiss", id: notice.id });
+  notice = undefined;
+  stopNoticeAudio();
+  render();
 }
 
 function menuContext() {
@@ -1232,7 +1293,11 @@ function leaveView() {
 function renderDisplay(): void {
   const view = menu ? menuView(menu, settings, menuContext()) : undefined;
   const loungeLive = variant === "lounge" && authed && !pairingCode && connection === "online";
-  const loungeText = loungeLive && !view ? loungeLines(lounge, deviceState) : undefined;
+  // A notice from the space shows on an idle Lounge phone too (over its takeover text).
+  const loungeText =
+    loungeLive && !view && !(notice && deviceState.kind === "idle")
+      ? loungeLines(lounge, deviceState)
+      : undefined;
   const deviceId = getDeviceId(profile);
   const qr =
     loungeLive && deviceId && lounge.nonce && showQr(lounge, deviceState, !!view, Date.now())
@@ -1257,6 +1322,7 @@ function renderDisplay(): void {
           battery,
           power: powerStatus(variant, powerSource),
           clock: new Date().toTimeString().slice(0, 5),
+          ...(notice && deviceState.kind === "idle" ? { notice } : {}),
           now: Date.now(),
         });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.

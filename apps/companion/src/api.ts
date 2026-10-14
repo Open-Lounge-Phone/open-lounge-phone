@@ -66,6 +66,12 @@ export interface RoomSummary {
   /** You may change or delete it (its owner, or a guardian). */
   mine: boolean;
   people: string[];
+  /** Open only at these times (the space's time zone); null = always open. */
+  hours: HoursRule[] | null;
+  /** Open now; `until` when that changes; `opens` in words ("Opens Fri 19:00") when closed. */
+  open: boolean;
+  until?: number;
+  opens?: string;
 }
 
 export interface ContactEntry {
@@ -102,7 +108,9 @@ export type LoungeSessionPolicy = "idle" | "end_of_day" | "until_logout";
 export type HouseLineTarget =
   | { kind: "user"; userId: string }
   | { kind: "device"; deviceId: string }
-  | { kind: "group"; userIds: string[] };
+  | { kind: "group"; userIds: string[] }
+  /** A public line by its address; the line sees the phone's name. */
+  | { kind: "line"; address: string };
 
 export interface HouseLineKey {
   index: number;
@@ -353,9 +361,26 @@ export interface LineSettings {
   voicemail: boolean;
   callerPerHour: number | null;
   serverPerHour: number | null;
+  /** Waiting callers may hang up and keep their place: the line calls them back. */
+  callback: boolean;
+  /** A missed call back: one more try later, or the voicemail offer at once. */
+  callbackMissed: "retry" | "voicemail";
   greeting: "default" | "name" | "custom";
   /** The server's caps (a line can only be stricter). */
   limits: { callerPerHour: number; serverPerHour: number };
+}
+
+/** A notice to the space's phones (docs/notices.md). */
+export interface NoticeView {
+  id: string;
+  lines: string[];
+  from: string;
+  at: number;
+  expiresAt: number;
+  endedAt: number | null;
+  live: boolean;
+  deviceIds: string[] | null;
+  audio: { durationMs: number } | null;
 }
 
 export type LinePatch = Partial<Omit<LineSettings, "address" | "greeting" | "limits">> & {
@@ -694,7 +719,12 @@ export function createApi(opts: ApiOptions) {
     }) => request<RoomSummary>("POST", "/rooms", room),
     updateRoom: (
       roomId: string,
-      patch: { name?: string; access?: "space" | "connections"; locked?: boolean },
+      patch: {
+        name?: string;
+        access?: "space" | "connections";
+        locked?: boolean;
+        hours?: HoursRule[] | null;
+      },
     ) => request<void>("PATCH", `/rooms/${enc(roomId)}`, patch),
     deleteRoom: (roomId: string) => request<void>("DELETE", `/rooms/${enc(roomId)}`),
     putRemoteContact: (deviceId: string, connectionId: string, contact: Omit<ContactEntry, "id">) =>
@@ -832,6 +862,15 @@ export function createApi(opts: ApiOptions) {
         { body: audio },
       );
     },
+    notices: () => request<NoticeView[]>("GET", "/notices"),
+    postNotice: (b: { text: string; minutes?: number; deviceIds?: string[] }) =>
+      request<NoticeView>("POST", "/notices", b),
+    setNoticeAudio: async (id: string, audio: Blob, durationMs: number) => {
+      await send("PUT", `/notices/${enc(id)}/audio?durationMs=${Math.round(durationMs)}`, {
+        body: audio,
+      });
+    },
+    deleteNotice: (id: string) => request<void>("DELETE", `/notices/${enc(id)}`),
     resetLineGreeting: (groupId: string) =>
       request<void>("DELETE", `/groups/${enc(groupId)}/line/greeting`),
     lineBlocks: () =>

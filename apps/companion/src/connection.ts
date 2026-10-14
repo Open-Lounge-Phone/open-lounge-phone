@@ -71,6 +71,8 @@ export interface RoomView {
   muted: boolean;
   /** You'll be dropped then unless you speak or tap "I'm here". */
   idleDropAt?: number;
+  /** `idleDropAt` is when the room's hours end: it closes then for everyone. */
+  closing?: boolean;
   /** Its audio is up. */
   connected: boolean;
   /** Recorded by its space (announced to everyone): the space's name. */
@@ -102,6 +104,8 @@ export interface Snapshot {
   connectionsSeq?: number;
   /** Latest `voicemail.new` (a phone's) or `voicemail.inbox` (yours); `seq` changes each time. */
   voicemail?: { seq: number; id: string; deviceId?: string; from: string };
+  /** Latest `room.opened` (a party line with hours just opened); `seq` changes each time. */
+  roomOpened?: { seq: number; roomId: string; name: string; closesAt: number };
 }
 
 type Rtc = Extract<ServerToApp, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -245,6 +249,13 @@ export class Connection {
     const call = this.snap.call;
     if (call.phase !== "outgoing" || !call.callId || !call.queue?.voicemail) return;
     this.socket.send({ t: "call.voicemail", callId: call.callId });
+  }
+
+  /** Waiting in a public line's queue: hang up but keep the place; the line calls back. */
+  callMeBack(): void {
+    const call = this.snap.call;
+    if (call.phase !== "outgoing" || !call.callId || !call.queue?.callback) return;
+    this.socket.send({ t: "call.callback", callId: call.callId });
   }
 
   private async dialWith(
@@ -631,6 +642,7 @@ export class Connection {
       host: me?.host === true,
       muted: me?.muted ?? false,
       ...(prev?.idleDropAt ? { idleDropAt: prev.idleDropAt } : {}),
+      ...(prev?.closing ? { closing: true } : {}),
       connected: prev?.connected ?? false,
       ...(msg.recording ? { recording: msg.recording.by } : {}),
     };
@@ -740,14 +752,30 @@ export class Connection {
       case "room.idle": {
         const room = this.snap.room;
         if (room?.roomId !== msg.roomId) return;
-        this.set({ room: { ...room, idleDropAt: msg.dropAt } });
+        this.set({
+          room: { ...room, idleDropAt: msg.dropAt, ...(msg.closing ? { closing: true } : {}) },
+        });
         return;
       }
+      case "room.opened":
+        this.set({
+          roomOpened: {
+            seq: (this.snap.roomOpened?.seq ?? 0) + 1,
+            roomId: msg.roomId,
+            name: msg.name,
+            closesAt: msg.closesAt,
+          },
+          roomsSeq: (this.snap.roomsSeq ?? 0) + 1,
+        });
+        return;
       case "room.ended":
         if (this.snap.room && msg.roomId && msg.roomId !== this.snap.room.roomId) return;
         this.endRoom();
         if (msg.reason !== "left" && msg.reason !== "closed") {
           this.set({ error: msg.note ?? roomEndText(msg.reason) });
+        } else if (msg.reason === "closed" && msg.note) {
+          // A party line with hours: closed now, and when it opens next.
+          this.set({ error: msg.note });
         }
         return;
       case "room.media":

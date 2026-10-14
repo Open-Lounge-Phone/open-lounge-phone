@@ -199,6 +199,9 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
             {call.phase === "outgoing" && call.line?.description && (
               <div className="muted small">{call.line.description}</div>
             )}
+            {call.phase === "incoming" && call.callback && (
+              <div className="muted small">You asked to be called back. It's your turn.</div>
+            )}
             {call.phase === "incoming" && call.address && (
               <div className="muted small">
                 {call.address}
@@ -212,7 +215,8 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
               </div>
             )}
             <div className="what">
-              {call.phase === "incoming" && "is calling…"}
+              {call.phase === "incoming" &&
+                (call.callback ? "is calling you back…" : "is calling…")}
               {call.phase === "outgoing" &&
                 (call.queue ? queueText(call.queue) : call.ringing ? "Ringing…" : "Calling…")}
               {call.phase === "connecting" && "Connecting…"}
@@ -222,7 +226,9 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                   : formatDuration(now - (call.startedAt ?? now)))}
               {call.phase === "ended" &&
                 !canLeaveVoicemail(call) &&
-                (call.note ?? endReasonText(call.reason, call.person))}
+                (call.callbackUntil !== undefined
+                  ? `${call.label} will call you back. You keep your place in line.`
+                  : (call.note ?? endReasonText(call.reason, call.person)))}
             </div>
             {canLeaveVoicemail(call) && (
               <LeaveVoicemail
@@ -259,6 +265,11 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                   onClick={() => conn.leaveVoicemailInstead()}
                 >
                   Leave a voicemail instead
+                </button>
+              )}
+              {call.phase === "outgoing" && call.queue?.callback && (
+                <button type="button" className="round" onClick={() => conn.callMeBack()}>
+                  Call me back
                 </button>
               )}
               {(call.phase === "outgoing" ||

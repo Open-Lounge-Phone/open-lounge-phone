@@ -48,17 +48,20 @@ Highest priority first: the first row that applies is shown.
 | Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `WRONG PASSWORD?`, `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
 | Connecting | `CONNECTING` |
 | Calling | `CALLING MOM` (or `CALLING` / long name) |
-| Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (or the line's name when it offers no voicemail; `WAITING IN LINE` when it shows no places) |
+| Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (with a call back too: `1 VM 2 CALL BACK`; only a call back: `2 CALL ME BACK`; neither: the line's name; `WAITING IN LINE` when it shows no places) |
+| Asked a public line to call back | `PLACE KEPT` / `WE'LL CALL BACK` (with the handset up, as the key map's footer) |
+| A public line calling you back | the line's name / `CALLS YOU BACK` (lift to answer: the call to the line goes on, `CALLING` or `IN LINE 1`) |
 | You put the call on hold | `ON HOLD` / name (`MENU 1 RESUMES`) |
 | Choosing who to transfer to | `TRANSFER TO?` / `PRESS A KEY` |
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
 | In a call | `IN CALL 01:23` / name; recorded: `REC 01:23` / name; while connecting `CONNECTING` / name |
 | They put you on hold | `ON HOLD` / name |
-| In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
+| In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
 | Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
+| Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording ([notices.md](notices.md)) |
 | Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app) |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
@@ -71,10 +74,10 @@ leave the phone.
 
 | State | Digits | MENU | BACK | Hook |
 |---|---|---|---|---|
-| Ready (handset down) | nothing (a click) | open the menu | nothing | lift: dial tone |
+| Ready (handset down) | nothing (a click); with a notice showing: clear it | open the menu | with a notice showing: clear it | lift: dial tone (and a notice's recording) |
 | Handset up | call that key's person | open the menu | nothing | down: back to ready |
 | Calling | nothing | open the menu | nothing | down: cancel |
-| Waiting in a public line's queue | 1: leave a voicemail instead (when offered) | open the menu | nothing | down: cancel |
+| Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
 | Ringing | nothing | open the menu | nothing | lift: answer |
 | In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen | nothing | down: hang up |
 | Call on hold | nothing (one call has audio at a time) | the call screen (1 Resume) | nothing | down: hang up both |

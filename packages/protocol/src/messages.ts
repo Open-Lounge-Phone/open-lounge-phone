@@ -125,6 +125,12 @@ export const CallVoicemail = z
     "Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.",
   );
 
+export const CallCallback = z
+  .object({ t: z.literal("call.callback"), ...Ref, callId: Id })
+  .describe(
+    "Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.",
+  );
+
 export const LineQueue = z
   .object({
     position: z
@@ -138,6 +144,10 @@ export const LineQueue = z
       .boolean()
       .optional()
       .describe("`call.voicemail` leaves a message instead of waiting on."),
+    callback: z
+      .boolean()
+      .optional()
+      .describe("`call.callback` hangs up but keeps your place: the line calls you back."),
   })
   .describe(
     "With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again.",
@@ -320,9 +330,20 @@ export const RoomState = z
   .describe("You're in a room: who's there and how its audio travels. Sent on every change.");
 
 export const RoomIdle = z
-  .object({ t: z.literal("room.idle"), ...Ref, roomId: Id, dropAt: EpochMs })
+  .object({
+    t: z.literal("room.idle"),
+    ...Ref,
+    roomId: Id,
+    dropAt: EpochMs,
+    closing: z
+      .boolean()
+      .optional()
+      .describe(
+        "The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do.",
+      ),
+  })
   .describe(
-    "10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.",
+    "10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.",
   );
 
 export const RoomEnded = z
@@ -578,6 +599,12 @@ export const CheckinMissed = z
     "Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.",
   );
 
+export const NoticeDismiss = z
+  .object({ t: z.literal("notice.dismiss"), ...Ref, id: Id })
+  .describe(
+    "Notices (device feature `notices`): this phone dismissed the notice (a key while it shows). It isn't shown on this phone again.",
+  );
+
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   CallExtension,
@@ -596,12 +623,14 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   VoicemailHeard,
   CheckinOk,
   CheckinMissed,
+  NoticeDismiss,
   CallAnswer,
   CallHangup,
   CallHold,
   CallMerge,
   CallTransfer,
   CallVoicemail,
+  CallCallback,
   RoomLeave,
   RoomMute,
   RoomLock,
@@ -757,6 +786,9 @@ export const CallRinging = z
         ),
     }),
     line: LineInfo.optional().describe("The call is for a public line you answer for."),
+    callback: LineInfo.optional().describe(
+      "A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go.",
+    ),
   })
   .describe("Incoming call; device rings until answered, hung up, or ended.");
 
@@ -805,6 +837,17 @@ export const CallStateMsg = z
       "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it.",
     ),
     queue: LineQueue.optional(),
+    callback: z
+      .object({
+        until: z
+          .number()
+          .int()
+          .describe("Epoch ms: your place is kept until then (unless the line calls sooner)."),
+      })
+      .optional()
+      .describe(
+        "With `ended` (reason `hangup`): you asked to be called back and keep your place in line.",
+      ),
     line: LineInfo.optional().describe(
       "Calling a public line: its name (and description), with the first `ringing`.",
     ),
@@ -943,6 +986,40 @@ export const Wipe = z
     'The phone must wipe itself: forget its device id, owner and settings, delete its device key and make a new one, then show "Set me up" again (Wi-Fi is kept so it can be claimed again; a factory reset clears that too). Sent to a removed phone that is connected, or when it next connects and proves it holds the removed key.',
   );
 
+/** The longest line of a notice: what fits the phones' screens. */
+export const NOTICE_LINE_MAX = 16;
+
+export const Notice = z
+  .object({
+    t: z.literal("notice"),
+    ...Ref,
+    id: Id,
+    lines: z
+      .array(z.string().min(1).max(NOTICE_LINE_MAX))
+      .min(1)
+      .max(2)
+      .describe('One or two lines of at most 16 characters ("BUS IS HERE").'),
+    from: z.string().max(24).describe("Who posted it."),
+    at: z.number().int().describe("When it was posted (ms since the Unix epoch)."),
+    expiresAt: z.number().int().describe("When it goes away by itself (`notice.cleared` follows)."),
+    audio: z
+      .object({
+        token: z.string().min(16).max(128),
+        durationMs: z.number().int().nonnegative(),
+      })
+      .optional()
+      .describe(
+        "A recorded message: `GET /api/notices/<id>/audio?token=` returns it (8 kHz 16-bit mono WAV) while the notice lasts. Play it when the handset is lifted.",
+      ),
+  })
+  .describe(
+    "Notices (device feature `notices`): a short notice for the phones of a space, posted by its owner, admins or guardians. Show it with a chime (no chime during quiet hours); lifting the handset plays its audio; a key dismisses it (`notice.dismiss`). Sent again with the same `id` when its audio is added (no second chime). The newest one replaces any earlier.",
+  );
+
+export const NoticeCleared = z
+  .object({ t: z.literal("notice.cleared"), ...Ref, id: Id })
+  .describe("The notice expired or was taken down: stop showing it.");
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -956,6 +1033,8 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   GreetingDone,
   VoicemailItems,
   Wipe,
+  Notice,
+  NoticeCleared,
   CallRinging,
   CallStateMsg,
   RtcConfig,
@@ -1053,6 +1132,7 @@ export const AppToServer = z.discriminatedUnion("t", [
   CallMerge,
   CallTransfer,
   CallVoicemail,
+  CallCallback,
   RoomJoin,
   RoomLeave,
   RoomMute,
@@ -1173,6 +1253,18 @@ export const RoomsChanged = z
   })
   .describe("Someone came into or left one of your space's rooms (\"members see who's in\").");
 
+export const RoomOpened = z
+  .object({
+    t: z.literal("room.opened"),
+    ...Ref,
+    roomId: Id,
+    name: z.string().min(1).max(40),
+    closesAt: EpochMs.describe("When its hours end."),
+  })
+  .describe(
+    'A room of your space with opening hours just opened ("party line open"): join it like any room. Sent once per opening to the members\' apps; phones with the room on a key get a notice.',
+  );
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
@@ -1191,6 +1283,7 @@ export const ServerToApp = z.discriminatedUnion("t", [
   RoomIdle,
   RoomEnded,
   RoomsChanged,
+  RoomOpened,
   ErrorMsg,
   Pong,
 ]);

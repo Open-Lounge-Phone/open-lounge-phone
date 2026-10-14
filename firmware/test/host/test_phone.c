@@ -181,3 +181,43 @@ TEST(phone_waits_in_a_public_lines_queue) {
   phone_button(&s, 0, emit);
   CHECK(s_n == 0);
 }
+
+TEST(phone_asks_a_line_to_call_back) {
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_button(&s, 3, emit);
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ringing\","
+         "\"queue\":{\"position\":2,\"voicemail\":true,\"callback\":true}}");
+  CHECK(s.queued && s.queue_cb && s.queue_vm);
+  s_n = 0;
+  phone_button(&s, 1, emit);  // key 2: call me back
+  CHECK(s_n == 1);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.callback\",\"callId\":\"c1\"}");
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":"
+         "\"hangup\",\"callback\":{\"until\":5}}");
+  CHECK(s.kind == PH_OFFHOOK && s.callback);
+  phone_hook(&s, false, emit);
+  // Later the line calls back; lifting answers and follows into the new call to the line.
+  server(&s,
+         "{\"t\":\"call.ringing\",\"callId\":\"c1\",\"from\":{\"label\":\"Support\"},"
+         "\"callback\":{\"name\":\"Support\"}}");
+  CHECK(s.kind == PH_INCOMING && s.callback);
+  s_n = 0;
+  phone_hook(&s, true, emit);
+  CHECK(s.kind == PH_INCALL);
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":"
+         "\"hangup\",\"transfer\":{\"callId\":\"c2\",\"ringing\":true,\"offerer\":true}}");
+  CHECK(s.kind == PH_DIALING);
+  CHECK_STR(s.call_id, "c2");
+  // A line that doesn't offer it: key 2 does nothing.
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"ringing\","
+         "\"queue\":{\"position\":1}}");
+  s_n = 0;
+  phone_button(&s, 1, emit);
+  CHECK(s_n == 0);
+}

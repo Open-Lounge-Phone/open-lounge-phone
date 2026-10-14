@@ -137,14 +137,28 @@ server) and only then hands the recording side's own client an upload ticket; ro
 [security-model.md](security-model.md).
 
 **Rooms.** Three kinds, all live in the owning space's hub (`LiveRooms`):
-- **Party lines**: a space's always-open rooms (guardians make them). Members drop in and out and
-  see who's in (`rooms.changed`, `GET /api/rooms`).
+- **Party lines**: a space's rooms that are always open, or open at set times (guardians make
+  them). Members drop in and out and see who's in (`rooms.changed`, `GET /api/rooms`).
 - **Phone rooms**: a name with an address, e.g. `standup@host` (room handles share the namespace
   of people's handles), made by any member, who hosts it. Open to the space, or also to its
   owner's connections. Dialable from the companion (by id, or by address on any server) and from
   a phone's speed-dial key once a guardian puts the room on the phone's allow-list
   (`PUT /api/devices/:id/rooms/:roomId`; migration `0016_rooms.sql`).
 - **3-way calls**: made by merging; nobody dials in.
+
+**Party line hours.** A room's owner (for a party line, a guardian) can give it weekly opening
+hours (`PATCH /api/rooms/:id {hours: [{days, start, end}]}`, the space's time zone, windows past
+midnight allowed: the same rules and code as quiet hours; `null` = always open; migration
+`0025_room_hours.sql`). Outside them nobody gets in (`room.ended` `closed` with a note such as
+"Closed. Opens Fri 19:00"; a join from another server is refused the same way). When a window
+opens, the space's apps get `room.opened` once (the companion offers to join) and the phones with
+the room on a key get a notice, `PARTY LINE OPEN` and its name, with a chime, until it closes
+([notices.md](notices.md)); a kids' phone in its quiet hours isn't told, and its own rules still
+decide whether it may join. A minute before closing everyone in it gets the idle warning with
+`closing` (`room.idle {dropAt, closing: true}`: phones show `CLOSING SOON`); at closing it ends
+for everyone (`room.ended` `closed` with when it opens next). The hub's one alarm wakes it for
+each opening, warning and closing; an opening is announced once per window
+(`rooms.announced_until`), also after a restart.
 
 Access is default deny (`roomAccess`): the space's members; for a phone room open to
 connections, anyone with an active connection to its owner (checked by the room's own server);

@@ -1,6 +1,7 @@
 // Bodies of the signed `/fed/v1` requests. The sending server is the signature's key id; every
 // `from` is one of that server's accounts, so a server can only speak for its own people.
 import {
+  CallCallback,
   CallStateMsg,
   CallVoicemail,
   RoomEnded,
@@ -86,7 +87,13 @@ export const CallTarget = z.discriminatedUnion("kind", [
    * A public line (feature `public-lines`): a team's or organization's published ring group,
    * by its handle. No connection needed; the receiver applies the line's own rules.
    */
-  z.object({ kind: z.literal("line"), handle: Handle }),
+  z.object({
+    kind: z.literal("line"),
+    handle: Handle,
+    callback: Id.optional().describe(
+      "Feature `line-callback`: the person answered the line's call back; their place in line (the id of the call they waited under).",
+    ),
+  }),
 ]);
 export type CallTarget = z.infer<typeof CallTarget>;
 
@@ -352,7 +359,47 @@ export const FedSignal = z.discriminatedUnion("t", [
   RtcIce,
   RoomSignal,
   CallVoicemail,
+  CallCallback,
 ]);
+
+// --- call me back (feature `line-callback`) ------------------------------------------------
+
+/** The line's name, as the person it calls back sees it. */
+export const LineName = z.object({
+  handle: Handle.describe("The line's handle on the sending server."),
+  name: z.string().trim().min(1).max(64).describe("Its display name."),
+  description: z.string().max(140).optional(),
+});
+
+/**
+ * `POST /fed/v1/lines/callback`: it's the turn of `to`, who asked the line `line` (on the
+ * sending server) to call them back while waiting under the call `id`: ring them now.
+ */
+export const LineCallbackBody = z.object({
+  id: Id.describe("The call `to` waited under (their place in line)."),
+  to: Handle.describe("The person to call back, on the receiving server."),
+  line: LineName,
+});
+export type LineCallbackBody = z.infer<typeof LineCallbackBody>;
+
+/** `POST /fed/v1/lines/callback/missed`: `from` didn't take the call back `id` (or declined). */
+export const LineCallbackMissedBody = z.object({
+  id: Id,
+  from: Party,
+  line: Handle.describe("The line's handle on the receiving server."),
+});
+export type LineCallbackMissedBody = z.infer<typeof LineCallbackMissedBody>;
+
+/** Answer to `/fed/v1/lines/callback/missed`. */
+export const LineCallbackMissedResult = z.object({
+  retry: z
+    .boolean()
+    .describe("The line will try once more later (their place: the end of the line)."),
+  voicemail: VoicemailOffer.optional().describe(
+    "The line's voicemail offer instead (relayed to them by their server).",
+  ),
+});
+export type LineCallbackMissedResult = z.infer<typeof LineCallbackMissedResult>;
 export type FedSignal = z.infer<typeof FedSignal>;
 export const StreamSignal = z.object({ t: z.literal("signal"), msg: FedSignal });
 
