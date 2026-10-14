@@ -10,9 +10,9 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-10-13, `server-v0.3.0`)
 
-On `main`, not tagged yet.
+What l1 and the public hub run.
 
 - **Public lines.** A team or organization can publish a ring group at its own address
   (`orders@acme.example`) that anyone on any server may call without knocking first: off by
