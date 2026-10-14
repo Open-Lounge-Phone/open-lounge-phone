@@ -18,7 +18,9 @@ typedef enum { CI_OFF, CI_WAITING, CI_DUE, CI_OK, CI_MISSED } checkin_state_t;
 void checkin_init(checkin_t *c);
 /** Where today stands (day = days since the epoch, minute = local minutes since midnight). */
 checkin_state_t checkin_state(const labs_cfg_t *cfg, const checkin_t *c, int day, int minute);
-/** True once, when the time passed without a check-in today: send the alert. */
+/** The time passed without a check-in today and the alert hasn't gone yet (it may be offline). */
+bool checkin_alert_pending(const labs_cfg_t *cfg, const checkin_t *c, int day, int minute);
+/** True once, when the time passed without a check-in today: send the alert (marks it sent). */
 bool checkin_due_alert(const labs_cfg_t *cfg, checkin_t *c, int day, int minute);
 /** "I'm OK" (also acknowledges the reminder showing). */
 void checkin_ok(const labs_cfg_t *cfg, checkin_t *c, int day, int minute);

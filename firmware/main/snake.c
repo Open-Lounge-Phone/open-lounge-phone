@@ -106,6 +106,7 @@ static void memory_show(int64_t now) {
   const char *lines[] = {a, b};
   display_text(lines, 2);
   signals_beep(BEEP_KEY);
+  ESP_LOGI(TAG, "memory watch %d of %d: %s", s_mpos + 1, s_mlen, b);
   s_last = now;
 }
 
@@ -144,6 +145,7 @@ static void memory_key(int index, int64_t now) {
   signals_beep(BEEP_OK);
   const char *lines[] = {"RIGHT!", "NEXT ROUND"};
   display_text(lines, 2);
+  ESP_LOGI(TAG, "memory round %d right", s_mlen);
   s_mshowing = true;
   s_mpos = -1;  // the tick starts the next round after a pause
   s_last = now;
@@ -215,6 +217,7 @@ void snake_tick(int64_t now) {
       s_mpos = 0;
       const char *lines[] = {"YOUR TURN", "KEY THEM BACK"};
       display_text(lines, 2);
+      ESP_LOGI(TAG, "memory your turn");
     }
     return;
   }
@@ -236,6 +239,7 @@ void snake_tick(int64_t now) {
     if (s_period > 450) s_period -= 15;  // e-paper sets the pace: a refresh takes ~0.5 s
     place_food();
   }
+  ESP_LOGI(TAG, "move %d,%d len %d", head.x, head.y, s_len);
   draw();
 }
 

@@ -219,7 +219,8 @@ void vmplay_loaded(bool ok, int64_t now_ms) {
 static void next(int64_t now_ms) {
   release();
   if (++s_cur >= s_n) {
-    note("NO MORE MESSAGES", NULL, now_ms);
+    if (!s_items[s_n - 1].id[0]) note("THE END", s_items[s_n - 1].from, now_ms);  // a story (labs)
+    else note("NO MORE MESSAGES", NULL, now_ms);
     return;
   }
   play_current(now_ms);
@@ -256,6 +257,7 @@ void vmplay_tick(int64_t now_ms) {
       break;
     case VP_PLAYING:
       if (audio_played() >= s_wav.count) {
+        ESP_LOGI(TAG, "played %u samples", (unsigned)s_wav.count);
         if (s_items[s_cur].id[0]) send_simple("voicemail.heard", s_items[s_cur].id);  // heard
         next(now_ms);
       }

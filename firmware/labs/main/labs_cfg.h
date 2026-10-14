@@ -53,5 +53,8 @@ const char *labs_action_name(labs_action_t a);
 const char *labs_mode_name(labs_mode_t m);
 /** "10:00" -> 600; -1 if not a time. */
 int labs_parse_hhmm(const char *s);
+/** What a digit key does in this mode: its action, or for a speed-dial key the mode's (a door
+ *  phone's keys ring; in check-in mode key 1 is I'm OK). */
+labs_action_t labs_key_action(const labs_cfg_t *c, int index);
 /** The label a key shows: its own, or one from the action and target. */
 void labs_key_label(const labs_key_t *k, int index, char *out, size_t n);

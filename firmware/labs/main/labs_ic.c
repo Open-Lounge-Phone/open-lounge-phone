@@ -103,7 +103,8 @@ static void seen(ic_t *ic, const char *name, uint32_t ip, int64_t now) {
   if (!name || !*name || !strcmp(name, ic->me)) return;
   int slot = -1, oldest = 0;
   for (int i = 0; i < IC_PEERS; i++) {
-    if (!strcmp(ic->peers[i].name, name)) { slot = i; break; }
+    // The same room, or the same phone under a new name (renamed: no ghost of the old one).
+    if (!strcmp(ic->peers[i].name, name) || (ip && ic->peers[i].ip == ip)) { slot = i; break; }
     if (!ic->peers[i].name[0] && slot < 0) slot = i;
     if (ic->peers[i].seen < ic->peers[oldest].seen) oldest = i;
   }

@@ -32,3 +32,22 @@ TEST(checkin_day) {
   CHECK(checkin_state(&cfg, &c, 101, 300) == CI_WAITING);   // a new day
   CHECK(checkin_reminder(&cfg, &c, 101, 545) == 0);
 }
+
+TEST(checkin_missed_offline_waits_to_say_told) {
+  labs_cfg_t cfg;
+  labs_cfg_defaults(&cfg);
+  cfg.checkin_by = 600;
+  checkin_t c;
+  checkin_init(&c);
+  char l[2][41];
+  CHECK(!checkin_alert_pending(&cfg, &c, 100, 599));
+  // Past the time but not sent yet (offline): pending, and the screen does not say "told".
+  CHECK(checkin_alert_pending(&cfg, &c, 100, 600));
+  CHECK(checkin_alert_pending(&cfg, &c, 100, 640));   // still, until it goes
+  checkin_lines(&cfg, &c, 100, 640, l);
+  CHECK_STR(l[0], "NOT CHECKED IN");
+  CHECK(checkin_due_alert(&cfg, &c, 100, 641));       // sent
+  CHECK(!checkin_alert_pending(&cfg, &c, 100, 642));
+  checkin_lines(&cfg, &c, 100, 642, l);
+  CHECK_STR(l[0], "FAMILY WAS TOLD");
+}

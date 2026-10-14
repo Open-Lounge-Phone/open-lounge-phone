@@ -39,7 +39,7 @@ static const char *TAG = "labs";
 #define HA_POLL_MS 60000
 #define STORY_WAIT_MS 15000
 
-void app_emit(cJSON *m);       // main.c: to the server (signed in only)
+bool app_emit(cJSON *m);       // main.c: to the server (false: not signed in / not sent)
 
 static labs_cfg_t s_cfg;
 static ic_t s_ic;
@@ -106,6 +106,7 @@ bool labs_cfg_set(const labs_cfg_t *c) {
     memcpy(s_ic.peers, keep.peers, sizeof s_ic.peers);
     host_from_name();
     labs_web_rename(s_host);
+    s_next_hello = 0;   // tell the other rooms the new name now
   }
   s_next_poll = 0;
   ESP_LOGI(TAG, "LABS settings saved (mode %s)%s", labs_mode_name(s_cfg.mode), restart ? ": restarting" : "");
@@ -154,11 +155,11 @@ static void post_note(const char *a, const char *b) {
   app_post(EV_LABS, 0, d);
 }
 
-static void server_send(const char *t, const char *by) {
+static bool server_send(const char *t, const char *by) {
   cJSON *m = cJSON_CreateObject();
   cJSON_AddStringToObject(m, "t", t);
   if (by) cJSON_AddStringToObject(m, "by", by);
-  app_emit(m);
+  return app_emit(m);
 }
 
 // ---------------------------------------------------------------- the intercom's network
@@ -251,6 +252,7 @@ static void ic_sync(void) {
   if (s_ic.chimed) {
     s_ic.chimed = false;
     signals_beep(BEEP_PAIR);
+    ESP_LOGI(TAG, "IC chime [%s|%s]: beep", s_ic.note[0], s_ic.note[1]);
   }
   if (s_ic.st != s_was) {
     ESP_LOGI(TAG, "IC state %d -> %d", s_was, s_ic.st);
@@ -354,15 +356,13 @@ bool labs_key(int index, bool hook_up, int64_t now) {
   today(&day, &minute);
   int rem = checkin_reminder(&s_cfg, &s_ci, day, minute);
   labs_key_t *k = &s_cfg.keys[index];
-  if (rem >= 0 && !hook_up && k->action != LA_CHECKIN) {   // a reminder showing: any key = done
+  labs_action_t a = labs_key_action(&s_cfg, index);
+  if (rem >= 0 && !hook_up && a != LA_CHECKIN) {           // a reminder showing: any key = done
     checkin_ack(&s_ci, rem, day);
     cfg_save();
     note(s_cfg.reminders[rem].text, "DONE", now);
     return true;
   }
-  labs_action_t a = k->action;
-  if (a == LA_PHONE && s_cfg.mode == LM_DOORBELL) a = LA_DOORBELL;   // a door phone: any key rings
-  if (a == LA_PHONE && s_cfg.mode == LM_CHECKIN && index == 0) a = LA_CHECKIN;
   const char *label = s_labels[index];
   ic_out_t o = {0};
   switch (a) {
@@ -436,6 +436,7 @@ void labs_event(int a, char *data, int64_t now) {
     char *ip = data + 2, *line = strchr(ip, '|');
     if (line) {
       *line++ = '\0';
+      ESP_LOGI(TAG, "IC <- %s", line);
       ic_out_t o = {0};
       icom_msg(&s_ic, (uint32_t)strtoul(ip, NULL, 10), line, now, &o);
       broadcast(&o);
@@ -468,12 +469,17 @@ void labs_tick(int64_t now) {
     s_next_check = now + 10000;
     int day, minute;
     today(&day, &minute);
-    if (checkin_due_alert(&s_cfg, &s_ci, day, minute)) {
+    if (checkin_alert_pending(&s_cfg, &s_ci, day, minute)) {
+      // Offline (no server connection): try again on the next check, so the alert isn't lost.
       char by[16];
       snprintf(by, sizeof by, "%02d:%02d", s_cfg.checkin_by / 60, s_cfg.checkin_by % 60);
-      ESP_LOGW(TAG, "CHECK-IN missed (by %s): telling the family", by);
-      server_send("checkin.missed", by);
-      cfg_save();
+      if (server_send("checkin.missed", by)) {
+        ESP_LOGW(TAG, "CHECK-IN missed (by %s): the family was told", by);
+        checkin_due_alert(&s_cfg, &s_ci, day, minute);
+        cfg_save();
+      } else {
+        ESP_LOGW(TAG, "CHECK-IN missed (by %s): not connected, trying again", by);
+      }
     }
   }
   if (s_pending_story >= 0 && now >= s_pending_until) s_pending_story = -1;

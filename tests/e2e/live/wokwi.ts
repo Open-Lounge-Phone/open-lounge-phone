@@ -164,10 +164,13 @@ export class QemuPhone extends WokwiPhone {
   hostfwd?: string;
   /** Another build directory than build-qemu (e.g. the OTA test's base image). */
   buildDir?: string;
+  /** More tools/qemu.sh settings (e.g. the labs tests' QEMU_LAN, QEMU_MAC). */
+  extraEnv: NodeJS.ProcessEnv = {};
 
   private env(): NodeJS.ProcessEnv {
     return {
       ...process.env,
+      ...this.extraEnv,
       ...(this.hostfwd ? { QEMU_HOSTFWD: this.hostfwd } : {}),
       ...(this.buildDir ? { OLP_QEMU_BUILD: this.buildDir } : {}),
     };

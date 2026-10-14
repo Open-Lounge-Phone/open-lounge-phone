@@ -55,9 +55,47 @@ UDP broadcast on port 47100, one line per message, `OLP1|TYPE|…`: `HELLO|room`
 number and 160 bytes of G.711 µ-law (20 ms). It is meant for a home network: anyone on the Wi-Fi
 can ring a room, and the audio isn't encrypted (calls through the server are).
 
+## Tests
+
+- Host tests (`make -C firmware/test/host`): settings, the intercom state machine, the check-in
+  schedule, the macro pad's key combos.
+- The labs firmware in QEMU, end to end (opt-in, about 10 minutes, nothing leaves the machine):
+
+  ```sh
+  OLP_LABS_QEMU=1 npx vitest run tests/e2e/live/labs.test.ts
+  ```
+
+  It builds the QEMU image (`OLP_QEMU_LABS=1 firmware/tools/qemu.sh build`; `OLP_FW_NO_BUILD=1`
+  reuses it), then runs three parts (`OLP_LABS=intercom,den,checkin` picks some): **intercom**,
+  three phones on one Ethernet segment (each QEMU sends its frames to a small UDP hub in the
+  test; one phone has QEMU's user network and hands out the addresses); **den**, one phone with a
+  fake Home Assistant and a web server with a story on this machine; **checkin**, a phone paired
+  to a self-hosted server started by the test. The console stands in for the keys and the hook,
+  and QEMU's test audio device for the codec. Logs: `firmware/build-qemu-labs/e2e/`.
+
 ## Status
 
-Host-tested: settings, the intercom state machine (room to room, all rooms, busy, doorbell,
-chime), the check-in schedule and the key combos (`make -C firmware/test/host`); the server's
-check-in alert (`voicemail.test.ts`). Runs on the board (its screens and settings page). **Not yet
-tried on hardware**: the intercom between two boards, Home Assistant, the USB keyboard and stories.
+Proven in QEMU (the tests above, real firmware):
+
+- **Intercom**: rooms find each other (and a renamed room replaces its old name); room to room
+  ring, lift to answer, G.711 audio both ways (each side hears the other's test tone), busy,
+  hang up on either side; every room rings and the first to lift answers; a door phone (any key
+  rings the house with the handset down); a doorbell key for one room, ended with BACK; a chime
+  shows the words and beeps on the other phones.
+- **Settings page**: the PIN (wrong PIN refused, five wrong tries lock it for a minute), saving,
+  and the Home Assistant token never comes back (a blank one keeps it).
+- **Home panel**: the status entity is read with the token every minute and shown; an `ha` key
+  calls the service.
+- **Dial-a-story**: downloads the WAV and plays it to the earpiece to the end; press then lift;
+  1 again, 2 next, BACK stops.
+- **Daily check-in**: missing the time sends the alert once it can (it waits while offline) and
+  the guardian finds it in their voicemail; key 1 is I'm OK.
+- **Games**: MENU ten times; Snake moves, turns and ends at the wall; Memory's rounds grow and a
+  wrong digit ends it with the score.
+
+Host-tested only: the **macro pad** (QEMU has no USB device for the phone).
+
+On the board it runs (its screens and the settings page). Still needs trying there: the intercom over real Wi-Fi between two boards (QEMU uses Ethernet),
+how the audio sounds through the codec and handset (level, echo, delay), the piezo and ringer,
+the `olp-<room>.local` name (mDNS; the tests use the address), the USB keyboard, and the games
+on the e-paper.

@@ -35,6 +35,25 @@ TEST(labs_cfg_parses_keys_and_features) {
   free(pub);
 }
 
+TEST(labs_cfg_key_actions_by_mode) {
+  labs_cfg_t c;
+  char err[96] = "";
+  // A doorbell key's room is matched like an intercom key's: upper case.
+  CHECK(labs_cfg_parse("{\"mode\":\"checkin\",\"keys\":[{\"key\":\"4\",\"action\":\"doorbell\","
+                       "\"target\":\"Kids room\"}]}", NULL, &c, err, sizeof err));
+  CHECK_STR(c.keys[3].target, "KIDS ROOM");
+  // Check-in mode: key 1 is I'm OK (so it checks in even while a reminder shows), others dial.
+  CHECK(labs_key_action(&c, 0) == LA_CHECKIN);
+  CHECK(labs_key_action(&c, 1) == LA_PHONE);
+  CHECK(labs_key_action(&c, 3) == LA_DOORBELL);
+  // A door phone: every speed-dial key rings the house; set keys keep their action.
+  CHECK(labs_cfg_parse("{\"mode\":\"doorbell\",\"keys\":[{\"key\":\"2\",\"action\":\"intercom\","
+                       "\"target\":\"Kids room\"}]}", NULL, &c, err, sizeof err));
+  CHECK(labs_key_action(&c, 0) == LA_DOORBELL && labs_key_action(&c, 9) == LA_DOORBELL);
+  CHECK(labs_key_action(&c, 1) == LA_INTERCOM);
+  CHECK(labs_key_action(&c, 10) == LA_PHONE);
+}
+
 TEST(labs_cfg_refuses_bad_input) {
   labs_cfg_t c;
   char err[96];

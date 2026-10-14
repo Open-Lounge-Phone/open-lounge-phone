@@ -161,8 +161,14 @@ static void emit(cJSON *m) {
 }
 
 #if CONFIG_OLP_LABS
-/** Labs: a message to the server (check-in). */
-void app_emit(cJSON *m) { emit(m); }
+/** Labs: a message to the server (check-in). False if it couldn't go (not signed in, offline). */
+bool app_emit(cJSON *m) {
+  if (!s_authed) {
+    emit(m);  // logs and drops it
+    return false;
+  }
+  return proto_send(m);
+}
 #endif
 
 static void end_call(void) {
@@ -971,7 +977,9 @@ static void on_hook(bool up) {
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
 #if CONFIG_OLP_LABS
-  if (labs_hook(up, now_ms())) return;   // the intercom answered / hung up
+  // The intercom answered: the phone's own call logic leaves the lift alone. Hanging up always
+  // reaches it too, so a phone lifted to call a room isn't left off the hook.
+  if (labs_hook(up, now_ms()) && up) return;
 #endif
   phone_hook(&s_phone, up, emit);
 }

@@ -101,7 +101,8 @@ bool labs_cfg_parse(const char *json, const labs_cfg_t *keep, labs_cfg_t *out, c
       ok = false;
       break;
     }
-    if (a == LA_INTERCOM) upper(kk->target);
+    // Room names are upper case (the intercom matches them exactly).
+    if (a == LA_INTERCOM || a == LA_DOORBELL) upper(kk->target);
   }
   const cJSON *ha = cJSON_GetObjectItemCaseSensitive(j, "ha");
   if (cJSON_IsObject(ha)) {
@@ -182,6 +183,14 @@ char *labs_cfg_json(const labs_cfg_t *c, bool secrets) {
   char *s = cJSON_PrintUnformatted(j);
   cJSON_Delete(j);
   return s;
+}
+
+labs_action_t labs_key_action(const labs_cfg_t *c, int index) {
+  if (index < 0 || index >= LABS_KEYS) return LA_PHONE;
+  labs_action_t a = c->keys[index].action;
+  if (a == LA_PHONE && c->mode == LM_DOORBELL) return LA_DOORBELL;  // a door phone: any key rings
+  if (a == LA_PHONE && c->mode == LM_CHECKIN && index == 0) return LA_CHECKIN;
+  return a;
 }
 
 void labs_key_label(const labs_key_t *k, int index, char *out, size_t n) {
