@@ -61,7 +61,10 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
     e.preventDefault();
     const next = {
       name: requiredProblem(name, "a name for the room"),
-      handle: kind === "phone" ? handleHint(handle) : undefined,
+      handle:
+        kind === "phone"
+          ? (requiredProblem(handle, "an address for the room") ?? handleHint(handle))
+          : undefined,
     };
     setProblems(next);
     if (next.name || next.handle) return;

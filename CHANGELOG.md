@@ -14,6 +14,12 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Forms say what to fix.** Every companion form keeps its button enabled and, on submit,
+  says next to the field what's wrong in plain words ("Use 2 to 6 digits.", "That's a server.
+  Add the name in front: name@server."), checked like the server checks it. No grey example
+  values that look filled in; examples are hints. Add a household asks for its time zone. The
+  server's own refusals are plain sentences too ("Name can be at most 24 characters." instead of
+  zod's wording), and the companion says "Couldn't reach the server" when offline.
 - **Public lines on Lounge phones.** A house-line key on an idle Lounge phone can call a public
   line (here or on another server) as the space: the line sees the phone's name and the space
   owner's verified address. A member signed in at a Lounge phone gets the lines on their own

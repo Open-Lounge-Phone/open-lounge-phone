@@ -91,7 +91,7 @@ export function PublicLineEditor({
   if (line === undefined) return error ? <p className="error">{error}</p> : null;
 
   if (line === null) {
-    const hint = handleHint(handle);
+    const hint = handle ? handleHint(handle) : "Enter an address for the line.";
     const showHint = handleTried && hint;
     return (
       <form
