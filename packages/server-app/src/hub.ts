@@ -241,9 +241,10 @@ type LoungeFail = "expired" | "wrong_key" | "timeout" | "busy" | "not_found";
 interface LoungeEntry {
   /**
    * `connection`: someone in another household or on another server (by connection id);
-   * `address`: a guest's speed-dial entry, dialed through the guest's own server.
+   * `address`: a guest's speed-dial entry, dialed through the guest's own server;
+   * `line`: a public line (`id` is its address) from the person's own phone's keys.
    */
-  kind: "user" | "device" | "connection" | "address";
+  kind: "user" | "device" | "connection" | "address" | "line";
   id: string;
   label: string;
 }
@@ -2243,6 +2244,7 @@ export class HouseholdHub {
     if (!key) return this.refuse(device, "denied");
     const as = { id: device.id, label: device.label };
     const target = key.target;
+    if (target.kind === "line") return this.lineDial(device, target.address, true);
     if (target.kind === "user") return this.userDial(device, target.userId, as);
     if (target.kind === "device") return this.houseLinePhone(device, target.deviceId);
     return this.groupDial(device, target.userIds);
@@ -2298,6 +2300,7 @@ export class HouseholdHub {
       return this.guestDial(device, session.guest, entry);
     }
     const as = { id: session.userId, label: session.name };
+    if (entry.kind === "line") return this.lineDial(device, entry.id);
     if (entry.kind === "device") return this.appDial(device, entry.id, as);
     if (entry.kind === "connection") return this.connectionDial(device, entry.id, as);
     return this.userDial(device, entry.id, as);
@@ -2331,9 +2334,15 @@ export class HouseholdHub {
       ]);
       const byId = new Map(contacts.map((c) => [c.id, c]));
       const remote = new Map((await store.listRemoteContacts(own.id)).map((r) => [r.id, r]));
+      const lines = new Map((await store.lines.onPhone(own.id)).map((l) => [l.id, l]));
       for (const [index, id] of buttons) {
         const c = byId.get(id);
         if (!c?.deviceCanCall || id === userId || index >= 10) continue;
+        const line = lines.get(id);
+        if (line) {
+          out.set(index, { kind: "line", id: line.address, label: c.label });
+          continue;
+        }
         const via = remote.get(id);
         if (via) out.set(index, { kind: "connection", id: via.connectionId, label: c.label });
         else out.set(index, { kind: "user", id, label: c.label });
@@ -3174,6 +3183,18 @@ export class HouseholdHub {
     return user ? { id: user.id, label: user.name } : undefined;
   }
 
+  /**
+   * Who an idle Lounge phone's house-line key calls a public line as: the space (the phone's
+   * name), vouched for by its owner's account, which also carries the minutes.
+   */
+  private async houseLineCaller(peer: Peer): Promise<{ id: string; label: string } | undefined> {
+    if (peer.kind !== "device" || !(peer as DevicePeer).lounge) return undefined;
+    const { store } = this.env;
+    const account = await store.spaceOwner(this.householdId);
+    const owner = account && (await store.membership(account, this.householdId));
+    return owner ? { id: owner.id, label: peer.label } : undefined;
+  }
+
   /** Team/org spaces: an extension dialed from an app or a phone of this space. */
   private async extensionDial(peer: Peer, number: string): Promise<void> {
     const { store } = this.env;
@@ -3692,22 +3713,24 @@ export class HouseholdHub {
    * a line of this space directly, any other through `/fed/v1/calls` (another household here is
    * reached the same way, without the network). Never from a kids' phone.
    */
-  private async lineDial(peer: Peer, address: string): Promise<void> {
+  private async lineDial(peer: Peer, address: string, houseLine = false): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_LINES);
-    const as = await this.callingAs(peer);
+    const as = houseLine ? await this.houseLineCaller(peer) : await this.callingAs(peer);
     const user = as && (await store.getUser(as.id));
     const account = user && (await store.getAccount(user.accountId));
     if (!as || !account) return this.refuse(peer, "denied");
     const addr = parseAddress(address);
     if (!addr) return this.refuse(peer, "unavailable");
+    // A house-line key calls as the space: the phone's name, its owner's verified address.
+    const party = houseLine ? { ...partyOf(account), name: as.label } : partyOf(account);
     if (addr.host !== ownHost(this.env)) {
-      return this.lineRemote(peer, as, account, addr.host, addr.handle, undefined);
+      return this.lineRemote(peer, as, party, addr.host, addr.handle, undefined);
     }
     const line = await store.lines.byHandle(addr.handle);
     if (!line?.enabled) return this.refuse(peer, "unavailable");
     if (line.householdId !== this.householdId) {
-      return this.lineRemote(peer, as, account, LOCAL_HOST, addr.handle, line.householdId);
+      return this.lineRemote(peer, as, party, LOCAL_HOST, addr.handle, line.householdId);
     }
     const callerAddress = `${account.handle}@${ownHost(this.env)}`;
     const admitted = await admitLineCall(this.env, line, {
@@ -3749,7 +3772,7 @@ export class HouseholdHub {
   private async lineRemote(
     peer: Peer,
     as: { id: string; label: string },
-    account: Account,
+    from: Party,
     host: string,
     handle: string,
     peerHousehold: string | undefined,
@@ -3760,7 +3783,7 @@ export class HouseholdHub {
       key: `fed:${host}:line:${handle}`,
       label: handle.slice(0, 24),
       peerHousehold,
-      body: { from: partyOf(account), to: { kind: "line", handle } },
+      body: { from, to: { kind: "line", handle } },
       line: true,
     });
   }

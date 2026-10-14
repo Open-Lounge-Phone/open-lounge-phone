@@ -4,16 +4,18 @@ import type { HouseLineKey, HouseLineTarget } from "./api.ts";
 export const HOUSE_LINE_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0] as const;
 export const indexOfDigit = (digit: number) => (digit === 0 ? 9 : digit - 1);
 
-/** A target as a <select> value: `user:<id>`, `device:<id>` or `group`. */
+/** A target as a <select> value: `user:<id>`, `device:<id>`, `group` or `line`. */
 export function targetValue(t: HouseLineTarget | undefined): string {
   if (!t) return "";
   if (t.kind === "group") return "group";
+  if (t.kind === "line") return "line";
   return t.kind === "user" ? `user:${t.userId}` : `device:${t.deviceId}`;
 }
 
-/** Back from a <select> value; a group starts with nobody picked. */
+/** Back from a <select> value; a group starts with nobody picked, a line with no address. */
 export function parseTarget(value: string, group: string[] = []): HouseLineTarget | undefined {
   if (value === "group") return { kind: "group", userIds: group };
+  if (value === "line") return { kind: "line", address: "" };
   const [kind, id] = value.split(":");
   if (!id) return undefined;
   if (kind === "user") return { kind: "user", userId: id };
@@ -32,9 +34,14 @@ export function setKey(
   return next.sort((a, b) => a.index - b.index);
 }
 
-/** Keys the server would refuse: a group with nobody in it, or a missing label. */
+/** Keys the server would refuse: a group with nobody in it, a line without an address, or a missing label. */
 export function incompleteKeys(keys: HouseLineKey[]): number[] {
   return keys
-    .filter((k) => !k.label.trim() || (k.target.kind === "group" && k.target.userIds.length === 0))
+    .filter(
+      (k) =>
+        !k.label.trim() ||
+        (k.target.kind === "group" && k.target.userIds.length === 0) ||
+        (k.target.kind === "line" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(k.target.address.trim())),
+    )
     .map((k) => k.index);
 }

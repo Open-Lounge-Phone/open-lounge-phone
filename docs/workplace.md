@@ -102,8 +102,11 @@ make it stricter.
 - **No enumeration:** a line that doesn't exist, is off, or doesn't take this caller (blocked, not
   allowed, over a limit, a kids' phone) answers exactly like an unavailable one (`ended`
   `unavailable`).
-- **Calling:** `call.line {address}` from the companion (Connections → Call a public line) or a
-  key on a personal phone. The first `call.state ringing` carries `line {name, description,
+- **Calling:** `call.line {address}` from the companion (Connections → Call a public line), a
+  key on a personal phone, or a Lounge phone: a house-line key while nobody is signed in (calls
+  as the space: the phone's name with the space owner's verified address; it can wait in the
+  queue but leaves no voicemail), and, for a signed-in member, the lines on their own phone's
+  keys. Kids' phones never. The first `call.state ringing` carries `line {name, description,
   address}`.
 
 ### The queue

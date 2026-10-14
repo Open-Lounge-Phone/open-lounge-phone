@@ -522,6 +522,71 @@ describe("public lines: calls on one server", () => {
     expect(await phone.nextState("ended")).toMatchObject({ reason: "voicemail" });
   });
 
+  it("a Lounge phone: a house-line key while idle, and the signed-in person's own keys", async () => {
+    await publish(s, t, groupId);
+    const lobby = await s.pairDevice(t.ada.token, "Lobby", { kind: "lounge" });
+    if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
+    const phone = await s.connectDevice(lobby.deviceId, lobby.key.pair);
+    const { nonce } = await phone.next("lounge.idle");
+    // Idle: key 1 calls the line as the space (the phone's name, the owner's address).
+    const keys = [
+      { index: 0, label: "Support", target: { kind: "line", address: "Acme-Support@work.test" } },
+    ];
+    const bad = [{ index: 1, label: "Oops", target: { kind: "line", address: "not an address" } }];
+    for (const [k, status] of [
+      [bad, 400],
+      [keys, 204],
+    ] as const) {
+      const r = await s.http("/lounge/settings", {
+        method: "PUT",
+        token: t.ada.token,
+        body: { houseLine: { enabled: true, keys: k } },
+      });
+      expectStatus(r, status);
+    }
+    expect((await phone.next("config")).buttons).toEqual([{ index: 0, label: "Support" }]);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    const q = await nextQueue(phone);
+    // Nobody to call back at an idle phone: it waits, but leaves no voicemail.
+    expect(q.queue).toEqual({ position: 1, size: 1 });
+    const cy = await s.connectApp(t.cy.token);
+    const ring = await cy.next("call.ringing");
+    expect(ring.from).toEqual({ label: "Lobby", address: "olga@work.test" });
+    phone.write({ t: "call.hangup", callId: q.callId });
+    await phone.nextState("ended");
+    phone.write({ t: "hook", state: "down" });
+    await cy.nextState("ended");
+
+    // Ben signs in: key 3 on his own desk phone is the line, so it is on the Lobby's key 3 too.
+    const desk = await s.pairDevice(t.ben.token, "Ben's desk", { forMe: true });
+    if (!desk.deviceId) throw new Error("pairing failed");
+    const add = await s.http(`/devices/${desk.deviceId}/lines`, {
+      method: "PUT",
+      token: t.ben.token,
+      body: { address: "acme-support@work.test", label: "Help" },
+    });
+    expectStatus(
+      await s.http(`/devices/${desk.deviceId}/buttons/2`, {
+        method: "PUT",
+        token: t.ben.token,
+        body: { userId: add.json.id },
+      }),
+      204,
+    );
+    const benApp = await s.connectApp(t.ben.token);
+    benApp.write({ t: "lounge.claim", deviceId: lobby.deviceId, nonce });
+    const { index } = await phone.next("lounge.challenge");
+    phone.write({ t: "lounge.press", index });
+    await phone.next("lounge.session");
+    const config = await phone.next("config");
+    expect(config.buttons).toContainEqual({ index: 2, label: "Help" });
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 2 });
+    const ring2 = await cy.next("call.ringing");
+    expect(ring2.from).toEqual({ label: "Ben", address: "ben@work.test" });
+  });
+
   it("a waiting call survives the host sleeping: its place and its longest wait", async () => {
     await publish(s, t, groupId, { queueWaitSeconds: 120 });
     // Ben (a member) calls his own team's line; nobody is free.
@@ -628,6 +693,32 @@ describe("public lines across servers", () => {
     expectStatus(res, 201);
     const inbox = (await a.http("/voicemails", { token: t.cy.token })).json;
     expect(inbox).toMatchObject([{ box: "Support", fromLabel: "Bob" }]);
+  });
+
+  it("an idle Lounge phone elsewhere calls the line as its space: the phone's name", async () => {
+    await publish(a, t, groupId);
+    const lobby = await b.pairDevice(bob.token, "Cafe phone", { kind: "lounge" });
+    if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
+    const phone = await b.connectDevice(lobby.deviceId, lobby.key.pair);
+    const keys = [
+      { index: 0, label: "Acme", target: { kind: "line", address: "acme-support@a.test" } },
+    ];
+    expectStatus(
+      await b.http("/lounge/settings", {
+        method: "PUT",
+        token: bob.token,
+        body: { houseLine: { enabled: true, keys } },
+      }),
+      204,
+    );
+    await phone.next("config");
+    const cy = await a.connectApp(t.cy.token);
+    phone.write({ t: "hook", state: "up" });
+    phone.write({ t: "button", index: 0 });
+    expect((await cy.next("call.ringing")).from).toEqual({
+      label: "Cafe phone",
+      address: "bob@b.test",
+    });
   });
 
   it("a member answers someone from another server; the call log names them", async () => {

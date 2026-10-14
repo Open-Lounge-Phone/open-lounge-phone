@@ -216,7 +216,12 @@ export type HouseLineTarget =
   /** A personal (desk) phone in the space. */
   | { kind: "device"; deviceId: string }
   /** Several members at once (a front desk, a staff group): the first to answer takes it. */
-  | { kind: "group"; userIds: string[] };
+  | { kind: "group"; userIds: string[] }
+  /**
+   * A public line (`orders@acme.example`, here or on another server). The space calls it: the
+   * line sees the phone's name and the space owner's verified address.
+   */
+  | { kind: "line"; address: string };
 
 export interface HouseLineKey {
   /** Button index (0–9: digits 1–9, then 0). */

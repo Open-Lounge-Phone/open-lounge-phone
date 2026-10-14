@@ -102,7 +102,9 @@ export type LoungeSessionPolicy = "idle" | "end_of_day" | "until_logout";
 export type HouseLineTarget =
   | { kind: "user"; userId: string }
   | { kind: "device"; deviceId: string }
-  | { kind: "group"; userIds: string[] };
+  | { kind: "group"; userIds: string[] }
+  /** A public line by its address; the line sees the phone's name. */
+  | { kind: "line"; address: string };
 
 export interface HouseLineKey {
   index: number;

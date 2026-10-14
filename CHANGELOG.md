@@ -14,6 +14,11 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Public lines on Lounge phones.** A house-line key on an idle Lounge phone can call a public
+  line (here or on another server) as the space: the line sees the phone's name and the space
+  owner's verified address. A member signed in at a Lounge phone gets the lines on their own
+  phone's keys. Companion: Lounge → house-line keys → "A public line…".
+
 ## 0.3.0 (2026-10-13, `server-v0.3.0`)
 
 What l1 and the public hub run.
