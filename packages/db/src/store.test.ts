@@ -2,7 +2,7 @@ import { copyFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { newPairingCode } from "./crypto.ts";
+import { newPairingCode, sha256 } from "./crypto.ts";
 import { MIGRATIONS_DIR, migrate, openSqlite } from "./node.ts";
 import { handleFromName, handleProblem, PAIRING_TTL_MS, SESSION_TTL_MS, Store } from "./store.ts";
 
@@ -1195,5 +1195,145 @@ describe("missed call backs (migration 0026)", () => {
     expect(await store.lines.missedCallbacks(accountId)).toEqual([]);
     await add("help@acme.example", "Help", T0);
     expect(await store.lines.clearMissedCallbacks(accountId)).toBe(1);
+  });
+});
+
+describe("0027_accounts_recovery", () => {
+  it("keeps sessions, invites and spaces; writes down each space's owner", async () => {
+    const old = openBefore("0027");
+    const s = new Store(old.sql);
+    const mom = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const dad = await s.createAccount({ name: "Dad", handle: "dad" }, T0);
+    if (!mom || !dad) throw new Error("no accounts");
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: mom.id },
+      T0,
+    );
+    const dadThere = await s.createUser(
+      { householdId: hh.id, name: "Dad", role: "guardian", accountId: dad.id },
+      T0 + 1,
+    );
+    const kid = await s.createUser({ householdId: hh.id, name: "Kid", role: "contact" }, T0 + 2);
+    await s.addPasskey({
+      id: "pk1",
+      accountId: mom.id,
+      publicKey: KEY,
+      counter: 0,
+      transports: [],
+      name: "Mac",
+      createdAt: T0,
+    });
+    // Sessions and an invite as 0026 stored them.
+    const raw = (table: string, cols: string[], values: unknown[]) =>
+      old.sql.run(
+        `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+        ...(values as (string | number | null)[]),
+      );
+    const sessionCols = ["token_hash", "account_id", "user_id", "created_at", "expires_at"];
+    await raw("sessions", sessionCols, [
+      await sha256("t-mom-1".repeat(4)),
+      mom.id,
+      guardian.id,
+      T0,
+      T0 + SESSION_TTL_MS,
+    ]);
+    await raw("sessions", sessionCols, [
+      await sha256("t-mom-2".repeat(4)),
+      mom.id,
+      guardian.id,
+      T0,
+      T0 + SESSION_TTL_MS,
+    ]);
+    await raw("sessions", sessionCols, [
+      await sha256("t-dad-1".repeat(4)),
+      dad.id,
+      dadThere.id,
+      T0,
+      T0 + SESSION_TTL_MS,
+    ]);
+    await raw(
+      "invites",
+      [
+        "token_hash",
+        "household_id",
+        "user_id",
+        "name",
+        "role",
+        "created_by",
+        "created_at",
+        "expires_at",
+      ],
+      [await sha256("invite-token"), hh.id, kid.id, "Kid", "contact", guardian.id, T0, T0 + 1000],
+    );
+    expect(migrate(old.db)).toContain("0027_accounts_recovery.sql");
+
+    // Owner: the space's first guardian, written down.
+    const row = await old.sql.first<{ owner_user: string }>(
+      "SELECT owner_user FROM households WHERE id = ?",
+      hh.id,
+    );
+    expect(row?.owner_user).toBe(guardian.id);
+    expect(await s.spaceOwnerUser(hh.id)).toBe(guardian.id);
+    expect(await s.spaceOwner(hh.id)).toBe(mom.id);
+    // Sessions still sign in; each has its own id; Mom's (she has a passkey) slide, Dad's don't.
+    const m1 = await s.sessionForToken("t-mom-1".repeat(4), T0 + 10);
+    const m2 = await s.sessionForToken("t-mom-2".repeat(4), T0 + 10);
+    const d1 = await s.sessionForToken("t-dad-1".repeat(4), T0 + 10);
+    expect(m1?.user?.id).toBe(guardian.id);
+    expect(m1?.session.id).toMatch(/^ses_[0-9a-f]{24}$/);
+    expect(m1?.session.id).not.toBe(m2?.session.id);
+    expect(m1?.session).toMatchObject({ passkey: true, limited: false, via: null });
+    expect(d1?.session).toMatchObject({ passkey: false, limited: false });
+    expect((await s.auth.sessions(mom.id, T0 + 10)).map((x) => x.id).sort()).toEqual(
+      [m1?.session.id, m2?.session.id].sort(),
+    );
+    // The invite works, now with an id the guardians' list can cancel it by.
+    const invite = await s.peekInvite("invite-token", T0 + 10);
+    expect(invite).toMatchObject({ userId: kid.id, createdBy: guardian.id });
+    expect(invite?.id).toMatch(/^inv_[0-9a-f]{24}$/);
+    expect((await s.auth.invites(hh.id, T0 + 10)).map((i) => i.id)).toEqual([invite?.id]);
+    // No account has a recovery code yet.
+    expect((await s.getAccount(mom.id))?.hasRecoveryCode).toBe(false);
+    old.db.close();
+  });
+});
+
+describe("sign-in records", () => {
+  it("recovery codes work once, and only for their own account", async () => {
+    const { guardian } = await household();
+    const code = "A".repeat(28);
+    await store.auth.setRecoveryCode(guardian.accountId, code, T0);
+    expect((await store.getAccount(guardian.accountId))?.hasRecoveryCode).toBe(true);
+    const stored = db
+      .prepare("SELECT recovery_hash FROM accounts WHERE id = ?")
+      .get(guardian.accountId) as { recovery_hash: string };
+    // Only a hash is kept.
+    expect(stored?.recovery_hash).not.toContain(code);
+    expect(await store.auth.useRecoveryCode(guardian.accountId, "B".repeat(28))).toBe(false);
+    expect(await store.auth.useRecoveryCode(undefined, code)).toBe(false);
+    expect(await store.auth.useRecoveryCode("acc_other", code)).toBe(false);
+    expect(await store.auth.useRecoveryCode(guardian.accountId, code)).toBe(true);
+    expect(await store.auth.useRecoveryCode(guardian.accountId, code)).toBe(false);
+    expect((await store.getAccount(guardian.accountId))?.hasRecoveryCode).toBe(false);
+  });
+
+  it("sessions slide once a day while in use, only when a passkey backs them", async () => {
+    const { guardian } = await household();
+    const day = 24 * 60 * 60 * 1000;
+    const backed = await store.createAccountSession(guardian.accountId, guardian.id, T0, {
+      passkey: true,
+    });
+    const bare = await store.createAccountSession(guardian.accountId, guardian.id, T0);
+    const later = await store.sessionForToken(backed, T0 + 80 * day);
+    expect(later?.session.expiresAt).toBe(T0 + 80 * day + SESSION_TTL_MS);
+    expect((await store.sessionForToken(bare, T0 + 80 * day))?.session.expiresAt).toBe(
+      T0 + SESSION_TTL_MS,
+    );
+    // Unused for the whole window: gone.
+    expect(await store.sessionForToken(bare, T0 + SESSION_TTL_MS)).toBeUndefined();
+    expect(await store.sessionForToken(backed, T0 + 80 * day + SESSION_TTL_MS - 1)).toBeDefined();
+    // Expired sessions are purged by the sweep.
+    await store.auth.purgeExpired(T0 + SESSION_TTL_MS);
+    expect(await store.auth.sessions(guardian.accountId, 0)).toHaveLength(1);
   });
 });

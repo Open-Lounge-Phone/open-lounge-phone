@@ -1,4 +1,5 @@
 export * from "./access.ts";
+export * from "./accounts.ts";
 export * from "./callControl.ts";
 export * from "./callRoom.ts";
 export * from "./device.ts";

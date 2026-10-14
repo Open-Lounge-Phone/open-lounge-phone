@@ -1,10 +1,22 @@
-import type {
-  ButtonMap,
-  Contact,
-  QuietHoursRule,
-  QuietHoursSchedule,
-  Weekday,
+import {
+  type ButtonMap,
+  type Contact,
+  type QuietHoursRule,
+  type QuietHoursSchedule,
+  SESSION_IDLE_MS,
+  SESSION_REFRESH_MS,
+  sessionShouldSlide,
+  type Weekday,
 } from "@openloungephone/core";
+import {
+  AuthStore,
+  type InviteRow,
+  type Session,
+  type SessionOptions,
+  type SessionRow,
+  toInvite,
+  toSession,
+} from "./auth.ts";
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
@@ -77,6 +89,8 @@ export interface Account {
    * null = the server default (keep).
    */
   retentionDays: number | null;
+  /** The account has a recovery code (only its hash is kept; see `AuthStore`). */
+  hasRecoveryCode: boolean;
 }
 
 /** The history retention choices (days; 0 = forever). */
@@ -358,18 +372,24 @@ export const DEFAULT_RING_SECONDS = 25;
 /** Long enough to hear a 30 s greeting and record two minutes, with slack. */
 export const VOICEMAIL_TICKET_TTL_MS = 10 * 60 * 1000;
 
-export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+/** A session's life without use (see `SESSION_IDLE_MS` in core: they slide while in use). */
+export const SESSION_TTL_MS = SESSION_IDLE_MS;
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 export interface Invite {
+  /** Public id (the list of outstanding links names them by it, never by the token). */
+  id: string;
   householdId: string;
   /** Set for sign-in links for an existing person. */
   userId: string | null;
   name: string;
   role: Role;
   expiresAt: number;
+  /** The membership that made it. */
+  createdBy: string;
+  createdAt: number;
 }
 
 export interface Passkey {
@@ -497,6 +517,7 @@ type AccountRow = {
   suspended_at?: number | null;
   fair_use_exempt?: number;
   retention_days?: number | null;
+  recovery_hash?: string | null;
 };
 const toAccount = (r: AccountRow): Account => ({
   id: r.id,
@@ -508,6 +529,7 @@ const toAccount = (r: AccountRow): Account => ({
   suspendedAt: r.suspended_at ?? null,
   fairUseExempt: r.fair_use_exempt === 1,
   retentionDays: r.retention_days ?? null,
+  hasRecoveryCode: !!r.recovery_hash,
 });
 type ContactRow = {
   user_id: string;
@@ -602,6 +624,8 @@ export class Store {
   readonly recordings: RecordingStore;
   /** Notices to a space's phones. */
   readonly notices: NoticeStore;
+  /** Sign-in: sessions, recovery codes, outstanding invites and sign-in links. */
+  readonly auth: AuthStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -611,6 +635,7 @@ export class Store {
     this.lines = new LineStore(sql, HANDLE_RESERVE_MS);
     this.recordings = new RecordingStore(sql);
     this.notices = new NoticeStore(sql);
+    this.auth = new AuthStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -670,6 +695,7 @@ export class Store {
           suspendedAt: null,
           fairUseExempt: false,
           retentionDays: null,
+          hasRecoveryCode: false,
         };
       }
     }
@@ -1019,6 +1045,8 @@ export class Store {
         FROM recordings r WHERE r.household_id = ? AND r.started_at < ?
       ) WHERE days > 0 AND t < ? - days * ${DAY_MS}`;
     const params = [host, householdId, floor, now];
+    // Expired sign-ins (server-wide; cheap): sessions, invites and passkey challenges.
+    await this.auth.purgeExpired(now);
     const expiredVm = await this.sql.all<{ id: string; k: string }>(voicemails, ...params);
     const expiredCalls = await this.sql.all<{ id: string }>(calls, ...params);
     const expiredRec = await this.sql.all<{ id: string; k: string }>(recordings, ...params);
@@ -1121,14 +1149,52 @@ export class Store {
     return r?.n ?? 0;
   }
 
-  /** The account that answers for a space: its first guardian. */
+  /** The account that answers for a space: its owner's (see `spaceOwnerUser`). */
   async spaceOwner(householdId: string): Promise<string | undefined> {
-    const r = await this.sql.first<{ account_id: string }>(
-      `SELECT account_id FROM users WHERE household_id = ? AND role = 'guardian'
+    const id = await this.spaceOwnerUser(householdId);
+    return id ? (await this.getUser(id))?.accountId : undefined;
+  }
+
+  /**
+   * A space's owner (a membership): the one `owner_user` names once ownership was handed on, else
+   * its founder (the first guardian, who made it; 0027 wrote that down for existing spaces). The
+   * API never removes or demotes an owner, so the founder fallback only ever finds the founder.
+   */
+  async spaceOwnerUser(householdId: string): Promise<string | undefined> {
+    const r = await this.sql.first<{ id: string }>(
+      `SELECT u.id FROM households h JOIN users u ON u.id = h.owner_user AND u.household_id = h.id
+       WHERE h.id = ?`,
+      householdId,
+    );
+    if (r) return r.id;
+    const first = await this.sql.first<{ id: string }>(
+      `SELECT id FROM users WHERE household_id = ? AND role = 'guardian'
        ORDER BY created_at, rowid LIMIT 1`,
       householdId,
     );
-    return r?.account_id;
+    return first?.id;
+  }
+
+  /** Hands a space to another of its members (the caller checked they may). */
+  async setSpaceOwner(householdId: string, userId: string): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      `UPDATE households SET owner_user = ? WHERE id = ?
+       AND EXISTS (SELECT 1 FROM users WHERE id = ? AND household_id = ?)`,
+      userId,
+      householdId,
+      userId,
+      householdId,
+    );
+    return changes === 1;
+  }
+
+  /** How many people are in a space. */
+  async memberCount(householdId: string): Promise<number> {
+    const r = await this.sql.first<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM users WHERE household_id = ?",
+      householdId,
+    );
+    return r?.n ?? 0;
   }
 
   /** Records something an operator did (or an automatic key change: `actor` null). */
@@ -1345,6 +1411,22 @@ export class Store {
     return r && toUser(r);
   }
 
+  /**
+   * Renames a person in their space (what phones and the app show). Phone keys that showed
+   * their old name show the new one; keys someone labelled differently keep their label.
+   */
+  async renameMember(userId: string, name: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+    await this.sql.batch([
+      { query: "UPDATE users SET name = ? WHERE id = ?", params: [name, userId] },
+      {
+        query: "UPDATE contacts SET label = ? WHERE user_id = ? AND label = ?",
+        params: [name, userId, user.name],
+      },
+    ]);
+  }
+
   /** A member's role in their space (team/org: guardian = admin, contact = member). */
   async setRole(userId: string, role: Role): Promise<void> {
     await this.sql.run("UPDATE users SET role = ? WHERE id = ?", role, userId);
@@ -1410,17 +1492,36 @@ export class Store {
     accountId: string,
     userId: string | null,
     now: number,
+    opts: SessionOptions = {},
   ): Promise<string> {
+    return (await this.openSession(accountId, userId, now, opts)).token;
+  }
+
+  /** Like `createAccountSession`, with the new session's public id. */
+  async openSession(
+    accountId: string,
+    userId: string | null,
+    now: number,
+    opts: SessionOptions = {},
+  ): Promise<{ token: string; id: string }> {
     const token = newToken();
+    const id = newId("ses");
     await this.sql.run(
-      "INSERT INTO sessions (token_hash, account_id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+      `INSERT INTO sessions (token_hash, account_id, user_id, created_at, expires_at, id, label,
+         last_used_at, via, passkey, limited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       await sha256(token),
       accountId,
       userId,
       now,
-      now + SESSION_TTL_MS,
+      now + (opts.ttlMs ?? SESSION_TTL_MS),
+      id,
+      opts.label?.slice(0, 60) ?? null,
+      now,
+      opts.via ?? null,
+      opts.passkey ? 1 : 0,
+      opts.limited ? 1 : 0,
     );
-    return token;
+    return { token, id };
   }
 
   /**
@@ -1431,16 +1532,31 @@ export class Store {
   async sessionForToken(
     token: string,
     now: number,
-  ): Promise<{ account: Account; user: User | undefined } | undefined> {
+  ): Promise<{ account: Account; user: User | undefined; session: Session } | undefined> {
     const hash = await sha256(token);
-    const s = await this.sql.first<{ account_id: string; user_id: string | null }>(
-      "SELECT account_id, user_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
+    const s = await this.sql.first<SessionRow>(
+      "SELECT * FROM sessions WHERE token_hash = ? AND expires_at > ?",
       hash,
       now,
     );
     if (!s) return undefined;
     const account = await this.getAccount(s.account_id);
     if (!account) return undefined;
+    const session = toSession(s);
+    if (sessionShouldSlide(session, now)) {
+      // In use: the session now ends SESSION_IDLE_MS from today (one write a day at most).
+      session.expiresAt = now + SESSION_IDLE_MS;
+      session.lastUsedAt = now;
+      await this.sql.run(
+        "UPDATE sessions SET last_used_at = ?, expires_at = ? WHERE token_hash = ?",
+        now,
+        session.expiresAt,
+        hash,
+      );
+    } else if (now - (session.lastUsedAt ?? 0) >= SESSION_REFRESH_MS) {
+      session.lastUsedAt = now;
+      await this.sql.run("UPDATE sessions SET last_used_at = ? WHERE token_hash = ?", now, hash);
+    }
     let user = s.user_id ? await this.getUser(s.user_id) : undefined;
     if (!user || user.accountId !== account.id) {
       user = (await this.listMemberships(account.id))[0]?.user;
@@ -1448,7 +1564,7 @@ export class Store {
         await this.sql.run("UPDATE sessions SET user_id = ? WHERE token_hash = ?", user.id, hash);
       }
     }
-    return { account, user };
+    return { account, user, session };
   }
 
   /** The session's active membership (see `sessionForToken`). */
@@ -2147,12 +2263,14 @@ export class Store {
   async createInvite(
     input: { householdId: string; userId?: string; name: string; role: Role; createdBy: string },
     now: number,
-  ): Promise<{ token: string; expiresAt: number }> {
+  ): Promise<{ token: string; expiresAt: number; id: string }> {
     const token = newToken();
     const expiresAt = now + INVITE_TTL_MS;
+    const id = newId("inv");
     await this.sql.run(
-      `INSERT INTO invites (token_hash, household_id, user_id, name, role, created_by, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO invites (id, token_hash, household_id, user_id, name, role, created_by, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
       await sha256(token),
       input.householdId,
       input.userId ?? null,
@@ -2162,26 +2280,16 @@ export class Store {
       now,
       expiresAt,
     );
-    return { token, expiresAt };
+    return { token, expiresAt, id };
   }
 
   async peekInvite(token: string, now: number): Promise<Invite | undefined> {
-    const r = await this.sql.first<{
-      household_id: string;
-      user_id: string | null;
-      name: string;
-      role: Role;
-      expires_at: number;
-    }>("SELECT * FROM invites WHERE token_hash = ? AND expires_at > ?", await sha256(token), now);
-    return (
-      r && {
-        householdId: r.household_id,
-        userId: r.user_id,
-        name: r.name,
-        role: r.role,
-        expiresAt: r.expires_at,
-      }
+    const r = await this.sql.first<InviteRow>(
+      "SELECT * FROM invites WHERE token_hash = ? AND expires_at > ?",
+      await sha256(token),
+      now,
     );
+    return r && toInvite(r);
   }
 
   /**

@@ -142,3 +142,60 @@ export function csvCell(v: string | number | boolean | null | undefined): string
   if (/^[=+\-@]/.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+
+/**
+ * Handing a space to someone else: only its owner can, and only to another admin (a guardian in
+ * a home), who then owns it. The old owner stays an admin (guardian).
+ */
+export function mayTransferOwnership(
+  actor: SpaceRole,
+  target: SpaceRole,
+): { ok: true } | { ok: false; error: string } {
+  if (actor !== "owner") return { ok: false, error: "only the owner can hand the space on" };
+  if (target === "owner") return { ok: false, error: "you already own it" };
+  if (target !== "admin") {
+    return { ok: false, error: "make them a guardian (an admin in a team) first" };
+  }
+  return { ok: true };
+}
+
+/**
+ * Whether a member may leave a space themselves. The owner hands it on first (or, alone in it,
+ * deletes it by leaving); a space that is someone's only one goes with their account (they
+ * delete the account instead).
+ */
+export function leaveCheck(input: {
+  role: SpaceRole;
+  /** People in the space, including the one leaving. */
+  members: number;
+  /** The leaver's other spaces on this server. */
+  otherSpaces: number;
+}):
+  | { ok: true; deletesSpace: boolean }
+  | { ok: false; reason: "owner" | "only_space"; error: string } {
+  if (input.role === "owner" && input.members > 1) {
+    return {
+      ok: false,
+      reason: "owner",
+      error: "you own this space; hand it to another guardian or admin first",
+    };
+  }
+  if (input.otherSpaces === 0) {
+    return {
+      ok: false,
+      reason: "only_space",
+      error: "this is your only space here; to leave it, delete your account",
+    };
+  }
+  return { ok: true, deletesSpace: input.role === "owner" };
+}
+
+/**
+ * Spaces that stop an owner deleting their account: ones they own that other people are in
+ * (they hand those on first). Spaces they're alone in are deleted with the account.
+ */
+export function ownedSpacesBlockingDelete<S extends { owner: boolean; members: number }>(
+  spaces: readonly S[],
+): S[] {
+  return spaces.filter((s) => s.owner && s.members > 1);
+}

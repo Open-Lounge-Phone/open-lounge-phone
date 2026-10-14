@@ -7,8 +7,11 @@ import {
   huntSteps,
   isExtension,
   isOpen,
+  leaveCheck,
   mayChangeRole,
+  mayTransferOwnership,
   nextRoundRobin,
+  ownedSpacesBlockingDelete,
   spaceRole,
 } from "./workplace.ts";
 
@@ -88,5 +91,44 @@ describe("workplace rules", () => {
     expect(csvCell("=SUM(A1)")).toBe("'=SUM(A1)");
     expect(csvCell(null)).toBe("");
     expect(csvCell(12)).toBe("12");
+  });
+});
+
+describe("owners", () => {
+  it("hand a space only to an admin, and only themselves", () => {
+    expect(mayTransferOwnership("owner", "admin")).toEqual({ ok: true });
+    expect(mayTransferOwnership("admin", "admin").ok).toBe(false);
+    expect(mayTransferOwnership("owner", "member").ok).toBe(false);
+    expect(mayTransferOwnership("owner", "owner").ok).toBe(false);
+  });
+
+  it("leave only after handing the space on; an only space goes with the account", () => {
+    expect(leaveCheck({ role: "member", members: 3, otherSpaces: 1 })).toEqual({
+      ok: true,
+      deletesSpace: false,
+    });
+    expect(leaveCheck({ role: "owner", members: 3, otherSpaces: 1 })).toMatchObject({
+      ok: false,
+      reason: "owner",
+    });
+    expect(leaveCheck({ role: "owner", members: 1, otherSpaces: 1 })).toEqual({
+      ok: true,
+      deletesSpace: true,
+    });
+    expect(leaveCheck({ role: "admin", members: 3, otherSpaces: 0 })).toMatchObject({
+      ok: false,
+      reason: "only_space",
+    });
+    // An owner with others in their only space hands it on first (then it's still their only one).
+    expect(leaveCheck({ role: "owner", members: 3, otherSpaces: 0 })).toMatchObject({
+      reason: "owner",
+    });
+    expect(
+      ownedSpacesBlockingDelete([
+        { name: "a", owner: true, members: 2 },
+        { name: "b", owner: true, members: 1 },
+        { name: "c", owner: false, members: 5 },
+      ]).map((s) => s.name),
+    ).toEqual(["a"]);
   });
 });
