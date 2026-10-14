@@ -55,6 +55,8 @@ export type MenuEvent =
 export interface MenuContext {
   /** Callers with unheard voicemail. */
   missedCount: number;
+  /** Public lines whose call back was missed (a person's own phone): 4 clears them. */
+  missedCallbacks?: number;
   fw: string;
   /** A Lounge phone someone is using: adds "Open to chat" and "Log out". */
   lounge?: { openToChat: boolean };
@@ -79,6 +81,8 @@ export type MenuAction =
   /** Interrupted (a call, the handset): discard it. */
   | { type: "greeting-cancel" }
   | { type: "greeting-reset" }
+  /** Forget the missed call backs (`missed.clear`). */
+  | { type: "missed-clear" }
   /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
   | { type: "call"; action: CallAction }
   /** Dial this extension (the phone lifts the handset if it's down). */
@@ -174,6 +178,8 @@ export function callActionPrompt(action: CallAction, attended: boolean): string 
 
 /** Voicemail screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
 const GREETING_LABELS = { 1: "Name", 2: "Greeting", 3: "Default" } as const;
+/** Voicemail screen: the key that clears missed call backs (1-3 are the greeting's). */
+export const CLEAR_MISSED_DIGIT = 4;
 const GREETING_TEXT = { default: "standard", name: "your name", custom: "your own" } as const;
 
 export function menuView(state: MenuState, settings: Settings, ctx: MenuContext): MenuView {
@@ -196,7 +202,10 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
       return {
         ...base,
         title: ctx.missedCount ? `${ctx.missedCount} VOICEMAIL` : "NO VOICEMAIL",
-        labels: ctx.greeting?.canRecord ? { ...GREETING_LABELS } : {},
+        labels: {
+          ...(ctx.greeting?.canRecord ? GREETING_LABELS : {}),
+          ...(ctx.missedCallbacks ? { [CLEAR_MISSED_DIGIT]: "Clear missed" } : {}),
+        },
       };
     case "greeting":
       return {
@@ -245,12 +254,15 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       const messages = ctx.missedCount
         ? `You have voicemail from ${ctx.missedCount} ${ctx.missedCount === 1 ? "person" : "people"}. Playing messages on the phone is not available yet; a grown-up can play them in the app.`
         : "You have no new voicemail.";
+      const callbacks = ctx.missedCallbacks
+        ? ` You missed ${ctx.missedCallbacks === 1 ? "a call back" : `${ctx.missedCallbacks} call backs`} from a public line. Press ${CLEAR_MISSED_DIGIT} to clear.`
+        : "";
       const g = ctx.greeting;
-      if (!g) return messages;
+      if (!g) return `${messages}${callbacks}`;
       const now = ` Callers hear the ${GREETING_TEXT[g.kind]} greeting.`;
       return g.canRecord
-        ? `${messages}${now} Press 1 to record your name, 2 to record a greeting, 3 for the standard greeting.`
-        : `${messages}${now} ${PROMPT_TEXT["greet.not_allowed"]}`;
+        ? `${messages}${callbacks}${now} Press 1 to record your name, 2 to record a greeting, 3 for the standard greeting.`
+        : `${messages}${callbacks}${now} ${PROMPT_TEXT["greet.not_allowed"]}`;
     }
     case "greeting":
       return state.recording === "name"
@@ -380,6 +392,14 @@ export function menuStep(
       return { state: touched, settings: { ...settings, volume }, say: `Volume ${volume}` };
     }
     case "voicemail": {
+      if (d === CLEAR_MISSED_DIGIT && ctx.missedCallbacks) {
+        return {
+          state: touched,
+          settings,
+          say: "Missed call backs cleared.",
+          action: { type: "missed-clear" },
+        };
+      }
       if (!ctx.greeting?.canRecord || (d !== 1 && d !== 2 && d !== 3)) {
         return { state: touched, settings };
       }

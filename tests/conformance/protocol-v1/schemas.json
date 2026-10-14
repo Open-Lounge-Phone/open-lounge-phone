@@ -355,6 +355,22 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "missed.clear"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "checkin.ok"
           },
           "id": {
@@ -1072,6 +1088,10 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 24
+                },
+                "callback": {
+                  "type": "boolean",
+                  "const": true
                 }
               },
               "required": ["from"]

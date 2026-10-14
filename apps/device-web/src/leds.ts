@@ -21,8 +21,11 @@ export interface DeviceConfig {
   quiet: boolean;
   /** Local "HH:MM" when current quiet hours end. */
   quietUntil?: string;
-  /** Callers with unheard voicemail, newest first. */
-  missed?: { from: string }[];
+  /**
+   * Missed calls, newest first: callers with unheard voicemail, and public lines whose call back
+   * wasn't taken (`callback`).
+   */
+  missed?: { from: string; callback?: true }[];
   /** The phone's voicemail greeting, and whether MENU → Voicemail may change it. */
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
   /** Whose phone this is and how it's used (the strip's trust line). */

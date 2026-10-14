@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   fingerprintLines,
   MENU_TIMEOUT_MS,
+  type MenuContext,
   type MenuEvent,
   type MenuState,
   menuLines,
@@ -127,6 +128,21 @@ describe("menuStep", () => {
   it("exits immediately on handset lift or an incoming call", () => {
     const open = run([menu(), digit(2)]).state;
     expect(menuStep(open, DEFAULT_SETTINGS, { type: "exit" }, ctx).state).toBeUndefined();
+  });
+
+  it("clears missed call backs with 4 (counted apart from voicemail)", () => {
+    const g = { ...ctx, greeting: { kind: "default" as const, canRecord: true } };
+    const c = { ...g, missedCount: 0, missedCallbacks: 1 };
+    const step = (state: MenuState | undefined, e: MenuEvent, x: MenuContext = c) =>
+      menuStep(state, DEFAULT_SETTINGS, e, x);
+    const vm = step(step(undefined, menu()).state, digit(2)).state as MenuState;
+    const view = menuView(vm, DEFAULT_SETTINGS, c);
+    expect(view.title).toBe("NO VOICEMAIL");
+    expect(view.labels).toEqual({ 1: "Name", 2: "Greeting", 3: "Default", 4: "Clear missed" });
+    expect(menuPrompt(vm, DEFAULT_SETTINGS, c)).toMatch(/missed a call back.*Press 4 to clear/);
+    expect(step(vm, digit(4)).action).toEqual({ type: "missed-clear" });
+    // Nothing to clear: 4 does nothing.
+    expect(step(vm, digit(4), g).action).toBeUndefined();
   });
 
   it("says voicemail playback isn't available yet", () => {

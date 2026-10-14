@@ -317,6 +317,15 @@ describe("leaving", () => {
     const [req] = (await s.http("/connections", { token: bob.token })).json.connections;
     await s.http(`/connections/${req.id}/accept`, { method: "POST", token: bob.token });
 
+    await s.store.lines.addMissedCallback(
+      {
+        accountId: jesse.account.id,
+        householdId: jesse.household.id,
+        lineAddress: "help@acme.example",
+        lineName: "Help",
+      },
+      s.timers.now,
+    );
     const exported = await s.http("/account/export", { token: jesse.token });
     expectStatus(exported, 200);
     expect(exported.headers.get("content-disposition")).toMatch(/jesse@hub\.test\.json/);
@@ -330,6 +339,7 @@ describe("leaving", () => {
         { name: "Jesse's home", role: "guardian", phones: [{ name: "Kid phone", kind: "kids" }] },
         { name: "Bob's home", role: "guardian" },
       ],
+      missedCallbacks: [{ line: "help@acme.example", name: "Help" }],
     });
 
     expectStatus(

@@ -992,7 +992,8 @@ function dismissNotice(): void {
 
 function menuContext() {
   return {
-    missedCount: config?.missed?.length ?? 0,
+    missedCount: config?.missed?.filter((m) => !m.callback).length ?? 0,
+    missedCallbacks: config?.missed?.filter((m) => m.callback).length ?? 0,
     fw: FW,
     fingerprint,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
@@ -1024,6 +1025,7 @@ function applyMenu(event: MenuEvent): void {
     voice.stop();
   }
   if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
+  if (r.action?.type === "missed-clear") send({ t: "missed.clear" });
   if (r.action?.type === "extension") {
     // Dialing needs the handset up.
     if (!hookUp) toggleHook();

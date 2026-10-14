@@ -11,6 +11,14 @@ export type MaxWaitAction =
   | { kind: "user"; userId: string }
   | { kind: "end"; message?: string };
 
+/** A public line's call back that a person didn't take (their side; migration 0026). */
+export interface MissedCallback {
+  /** `handle@host`. */
+  lineAddress: string;
+  lineName: string;
+  at: number;
+}
+
 /** A ring group's public line: its address, who may call, the queue, voicemail, limits. */
 export interface PublicLine {
   groupId: string;
@@ -570,6 +578,54 @@ export class LineStore {
 
   async dropGrant(id: string): Promise<void> {
     await this.sql.run("DELETE FROM line_callback_grants WHERE id = ?", id);
+  }
+
+  // --- missed call backs (migration 0026; the caller's side) --------------------------------
+
+  /** A call back this person didn't take: one row per line, the latest miss. */
+  async addMissedCallback(
+    m: { accountId: string; householdId: string; lineAddress: string; lineName: string },
+    now: number,
+  ): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO missed_callbacks (id, account_id, household_id, line_address, line_name, at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (account_id, line_address) DO UPDATE SET
+         household_id = excluded.household_id, line_name = excluded.line_name, at = excluded.at`,
+      newId("mcb"),
+      m.accountId,
+      m.householdId,
+      m.lineAddress.toLowerCase(),
+      m.lineName.slice(0, 64),
+      now,
+    );
+  }
+
+  /** A person's missed call backs, newest first. */
+  async missedCallbacks(accountId: string, limit = 8): Promise<MissedCallback[]> {
+    const rows = await this.sql.all<{
+      line_address: string;
+      line_name: string;
+      at: number;
+    }>(
+      `SELECT line_address, line_name, at FROM missed_callbacks WHERE account_id = ?
+       ORDER BY at DESC LIMIT ?`,
+      accountId,
+      limit,
+    );
+    return rows.map((r) => ({ lineAddress: r.line_address, lineName: r.line_name, at: r.at }));
+  }
+
+  /** Clears a person's missed call backs (from one line, or all); answers how many went. */
+  async clearMissedCallbacks(accountId: string, lineAddress?: string): Promise<number> {
+    const r = lineAddress
+      ? await this.sql.run(
+          "DELETE FROM missed_callbacks WHERE account_id = ? AND line_address = ?",
+          accountId,
+          lineAddress.toLowerCase(),
+        )
+      : await this.sql.run("DELETE FROM missed_callbacks WHERE account_id = ?", accountId);
+    return r.changes;
   }
 
   /** Forgets expired grants and rows (any space). */

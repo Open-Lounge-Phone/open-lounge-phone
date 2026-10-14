@@ -1,5 +1,5 @@
 import { SIGN_IN_FOR_LINES_NOTE } from "@openloungephone/core";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type ConnectionHandler, Gateway } from "./gateway.ts";
 import { LINE_WARNING } from "./lines.ts";
 import { expectStatus, type FakeConn, Network, type TestServer } from "./testkit.ts";
@@ -999,6 +999,78 @@ describe("public lines: call me back", () => {
     const back = await phone.next("call.ringing");
     expect(back.callback?.name).toBe("Support");
   });
+
+  /** Ann's own desk phone with the line on key 3, and her app; she asks to be called back. */
+  async function annAtHerDesk(settings: object = {}) {
+    await publish(s, t, groupId, settings);
+    const desk = await s.pairDevice(ann.token, "Desk", { forMe: true });
+    if (!desk.deviceId || !desk.key) throw new Error("pairing failed");
+    const phone = await s.connectDevice(desk.deviceId, desk.key.pair);
+    const app = await s.connectApp(ann.token);
+    app.write({ t: "call.line", address: "acme-support@work.test" });
+    const q = await nextQueue(app);
+    app.write({ t: "call.callback", callId: q.callId });
+    await app.nextState("ended");
+    return { phone, app, waited: q.callId };
+  }
+  const missedOf = (phone: FakeConn) => phone.all("config").at(-1)?.missed;
+
+  it("a call back nobody takes shows on the phone as a missed call naming the line", async () => {
+    const { phone, app, waited } = await annAtHerDesk();
+    expect(missedOf(phone)).toBeUndefined();
+    const cy = await s.connectApp(t.cy.token);
+    expect((await phone.next("call.ringing")).callback?.name).toBe("Support");
+    // Nobody answers in 30 s: the phone stops ringing and shows the miss.
+    s.timers.advance(31_000);
+    expect(await phone.nextState("ended")).toMatchObject({ callId: waited, reason: "timeout" });
+    await vi.waitFor(() => expect(missedOf(phone)).toEqual([{ from: "Support", callback: true }]));
+    // The line tries once more; taking it calls the line, which answers the missed call.
+    const again = await app.next("call.ringing");
+    app.write({ t: "call.answer", callId: again.callId });
+    await cy.next("call.ringing");
+    await vi.waitFor(() => expect(missedOf(phone)).toBeUndefined());
+  });
+
+  it("MENU → Voicemail → Clear forgets it; voicemail stays until heard", async () => {
+    // An unheard voicemail from earlier, to Ann.
+    await s.store.createVoicemail({
+      householdId: ann.user.householdId,
+      deviceId: null,
+      toUser: ann.user.id,
+      groupId: null,
+      fromUser: null,
+      fromLabel: "Gran",
+      fromAddress: "gran@work.test",
+      createdAt: s.timers.now - 1000,
+      durationMs: 2000,
+      mime: "audio/wav",
+      blobKey: "vm/gran",
+      transcriptStatus: "unavailable",
+    });
+    const { phone } = await annAtHerDesk({ callbackMissed: "voicemail" });
+    expect(missedOf(phone)).toEqual([{ from: "Gran" }]);
+    await s.connectApp(t.cy.token);
+    await phone.next("call.ringing");
+    s.timers.advance(31_000);
+    // Newest first: the line, then Gran's message.
+    await vi.waitFor(() =>
+      expect(missedOf(phone)).toEqual([{ from: "Support", callback: true }, { from: "Gran" }]),
+    );
+    phone.write({ t: "missed.clear" });
+    await vi.waitFor(() => expect(missedOf(phone)).toEqual([{ from: "Gran" }]));
+    expect(await s.store.lines.missedCallbacks(ann.account.id)).toEqual([]);
+  });
+
+  it("declining the call back isn't missing it", async () => {
+    const { phone } = await annAtHerDesk({ callbackMissed: "voicemail" });
+    await s.connectApp(t.cy.token);
+    const ring = await phone.next("call.ringing");
+    phone.write({ t: "call.hangup", callId: ring.callId });
+    expect(await phone.nextState("ended")).toMatchObject({ reason: "declined" });
+    await settle();
+    expect(missedOf(phone)).toBeUndefined();
+    expect(await s.store.lines.missedCallbacks(ann.account.id)).toEqual([]);
+  });
 });
 
 describe("public lines: call me back across servers", () => {
@@ -1060,6 +1132,27 @@ describe("public lines: call me back across servers", () => {
     expect((await a.http("/voicemails", { token: t.cy.token })).json).toMatchObject([
       { box: "Support", fromLabel: "Bob" },
     ]);
+  });
+
+  it("a missed call back across servers shows on their own phone; calling the line clears it", async () => {
+    await publish(a, t, groupId);
+    const desk = await b.pairDevice(bob.token, "Desk", { forMe: true });
+    if (!desk.deviceId || !desk.key) throw new Error("pairing failed");
+    const phone = await b.connectDevice(desk.deviceId, desk.key.pair);
+    const app = await b.connectApp(bob.token);
+    app.write({ t: "call.line", address: "acme-support@a.test" });
+    const q = await nextQueue(app);
+    app.write({ t: "call.callback", callId: q.callId });
+    await app.nextState("ended");
+    await a.connectApp(t.cy.token);
+    await phone.next("call.ringing");
+    b.timers.advance(31_000);
+    await vi.waitFor(() =>
+      expect(phone.all("config").at(-1)?.missed).toEqual([{ from: "Support", callback: true }]),
+    );
+    // Bob calls the line himself (from the app): the missed call back is answered.
+    app.write({ t: "call.line", address: "Acme-Support@a.test" });
+    await vi.waitFor(() => expect(phone.all("config").at(-1)?.missed).toBeUndefined());
   });
 
   it("nobody rings without having asked; not offered by a server without the feature", async () => {

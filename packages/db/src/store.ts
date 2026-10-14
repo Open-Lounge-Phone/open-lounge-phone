@@ -1036,7 +1036,17 @@ export class Store {
       householdId,
       householdId,
     );
-    // The audit trail of a team/org space follows the space's history setting too.
+    // Missed call backs asked from this space follow its history setting too.
+    await this.sql.run(
+      `DELETE FROM missed_callbacks WHERE household_id = ?
+         AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
+         AND (SELECT history_days FROM households WHERE id = ?) > 0`,
+      householdId,
+      now,
+      householdId,
+      householdId,
+    );
+    // The audit trail (every space) follows the space's history setting too.
     await this.sql.run(
       `DELETE FROM audit_log WHERE household_id = ?
          AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
@@ -2356,7 +2366,16 @@ export class Store {
    * own phone (`ownerUserId`) also shows their personal voicemail.
    */
   async unheardFrom(deviceId: string, limit = 8, ownerUserId?: string | null): Promise<string[]> {
-    const rows = await this.sql.all<{ from_label: string }>(
+    return (await this.unheardSenders(deviceId, limit, ownerUserId)).map((r) => r.from);
+  }
+
+  /** `unheardFrom` with when each sender's latest unheard message came (to merge with others). */
+  async unheardSenders(
+    deviceId: string,
+    limit = 8,
+    ownerUserId?: string | null,
+  ): Promise<{ from: string; at: number }[]> {
+    const rows = await this.sql.all<{ from_label: string; latest: number }>(
       // A personal phone shows its owner's voicemail from every space they're in (the same
       // account-wide inbox the app shows), not just the phone's own space.
       `SELECT from_label, MAX(created_at) AS latest FROM voicemails
@@ -2368,7 +2387,7 @@ export class Store {
       ownerUserId ?? null,
       limit,
     );
-    return rows.map((r) => r.from_label);
+    return rows.map((r) => ({ from: r.from_label, at: r.latest }));
   }
 
   /** A person's own voicemail, across all their memberships (the account's inbox). */

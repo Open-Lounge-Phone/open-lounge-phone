@@ -582,6 +582,12 @@ export const VoicemailHeard = z
   .object({ t: z.literal("voicemail.heard"), ...Ref, id: Id })
   .describe("The phone played this message to the end: mark it heard (as the app's Heard does).");
 
+export const MissedClear = z
+  .object({ t: z.literal("missed.clear"), ...Ref })
+  .describe(
+    "MENU → Voicemail → Clear on a person's own phone: forget their missed call backs (`config.missed` items with `callback`), on all their phones. Voicemail is cleared with `voicemail.heard`.",
+  );
+
 export const CheckinOk = z
   .object({ t: z.literal("checkin.ok"), ...Ref })
   .describe("Labs daily check-in: the person at the phone pressed I'm OK today.");
@@ -621,6 +627,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   GreetingReset,
   VoicemailFetch,
   VoicemailHeard,
+  MissedClear,
   CheckinOk,
   CheckinMissed,
   NoticeDismiss,
@@ -699,10 +706,22 @@ export const Config = z
         "The server's time (ms since the Unix epoch) when it sent this, so a phone can show a clock without asking a time server: hardware phones set their clock from it.",
       ),
     missed: z
-      .array(z.object({ from: z.string().min(1).max(24) }))
+      .array(
+        z.object({
+          from: z.string().min(1).max(24),
+          callback: z
+            .literal(true)
+            .optional()
+            .describe(
+              "A public line called you back as you asked and you didn't take it (`from` = the line's name). No message to play: it stays until `missed.clear`, or you call the line, or take its next call back.",
+            ),
+        }),
+      )
       .max(8)
       .optional()
-      .describe("Unheard voicemails, newest first, for the status display."),
+      .describe(
+        "Missed calls for the status display, newest first: unheard voicemails by sender, and (a person's own phone) missed call backs from public lines.",
+      ),
     greeting: z
       .object({
         kind: GreetingKind,

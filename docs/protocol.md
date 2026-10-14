@@ -186,6 +186,14 @@ The phone played this message to the end: mark it heard (as the app's Heard does
 |---|---|---|---|
 | `id` | string (len ≤64) | yes |  |
 
+### `missed.clear`
+
+MENU → Voicemail → Clear on a person's own phone: forget their missed call backs (`config.missed` items with `callback`), on all their phones. Voicemail is cleared with `voicemail.heard`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
 ### `checkin.ok`
 
 Labs daily check-in: the person at the phone pressed I'm OK today.
@@ -425,7 +433,7 @@ Sent after authentication and whenever guardians change settings.
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `utcOffsetMin` | integer (≥-720, ≤840) |  | The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock knows local time: hardware phones install updates overnight. |
 | `now` | integer |  | The server's time (ms since the Unix epoch) when it sent this, so a phone can show a clock without asking a time server: hardware phones set their clock from it. |
-| `missed` | { from: string (len ≤24) }[] |  | Unheard voicemails, newest first, for the status display. |
+| `missed` | { from: string (len ≤24), callback?: `true` }[] |  | Missed calls for the status display, newest first: unheard voicemails by sender, and (a person's own phone) missed call backs from public lines. |
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |

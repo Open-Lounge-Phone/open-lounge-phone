@@ -87,6 +87,12 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
           ? { recordingId: l.recordingId, recording: `/api/recordings/${l.recordingId}/audio` }
           : {}),
       })),
+      // Public lines' call backs you didn't take (shown on your phones until cleared).
+      missedCallbacks: (await store.lines.missedCallbacks(account.id, 100)).map((m) => ({
+        line: m.lineAddress,
+        name: m.lineName,
+        at: new Date(m.at).toISOString(),
+      })),
       // Recordings of calls and rooms you were in or recorded (their audio: the paths above).
       recordings: (await store.recordings.forAccount(account.id, 1000)).map((r) => ({
         id: r.id,

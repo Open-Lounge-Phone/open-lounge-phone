@@ -781,6 +781,8 @@ export class HouseholdHub {
           return this.checkinMissed(device, msg.by);
         case "voicemail.heard":
           return this.voicemailHeard(device, msg.id);
+        case "missed.clear":
+          return this.missedClear(device);
         case "status":
           device.status = msg;
           this.remember(device);
@@ -1801,9 +1803,44 @@ export class HouseholdHub {
     await store.markVoicemailHeard(vm.id, this.env.now(), to.id);
     await this.sendConfig(device, true);
     // The owner's other phones, here and in their other spaces.
-    for (const m of await store.listMemberships(owner.accountId)) {
+    await this.refreshAccountPhones(owner.accountId, device.id);
+  }
+
+  /**
+   * What a phone shows as missed, newest first: unheard voicemail by sender, and on a person's own
+   * phone the public lines whose call back they didn't take (`callback`).
+   */
+  private async missedFor(peer: DevicePeer): Promise<{ from: string; callback?: true }[]> {
+    const { store } = this.env;
+    const voicemail = (await store.unheardSenders(peer.id, 8, peer.owner)).map((v) => ({
+      from: v.from,
+      at: v.at,
+      callback: false,
+    }));
+    const owner = peer.owner ? await store.getUser(peer.owner) : undefined;
+    const lines = owner
+      ? (await store.lines.missedCallbacks(owner.accountId, 8)).map((m) => ({
+          from: m.lineName,
+          at: m.at,
+          callback: true,
+        }))
+      : [];
+    return [...voicemail, ...lines]
+      .filter((m) => m.from.trim())
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 8)
+      .map((m) => ({
+        from: m.from.slice(0, 24),
+        ...(m.callback ? { callback: true as const } : {}),
+      }));
+  }
+
+  /** Fresh config for an account's own phones, here and in its other spaces (`except` one). */
+  private async refreshAccountPhones(accountId: string, except?: string): Promise<void> {
+    const { store } = this.env;
+    for (const m of await store.listMemberships(accountId)) {
       for (const d of await store.listDevices(m.household.id)) {
-        if (d.ownerUserId !== m.user.id || d.id === device.id) continue;
+        if (d.ownerUserId !== m.user.id || d.id === except) continue;
         if (m.household.id === this.householdId) {
           const peer = this.devices.get(d.id);
           if (peer) await this.sendConfig(peer, true);
@@ -1812,6 +1849,15 @@ export class HouseholdHub {
         }
       }
     }
+  }
+
+  /** MENU → Voicemail → Clear: the owner's missed call backs go, on all their phones. */
+  private async missedClear(device: DevicePeer): Promise<void> {
+    const owner =
+      device.owner && !device.lounge ? await this.env.store.getUser(device.owner) : undefined;
+    if (!owner) return;
+    await this.env.store.lines.clearMissedCallbacks(owner.accountId);
+    await this.refreshAccountPhones(owner.accountId);
   }
 
   // --- config & status ----------------------------------------------------------
@@ -1850,7 +1896,7 @@ export class HouseholdHub {
       store.listButtons(peer.id),
       store.listContacts(peer.id),
       this.scheduleFor(peer),
-      store.unheardFrom(peer.id, 8, peer.owner),
+      this.missedFor(peer),
       this.phoneGreeting(peer),
       peer.owner ? this.hasExtensions() : false,
     ]);
@@ -1881,7 +1927,7 @@ export class HouseholdHub {
       ...(quietUntil ? { quietUntil } : {}),
       utcOffsetMin: utcOffsetMinutes(now, schedule.timeZone),
       now: now.getTime(),
-      ...(missed.length ? { missed: missed.map((from) => ({ from: from.slice(0, 24) })) } : {}),
+      ...(missed.length ? { missed } : {}),
       ...(greeting
         ? {
             greeting: {
@@ -4319,6 +4365,20 @@ export class HouseholdHub {
       this.run(async () => {
         this.callbackRings.delete(req.id);
         if (!result.retry) await this.env.store.lines.dropGrant(req.id);
+        // Not taken (no answer, or no phone or app free): their phones show a missed call
+        // naming the line until they clear it, call the line, or take its next call back.
+        if (reason !== "declined") {
+          await this.env.store.lines.addMissedCallback(
+            {
+              accountId: req.accountId,
+              householdId: this.householdId,
+              lineAddress: `${req.line.handle}@${req.lineHost || ownHost(this.env)}`,
+              lineName: req.line.name,
+            },
+            this.env.now(),
+          );
+          await this.refreshAccountPhones(req.accountId);
+        }
         let voicemail: VoicemailOffer | undefined;
         if (result.voicemail) {
           // A line here: its own offer. Elsewhere: ours, which forwards to its server.
@@ -4395,6 +4455,10 @@ export class HouseholdHub {
     if (!as || !account) return this.refuse(peer, "denied");
     const addr = parseAddress(address);
     if (!addr) return this.refuse(peer, "unavailable");
+    // Calling the line (or taking its call back) answers a missed call back from it.
+    if (await store.lines.clearMissedCallbacks(account.id, `${addr.handle}@${addr.host}`)) {
+      await this.refreshAccountPhones(account.id);
+    }
     const party = partyOf(account);
     if (addr.host !== ownHost(this.env)) {
       return this.lineRemote(peer, as, party, addr.host, addr.handle, undefined, callback);

@@ -165,7 +165,8 @@ export function statusLines(input: StatusInput): StatusLines {
       ? `QUIET TIL ${config.quietUntil}`
       : "QUIET HOURS"
     : undefined;
-  const missed = (config?.missed ?? []).map((m) => m.from.trim()).filter(Boolean);
+  const missedItems = (config?.missed ?? []).filter((m) => m.from.trim());
+  const missed = missedItems.map((m) => m.from.trim());
 
   if (missed.length > 0) {
     const [newest] = missed as [string];
@@ -177,6 +178,8 @@ export function statusLines(input: StatusInput): StatusLines {
           : "MISSED CALL"
         : `${missed.length} MISSED CALLS`;
     if (quiet) return [quiet, clip(summary)];
+    // A public line's call back nobody took: there's no message to play, just its name.
+    if (missed.length === 1 && missedItems[0]?.callback) return ["MISSED CALL BACK", clip(newest)];
     if (missed.length === 1) {
       const next =
         !config?.owner || config.owner.mode === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP";

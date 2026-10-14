@@ -1171,3 +1171,29 @@ describe("0025_room_hours", () => {
     old.db.close();
   });
 });
+
+describe("missed call backs (migration 0026)", () => {
+  it("one per person and line, newest first; cleared per line or all; gone with the history", async () => {
+    const { household: hh, guardian } = await household();
+    const accountId = guardian.accountId;
+    const add = (lineAddress: string, lineName: string, at: number) =>
+      store.lines.addMissedCallback({ accountId, householdId: hh.id, lineAddress, lineName }, at);
+    await add("Help@Acme.example", "Help", T0);
+    await add("orders@shop.example", "Orders", T0 + 1);
+    await add("help@acme.example", "Help desk", T0 + 2);
+    expect(await store.lines.missedCallbacks(accountId)).toEqual([
+      { lineAddress: "help@acme.example", lineName: "Help desk", at: T0 + 2 },
+      { lineAddress: "orders@shop.example", lineName: "Orders", at: T0 + 1 },
+    ]);
+    expect(await store.lines.clearMissedCallbacks(accountId, "ORDERS@shop.example")).toBe(1);
+    expect((await store.lines.missedCallbacks(accountId)).map((m) => m.lineName)).toEqual([
+      "Help desk",
+    ]);
+    // The space keeps history 30 days: older misses go with the sweep.
+    await store.setSpacePrivacy(hh.id, { historyDays: 30 });
+    await store.sweepExpired(hh.id, "x", T0 + 31 * 24 * 60 * 60 * 1000);
+    expect(await store.lines.missedCallbacks(accountId)).toEqual([]);
+    await add("help@acme.example", "Help", T0);
+    expect(await store.lines.clearMissedCallbacks(accountId)).toBe(1);
+  });
+});

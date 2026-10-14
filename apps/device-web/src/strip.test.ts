@@ -153,6 +153,14 @@ describe("quiet hours and missed voicemail", () => {
     ]);
   });
 
+  it("names a public line whose call back was missed (no message to play)", () => {
+    const one = cfg({ missed: [{ from: "Acme Support", callback: true }] });
+    expect(statusLines({ ...base, config: one })).toEqual(["MISSED CALL BACK", "ACME SUPPORT"]);
+    // With voicemail too: counted and cycled like any missed call.
+    const both = cfg({ missed: [{ from: "Help", callback: true }, { from: "Mom" }] });
+    expect(statusLines({ ...base, config: both, now: 0 })).toEqual(["2 MISSED CALLS", "HELP"]);
+  });
+
   it("combines quiet hours with missed calls", () => {
     const one = cfg({ quiet: true, quietUntil: "07:00", missed: [{ from: "Grandma" }] });
     expect(statusLines({ ...base, config: one })).toEqual(["QUIET TIL 07:00", "MISSED GRANDMA"]);
