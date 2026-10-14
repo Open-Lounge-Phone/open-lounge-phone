@@ -1,12 +1,13 @@
 """The plush series: a fat, cushion-like desk case that lies flat: build/plush/.
 
-Two pillows fused like a sofa cushion: one over the keypad, one beside it that is the handset's
-bed. Rigid print, made to look inflated (big radii everywhere). The keys are the same captive
-caps as the wall faceplate (a flange under the face, a button through it), with their own puffy
-tops. The handset lies in a pocket shaped to it (handset.py, the Opis 60s Micro outline); under
-its lower cup the floor is a tongue printed with the case: the cup rests on the tongue alone, and
-its weight bends the tongue onto the hook key's cap. Lift the handset: the tongue springs back and
-the hook switch's own spring lifts the key. No extra parts. A bottom plate closes it from below.
+Two pillows fused like a sofa cushion: the keypad pillow, whose rounded top is the key face (the
+keys and the screen sit right in it), and beside it a taller pillow that is the handset's bed,
+with soft-rimmed pockets for the cups. Rigid print, made to look inflated. The keys are captive
+caps (a flange under the face, a puffy button through it). The hook key's button rises through
+the floor under the handset's lower cup, like a classic cradle's plunger: the cup's weight
+presses it and the floor stops it. The status light shows as a jewel on the bed's front through
+an angled light pipe; the buzzer sounds out through the bottom plate. The plate drops in on a
+locating lip and five screws hide under the rubber feet.
 
     .venv/bin/python plush.py
 
@@ -27,27 +28,42 @@ OUT = Path(__file__).resolve().parent / "build" / "plush"
 
 Z_BOT = -10.0              # the case's underside (the bottom plate sits flush in it)
 WALL = 3.0
-KEY_TOP, BED_TOP = 30.0, 36.0           # the two pillows' tops
-KEY_R, BED_R = 17.0, 19.0               # their puffiness: the rounded top edge
+KEY_TOP = F.FACE_Z         # the keypad pillow's top IS the key face: no recessed panel
+BED_TOP = 36.0             # the handset bed rises above it
+KEY_R, BED_R = 12.0, 19.0  # their puffiness: the rounded top edge
 CORNER = 2.0               # corner radius in plan = this x the top radius (fat, round corners)
 BOTTOM_R = 2.5             # the soft edge it sits on (under the wall's thickness)
 SEAM_Z, SEAM_W, SEAM_D = 2.0, 1.6, 0.8  # a piping seam round each pillow (height, width, depth)
-KEY_BOX = (-8.0, 168.0, -8.0, 96.0)     # keypad pillow x0, x1, y0, y1
+KEY_BOX = (-8.0, 172.0, -8.0, 96.0)     # keypad pillow x0, x1, y0, y1
 HS_C = (-8.0, 84.5)        # the handset's centre (x, y): its lower cup over the hook key's row
-HS_Z = 26.5                # where the handset's cups rest (the tongue's top)
 BED_BOX = (-50.0, 30.0, HS_C[1] - 105.0 - 9.0, HS_C[1] + 105.0 + 9.0)
-KEYPAD = (34.0, 157.0, 0.0, 88.0)       # the recessed key panel (its floor is the captive face)
-PANEL_R = 9.0
+HOLLOW_TOP = 17.0          # the bed's hollow (cords, plugs) stops here: 3 mm under the lower cup's floor
 
-# the tongue under the lower cup: along x, rooted toward the cup's middle, its free end at the key
-TONGUE_X = (-30.0, 22.0)
-TONGUE_W = 16.0
-TONGUE_T = 1.4             # TUNE on a print: thinner = softer (PETG/PLA); a 200 g handset bends it ~4 mm
-CUP_DROP = 4.0             # the rest of the lower cup's pocket sits this much lower: the cup's stop
-NUB_D = 8.0
-GAP = 0.5                  # nub over the hook cap at rest
+# The hook: the hook key's captive button rises through the floor under the handset's lower cup,
+# like the plunger in a classic cradle. The upper cup's floor is at the button's top, so the
+# handset lies level on it; the cup's weight presses the button and the floor (the key face,
+# PROUD lower) stops the cup after 3.6 mm, past the switch point (2) and short of the bottom (4).
+HS_Z = F.CAP_TOP           # the upper cup's floor (the handset's underside, at rest)
+LOW_FLOOR = F.FACE_Z       # the lower cup's floor: the face the hook button comes through
+FLARE = 9.0                # the cup pockets' rims flare out this much (a soft, dished lip)
+FLARE_H = 8.0
 
-CORD_HOLES = ((8.0, 112.0), (7.0, 124.0))   # (diameter, y) through the bed pillow's outer side
+# The status light: an angled light pipe (a 3 mm clear acrylic rod) from the LED to a small jewel
+# on the front of the bed, where it shows with the handset hung up.
+JEWEL = (-10.0, 18.0)      # x and height of the jewel on the bed's front
+CORD_HOLES = ((8.0, 150.0), (7.0, 164.0))   # (diameter, y) through the bed pillow's outer side
+
+# The bottom: one plate on a locating lip, five countersunk M3 screws hidden under the rubber
+# feet, up into heat-set inserts in columns from the top shell.
+PLATE_T = 3.5
+LIP_H, LIP_T = 2.5, 1.6
+FEET = ((KEY_BOX[1] - WALL - 4.0, 14.0), (KEY_BOX[1] - WALL - 4.0, 74.0), (-26.0, -12.0),
+        (-26.0, 182.0), (12.0, 188.0))
+FOOT_D, FOOT_DEPTH = 11.0, 1.0
+COLUMN_D = 8.0
+SCREW = "M3 x 8 countersunk (ISO 10642)"
+INSERT = "M3 x 4 heat-set insert (OD 4.0-4.2)"
+GRILLE_AT = (-16.0, 73.0)  # the buzzer's sound leaves through the bottom plate, beside the board
 
 
 def pillow(x0, x1, y0, y1, z0, z1, r):
@@ -75,37 +91,59 @@ def hook_xy():
     return P.HOOK[0], F.Y(P.HOOK[1])
 
 
+def lift(a, b):
+    """A unit direction and length from point a to b."""
+    d = [b[i] - a[i] for i in range(3)]
+    n = math.sqrt(sum(v * v for v in d))
+    return [v / n for v in d], n
+
+
+def rod(a, b, d, extra=0.0):
+    """A cylinder of diameter d from a to b (and `extra` past b)."""
+    from build123d import Align, Plane
+    u, n = lift(a, b)
+    return Plane(origin=a, z_dir=u) * Cylinder(d / 2, n + extra, align=(Align.CENTER, Align.CENTER, Align.MIN))
+
+
+def jewel_path():
+    lx, ly = P.LED[0], F.Y(P.LED[1])
+    return (lx, ly, 2.5), (JEWEL[0], BED_BOX[2], JEWEL[1])
+
+
+def cup_pocket(x, y, floor):
+    """A cup's pocket: a round bore 1 mm roomy, opening into a soft flared rim."""
+    from build123d import Cone
+    r = HS.CUP_D / 2 + 1.0
+    bore = F.cyl(x, y, floor, BED_TOP - FLARE_H + 0.01, 2 * r)
+    flare = Pos(x, y, BED_TOP - FLARE_H / 2 + 0.5) * Cone(r, r + FLARE, FLARE_H + 1.0)
+    return bore + flare
+
+
 def build_case():
     zt, zu = F.FACE_Z, F.FACE_Z - F.FACE_T
     kx0, kx1, ky0, ky1 = KEY_BOX
     bx0, bx1, by0, by1 = BED_BOX
     body = pillow(kx0, kx1, ky0, ky1, Z_BOT, KEY_TOP, KEY_R) + pillow(bx0, bx1, by0, by1, Z_BOT, BED_TOP, BED_R)
 
-    # inside: the board's room up to under the face, and the bed pillow hollowed (cords, plugs)
+    # inside: the board's room up to under the face, the bed hollowed below its floors
     body -= F.rrect(F.BOARD_W / 2, F.BOARD_H / 2, F.BOARD_W + 0.6, F.BOARD_H + 0.6, F.BOARD_R + 0.3, Z_BOT - 1, zu)
-    hollow = inside(bx0, bx1, by0, by1, BED_R, Z_BOT - 1, 19.0)
+    hollow = inside(bx0, bx1, by0, by1, BED_R, Z_BOT - 1, HOLLOW_TOP)
     hollow -= F.rrect(F.BOARD_W / 2, F.BOARD_H / 2, F.BOARD_W + 0.6 + 2 * WALL, F.BOARD_H + 0.6 + 2 * WALL,
                       F.BOARD_R + 3.0, zu - 0.01, 20.0)        # over the board the room stops under the face
     body -= hollow
     body -= inside(kx0, kx1, ky0, ky1, KEY_R, Z_BOT - 1, 0.0)
 
-    # the key panel: recessed into the pillow, its floor is the captive face
-    px0, px1, py0, py1 = KEYPAD
-    body -= F.rrect((px0 + px1) / 2, (py0 + py1) / 2, px1 - px0, py1 - py0, PANEL_R, zt, KEY_TOP + 1)
-
-    # captive caps: openings through the face, room for every flange to travel (the hook's too)
-    hx, hy = hook_xy()
-    for x, y, lab in F.SWITCHES:
-        if lab != "HOOK":
-            body -= F.rrect(x, F.Y(y), F.HOLE, F.HOLE, F.BUTTON_R + 0.3, zu - 1, zt + 1)
+    # captive caps: openings through the face (the hook's in the lower cup's floor), and room for
+    # every flange to travel
+    for x, y, _ in F.SWITCHES:
+        body -= F.rrect(x, F.Y(y), F.HOLE, F.HOLE, F.BUTTON_R + 0.3, zu - 1, zt + 1)
         body -= F.rrect(x, F.Y(y), F.FLANGE + 0.8, F.FLANGE + 0.8, F.FLANGE_R + 0.4, F.MX_HOUSING_TOP, zu)
 
     # display: window, lens and frame, far-end posts (as the faceplate)
     (mx, my, mw, mh), (wx, wy, ww, wh) = F.display()
     module_top = P.STANDOFF_L + P.MODULE_PCB_T
     lw, lh, _ = F.LENS
-    chim = F.rrect(wx, wy, lw + 0.4 + 2 * F.HOOD_WALL, lh + 0.4 + 2 * F.HOOD_WALL, F.HOOD_R, F.DISP_TOP + 0.2, zu + 0.01)
-    body += chim
+    body += F.rrect(wx, wy, lw + 0.4 + 2 * F.HOOD_WALL, lh + 0.4 + 2 * F.HOOD_WALL, F.HOOD_R, F.DISP_TOP + 0.2, zu + 0.01)
     for x, y in P.MODULE_FAR_HOLES:
         body += F.cyl(x, F.Y(y), module_top + 0.1, zu + 0.01, F.FAR_POST_D)
         body += F.cyl(x, F.Y(y), module_top + 0.1 - F.FAR_PIN_L, module_top + 0.11, F.FAR_PIN_D)
@@ -118,53 +156,30 @@ def build_case():
         body += F.cyl(x, F.Y(y), 0.0, zu + 0.01, F.BOSS_D)
         body -= F.cyl(x, F.Y(y), -0.01, F.INSERT_L, F.INSERT_D)
 
-    # the handset's bed: a round pocket for each cup, 1 mm roomy (the handle arches clear above the
-    # pillow); the upper cup sits on the pocket's floor, the lower cup's pocket is CUP_DROP deeper
+    # the handset's bed: soft-rimmed pockets; the lower one's floor is the face with the hook button
     yc = HS.LENGTH / 2 - HS.CUP_D / 2
-    low, high = (HS_C[0], HS_C[1] - yc), (HS_C[0], HS_C[1] + yc)
-    body -= F.cyl(high[0], high[1], HS_Z, BED_TOP + 1, HS.CUP_D + 2.0)
-    body -= F.cyl(low[0], low[1], HS_Z - CUP_DROP, BED_TOP + 1, HS.CUP_D + 2.0)
+    body -= cup_pocket(HS_C[0], HS_C[1] + yc, HS_Z)
+    body -= cup_pocket(HS_C[0], HS_C[1] - yc, LOW_FLOOR)
 
-    # the hook key under the tongue: its opening and room for the cap and the nub to move
-    body -= F.rrect(hx, hy, F.HOLE, F.HOLE, F.BUTTON_R + 0.3, zu - 1, zt + 0.01)
-    body -= F.rrect(hx, hy, F.HOLE + 3.0, F.HOLE + 3.0, F.BUTTON_R + 1.5, zt, HS_Z)
+    # the status light: a guide tube from over the board out to the jewel on the bed's front
+    a, b = jewel_path()
+    u, n = lift(a, b)
+    t0 = 0.35                                            # the tube starts clear of the board's parts
+    g0 = tuple(a[i] + u[i] * n * t0 for i in range(3))
+    body += rod(g0, b, F.LIGHT_PIPE + 3.0, -1.0)
+    body -= rod(a, b, F.LIGHT_PIPE + 0.3, 2.0)
+    body -= rod(tuple(b[i] - u[i] * 1.2 for i in range(3)), b, F.LIGHT_PIPE + 3.0, 2.0)   # the jewel's seat
 
-    # the tongue: printed with the case, rooted on a pedestal toward the cup's middle
-    t0, t1 = TONGUE_X
-    tongue = F.bx(t0, t1, low[1] - TONGUE_W / 2, low[1] + TONGUE_W / 2, HS_Z - TONGUE_T, HS_Z)
-    tongue += F.bx(t0 - 6.0, t0 + 0.5, low[1] - TONGUE_W / 2, low[1] + TONGUE_W / 2, HS_Z - CUP_DROP - 0.5, HS_Z)
-    tongue += F.cyl(hx, hy, F.CAP_TOP + GAP, HS_Z - TONGUE_T + 0.01, NUB_D)
-    body += tongue
-
-    # sound and light: the piezo's slots and the LED's pipe up through the pillow
-    body -= F.grille_slots(zu - 1, BED_TOP + 1)
-    lx, ly = P.LED[0], F.Y(P.LED[1])
-    body += F.cyl(lx, ly, 1.5, zu + 0.01, F.LIGHT_PIPE + 2.4)
-    body -= F.cyl(lx, ly, 1.0, BED_TOP + 1, F.LIGHT_PIPE + 0.2)
-
-    # cords out through the bed pillow's outer side, and bosses for the bottom plate
+    # cords out through the bed pillow's outer side
     for d, y in CORD_HOLES:
-        body -= F.Pos(bx0 + WALL / 2, y, -3.0) * F.Rot(0, 90, 0) * Cylinder(d / 2, WALL * 3)
-    for x, y in plate_screws():
-        body += F.cyl(x, y, Z_BOT + PLATE_T, Z_BOT + PLATE_T + 7.0, 7.0)
-        body -= F.cyl(x, y, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + 4.5, F.INSERT_D)
+        body -= Pos(bx0 + WALL / 2, y, -3.0) * F.Rot(0, 90, 0) * Cylinder(d / 2, WALL * 3)
+
+    # columns for the bottom plate's screws (hidden under the feet)
+    for x, y in FEET:
+        top = 0.5 if x > F.BOARD_W else HOLLOW_TOP + 0.01
+        body += F.cyl(x, y, Z_BOT + PLATE_T, top, COLUMN_D)
+        body -= F.cyl(x, y, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + 5.0, F.INSERT_D)
     return body
-
-
-PLATE_T = 2.5
-LIP_H, LIP_T = 2.5, 1.6    # the plate's locating lip: drops inside the walls so it lines up by itself
-SCREW = "M3 x 8 countersunk (ISO 10642)"
-INSERT = "M3 x 4 heat-set insert (OD 4.0-4.2)"
-
-
-def plate_screws():
-    """Seven bosses on straight stretches of wall (each touches it), all clear of the board."""
-    kx0, kx1, ky0, ky1 = KEY_BOX
-    bx0, bx1, by0, by1 = BED_BOX
-    d = WALL + 3.2
-    ymid = (ky0 + ky1) / 2
-    return [(kx1 - d, ky0 + 22.0), (kx1 - d, ymid), (kx1 - d, ky1 - 22.0),
-            (bx0 + d, by0 + 40.0), (bx0 + d, ymid), (bx0 + d, by1 - 40.0), (bx1 - d, by1 - 30.0)]
 
 
 def _outline(inset, z0, z1):
@@ -176,23 +191,23 @@ def _outline(inset, z0, z1):
 
 
 def build_plate():
-    """The bottom: flush inside the pillows' walls, a lip that locates it, seven countersunk M3
-    screws up into heat-set inserts in the case's bosses, four rubber-foot recesses."""
-    kx0, kx1, ky0, ky1 = KEY_BOX
-    bx0, bx1, by0, by1 = BED_BOX
+    """The bottom: flush inside the walls on a locating lip; five countersunk M3 screws into the
+    columns, each under a rubber foot; a grille for the buzzer beside the board."""
     g = WALL + 0.3
     plate = _outline(g, Z_BOT, Z_BOT + PLATE_T)
     lip = _outline(g, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + LIP_H) - _outline(g + LIP_T, Z_BOT, Z_BOT + PLATE_T + LIP_H + 1)
-    for x, y in plate_screws():                       # the lip steps round each boss
-        lip -= F.cyl(x, y, Z_BOT, Z_BOT + 20, 9.0)
-    # and never reaches under the board (its corner screws' heads are there)
+    for x, y in FEET:
+        lip -= F.cyl(x, y, Z_BOT, Z_BOT + 20, COLUMN_D + 2.0)
     lip -= F.rrect(F.BOARD_W / 2, F.BOARD_H / 2, F.BOARD_W + 1.0, F.BOARD_H + 1.0, F.BOARD_R + 0.5, Z_BOT, Z_BOT + 20)
     plate += lip
-    for x, y in plate_screws():
+    for x, y in FEET:
         plate -= F.cyl(x, y, Z_BOT - 1, Z_BOT + PLATE_T + 1, 3.4)
-        plate -= F.Pos(x, y, Z_BOT) * F.Cylinder(3.15, 1.7, align=(F.Align.CENTER, F.Align.CENTER, F.Align.MIN))
-    for x, y in ((kx1 - 22, ky0 + 22), (kx1 - 22, ky1 - 22), (bx0 + 22, by0 + 26), (bx0 + 22, by1 - 26)):
-        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + 1.0, 10.5)          # stick-on rubber feet, 10 mm
+        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + FOOT_DEPTH, FOOT_D)                  # the foot
+        plate -= F.Pos(x, y, Z_BOT + FOOT_DEPTH - 0.01) * F.Cylinder(3.2, 1.75, align=(F.Align.CENTER, F.Align.CENTER, F.Align.MIN))
+    gx, gy = GRILLE_AT
+    for i in range(-3, 4):
+        half = math.sqrt(max(0.0, 11.0 ** 2 - (i * 3.0) ** 2))
+        plate -= F.rrect(gx, gy + i * 3.0, 2 * half, 1.6, 0.79, Z_BOT - 1, Z_BOT + PLATE_T + 1)
     return plate
 
 
@@ -229,13 +244,10 @@ def main() -> None:
         cap = build_puffy_cap(lab) if lab != "HOOK" else F.build_cap("HOOK")
         export_stl(cap, str(OUT / "caps" / f"puffy-{lab.lower()}.stl"), tolerance=0.01, angular_tolerance=0.1)
         export_step(cap, str(OUT / "caps" / f"puffy-{lab.lower()}.step"))
-    # how far the handset bends the tongue (cantilever, the lower cup's half of the weight at the nub)
-    e_mpa = 2000.0
-    i = TONGUE_W * TONGUE_T ** 3 / 12
-    a = hook_xy()[0] - TONGUE_X[0]
-    per_n = a ** 3 / (3 * e_mpa * i)
-    print(f"tongue {TONGUE_X[1] - TONGUE_X[0]:.0f} x {TONGUE_W} x {TONGUE_T} mm: {per_n:.1f} mm per newton at the key "
-          f"(a 200 g handset puts ~1 N on it: ~{per_n:.1f} mm free, the hook cap sits {GAP} mm under the nub)")
+    yc = HS.LENGTH / 2 - HS.CUP_D / 2
+    print(f"hook: the lower cup rests on the hook button (top {F.CAP_TOP:.1f}) and stops on the face at "
+          f"{LOW_FLOOR:.1f}: {F.CAP_TOP - LOW_FLOOR:.1f} mm of travel (switches at 2, bottoms at 4)")
+    print(f"screws: {len(FEET)} x {SCREW} under the feet, into {INSERT}s; light pipe ~{lift(*jewel_path())[1]:.0f} mm")
 
 
 if __name__ == "__main__":
