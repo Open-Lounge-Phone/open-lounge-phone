@@ -760,7 +760,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
 
   /**
    * House-line keys must point inside the space: its members, or a personal (desk) phone here.
-   * Kids' phones are never a target (they have their own allow-lists).
+   * Kids' phones are never a target (they have their own allow-lists), nor public lines (only a
+   * person signed in at a Lounge phone calls those).
    */
   const houseLineProblem = async (
     hh: string,
@@ -774,8 +775,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       if (t.kind === "group" && !t.userIds.every((u) => members.has(u))) {
         return `key ${k.index}: not all members here`;
       }
-      if (t.kind === "line" && !parseAddress(t.address)) {
-        return `key ${k.index}: use a line's address like support@example.org`;
+      // A free phone calls as the space; public lines are called only as a person (signed in).
+      if (t.kind === "line") {
+        return `key ${k.index}: public lines can be called only by someone signed in at the phone`;
       }
       if (t.kind === "device") {
         const d = await store.getDevice(t.deviceId);

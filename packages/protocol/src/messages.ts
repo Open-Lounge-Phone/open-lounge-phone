@@ -804,7 +804,7 @@ export const CallStateMsg = z
       .max(200)
       .optional()
       .describe(
-        "With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached).",
+        "With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). `Sign in at this phone to call a public line` (reason `denied`): a Lounge phone with nobody signed in tried a public line; phones show `SIGN IN TO CALL`.",
       ),
     voicemail: VoicemailOffer.optional().describe(
       "With `ended`, to the caller only: the call went unanswered and a message may be left.",

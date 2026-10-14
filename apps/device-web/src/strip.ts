@@ -133,6 +133,8 @@ export function statusLines(input: StatusInput): StatusLines {
       }
       // Asked a public line to call back: the place in line is kept.
       if (s.callback) return ["PLACE KEPT", "WE'LL CALL BACK"];
+      // A free Lounge phone tried a public line: only someone signed in can call one.
+      if (s.signIn) return ["SIGN IN TO CALL", "PRESS A KEY"];
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
     }

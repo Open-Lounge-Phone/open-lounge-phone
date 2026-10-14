@@ -1,3 +1,4 @@
+import { SIGN_IN_FOR_LINES_NOTE } from "@openloungephone/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type ConnectionHandler, Gateway } from "./gateway.ts";
 import { LINE_WARNING } from "./lines.ts";
@@ -542,41 +543,54 @@ describe("public lines: calls on one server", () => {
     expect(await phone.nextState("ended")).toMatchObject({ reason: "voicemail" });
   });
 
-  it("a Lounge phone: a house-line key while idle, and the signed-in person's own keys", async () => {
+  it("a Lounge phone: nobody signed in can't call a line; the signed-in person's own keys can", async () => {
     await publish(s, t, groupId);
     const lobby = await s.pairDevice(t.ada.token, "Lobby", { kind: "lounge" });
     if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
     const phone = await s.connectDevice(lobby.deviceId, lobby.key.pair);
     const { nonce } = await phone.next("lounge.idle");
-    // Idle: key 1 calls the line as the space (the phone's name, the owner's address).
+    // A free phone calls as the space; a line is called as a person: no line on its keys.
     const keys = [
-      { index: 0, label: "Support", target: { kind: "line", address: "Acme-Support@work.test" } },
+      { index: 0, label: "Support", target: { kind: "line", address: "acme-support@work.test" } },
     ];
-    const bad = [{ index: 1, label: "Oops", target: { kind: "line", address: "not an address" } }];
-    for (const [k, status] of [
-      [bad, 400],
-      [keys, 204],
-    ] as const) {
-      const r = await s.http("/lounge/settings", {
-        method: "PUT",
-        token: t.ada.token,
-        body: { houseLine: { enabled: true, keys: k } },
-      });
-      expectStatus(r, status);
-    }
+    const r = await s.http("/lounge/settings", {
+      method: "PUT",
+      token: t.ada.token,
+      body: { houseLine: { enabled: true, keys } },
+    });
+    expectStatus(r, 400);
+    expect(r.json.error).toBe(
+      "key 0: public lines can be called only by someone signed in at the phone",
+    );
+    // One saved before that rule: pressing it says why, and nothing rings.
+    await s.store.setLoungeSession(t.hh, {
+      idle: {
+        houseLine: {
+          enabled: true,
+          keys: [
+            {
+              index: 0,
+              label: "Support",
+              target: { kind: "line", address: keys[0]?.target.address ?? "" },
+            },
+          ],
+        },
+        whosHere: false,
+      },
+    });
+    await s.gateway.refreshDevice(t.hh, lobby.deviceId);
     expect((await phone.next("config")).buttons).toEqual([{ index: 0, label: "Support" }]);
+    const cy = await s.connectApp(t.cy.token);
     phone.write({ t: "hook", state: "up" });
     phone.write({ t: "button", index: 0 });
-    const q = await nextQueue(phone);
-    // Nobody to call back at an idle phone: it waits, but leaves no voicemail.
-    expect(q.queue).toEqual({ position: 1, size: 1 });
-    const cy = await s.connectApp(t.cy.token);
-    const ring = await cy.next("call.ringing");
-    expect(ring.from).toEqual({ label: "Lobby", address: "olga@work.test" });
-    phone.write({ t: "call.hangup", callId: q.callId });
-    await phone.nextState("ended");
+    expect(await phone.nextState("ended")).toMatchObject({
+      reason: "denied",
+      note: SIGN_IN_FOR_LINES_NOTE,
+    });
     phone.write({ t: "hook", state: "down" });
-    await cy.nextState("ended");
+    expect(cy.all("call.ringing")).toEqual([]);
+    const callers = (await s.http(`/groups/${groupId}/line/callers`, { token: t.ada.token })).json;
+    expect(callers).toEqual([]);
 
     // Ben signs in: key 3 on his own desk phone is the line, so it is on the Lobby's key 3 too.
     const desk = await s.pairDevice(t.ben.token, "Ben's desk", { forMe: true });
@@ -737,30 +751,35 @@ describe("public lines across servers", () => {
     expect((await cy.next("call.ringing")).from.address).toBe("bob@b.test");
   });
 
-  it("an idle Lounge phone elsewhere calls the line as its space: the phone's name", async () => {
+  it("an idle Lounge phone elsewhere can't call the line: its server refuses, nothing is sent", async () => {
     await publish(a, t, groupId);
     const lobby = await b.pairDevice(bob.token, "Cafe phone", { kind: "lounge" });
     if (!lobby.deviceId || !lobby.key) throw new Error("pairing failed");
     const phone = await b.connectDevice(lobby.deviceId, lobby.key.pair);
-    const keys = [
-      { index: 0, label: "Acme", target: { kind: "line", address: "acme-support@a.test" } },
-    ];
-    expectStatus(
-      await b.http("/lounge/settings", {
-        method: "PUT",
-        token: bob.token,
-        body: { houseLine: { enabled: true, keys } },
-      }),
-      204,
-    );
+    // A key saved before free phones stopped calling lines.
+    await b.store.setLoungeSession(bob.household.id, {
+      idle: {
+        houseLine: {
+          enabled: true,
+          keys: [
+            { index: 0, label: "Acme", target: { kind: "line", address: "acme-support@a.test" } },
+          ],
+        },
+        whosHere: false,
+      },
+    });
+    await b.gateway.refreshDevice(bob.household.id, lobby.deviceId);
     await phone.next("config");
     const cy = await a.connectApp(t.cy.token);
+    const before = net.requests.length;
     phone.write({ t: "hook", state: "up" });
     phone.write({ t: "button", index: 0 });
-    expect((await cy.next("call.ringing")).from).toEqual({
-      label: "Cafe phone",
-      address: "bob@b.test",
+    expect(await phone.nextState("ended")).toMatchObject({
+      reason: "denied",
+      note: SIGN_IN_FOR_LINES_NOTE,
     });
+    expect(net.requests.slice(before).filter((r) => r.url.includes("/fed/v1/calls"))).toEqual([]);
+    expect(cy.all("call.ringing")).toEqual([]);
   });
 
   it("a member answers someone from another server; the call log names them", async () => {

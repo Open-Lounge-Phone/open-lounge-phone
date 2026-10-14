@@ -555,7 +555,7 @@ Call progress update.
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
-| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
+| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). `Sign in at this phone to call a public line` (reason `denied`): a Lounge phone with nobody signed in tried a public line; phones show `SIGN IN TO CALL`. |
 | `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
@@ -1055,7 +1055,7 @@ Call progress update.
 | `callId` | string (len ≤64) | yes |  |
 | `state` | `"requesting"` \| `"ringing"` \| `"connecting"` \| `"active"` \| `"ended"` | yes | Lifecycle of a call as seen by one participant. |
 | `reason` | `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"` |  | Present when `state` is `ended`. |
-| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). |
+| `note` | string (len ≤200) |  | With `ended`: the server's explanation in words, when it has one (e.g. a fair-use allowance reached). `Sign in at this phone to call a public line` (reason `denied`): a Lounge phone with nobody signed in tried a public line; phones show `SIGN IN TO CALL`. |
 | `voicemail` | { ticket: string (len ≥16, len ≤128), name: string (len ≤24), maxMs: integer, prompts: `"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`[] } |  | With `ended`, to the caller only: the call went unanswered and a message may be left. |
 | `hold` | `"you"` \| `"them"` |  | With `active`: `you` = you put this call on hold; `them` = the other side did (play the soft `hold.tone`). Absent = not on hold. |
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |

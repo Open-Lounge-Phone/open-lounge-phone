@@ -23,8 +23,9 @@ describe("house-line keys", () => {
       expect(parseTarget(targetValue(t))).toEqual(t);
     }
     expect(parseTarget("group", ["usr_1"])).toEqual({ kind: "group", userIds: ["usr_1"] });
+    // A key saved with a public line shows as one, but nothing picks a line any more.
     expect(targetValue({ kind: "line", address: "help@acme.example" })).toBe("line");
-    expect(parseTarget("line")).toEqual({ kind: "line", address: "" });
+    expect(parseTarget("line")).toBeUndefined();
     expect(parseTarget("")).toBeUndefined();
     expect(targetValue(undefined)).toBe("");
   });
@@ -38,13 +39,11 @@ describe("house-line keys", () => {
       [2, "Front"],
     ]);
     expect(incompleteKeys(keys)).toEqual([0]);
-    keys = setKey(keys, 4, { label: "Taxi", target: { kind: "line", address: "taxi" } });
-    expect(incompleteKeys(keys)).toEqual([0, 4]);
     keys = setKey(keys, 4, {
       label: "Taxi",
       target: { kind: "line", address: "taxi@cabs.example" },
     });
-    expect(incompleteKeys(keys)).toEqual([0]);
+    expect(incompleteKeys(keys)).toEqual([0, 4]);
     expect(setKey(keys, 0, undefined).map((k) => k.index)).toEqual([2, 4]);
   });
 
@@ -65,8 +64,9 @@ describe("house-line keys", () => {
       label: "Taxi",
       target: { kind: "line" as const, address },
     });
-    expect(keyProblem(line(""))).toMatch(/Enter an address/);
-    expect(keyProblem(line("cabs.example"))).toMatch(/That's a server/);
-    expect(keyProblem(line("taxi@cabs.example"))).toBeUndefined();
+    // A free phone calls as the space: public lines only for someone signed in.
+    expect(keyProblem(line("taxi@cabs.example"))).toBe(
+      "Public lines work only for someone signed in at the phone. Pick a person or a group.",
+    );
   });
 });

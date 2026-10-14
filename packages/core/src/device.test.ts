@@ -6,6 +6,7 @@ import {
   initialDeviceState,
   soundFor,
 } from "./device.ts";
+import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
 
 const hook = (state: "up" | "down"): DeviceInput => ({ type: "hook", state });
 const button = (index: number): DeviceInput => ({ type: "button", index });
@@ -382,6 +383,31 @@ describe("public lines (waiting in a queue)", () => {
     const again = run([callState("c1", "ringing")], waiting.state).state;
     expect(again).toEqual({ kind: "dialing", button: 3, callId: "c1" });
     expect(soundFor(again)).toBe("ringback");
+  });
+
+  it("a Lounge phone with nobody signed in is told to sign in to call a line", () => {
+    const refused = run([
+      hook("up"),
+      button(0),
+      {
+        type: "server",
+        msg: {
+          t: "call.state",
+          callId: "c1",
+          state: "ended",
+          reason: "denied",
+          note: SIGN_IN_FOR_LINES_NOTE,
+        },
+      },
+    ]).state;
+    expect(refused).toEqual({ kind: "offhook", lastEnd: "denied", signIn: true });
+    // Any other refusal is just "not allowed".
+    const other = run([
+      hook("up"),
+      button(0),
+      { type: "server", msg: { t: "call.state", callId: "c1", state: "ended", reason: "denied" } },
+    ]).state;
+    expect(other).toEqual({ kind: "offhook", lastEnd: "denied" });
   });
 
   it("key 2 asks for a call back: the place is kept, and the line rings back later", () => {

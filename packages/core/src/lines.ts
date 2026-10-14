@@ -215,6 +215,12 @@ export function afterMissedCallback(
   return line.voicemail ? "voicemail" : "drop";
 }
 
+/**
+ * Why a Lounge phone with nobody signed in can't call a public line (`call.state.note`): free
+ * phones call as the space, and a line is called only as a person. Phones show `SIGN IN TO CALL`.
+ */
+export const SIGN_IN_FOR_LINES_NOTE = "Sign in at this phone to call a public line";
+
 /** The note a caller sees when the line ends their wait without voicemail. */
 export const LINE_ENDED_NOTE = "Nobody could take your call. Please try again later.";
 

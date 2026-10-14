@@ -48,6 +48,7 @@ import {
   roomHoursStep,
   roomOpenAt,
   roomStep,
+  SIGN_IN_FOR_LINES_NOTE,
   utcOffsetMinutes,
 } from "@openloungephone/core";
 import {
@@ -2342,7 +2343,8 @@ export class HouseholdHub {
     if (!key) return this.refuse(device, "denied");
     const as = { id: device.id, label: device.label };
     const target = key.target;
-    if (target.kind === "line") return this.lineDial(device, target.address, true);
+    // Saved before free phones stopped calling lines: refused as the line rule says.
+    if (target.kind === "line") return this.lineDial(device, target.address);
     if (target.kind === "user") return this.userDial(device, target.userId, as);
     if (target.kind === "device") return this.houseLinePhone(device, target.deviceId);
     return this.groupDial(device, target.userIds);
@@ -3297,18 +3299,6 @@ export class HouseholdHub {
     if (!d.owner) return undefined;
     const user = await this.env.store.getUser(d.owner);
     return user ? { id: user.id, label: user.name } : undefined;
-  }
-
-  /**
-   * Who an idle Lounge phone's house-line key calls a public line as: the space (the phone's
-   * name), vouched for by its owner's account, which also carries the minutes.
-   */
-  private async houseLineCaller(peer: Peer): Promise<{ id: string; label: string } | undefined> {
-    if (peer.kind !== "device" || !(peer as DevicePeer).lounge) return undefined;
-    const { store } = this.env;
-    const account = await store.spaceOwner(this.householdId);
-    const owner = account && (await store.membership(account, this.householdId));
-    return owner ? { id: owner.id, label: peer.label } : undefined;
   }
 
   /** Team/org spaces: an extension dialed from an app or a phone of this space. */
@@ -4311,7 +4301,7 @@ export class HouseholdHub {
     });
     const req = ringing.req;
     const address = `${req.line.handle}@${req.lineHost || ownHost(this.env)}`;
-    await this.lineDial(peer, address, false, { callId, id });
+    await this.lineDial(peer, address, { callId, id });
   }
 
   /** Nobody took the call back: tell the line; it may try again later or offer voicemail. */
@@ -4381,25 +4371,31 @@ export class HouseholdHub {
   /**
    * Someone here calls a public line by its address (`call.line`, or a line on a phone's key):
    * a line of this space directly, any other through `/fed/v1/calls` (another household here is
-   * reached the same way, without the network). Never from a kids' phone.
+   * reached the same way, without the network). Never from a kids' phone, nor from a Lounge
+   * phone with nobody signed in (a line is called as a person; free phones call as the space).
    */
   private async lineDial(
     peer: Peer,
     address: string,
-    houseLine = false,
     /** Calling back in after the line's call back: the new call's id, and their place. */
     callback?: { callId: string; id: string },
   ): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_LINES);
-    const as = houseLine ? await this.houseLineCaller(peer) : await this.callingAs(peer);
+    if (
+      peer.kind === "device" &&
+      (peer as DevicePeer).lounge &&
+      !(peer as DevicePeer).lounge?.session
+    ) {
+      return this.refuse(peer, "denied", SIGN_IN_FOR_LINES_NOTE);
+    }
+    const as = await this.callingAs(peer);
     const user = as && (await store.getUser(as.id));
     const account = user && (await store.getAccount(user.accountId));
     if (!as || !account) return this.refuse(peer, "denied");
     const addr = parseAddress(address);
     if (!addr) return this.refuse(peer, "unavailable");
-    // A house-line key calls as the space: the phone's name, its owner's verified address.
-    const party = houseLine ? { ...partyOf(account), name: as.label } : partyOf(account);
+    const party = partyOf(account);
     if (addr.host !== ownHost(this.env)) {
       return this.lineRemote(peer, as, party, addr.host, addr.handle, undefined, callback);
     }
@@ -4444,10 +4440,7 @@ export class HouseholdHub {
         address: callerAddress,
         name: as.label,
         ...(since !== undefined ? { since } : {}),
-        // An idle Lounge phone has nobody to call back.
-        ...(houseLine
-          ? {}
-          : { callback: { host: LOCAL_HOST, accountId: account.id, handle: account.handle } }),
+        callback: { host: LOCAL_HOST, accountId: account.id, handle: account.handle },
       },
     });
     const from = await this.vmCaller(peer, as.label, as);

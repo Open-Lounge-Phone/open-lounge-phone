@@ -219,8 +219,9 @@ export type HouseLineTarget =
   /** Several members at once (a front desk, a staff group): the first to answer takes it. */
   | { kind: "group"; userIds: string[] }
   /**
-   * A public line (`orders@acme.example`, here or on another server). The space calls it: the
-   * line sees the phone's name and the space owner's verified address.
+   * A public line. No longer accepted: a free phone calls as the space, and a public line is
+   * called only by someone signed in at the phone. A key saved earlier is refused when pressed
+   * (`SIGN IN TO CALL`).
    */
   | { kind: "line"; address: string };
 

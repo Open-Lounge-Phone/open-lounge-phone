@@ -5,6 +5,7 @@ import type {
   ServerToDevice,
   VoicemailOffer,
 } from "@openloungephone/protocol";
+import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
 
 /**
  * Handset behaviour shared by every Open Lounge Phone device. The web emulator runs this directly and
@@ -18,8 +19,9 @@ export type DeviceState =
   /**
    * Handset up, waiting for a key. `held`: a call this phone put on hold (MENU → Add caller).
    * `callback`: you just asked a public line to call you back (your place is kept).
+   * `signIn`: a Lounge phone with nobody signed in tried a public line (`SIGN IN TO CALL`).
    */
-  | { kind: "offhook"; lastEnd?: EndReason; held?: string; callback?: true }
+  | { kind: "offhook"; lastEnd?: EndReason; held?: string; callback?: true; signIn?: true }
   /**
    * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
    * line, whether key 1 leaves a voicemail instead, and whether key 2 asks for a call back).
@@ -229,7 +231,8 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
         return stay({ kind: "offhook", lastEnd: "hangup", callback: true });
       }
       if (msg.state === "ended") {
-        return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held });
+        const signIn = msg.note === SIGN_IN_FOR_LINES_NOTE ? { signIn: true as const } : {};
+        return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held, ...signIn });
       }
       if (msg.state === "active")
         return stay({ kind: "incall", callId: msg.callId, connected: true, ...held });

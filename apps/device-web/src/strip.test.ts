@@ -353,6 +353,17 @@ describe("public lines on the strip", () => {
     }
   });
 
+  it("a free Lounge phone that tried a public line says to sign in", () => {
+    expect(lines({ deviceState: { kind: "offhook", lastEnd: "denied", signIn: true } })).toEqual([
+      "SIGN IN TO CALL",
+      "PRESS A KEY",
+    ]);
+    expect(lines({ deviceState: { kind: "offhook", lastEnd: "denied" } })).toEqual([
+      "NOT ALLOWED",
+      "PRESS A KEY",
+    ]);
+  });
+
   it("a call back: the place kept, then the line calling", () => {
     expect(lines({ deviceState: { kind: "offhook", lastEnd: "hangup", callback: true } })).toEqual([
       "PLACE KEPT",

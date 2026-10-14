@@ -16,6 +16,7 @@ import {
   incompleteKeys,
   indexOfDigit,
   keyProblem,
+  LINE_ON_FREE_PHONE,
   parseTarget,
   setKey,
   targetValue,
@@ -546,7 +547,11 @@ function IdleOptions({
                       </option>
                     ))}
                     <option value="group">Several people…</option>
-                    <option value="line">A public line…</option>
+                    {key?.target.kind === "line" && (
+                      <option value="line" disabled>
+                        A public line (only after signing in)
+                      </option>
+                    )}
                   </select>
                   {key && (
                     <input
@@ -559,21 +564,6 @@ function IdleOptions({
                     />
                   )}
                 </div>
-                {key?.target.kind === "line" && (
-                  <input
-                    aria-label={`Key ${digit} public line address`}
-                    value={key.target.address}
-                    maxLength={300}
-                    inputMode="email"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    onChange={(e) =>
-                      update(key.label, { kind: "line", address: e.target.value.trim() })
-                    }
-                  />
-                )}
                 {key?.target.kind === "group" && (
                   <div className="row wrap">
                     {people.map((p) => (
@@ -597,7 +587,7 @@ function IdleOptions({
                 )}
                 {problem && <span className="hint error">{problem}</span>}
                 {!problem && key?.target.kind === "line" && (
-                  <span className="hint">The line's address, like name@server.</span>
+                  <span className="hint error">{LINE_ON_FREE_PHONE}</span>
                 )}
               </li>
             );
@@ -613,13 +603,7 @@ function IdleOptions({
               void save({
                 houseLine: {
                   enabled,
-                  keys: keys.map((k) => ({
-                    ...k,
-                    label: k.label.trim(),
-                    ...(k.target.kind === "line"
-                      ? { target: { kind: "line", address: k.target.address.toLowerCase() } }
-                      : {}),
-                  })),
+                  keys: keys.map((k) => ({ ...k, label: k.label.trim() })),
                 },
               });
             }
