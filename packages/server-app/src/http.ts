@@ -18,7 +18,7 @@ import {
   sha256,
   type User,
 } from "@openloungephone/db";
-import { FEDERATION_VERSION, parseAddress } from "@openloungephone/federation";
+import { FEDERATION_VERSION } from "@openloungephone/federation";
 import { Id, PROTOCOL_VERSION } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
