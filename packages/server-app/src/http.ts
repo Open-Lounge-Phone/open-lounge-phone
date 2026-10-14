@@ -1,5 +1,6 @@
 import {
   deviceFingerprint,
+  isValidTimeZone,
   type QuietHoursRule,
   validateSchedule,
   type Weekday,
@@ -62,6 +63,16 @@ const SetupBody = z.object({
   guardianName: Name,
   timeZone: z.string().min(1),
 });
+/** A space's name and time zone (the Settings page); the same limits as when it was made. */
+const SpacePatch = z
+  .object({
+    name: z.string().trim().min(1).max(64).optional(),
+    timeZone: z.string().trim().min(1).max(64).optional(),
+  })
+  .strict()
+  .refine((b) => b.name !== undefined || b.timeZone !== undefined, {
+    message: "Nothing to change.",
+  });
 const Code = z.string().regex(/^\d{6}$/);
 const Mode = z.enum(["kids", "personal", "lounge"]);
 const PairBody = z.object({
@@ -619,6 +630,40 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     await sweepSpace(env, hh);
     await auditFrom(env, c, "privacy.update", b);
     return c.body(null, 204);
+  });
+
+  // --- the space: name and time zone ------------------------------------------
+
+  /**
+   * Renames the space and/or moves it to another time zone: any guardian of a home, the owner
+   * or an admin of a team or org. Phones and everything timed by the space's clock follow now.
+   */
+  api.patch("/space", guardianOnly, async (c) => {
+    const hh = c.get("user").householdId;
+    const b = await body(c.req.raw, SpacePatch);
+    if (b instanceof Response) return b;
+    if (b.timeZone !== undefined && !isValidTimeZone(b.timeZone)) {
+      return c.json({ error: "Use a time zone like America/New_York or Europe/London." }, 400);
+    }
+    const before = await store.getHousehold(hh);
+    if (!before) return c.json({ error: "not found" }, 404);
+    const name = b.name !== undefined && b.name !== before.name ? b.name : undefined;
+    const timeZone =
+      b.timeZone !== undefined && b.timeZone !== before.timeZone ? b.timeZone : undefined;
+    if (name !== undefined || timeZone !== undefined) {
+      await store.updateHousehold(hh, {
+        ...(name !== undefined ? { name } : {}),
+        ...(timeZone !== undefined ? { timeZone } : {}),
+      });
+      if (name !== undefined) {
+        await auditFrom(env, c, "space.rename", { from: before.name, to: name });
+      }
+      if (timeZone !== undefined) {
+        await auditFrom(env, c, "space.timezone", { from: before.timeZone, to: timeZone });
+      }
+      await live.spaceChanged(hh);
+    }
+    return c.json(await store.getHousehold(hh));
   });
 
   // --- Lounge phones --------------------------------------------------------

@@ -433,6 +433,10 @@ export class HouseholdObject extends GatewayObject {
     return this.gateway.noticesChanged(this.householdId);
   }
 
+  spaceChanged(): Promise<void> {
+    return this.gateway.spaceChanged(this.householdId);
+  }
+
   callbackRing(req: CallbackRing): Promise<void> {
     return this.gateway.callbackRing(this.householdId, req);
   }
@@ -592,6 +596,7 @@ function coordinator(env: Env): Coordinator {
     closeRoom: (hh, roomId) => env.HOUSEHOLD.getByName(hh).closeRoom(roomId),
     callbackRing: (hh, req) => env.HOUSEHOLD.getByName(hh).callbackRing(req),
     noticesChanged: (hh) => env.HOUSEHOLD.getByName(hh).noticesChanged(),
+    spaceChanged: (hh) => env.HOUSEHOLD.getByName(hh).spaceChanged(),
     roomHoursChanged: (hh) => env.HOUSEHOLD.getByName(hh).roomHoursChanged(),
     lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
     notifyAccount: async (accountId, msg) => {

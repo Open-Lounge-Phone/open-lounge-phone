@@ -966,21 +966,33 @@ export class HouseholdHub {
 
   /** Called by hosts that implement `wakeAt`, at the requested time. */
   wake(): Promise<void> {
-    return this.run(async () => {
-      for (const d of this.devices.values()) await this.sendConfig(d, false);
-      await this.expireOfflineLounges();
-      await this.endDayEndSessions();
-      await this.env.flushPresence?.(this.householdId);
-      await this.conf.sweepIdle(this.env.now());
-      // Call backs: a ring that ran out, a place that expired, someone free to call back.
-      this.callbacksPending = true;
-      await this.pumpLines();
-      // Notices: one that expired leaves the phones.
-      await this.updateNotices();
-      // Party lines with hours: opening, closing soon, closed.
-      await this.checkRoomHours();
-      await this.scheduleWake();
-    });
+    return this.run(() => this.catchUp(false));
+  }
+
+  /**
+   * The space's name or time zone changed: every phone gets fresh config now (its clock, quiet
+   * status and owner line), and everything timed by the space's clock (quiet hours, Lounge end of
+   * day, party line hours, public lines' hours for call backs) is checked and scheduled again.
+   */
+  spaceChanged(): Promise<void> {
+    return this.run(() => this.catchUp(true));
+  }
+
+  /** What the hub's alarm does; `force` re-sends every phone's config even if quiet didn't change. */
+  private async catchUp(force: boolean): Promise<void> {
+    for (const d of this.devices.values()) await this.sendConfig(d, force);
+    await this.expireOfflineLounges();
+    await this.endDayEndSessions();
+    await this.env.flushPresence?.(this.householdId);
+    await this.conf.sweepIdle(this.env.now());
+    // Call backs: a ring that ran out, a place that expired, someone free to call back.
+    this.callbacksPending = true;
+    await this.pumpLines();
+    // Notices: one that expired leaves the phones.
+    await this.updateNotices();
+    // Party lines with hours: opening, closing soon, closed.
+    await this.checkRoomHours();
+    await this.scheduleWake();
   }
 
   // --- dialing ----------------------------------------------------------------

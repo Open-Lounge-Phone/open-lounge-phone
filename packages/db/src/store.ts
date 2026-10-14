@@ -1290,6 +1290,16 @@ export class Store {
     return r && toHousehold(r);
   }
 
+  /** Renames a space and/or moves it to another time zone (the caller validated both). */
+  async updateHousehold(id: string, v: { name?: string; timeZone?: string }): Promise<void> {
+    await this.sql.run(
+      "UPDATE households SET name = COALESCE(?, name), time_zone = COALESCE(?, time_zone) WHERE id = ?",
+      v.name ?? null,
+      v.timeZone ?? null,
+      id,
+    );
+  }
+
   /**
    * Adds a person to a household. With `accountId` it's another membership of that account;
    * otherwise a new account is created for them.
