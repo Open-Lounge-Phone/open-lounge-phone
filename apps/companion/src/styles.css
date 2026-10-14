@@ -1366,3 +1366,13 @@ dl.phone-facts {
   background: rgb(255 255 255 / 18%);
   color: #fff;
 }
+
+/* An add-on's badge on the dark call screen. */
+.badge-on-dark {
+  background: rgb(255 255 255 / 85%);
+  color: #1d2321;
+}
+.addons .addon .row {
+  align-items: center;
+  gap: 0.5rem;
+}

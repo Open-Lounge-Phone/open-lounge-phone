@@ -226,7 +226,10 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
               {call.addon && (
                 <>
                   {" "}
-                  <span className="badge" title="A service linked to someone's account">
+                  <span
+                    className="badge badge-on-dark"
+                    title="A service linked to someone's account"
+                  >
                     add-on
                   </span>
                 </>

@@ -161,7 +161,7 @@ function AddonRow({
   return (
     <li className="stack addon">
       <div className="row">
-        <span className={`dot ${addon.online ? "online" : "offline"}`} aria-hidden title={status} />
+        <span className={`dot ${addon.online ? "on" : "off"}`} aria-hidden title={status} />
         <strong>{addon.name}</strong> <span className="badge">add-on</span>
       </div>
       <div className="row wrap">
