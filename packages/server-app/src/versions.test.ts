@@ -53,10 +53,16 @@ describe("what this server advertises", () => {
       federation: "/fed/v1",
       software: `openloungephone/${rootPackage.version}`,
       versions: { "1": "/fed/v1" },
-      features: FEATURE_NAMES,
+      // `addons` only when the operator turns add-ons on.
+      features: FEATURE_NAMES.filter((f) => f !== "addons"),
     });
     expect(res.headers.get("cache-control")).toBe("public, max-age=300");
     expect((await a.http("/health")).json.software).toBe(SOFTWARE);
+    const on = await net.server("on.test", { env: { addons: true } });
+    const onDoc = await (
+      await on.root.fetch(new Request("https://on.test/.well-known/openloungephone"))
+    ).json();
+    expect(onDoc.features).toEqual(FEATURE_NAMES);
   });
 });
 

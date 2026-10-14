@@ -19,7 +19,7 @@ import type { ServerEnv } from "./env.ts";
 import { limitsOf } from "./limits.ts";
 import { federates, operatorAudit, ownKeys } from "./ownKey.ts";
 import { forgetPeer, peerBase, rememberPeer, WELL_KNOWN_MAX_AGE_S } from "./peers.ts";
-import { OWN_FEATURES, SOFTWARE, SUPPORTED_VERSIONS } from "./version.ts";
+import { advertisedFeatures, SOFTWARE, SUPPORTED_VERSIONS } from "./version.ts";
 
 export { SOFTWARE } from "./version.ts";
 
@@ -73,7 +73,7 @@ export async function wellKnownDoc(env: ServerEnv): Promise<WellKnown | undefine
     versions: Object.fromEntries(
       SUPPORTED_VERSIONS.map((v) => [String(v), VERSION_PATHS[v] as string]),
     ),
-    features: [...OWN_FEATURES],
+    features: advertisedFeatures(env),
     ...(r
       ? {
           previous_key: r.previous_key,

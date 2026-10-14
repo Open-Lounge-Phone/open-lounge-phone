@@ -52,13 +52,16 @@ export const PROTOCOL_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 /**
- * Enum values and union variants added within v1 behind a federation feature (`compare`'s
- * `gated`), by schema.
+ * Enum values and union variants added within v1 behind a federation feature or a device
+ * protocol feature (`compare`'s `gated`), by schema.
  */
 export const GATED: Record<string, string[]> = {
-  // Feature `public-lines`: the `line` call target.
-  CallTarget: ["#line"],
-  CallBody: ["to#line"],
+  // Feature `public-lines`: the `line` call target. Feature `addons`: the `addon` call target.
+  CallTarget: ["#line", "#addon"],
+  CallBody: ["to#line", "to#addon"],
+  // Device feature `addons`: an add-on says what it is (a server without the feature refuses
+  // its `pair.begin`, as it refused unknown values before).
+  DeviceToServer: ["#hello.model=addon", "#pair.begin.kind=addon"],
 };
 
 export const snapshotAll = (schemas: Record<string, z.ZodType>): Record<string, JsonSchema> =>

@@ -22,6 +22,33 @@ export function parseAddress(text: string): Address | undefined {
 
 export const formatAddress = (a: Address) => `${a.handle}@${a.host}`;
 
+/** An add-on's name, the part after `+` (validated like a handle). */
+export const ADDON_NAME_RE = HANDLE_RE;
+
+/** An add-on's address: `handle+name@host` (docs/add-ons.md). */
+export interface AddonAddress extends Address {
+  name: string;
+}
+
+/**
+ * Parses `handle+name@host` (an add-on on someone's account). `parseAddress` never accepts it,
+ * so nothing that takes a person's address (a knock, a connection, a public line) can reach an
+ * add-on by accident.
+ */
+export function parseAddonAddress(text: string): AddonAddress | undefined {
+  const t = text.trim().toLowerCase().replace(/^@/, "");
+  const at = t.lastIndexOf("@");
+  const plus = t.indexOf("+");
+  if (at <= 0 || plus <= 0 || plus > at) return undefined;
+  const handle = t.slice(0, plus);
+  const name = t.slice(plus + 1, at);
+  const host = t.slice(at + 1);
+  if (!HANDLE_RE.test(handle) || !ADDON_NAME_RE.test(name) || !HOST_RE.test(host)) return undefined;
+  return { handle, name, host };
+}
+
+export const formatAddonAddress = (a: AddonAddress) => `${a.handle}+${a.name}@${a.host}`;
+
 const hostName = (host: string) => host.replace(/:\d+$/, "").toLowerCase();
 
 /** `localhost` and `*.localhost` (RFC 6761): development and interop tests only. */

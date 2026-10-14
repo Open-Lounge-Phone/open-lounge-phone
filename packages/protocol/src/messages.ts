@@ -119,6 +119,33 @@ export const CallExtension = z
     "Team/org spaces: dial an extension of your space (a member, a phone, a room or a ring group). Phones: MENU → Dial extension, the digits, then MENU. Refused (`denied`) in homes and for unknown numbers; a ring group that's closed follows its after-hours action.",
   );
 
+export const CallAddress = z
+  .object({
+    t: z.literal("call.address"),
+    ...Ref,
+    address: z
+      .string()
+      .min(3)
+      .max(300)
+      .describe(
+        "`handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one.",
+      ),
+  })
+  .describe(
+    "Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).",
+  );
+
+export const CallKey = z
+  .object({
+    t: z.literal("call.key"),
+    ...Ref,
+    callId: Id,
+    key: z.string().regex(/^[0-9*#]$/),
+  })
+  .describe(
+    "Server feature `addons`: a key pressed during an answered call with an add-on (`0`–`9`, `*`, `#`). Sent by an app; the server passes it to the add-on (on another server too) and drops it for anyone else.",
+  );
+
 export const CallVoicemail = z
   .object({ t: z.literal("call.voicemail"), ...Ref, callId: Id })
   .describe(
@@ -441,7 +468,9 @@ export type VoicemailOffer = z.infer<typeof VoicemailOffer>;
 // Device -> server
 // ---------------------------------------------------------------------------
 
-export const DeviceModel = z.enum(["web-emulator", "desktop", "esp32s3"]);
+export const DeviceModel = z
+  .enum(["web-emulator", "desktop", "esp32s3", "addon"])
+  .describe("`addon` = an add-on (a service linked to a person's account, docs/add-ons.md).");
 
 export const DeviceHello = z
   .object({
@@ -482,13 +511,20 @@ export const PhoneMode = z
   );
 export type PhoneMode = z.infer<typeof PhoneMode>;
 
+export const PairKind = z
+  .enum(["kids", "personal", "lounge", "addon"])
+  .describe(
+    "A `PhoneMode`, or `addon`: an add-on asking to be linked to someone's account (server feature `addons`). Its code is claimed in the companion app under Settings → Add-ons, never as a phone.",
+  );
+export type PairKind = z.infer<typeof PairKind>;
+
 export const PairBegin = z
   .object({
     t: z.literal("pair.begin"),
     ...Ref,
     alg: KeyAlg.optional().describe("Defaults to `ed25519`."),
-    kind: PhoneMode.optional().describe(
-      "What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`.",
+    kind: PairKind.optional().describe(
+      "What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`. An add-on sends `addon` (with an `ed25519` key).",
     ),
     publicKey: Base64Url.describe(
       "Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes.",
@@ -614,6 +650,8 @@ export const NoticeDismiss = z
 export const DeviceToServer = z.discriminatedUnion("t", [
   DeviceHello,
   CallExtension,
+  CallAddress,
+  CallKey,
   PairBegin,
   AuthProof,
   Hook,
@@ -743,6 +781,19 @@ export const Config = z
       .describe(
         'Who the phone belongs to and how it is used, for the status strip\'s trust line ("Kids · Smith home", "Jesse\'s phone", "Lounge · Office").',
       ),
+    addon: z
+      .object({
+        name: z.string().min(1).max(30).describe("Its name, the part after `+`."),
+        address: z.string().max(300).describe("Its address, `handle+name@host`."),
+        owner: z.object({
+          name: z.string().min(1).max(64),
+          address: z.string().max(300).describe("`handle@host`."),
+        }),
+      })
+      .optional()
+      .describe(
+        "Sent to an add-on only (instead of `owner`): who it is and whose account it belongs to.",
+      ),
     houseLine: z
       .boolean()
       .optional()
@@ -801,7 +852,13 @@ export const CallRinging = z
         .max(300)
         .optional()
         .describe(
-          "Calls to a public line: the caller's verified address (`handle@host`), checked by their server's signature.",
+          "The caller's verified address, checked by their server's signature (another server) or by this server: on calls to a public line (`handle@host`), on every call to an add-on (the person calling, `handle@host`), and on every call from an add-on (`handle+name@host`).",
+        ),
+      kind: z
+        .enum(["addon"])
+        .optional()
+        .describe(
+          '`addon`: the caller is an add-on (`label` is its name). Show it with an add-on label, e.g. `SEAT · ADD-ON` on a phone\'s display, an "add-on" badge in an app.',
         ),
     }),
     line: LineInfo.optional().describe("The call is for a public line you answer for."),
@@ -1056,6 +1113,7 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   NoticeCleared,
   CallRinging,
   CallStateMsg,
+  CallKey,
   RtcConfig,
   RtcSdp,
   RtcIce,
@@ -1142,6 +1200,8 @@ export const AppToServer = z.discriminatedUnion("t", [
   CallConnection,
   CallPhone,
   CallLine,
+  CallAddress,
+  CallKey,
   PresenceSet,
   LoungeClaim,
   LoungeAppLeave,

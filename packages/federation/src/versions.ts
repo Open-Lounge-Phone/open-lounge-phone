@@ -34,6 +34,8 @@ export const FEATURES = {
     "Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`.",
   "line-callback":
     "Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`.",
+  addons:
+    "Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it.",
 } as const satisfies Record<string, string>;
 
 export type Feature = keyof typeof FEATURES;

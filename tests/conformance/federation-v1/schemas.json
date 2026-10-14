@@ -301,6 +301,24 @@
           }
         },
         "required": ["kind", "handle"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "addon"
+          },
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          }
+        },
+        "required": ["kind", "handle", "name"]
       }
     ]
   },
@@ -401,6 +419,24 @@
               }
             },
             "required": ["kind", "handle"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "addon"
+              },
+              "handle": {
+                "type": "string",
+                "pattern": "^[a-z0-9._-]{2,30}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9._-]{2,30}$"
+              }
+            },
+            "required": ["kind", "handle", "name"]
           }
         ]
       },
@@ -426,6 +462,10 @@
       },
       "recording": {
         "type": "boolean"
+      },
+      "addon": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]{2,30}$"
       }
     },
     "required": ["callId", "from", "to"]
@@ -1768,6 +1808,32 @@
               }
             },
             "required": ["t", "callId"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "t": {
+                "type": "string",
+                "const": "call.key"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "callId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[0-9*#]$"
+              }
+            },
+            "required": ["t", "callId", "key"]
           }
         ]
       }

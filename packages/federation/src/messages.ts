@@ -2,6 +2,7 @@
 // `from` is one of that server's accounts, so a server can only speak for its own people.
 import {
   CallCallback,
+  CallKey,
   CallStateMsg,
   CallVoicemail,
   RoomEnded,
@@ -94,6 +95,15 @@ export const CallTarget = z.discriminatedUnion("kind", [
       "Feature `line-callback`: the person answered the line's call back; their place in line (the id of the call they waited under).",
     ),
   }),
+  /**
+   * An add-on (feature `addons`): `handle+name@host`. Only its owner and the connections its
+   * owner allowed reach it; the receiver checks both, and refuses everything else `unavailable`.
+   */
+  z.object({
+    kind: z.literal("addon"),
+    handle: Handle.describe("The owner's handle."),
+    name: Handle.describe("The add-on's name (after `+`)."),
+  }),
 ]);
 export type CallTarget = z.infer<typeof CallTarget>;
 
@@ -132,6 +142,14 @@ export const CallBody = z.object({
     .boolean()
     .optional()
     .describe("The caller's space records this call; the receiver may refuse (`denied` + `note`)."),
+  /**
+   * Feature `addons`: the caller is `from`'s add-on with this name (`handle+name@host`), calling
+   * a person (`to.kind` `person`) its owner allowed. The receiver labels the call as an add-on's
+   * and never lets it reach a phone.
+   */
+  addon: Handle.optional().describe(
+    "Feature `addons`: the caller is `from`'s add-on of this name; `to` must be a person.",
+  ),
 });
 export type CallBody = z.infer<typeof CallBody>;
 
@@ -351,7 +369,8 @@ export type RoomJoinResult = z.infer<typeof RoomJoinResult>;
 
 /**
  * Call signaling relayed between the two servers of a federated call (same shapes as clients).
- * `call.voicemail` (feature `public-lines`) goes from a caller's server to a public line's.
+ * `call.voicemail` (feature `public-lines`) goes from a caller's server to a public line's;
+ * `call.key` (feature `addons`) from a caller's server to an add-on's.
  */
 export const FedSignal = z.discriminatedUnion("t", [
   CallStateMsg,
@@ -360,6 +379,7 @@ export const FedSignal = z.discriminatedUnion("t", [
   RoomSignal,
   CallVoicemail,
   CallCallback,
+  CallKey,
 ]);
 
 // --- call me back (feature `line-callback`) ------------------------------------------------

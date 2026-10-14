@@ -340,7 +340,7 @@ Call and room signaling between two servers travels over one WebSocket per serve
 | `nonce` | string (`^[A-Za-z0-9_-]{16,64}$`) | yes | The dialer's random nonce; `hello.ok` echoes it. |
 | `sig` | string (len ≤128) | yes | base64url Ed25519 signature over `streamStatement(from, to, created, nonce)`. |
 
-**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal`, `call.voicemail`, `call.callback` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
+**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal`, `call.voicemail`, `call.callback`, `call.key` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
 
 **Room signals** — `msg` of a `room.signal` is one of `room.state`, `room.media`, `room.idle`, `room.ended`, `room.leave`, `room.mute`, `room.remove`, `room.lock`, `room.talk`, `room.here`, `rtc.sdp`, `rtc.ice`.
 
@@ -499,6 +499,7 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 | `guestOf` | string (len ≤260) |  | `from` is a guest at one of the sender's Lounge phones, from this host. |
 | `ringLabel` | string (len ≥1, len ≤24) |  | What to show while ringing, when it isn't `from.name`. |
 | `recording` | boolean |  | The caller's space records this call; the receiver may refuse (`denied` + `note`). |
+| `addon` | string (`^[a-z0-9._-]{2,30}$`) |  | Feature `addons`: the caller is `from`'s add-on of this name; `to` must be a person. |
 
 **Responses**
 
@@ -837,6 +838,7 @@ One of:
 - { kind: `"phone"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"guest"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"line"`, handle: string (`^[a-z0-9._-]{2,30}$`), callback?: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
+- { kind: `"addon"`, handle: string (`^[a-z0-9._-]{2,30}$`), name: string (`^[a-z0-9._-]{2,30}$`) }
 
 #### `VoicemailOffer`
 
@@ -1076,6 +1078,7 @@ This implementation speaks federation version 1 (`/fed/v1`).
 | `transfer` | yes | Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces). |
 | `public-lines` | no | Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`. |
 | `line-callback` | no | Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`. |
+| `addons` | no | Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it. |
 <!-- END GENERATED: features -->
 
 New features are added to this registry (and to `FEATURES` in `packages/federation`) in the

@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -55,7 +55,7 @@ First message on every connection.
 | `id` | string (len ≤64) |  |  |
 | `proto` | integer | yes |  |
 | `deviceId` | string (len ≤64) |  | Omitted by an unpaired device. |
-| `model` | `"web-emulator"` \| `"desktop"` \| `"esp32s3"` | yes |  |
+| `model` | `"web-emulator"` \| `"desktop"` \| `"esp32s3"` \| `"addon"` | yes | `addon` = an add-on (a service linked to a person's account, docs/add-ons.md). |
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
 | `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
@@ -69,6 +69,25 @@ Team/org spaces: dial an extension of your space (a member, a phone, a room or a
 | `id` | string (len ≤64) |  |  |
 | `number` | string (`^[0-9]{2,6}$`) | yes |  |
 
+### `call.address`
+
+Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one. |
+
+### `call.key`
+
+Server feature `addons`: a key pressed during an answered call with an add-on (`0`–`9`, `*`, `#`). Sent by an app; the server passes it to the add-on (on another server too) and drops it for anyone else.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+| `key` | string (`^[0-9*#]$`) | yes |  |
+
 ### `pair.begin`
 
 Unpaired device asks for a pairing code to show on its display.
@@ -77,7 +96,7 @@ Unpaired device asks for a pairing code to show on its display.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `alg` | `"ed25519"` \| `"p256"` |  | Defaults to `ed25519`. |
-| `kind` | `"kids"` \| `"personal"` \| `"lounge"` |  | What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`. |
+| `kind` | `"kids"` \| `"personal"` \| `"lounge"` \| `"addon"` |  | What the phone was set up as (first-run choice: a `PhoneMode`); whoever claims it can choose another mode. Defaults to `kids`. An add-on sends `addon` (with an `ed25519` key). |
 | `publicKey` | string | yes | Raw public key, base64url: Ed25519 32 bytes, or P-256 uncompressed SEC1 point 65 bytes. |
 
 ### `auth.proof`
@@ -436,6 +455,7 @@ Sent after authentication and whenever guardians change settings.
 | `missed` | { from: string (len ≤24), callback?: `true` }[] |  | Missed calls for the status display, newest first: unheard voicemails by sender, and (a person's own phone) missed call backs from public lines. |
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
+| `addon` | { name: string (len ≤30), address: string (len ≤300), owner: { name: string (len ≤64), address: string (len ≤300) } } |  | Sent to an add-on only (instead of `owner`): who it is and whose account it belongs to. |
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 | `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |
@@ -549,7 +569,7 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
@@ -572,6 +592,16 @@ Call progress update.
 | `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean, callback?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
 | `callback` | { until: integer } |  | With `ended` (reason `hangup`): you asked to be called back and keep your place in line. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
+
+### `call.key`
+
+Server feature `addons`: a key pressed during an answered call with an add-on (`0`–`9`, `*`, `#`). Sent by an app; the server passes it to the add-on (on another server too) and drops it for anyone else.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+| `key` | string (`^[0-9*#]$`) | yes |  |
 
 ### `rtc.config`
 
@@ -751,6 +781,25 @@ Call a public line (a team's or organization's published ring group) on this ser
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `address` | string (len ≥3, len ≤300) | yes | The line's address, `handle@host`. |
+
+### `call.address`
+
+Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one. |
+
+### `call.key`
+
+Server feature `addons`: a key pressed during an answered call with an add-on (`0`–`9`, `*`, `#`). Sent by an app; the server passes it to the add-on (on another server too) and drops it for anyone else.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+| `key` | string (`^[0-9*#]$`) | yes |  |
 
 ### `presence.set`
 
@@ -1059,7 +1108,7 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 

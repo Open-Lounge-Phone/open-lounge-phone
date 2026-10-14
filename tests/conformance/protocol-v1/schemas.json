@@ -27,7 +27,7 @@
           },
           "model": {
             "type": "string",
-            "enum": ["web-emulator", "desktop", "esp32s3"]
+            "enum": ["web-emulator", "desktop", "esp32s3", "addon"]
           },
           "fw": {
             "type": "string",
@@ -71,6 +71,53 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "call.address"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": ["t", "address"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.key"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[0-9*#]$"
+          }
+        },
+        "required": ["t", "callId", "key"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "pair.begin"
           },
           "id": {
@@ -85,7 +132,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["kids", "personal", "lounge"]
+            "enum": ["kids", "personal", "lounge", "addon"]
           },
           "publicKey": {
             "type": "string",
@@ -1130,6 +1177,36 @@
             },
             "required": ["mode", "space"]
           },
+          "addon": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 30
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "owner": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": ["name", "address"]
+              }
+            },
+            "required": ["name", "address", "owner"]
+          },
           "houseLine": {
             "type": "boolean"
           },
@@ -1533,6 +1610,10 @@
               "address": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["addon"]
               }
             },
             "required": ["label"]
@@ -1759,6 +1840,32 @@
           }
         },
         "required": ["t", "callId", "state"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.key"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[0-9*#]$"
+          }
+        },
+        "required": ["t", "callId", "key"]
       },
       {
         "type": "object",
@@ -2408,6 +2515,53 @@
           }
         },
         "required": ["t", "address"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.address"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": ["t", "address"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.key"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[0-9*#]$"
+          }
+        },
+        "required": ["t", "callId", "key"]
       },
       {
         "type": "object",
@@ -3400,6 +3554,10 @@
               "address": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["addon"]
               }
             },
             "required": ["label"]

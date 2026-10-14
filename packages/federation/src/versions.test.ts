@@ -21,9 +21,11 @@ describe("reading a peer's offer", () => {
       legacy: true,
       software: "openloungephone/0.1",
     });
-    // Everything but what came after 0.1 (public lines, call me back).
+    // Everything but what came after 0.1 (public lines, call me back, add-ons).
     expect([...o.features].sort()).toEqual(
-      FEATURE_NAMES.filter((f) => f !== "public-lines" && f !== "line-callback").sort(),
+      FEATURE_NAMES.filter(
+        (f) => f !== "public-lines" && f !== "line-callback" && f !== "addons",
+      ).sort(),
     );
   });
 

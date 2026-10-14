@@ -16,11 +16,23 @@ export const SOFTWARE = `openloungephone/${SERVER_VERSION}`;
 /** Federation features this server implements (all of the registry). */
 export const OWN_FEATURES: readonly Feature[] = FEATURE_NAMES;
 
+/**
+ * What this server advertises in `.well-known`: everything it implements, but `addons` only
+ * when its operator turned add-ons on (`ADDONS=on`), so other servers never offer it add-on
+ * calls otherwise.
+ */
+export const advertisedFeatures = (env: { addons?: boolean }): Feature[] =>
+  OWN_FEATURES.filter((f) => f !== "addons" || env.addons === true);
+
 export { SUPPORTED_VERSIONS };
 
 /** What phones and apps are told about this server (`config.server`, `app.ready.server`). */
 export const SERVER_INFO: ServerInfo = {
   software: SOFTWARE,
   protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
-  features: [...DEVICE_FEATURES],
+  features: DEVICE_FEATURES.filter((f) => f !== "addons"),
 };
+
+/** `SERVER_INFO` as this server tells it: with `addons` when add-ons are on. */
+export const serverInfo = (env: { addons?: boolean }): ServerInfo =>
+  env.addons === true ? { ...SERVER_INFO, features: [...DEVICE_FEATURES] } : SERVER_INFO;

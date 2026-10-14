@@ -26,6 +26,7 @@ export const DEVICE_FEATURES = [
   "public-lines",
   "line-callback",
   "notices",
+  "addons",
 ] as const;
 export type DeviceFeature = (typeof DEVICE_FEATURES)[number];
 
@@ -54,7 +55,7 @@ export const ServerInfo = z
       })
       .describe("The protocol versions the server accepts."),
     features: Names(32).describe(
-      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`). Unknown names are ignored.",
+      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on). Unknown names are ignored.",
     ),
   })
   .describe("What the server speaks, so a client can adapt to an older or newer server.");

@@ -102,6 +102,7 @@ export const UNAVAILABLE: Record<Feature, string> = {
   transfer: "Transfers aren't available with that server yet",
   "public-lines": "That server doesn't take calls to public lines yet",
   "line-callback": "That server can't call you back yet",
+  addons: "That server doesn't take add-on calls",
 };
 
 /** Every peer's last known offer (for the operator's view), without fetching anything. */
