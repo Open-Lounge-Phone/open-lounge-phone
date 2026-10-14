@@ -10,9 +10,7 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.5.0 (unreleased)
-
-On `main`, not tagged yet.
+## 0.5.0 (2026-10-14, `server-v0.5.0`)
 
 - **Why a passkey.** Sign-up, sign-in, the passkey offer and Account explain in plain words why
   accounts use passkeys instead of passwords, and how to make one without a fingerprint or face
