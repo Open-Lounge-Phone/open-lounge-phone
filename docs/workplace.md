@@ -85,8 +85,8 @@ make it stricter.
 
 - **Only owners and admins of a team or organization space** can publish one (homes have no ring
   groups). `PUT /api/groups/:id/line {handle}` gives the group its address (it starts off); the
-  handle shares the namespace of people's and rooms' handles (reserved and recently released
-  handles included). Turning it on needs `{enabled: true, confirm: true}`: the companion shows the
+  handle shares the namespace of people's and rooms' handles (recently released handles
+  included); unlike a person, a line may use names like `support` or `help`. Turning it on needs `{enabled: true, confirm: true}`: the companion shows the
   warning first, in these words: "Anyone on a server you haven't blocked can call this line.
   Their verified address shows on every call, and you can block people and whole servers."
   Publishing, turning off, changing the address and every setting go into the audit trail.

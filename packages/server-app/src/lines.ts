@@ -301,7 +301,7 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     }
     const now = env.now();
     if (handle !== undefined && handle !== before?.handle) {
-      const problem = handleProblem(handle);
+      const problem = handleProblem(handle, { reserved: false }); // lines may be support@, help@
       if (problem) return c.json({ error: problem }, 400);
       if (!(await store.lines.setHandle(group.id, user.householdId, handle, now))) {
         return c.json({ error: "that address is taken" }, 409);

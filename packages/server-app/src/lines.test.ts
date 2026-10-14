@@ -89,6 +89,16 @@ describe("public lines: publishing", () => {
     groupId = await supportGroup(s, t, [t.cy.user.id]);
   });
 
+  it("may use names reserved for people's handles, like support@", async () => {
+    const r = await s.http(`/groups/${groupId}/line`, {
+      method: "PUT",
+      token: t.ada.token,
+      body: { handle: "support" },
+    });
+    expectStatus(r, 200);
+    expect(r.json.line).toMatchObject({ address: "support@work.test" });
+  });
+
   it("is opt-in: off until an admin confirms the warning, and audited", async () => {
     const path = `/groups/${groupId}/line`;
     // Members can't; a new line needs an address and starts off.

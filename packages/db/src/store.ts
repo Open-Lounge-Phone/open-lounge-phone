@@ -158,12 +158,18 @@ export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
   "no-reply",
 ]);
 
-/** Why a handle can't be used, or undefined when it's fine (uniqueness is checked separately). */
-export function handleProblem(handle: string): string | undefined {
+/**
+ * Why a handle can't be used, or undefined when it's fine (uniqueness is checked separately).
+ * People's handles skip the reserved names; a public line's address may use them (`support@`).
+ */
+export function handleProblem(
+  handle: string,
+  opts: { reserved?: boolean } = {},
+): string | undefined {
   if (!HANDLE_RE.test(handle)) {
     return "use 2-30 lower-case letters, digits, dots, dashes or underscores";
   }
-  if (RESERVED_HANDLES.has(handle)) return "that handle is reserved";
+  if ((opts.reserved ?? true) && RESERVED_HANDLES.has(handle)) return "that handle is reserved";
   return undefined;
 }
 
