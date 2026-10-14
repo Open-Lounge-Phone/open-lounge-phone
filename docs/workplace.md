@@ -103,11 +103,11 @@ make it stricter.
   allowed, over a limit, a kids' phone) answers exactly like an unavailable one (`ended`
   `unavailable`).
 - **Calling:** `call.line {address}` from the companion (Connections → Call a public line), a
-  key on a personal phone, or a Lounge phone: a house-line key while nobody is signed in (calls
-  as the space: the phone's name with the space owner's verified address; it can wait in the
-  queue but leaves no voicemail), and, for a signed-in member, the lines on their own phone's
-  keys. Kids' phones never. The first `call.state ringing` carries `line {name, description,
-  address}`.
+  key on a personal phone, or the lines on a member's own phone's keys while they're signed in at
+  a Lounge phone. A line is always called as a person: a Lounge phone with nobody signed in is
+  refused (`ended` `denied`, note `Sign in at this phone to call a public line`; the phone shows
+  `SIGN IN TO CALL`), and its house-line keys can't hold a line. Kids' phones never. The first
+  `call.state ringing` carries `line {name, description, address}`.
 
 ### The queue
 
@@ -134,10 +134,14 @@ Answering calls the line again in their place: the ringing call ends with `trans
 the caller of the new call, which rings the members). If they decline or don't answer, the line
 does what it says (`callbackMissed`): `retry` tries once more when their turn comes again (they
 go to the end of the line), then offers voicemail; `voicemail` offers it at once. The offer comes
-with the ended ring (apps show "Leave a message"; phones just stop ringing). Without voicemail a
-missed call back simply ends. Kids' phones never call lines, and an idle Lounge phone has nobody
-to call back, so neither is offered it. Recent callers show `call back`, `missed call back` and
-`call back expired`. The line only rings someone who asked: their server keeps the request
+with the ended ring (apps show "Leave a message"). A call back that rang and wasn't taken (no
+answer, or no phone or app free; declining doesn't count) shows on the person's own phones as a
+**missed call** naming the line (`config.missed` with `callback`: `MISSED CALL BACK` / the line's
+name), until they clear it on the phone (MENU → Voicemail → Clear, `missed.clear`), call the
+line, or take its next call back. Their server keeps it (one per person and line, the latest
+miss) no longer than the call history of the space they called from. Kids' phones never call
+lines, and a Lounge phone with nobody signed in can't call one, so neither is offered a call
+back. Recent callers show `call back`, `missed call back` and `call back expired`. The line only rings someone who asked: their server keeps the request
 (the line, the waiting call) and ignores any other call back.
 
 ### Settings
@@ -194,11 +198,23 @@ the caller's server. See [federation-spec.md](federation-spec.md).
   /api/space/calls.csv` exports it (spreadsheet formulas in names are defused); the export is
   itself audited.
 - `GET /api/space/audit` — who changed what: extensions, ring groups, hours, roles, invites,
-  removed people, phones added and removed, privacy and recording settings, public lines and
-  their blocklist.
+  removed people, phones added and removed (and changes to phones other than one's own), privacy
+  and recording settings, notices, the space's name and time zone, public lines and their
+  blocklist. Every space keeps one, homes included; see
+  [security-model.md](security-model.md#audit-trail) for who reads it and what it never holds.
 
 Both are kept as long as the space's history retention (`PUT /api/space/privacy`), and deleted
 by the same sweep as call history.
+
+## Name and time zone
+
+`PATCH /api/space {name?, timeZone?}` (the companion's Settings page) renames the space or moves
+it to another time zone: the owner or an admin in a team or org, any guardian in a home; everyone
+else sees the values. The name is 1-64 characters (trimmed), the time zone an IANA name such as
+`Europe/Lisbon`. Both changes are audited with the old and new values. Everything timed by the
+space's clock follows at once: business hours, public lines' hours, party line hours, quiet hours
+(homes), the Lounge "end of day", and the phones' clock (`config.now`, `utcOffsetMin`), which get
+fresh config right away.
 
 ## Transfer across households and servers
 

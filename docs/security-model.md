@@ -170,6 +170,32 @@ code on the screen belongs to a different phone; they are not a secret.
 - Expired rows and their audio are deleted by a sweep: daily when self-hosted, on activity in the
   space on Cloudflare (no timers), and always before a timeline or inbox is shown.
 
+## Audit trail
+
+Every space (households, teams and organizations) keeps a list of who changed what
+(`GET /api/space/audit`; the companion's Settings → Changes).
+
+- **What's in it:** changes made by the people who run the space: phones added, removed and
+  renamed, a phone's allow-list, keys, voicemail settings and greeting (except changes a person
+  makes to their own phone), quiet hours, invites and removed people, roles, privacy and
+  recording settings, notices posted and taken down, Lounge settings, extensions, ring groups,
+  hours, public lines, and the space's name and time zone.
+- **What it never holds:** what anyone said or wrote — no notice text or audio, no voicemail,
+  transcript or recording, no passkey, session or token, no IP address. An entry is who (their
+  account and name in the space), what (the action), when, and the ids, names and counts needed to
+  understand it (a time zone change keeps the old and new zone). The server drops content and
+  secret fields from every entry as a backstop, and tests check a notice's text never reaches
+  the stored row.
+- **Who reads it:** a home's guardians, or a team's or organization's owner and admins. Never its
+  members or contacts, never another space, and never another server: no federation route
+  exposes it.
+- **Append-only:** no route edits or deletes an entry. Entries go only with the space's history
+  retention (above), by the same sweep, and when the space itself is deleted.
+- **A failed write** doesn't stop the change; it is logged as an error for the operator to see.
+
+The server-wide operator trail (key rotation, blocked servers, suspensions) is separate and only
+for the server's operators ([federation.md](federation.md)).
+
 ## Recording (built)
 
 1. **Off unless a space turns it on** (`PUT /api/space/recording`, guardians or admins; audited).

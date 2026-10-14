@@ -20,10 +20,28 @@ On `main`, not tagged yet.
   values that look filled in; examples are hints. Add a household asks for its time zone. The
   server's own refusals are plain sentences too ("Name can be at most 24 characters." instead of
   zod's wording), and the companion says "Couldn't reach the server" when offline.
-- **Public lines on Lounge phones.** A house-line key on an idle Lounge phone can call a public
-  line (here or on another server) as the space: the line sees the phone's name and the space
-  owner's verified address. A member signed in at a Lounge phone gets the lines on their own
-  phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Space settings.** A Settings tab for every space: its name and time zone can be changed after
+  it was made (`PATCH /api/space {name?, timeZone?}`; any guardian of a home, the owner or an
+  admin of a team or org; others see the values). Everything on the space's clock follows at
+  once: phones get fresh config (clock, quiet status, owner line) and the hub's next quiet-hours
+  change, Lounge end of day, party line hours and call backs are scheduled in the new zone. The
+  privacy settings moved here from Account.
+- **An audit trail in every space.** Homes now log what teams log (and more of it: quiet hours,
+  a kid's phone's allow-list, keys, name, voicemail settings and greeting, Lounge settings, the
+  space's name and time zone), shown under Settings → Changes. Only a home's guardians, or a
+  team's or org's owner and admins, can read it (never members, other spaces or other servers);
+  nothing edits or deletes it except the space's history retention. Entries hold who, what, when
+  and ids/names/counts, never content: a notice's text is no longer stored, and content or secret
+  fields are dropped from every entry. A failed audit write is logged as an error.
+- **Public lines on Lounge phones.** A member signed in at a Lounge phone gets the lines on their
+  own phone's keys. A Lounge phone with nobody signed in can't call a public line: the call is
+  refused before anything is sent and the phone shows `SIGN IN TO CALL` (additive: the note's
+  value on `call.state`); house-line keys can't hold a line.
+- **Missed call backs on the phones.** A public line's call back that rang and wasn't taken shows
+  on the person's own phones as a missed call naming the line (`MISSED CALL BACK` / its name),
+  until they clear it (MENU → Voicemail → Clear), call the line, or take its next call back.
+  Additive protocol: `config.missed[].callback`, `missed.clear`. Migration 0026 (additive). In
+  the data export as `missedCallbacks`. Firmware 0.9.2 shows and clears them.
 - **Party line hours**: a room can be open only at set weekly times (the space's time zone,
   windows past midnight, the same rules as quiet hours). Outside them nobody gets in ("Closed.
   Opens Fri 19:00"). At opening the space's apps get `room.opened` (the companion offers to join)
@@ -36,8 +54,8 @@ On `main`, not tagged yet.
   phones, all of them or some: one or two lines of 16 characters, an optional 30-second
   recording, an hour unless they choose otherwise (up to a day). Phones show it on the ready
   screen with a chime (none during quiet hours), lifting the handset plays the recording, any key
-  dismisses it on that phone; it leaves every phone when it expires or is taken down. Audited in
-  team and org spaces; never federated. `/api/notices`; additive protocol: `notice`,
+  dismisses it on that phone; it leaves every phone when it expires or is taken down. Audited
+  (without its text); never federated. `/api/notices`; additive protocol: `notice`,
   `notice.cleared`, `notice.dismiss`, device feature `notices`. Companion: Home → Notice to the
   phones. Migration 0024. See [docs/notices.md](docs/notices.md).
 - **Call me back** (public lines): a caller waiting in a line's queue can hang up and keep their
@@ -46,7 +64,7 @@ On `main`, not tagged yet.
   (a per-line setting); the place is kept for up to two hours. On by default per line; works
   across servers (federation feature `line-callback`: `call.callback` on the stream,
   `/fed/v1/lines/callback` and `/fed/v1/lines/callback/missed`, the `line` target's `callback`).
-  Never for kids' phones or idle Lounge phones. Additive protocol: `call.callback`,
+  Never for kids' phones or Lounge phones with nobody signed in. Additive protocol: `call.callback`,
   `call.state.queue.callback`, `call.state.callback`, `call.ringing.callback`, device feature
   `line-callback`. Companion: "Call me back" in the call screen, the line's settings; browser
   phone: key 2 while waiting. Migration 0023.

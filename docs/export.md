@@ -75,6 +75,9 @@ and, later, for **moving an account** to another server while keeping its connec
       "recording": "/api/recordings/rec_…/audio"
     }
   ],
+  "missedCallbacks": [
+    { "line": "help@acme.example", "name": "Acme help", "at": "2026-09-14T10:00:00.000Z" }
+  ],
   "recordings": [
     {
       "id": "rec_…",
@@ -103,6 +106,8 @@ and, later, for **moving an account** to another server while keeping its connec
   everyone on it) carries `recordingId` and `recording`, the path of its audio.
 - `recordings` lists the recordings of calls and rooms you were in or recorded (up to 1,000),
   with their transcripts where the space transcribes; the audio is at `audio` (signed-in `GET`).
+- `missedCallbacks` lists public lines' call backs you didn't take and haven't cleared (`line`
+  address, `name`, `at`), up to 100.
 - Not included: passkeys (they're bound to the old server's name), sessions, voicemail audio
   (download it from the Voicemail tab), other people's data.
 

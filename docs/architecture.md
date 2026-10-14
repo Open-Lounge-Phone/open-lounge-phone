@@ -53,7 +53,9 @@ and asking for a household the account isn't in is refused (403). Ways in:
   account;
 - **Add a household** (`POST /api/households {name, type?, timeZone?}`): any account on an open
   server, or a guardian on an invite-only one. The companion asks for the time zone (starting on
-  the device's); without one the server uses the current space's.
+  the device's); without one the server uses the current space's. Its name and time zone can be
+  changed later (`PATCH /api/space {name?, timeZone?}`, the companion's Settings): the hub then
+  re-sends every phone's config and reschedules its alarm in the new zone.
 
 A household is one kind of **space** (`type`: `home`, `team` or `org`; `POST /api/spaces`).
 Kids' phones and quiet hours exist only in homes; team and org spaces hold grown-ups' own phones
@@ -127,8 +129,10 @@ more — a *consult* call, never a third (`controlCheck` in `packages/core`). Th
 directory, extensions for members, phones, rooms and ring groups (`call.extension`; phones:
 MENU → Dial ext), ring groups (simultaneous, sequential, round robin; a hub-side `hunt` state
 steps through members on the room's timer), business hours with an after-hours action, shared
-voicemail boxes (`voicemails.group_id`, "heard by"), the space's call log with CSV export and an
-audit trail (`audit_log`) — migration `0017_workplace.sql`; see [workplace.md](workplace.md).
+voicemail boxes (`voicemails.group_id`, "heard by") and the space's call log with CSV export —
+migration `0017_workplace.sql`; see [workplace.md](workplace.md). Every space (homes too) keeps an
+audit trail (`audit_log`, `audit.ts`): who changed what, read only by those who run the space,
+never holding content; see [security-model.md](security-model.md#audit-trail).
 
 **Recording.** Off unless a space turns it on; never with kids' phones. When a call goes live the
 space's hub announces `call.state.recording` to every party (other servers' people through their

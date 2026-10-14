@@ -47,8 +47,8 @@ All routes are under `/api`, with the session's active space.
 | `DELETE /notices/:id` | guardians / admins | takes it down |
 | `GET /notices/:id/audio?token=` | phones | the recording, while the notice lasts (the token comes with the notice) |
 
-In team and organization spaces posting, recording and taking down are in the audit trail
-(`notice.post`, `notice.audio`, `notice.delete`). Recordings are deleted when the notice ends;
+Posting, recording and taking down are in the space's audit trail (`notice.post`, `notice.audio`,
+`notice.delete`): who, when, how long and to which phones, never the notice's text or audio. Recordings are deleted when the notice ends;
 the notice itself a week later.
 
 ## Protocol

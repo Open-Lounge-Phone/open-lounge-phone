@@ -17,7 +17,9 @@ own infrastructure.
 | Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until deleted, or until the retention runs out: yours by your setting for that person (else the space's voicemail default), a phone's by the space's |
 | Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
 | Call recordings (only where a space turned recording on, always announced; never in a home with kids' phones or with a kids' phone on the call) and their transcripts where the space transcribes | the space's record of its calls | by the history retention of whoever recorded it (per connection, account, then the space's history setting) |
-| Team and org spaces: extensions, ring groups and their hours, the shared voicemail boxes, and an audit trail of admin changes | the workplace phone system | extensions and groups until removed; the audit trail by the space's history setting |
+| Team and org spaces: extensions, ring groups and their hours, the shared voicemail boxes | the workplace phone system | until removed |
+| Every space's audit trail: who changed what and when (phones, allow-lists, quiet hours, invites, roles, privacy, notices, the space's name and time zone…), with ids and names only — never what was said or written, no tokens, no IP addresses | so the people running a space can see who changed it; only its guardians (or owner and admins) read it | by the space's history setting |
+| Public lines' call backs you didn't take: the line's name and address, when | showing them on your phones as missed calls | until you clear them, call the line, or the space's history setting runs out |
 | Lounge sessions: who used which Lounge phone, when | shown to the space's guardians | by the space's history setting (forever by default) |
 | Phones' software version and model, as they report it | the phone's page in the app | until the phone is removed |
 | Usage counters per month (call minutes, room minutes, voicemails, knocks) | the fair-use allowance | per calendar month |
@@ -25,7 +27,7 @@ own infrastructure.
 | Rate-limit counters (with IP addresses **hashed**) | stopping abuse | counted per minute, hour or day; stale counters are pruned after about a month |
 | Other servers' public keys and recent signature nonces | federation security | keys while the server is known; nonces ~11 minutes |
 
-**Transcription** can be switched off per space (guardians: Account → Privacy in this space);
+**Transcription** can be switched off per space (guardians: Settings → Privacy in this space);
 then voicemail audio is never sent to speech-to-text.
 
 **Expiry.** Expired call-log rows and voicemails are deleted with their audio by a sweep: once a

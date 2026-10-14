@@ -57,12 +57,12 @@ Highest priority first: the first row that applies is shown.
 | In a call | `IN CALL 01:23` / name; recorded: `REC 01:23` / name; while connecting `CONNECTING` / name |
 | They put you on hold | `ON HOLD` / name |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
-| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` |
+| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
 | Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording ([notices.md](notices.md)) |
-| Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app) |
+| Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app). A public line's call back that nobody took (a person's own phone): `MISSED CALL BACK` / the line's name, or among the names; it goes with `3 CLEAR`, by calling the line, or by taking its next call back |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
 | Ready | `READY 14:05` (local time, once the server has sent its clock; `READY` before) / the owner line: `KIDS: SMITHS`, `LOUNGE: STUDIO`, `ANA'S PHONE` |
@@ -94,7 +94,7 @@ The menu closes by itself after 20 s without a key.
 | Key | Item | On the phone |
 |---|---|---|
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
-| 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard; a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). Greetings from the phone are planned | yes |
+| 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard and clears missed call backs (`1 MISSED CALL BACK` shows under the count; they aren't voicemail; the browser phone clears them with 4, since its 1-3 still record the greeting); a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). Greetings from the phone are planned | yes |
 | 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on) | yes |
 | 4 | The same screen as 3 | yes |
 | 5 | Lounge phone in use: open to chat on / off | yes |
@@ -113,7 +113,8 @@ last and is left off when it doesn't fit (9 works either way).
 
 A shared phone (set up as a Lounge phone in the app). Free: the takeover QR code with
 `SCAN TO USE THIS PHONE`, a hint (`THIS PHONE`, `HERE: BEN` when someone is open to chat at
-another Lounge phone, `OR PRESS A KEY` when the space gave free phones house-line keys) and the
+another Lounge phone, `OR PRESS A KEY` when the space gave free phones house-line keys; those
+call people of the space, never a public line: only someone signed in calls a line) and the
 space's name. Scanning asks for proof the person is at the phone: `PRESS KEY 7` / `TO START`
 (the red LED flashes fast) until they press it. In use: `HI ANA` / `MENU = OPTIONS` (or
 `OPEN TO CHAT`), their people on the keys. When the session ends (log out, the space's time limit,
