@@ -50,12 +50,21 @@ and asking for a household the account isn't in is refused (403). Ways in:
 - **open sign-up** (`OPEN_SIGNUP=1`, off by default): pick a handle, create a passkey → account
   plus a personal household (`POST /api/signup/options`, `POST /api/signup`);
 - an **invite link**: signed out it creates a new person; signed in it adds a membership to your
-  account;
+  account (a stale or suspended session is refused, never turned into a new account);
+- a **sign-in link** (a guardian's, for someone whose only space is theirs) signs that person in
+  without a passkey;
+- a **recovery code** (`POST /api/recover`): a handle and the account's code give a 30-minute
+  session that may only add a passkey (see [security-model.md](security-model.md#accounts-and-sign-in));
 - **Add a household** (`POST /api/households {name, type?, timeZone?}`): any account on an open
   server, or a guardian on an invite-only one. The companion asks for the time zone (starting on
   the device's); without one the server uses the current space's. Its name and time zone can be
   changed later (`PATCH /api/space {name?, timeZone?}`, the companion's Settings): the hub then
   re-sends every phone's config and reschedules its alarm in the new zone.
+
+Sessions slide (90 days after the last use, when a passkey backs them), are listed and signed out
+from Account (`/api/sessions`), and their open app sockets close when they end. Every space has
+an **owner** (`households.owner_user`; its founder until handed on with `POST /api/space/owner`);
+members leave with `POST /api/space/leave`.
 
 A household is one kind of **space** (`type`: `home`, `team` or `org`; `POST /api/spaces`).
 Kids' phones and quiet hours exist only in homes; team and org spaces hold grown-ups' own phones
@@ -81,7 +90,7 @@ the web-standard crypto and message schemas; `packages/server-app/src/connection
 per-account rate limits, and a monthly **fair-use allowance** (`FAIR_USE=hub`; checked when a call,
 voicemail or knock starts, metered in the `usage` table when it ends; calls in progress are never
 cut off). Every call writes a **call log** row per party (`call_log`), the base for a per-buddy
-timeline. Operators (`OPERATORS`) get an admin view to suspend or exempt accounts and block
+timeline. Operators (`OPERATORS`, account ids) get an admin view to suspend or exempt accounts and block
 servers. People can download their data (`GET /api/account/export`, [export.md](export.md)) and
 delete their account. See [hub.md](hub.md) and [privacy.md](privacy.md).
 

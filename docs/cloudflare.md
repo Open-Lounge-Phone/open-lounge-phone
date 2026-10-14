@@ -70,7 +70,11 @@ Turnstile keys come only from the environment or its prompts):
 - `--refuse-recorded-calls`: other servers' recorded calls don't reach your people (sets the
   `REFUSE_RECORDED_CALLS` var on every deploy; see [security-model.md](security-model.md)).
 - `--operator <handle[,handle]>`: who sees the Operator view (suspend or exempt accounts, block
-  servers, rotate the federation key, re-trust other servers' keys, the audit trail). A key
+  servers, rotate the federation key, re-trust other servers' keys, the audit trail). Each handle
+  is looked up once in the instance's own D1 (`wrangler d1 execute openloungephone-<instance>
+  --remote --json`); an unknown handle stops the deploy, and the account id (never the handle)
+  becomes `OPERATORS` and is kept in `instances/<instance>.json` for later deploys
+  (`--operator none` removes it). Sign up first, then deploy with `--operator`. A key
   rotation needs no redeploy: the new key is kept in D1, sealed by the `FED_PRIVATE_KEY` secret,
   which `deploy.ts` sets once and must never replace (see
   [federation.md](federation.md#key-rotation-implemented)).

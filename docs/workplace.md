@@ -9,7 +9,7 @@ a connection.
 
 | Role | Stored as | May |
 |---|---|---|
-| **Owner** | the space's first admin (whoever made it) | everything an admin may, plus make and unmake admins, invite admins, remove admins. The owner can't be demoted or removed. |
+| **Owner** | whoever made the space, until they hand it to another admin (`POST /api/space/owner {userId}`) | everything an admin may, plus make and unmake admins, invite admins, remove admins, make sign-in links for admins, and hand the space on. The owner can't be demoted or removed; they hand it on before leaving or deleting their account. |
 | **Admin** | membership role `guardian` | manage people (invite members, remove members), phones, extensions, ring groups, business hours, privacy and recording; read the space's call log and audit trail |
 | **Member** | membership role `contact` | the directory, dialing extensions and groups, their groups' shared voicemail |
 

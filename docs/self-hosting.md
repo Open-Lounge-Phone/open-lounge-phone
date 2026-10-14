@@ -55,7 +55,7 @@ Configuration is by environment variable:
 | `FEDERATION` | on | Connect with people on other Open Lounge Phone servers. `0` turns it off. Needs `PUBLIC_URL` to be the `https://` name other servers reach you at (a server on a `localhost` URL only federates with other `localhost` servers; a public one never contacts loopback, IP-literal or local-network names). The server key lives in `DATA_DIR/federation-key.jwk` (back it up; other servers pin it) |
 | `FAIR_USE`, `FAIR_USE_*` | unset (unlimited) | A fair-use allowance for a public server: `FAIR_USE=hub` applies the hub's defaults; `FAIR_USE_CALL_MINUTES`, `_VOICEMAILS`, `_VOICEMAIL_MB`, `_KNOCKS`, `_PHONES_PER_SPACE`, `_SPACES_PER_ACCOUNT` set or override one (a number, or `unlimited`). See [hub.md](hub.md) |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET` | unset | Cloudflare Turnstile on sign-up (both needed) |
-| `OPERATORS` | unset | Comma-separated handles who see the Operator view |
+| `OPERATORS` | unset | Comma-separated **account ids** (`acc_…`) who see the Operator view. Handles give no rights (a handle can change hands); if you put one here, the server logs the account id to use instead |
 | `FUNDING_BALANCE_USD`, `SPONSOR_URL` | unset | Funding card and Sponsor button (public hubs; see [hub.md](hub.md)) |
 | `TRUST_PROXY` | unset | `1` behind your own reverse proxy: take the client address from `X-Forwarded-For` for per-IP limits |
 | `REFUSE_RECORDED_CALLS` | unset | `1`: calls from other servers that are recorded (their space turned recording on) don't reach your people — refused when placed, or ended when the recording is announced (see [security-model.md](security-model.md)) |
@@ -64,6 +64,18 @@ Configuration is by environment variable:
 
 Passkeys are tied to the site's host name. If you reach the server through a reverse proxy or
 several names, set `PUBLIC_URL` to the one address people use.
+
+**Moving from `localhost` (or any address) to a real domain:** passkeys made at the old address
+don't work at the new one, so everyone will have to get back in another way. Before you move,
+make sure each person has a **recovery code** (Account → Recovery code; the app reminds anyone
+without one). After the move they choose "Lost your passkey?", enter their handle and code, and
+make a new passkey at the new address. Someone whose only household is yours can also be sent a
+sign-in link instead. Sessions already signed in keep working until they end (the app keeps no
+passkey of them, so they end 90 days after their last use at most).
+
+**Operators.** To find your account id for `OPERATORS`, start the server with
+`OPERATORS=<your handle>` once: it gives no rights, and the log says
+`Use the account id instead: OPERATORS=acc_…`.
 
 ## Rooms
 

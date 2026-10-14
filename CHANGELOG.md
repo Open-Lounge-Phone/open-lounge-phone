@@ -19,6 +19,45 @@ On `main`, not tagged yet.
   sign-in (your phone by QR code, a security key, a password manager, the computer's screen lock).
   Clearer messages when a passkey is cancelled or the browser can't make one. Account suggests a
   second passkey.
+- **Recovery codes.** Every account gets one recovery code when it's made (the setup link, open
+  sign-up, the first invite), shown once with Copy, Download and a re-type check; accounts
+  without one see a reminder until they make one (Account → Recovery code). "Lost your passkey?"
+  on the start screen (also `/#recover`) takes your handle and code, has you make a new passkey,
+  then shows a new code and signs you out everywhere else (on by default). The code is used up,
+  stored only as a hash, rate-limited per handle and per address, and never logged, audited or
+  exported; the recovery is audited in every space and your other open apps are told
+  (`account.notice`, additive). No email and no operator recovery.
+- **Sessions.** Sessions now slide: 90 days after their last use when a passkey backs them;
+  ones without (an invite or a sign-in link on a device that made no passkey) end 90 days after
+  they started, and the app says when. Account → Where you're signed in lists them with Sign out
+  on each and "Sign out everywhere else". Signing out, a suspension, leaving or removal from a
+  space, and deleting an account close the person's open app connections at once.
+- **Sign-in links only where they're safe.** A guardian's sign-in link now works only for someone
+  whose only space on the server is that one, never for the owner by others, and a new one
+  cancels the old; making and using one are audited. Guardians and admins see the invites and
+  sign-in links not used yet and can cancel them. The link screen says who it signs you in as.
+- **Owners.** Every space (homes too) has an owner: its founder until they hand it to another
+  guardian or admin (People → Make owner). The owner can't be removed by others; only the owner
+  changes roles, and homes can now make someone a guardian. You can leave a space yourself
+  (Account); an owner hands it on first. Deleting your account no longer takes a space other
+  people are in with it: you're asked to hand it on. Removing someone whose only space this is
+  deletes their account, and says so. Guardians can rename people in their space; you can change
+  your own name.
+- **Invites.** A stale saved session no longer turns an invite into a second account (the app
+  signs it out and joins signed out); a suspended one is refused. Signed in, you choose to join
+  as yourself or as someone new; signed out, you can sign in first. An invite for a space you're
+  already in says so.
+- **Passkeys.** Removing one is confirmed; the last one goes only when you have a recovery code,
+  and the app offers to sign out everywhere else. A passkey this server no longer knows gets its
+  own message (and the browser is told to forget it). After signing in with your phone, the app
+  offers a passkey on this device too. A wrong server address is named as such.
+- **Operators by account id.** `OPERATORS` holds account ids (`acc_…`), never handles;
+  `deploy.ts --operator <handle>` looks the handle up once and stores the id. **The hub needs
+  `--operator jesse` on its next deploy.**
+- **Hub sign-up.** The handle is checked before the person check, the check is reset after every
+  try, and only accounts actually made count toward the per-address limit (tries have a looser
+  one). Developer sign-in shows only in dev builds or with `?dev`. Accounts in no space can still
+  sign in. Migration 0027 (additive).
 ## 0.4.0 (2026-10-14, `server-v0.4.0`)
 
 - **A sign-up you can always finish.** The time zone is a list (starting on the device's own

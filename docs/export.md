@@ -108,7 +108,8 @@ and, later, for **moving an account** to another server while keeping its connec
   with their transcripts where the space transcribes; the audio is at `audio` (signed-in `GET`).
 - `missedCallbacks` lists public lines' call backs you didn't take and haven't cleared (`line`
   address, `name`, `at`), up to 100.
-- Not included: passkeys (they're bound to the old server's name), sessions, voicemail audio
+- Not included: passkeys (they're bound to the old server's name), sessions, the recovery code
+  (only its hash is kept, and never exported), voicemail audio
   (download it from the Voicemail tab), other people's data.
 
 Readers must reject documents whose `format` differs, and should accept any `version` they know;

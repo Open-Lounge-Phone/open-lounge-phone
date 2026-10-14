@@ -252,7 +252,8 @@ Asks for anything not given. Creates or reuses only resources named openloungeph
   --invite-only              people join by invite only (the default)
   --no-ai                    no Workers AI voicemail transcripts
   --fair-use hub|none        fair-use allowance for an open instance (default hub)
-  --operator <handles>       who sees the Operator view (comma-separated)
+  --operator <handles>       who sees the Operator view (comma-separated; each handle is
+                             looked up once and stored as its account id; "none" removes)
   --sponsor-url <https://…>  show a Sponsor button
   --funding-balance <usd>    show the funding card
   --refuse-recorded-calls    other servers' recorded calls don't reach your people

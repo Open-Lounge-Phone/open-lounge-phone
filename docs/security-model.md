@@ -2,7 +2,7 @@
 
 Status: the hardware side describes the **minimal board**; the software side is **built** (the
 four-word fingerprint, the device page, remove and wipe, retention defaults and transcription per
-space, and call recording as designed below). Items marked *(planned)* are not built yet.
+space, recovery codes and sessions, and call recording as designed below). Items marked *(planned)* are not built yet.
 
 ## Your keys, your server
 
@@ -82,6 +82,52 @@ What the firmware does today (firmware/README.md has the details) and what is st
 - *Planned:* **debug ports locked** in production; hobby builds get a clearly marked unlocked
   option.
 - *Planned:* **reproducible builds with published fingerprints**, shown on the phone.
+
+## Accounts and sign-in
+
+Accounts have no password, email or phone number. People sign in with **passkeys** (WebAuthn:
+built-in, a phone by QR code, a security key or a password manager); the server keeps only each
+passkey's public key.
+
+- **Recovery code.** Every account gets one when it is made (the setup link, open sign-up, or the
+  first time an invited person joins), shown once with Copy and Download and a re-type check.
+  Accounts without one see a lasting reminder until they make one (Account → Recovery code). It
+  is 28 base32 characters (140 bits) in groups of four; the server keeps only a hash bound to the
+  account, compares in constant time, and never logs, audits or exports it. Making a new one stops
+  the old one working.
+- **Recovering.** "Lost your passkey?" (or `/#recover`): your handle and the code. A wrong handle
+  and a wrong code get the same answer; tries are limited per handle (5 an hour, from anywhere)
+  and per IP address (20 an hour). The code is used up at once. The session it gives lasts 30
+  minutes and may only add a passkey (no API, no app socket) until one is made; then the person
+  gets a new code and is offered "Sign out everywhere else" (on by default). `account.recovered`
+  goes into the audit trail of every space they're in, and their other open apps are told
+  (`account.notice`). A suspended account can't recover. There is no email recovery and no
+  operator recovery.
+- **Sign-in links** (a guardian's or admin's "Sign-in link" for someone in their space) work
+  only for someone whose **only** space on this server is that one: a link could otherwise open
+  spaces the guardian doesn't manage. This is checked when the link is made and when it is used.
+  Nobody but the owner makes one for the owner; in teams only the owner makes them for admins. A
+  new link cancels that person's older ones. Making and using one are audited, using one tells the
+  person's other apps, and guardians see and can cancel the links not used yet.
+- **Sessions** (a bearer token in the app; the server keeps only its hash) **slide**: each day a
+  session is used, it ends 90 days after that use. A session no passkey backs (an invite or a
+  sign-in link on a device that made none) does not slide: it ends 90 days after it started, and
+  the app says on which date. Account → Where you're signed in lists each session (browser and
+  system, when it signed in and how, last used, this device) with Sign out on each and "Sign out
+  everywhere else". Removing a passkey signs nobody out by itself (the app offers to sign out
+  everywhere else). Signing out, a suspension, leaving or being removed from a space, and account
+  deletion close the person's open app connections at once. Expired sessions and invites are
+  purged by the regular history sweep.
+- **The last passkey** can be removed only when the account has a recovery code.
+- **Owners.** Every space has an owner: whoever made it, until they hand it on (to another
+  guardian in a home, or an admin in a team or org). Nobody else can remove the owner or make a
+  sign-in link for them, and only the owner changes roles. An owner leaves, or deletes their
+  account, only after handing on each space other people are in; a space they're alone in is
+  deleted with it.
+- **Operators** (the server-wide admin view) are named by **account id** (`OPERATORS=acc_…`),
+  never by handle, so a renamed, released or re-registered handle never carries operator rights.
+  `deploy.ts --operator <handle>` looks the handle up once, at deploy time; a self-hosted server
+  logs the id to use when `OPERATORS` holds a handle.
 
 ## Network and service
 

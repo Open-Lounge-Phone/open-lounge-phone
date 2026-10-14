@@ -8,7 +8,8 @@ own infrastructure.
 
 | What | Why | How long |
 |---|---|---|
-| Your account: handle, display name, passkey public keys (never a password, email or phone number) | signing in, your address `handle@host` | until you delete it; the handle is then reserved for 90 days so nobody can pose as you to your connections |
+| Your account: handle, display name, passkey public keys, a hash of your recovery code (never a password, email or phone number, nor the code itself) | signing in, getting back in, your address `handle@host` | until you delete it; the handle is then reserved for 90 days so nobody can pose as you to your connections |
+| Where you're signed in: per session the browser and system ("Chrome on Mac"), how and when it signed in, when it was last used (never the token itself, only its hash) | the session list, signing out | until the session ends (90 days after its last use at most), and then the next sweep |
 | Your spaces (households, teams): name, time zone, quiet hours, who's a member and their role | running the space | until the space is deleted |
 | Phones: name, public key, allow-lists and speed-dial keys; last time seen | pairing, calls, default-deny access | until the phone is removed |
 | Connections (buddies): their address, name, state (knocked, connected, declined, blocked), the note on a knock | knock-then-talk, blocking | until either side disconnects; declines are kept 30 days, blocks until you remove them |
@@ -63,8 +64,10 @@ In the companion: **Account → Your data**.
 1. **Download my data** — one JSON file with your account, connections, spaces, phones and call
    log ([format](export.md)). Save voicemail you want to keep from the Voicemail tab first.
 2. **Delete my account** — type your handle to confirm. Your account goes, with every space where
-   you are the only guardian (its phones are unpaired and its voicemail deleted). In shared spaces
-   only your membership goes. Your connections are told you've left.
+   you are the only person (its phones are wiped and its voicemail deleted). A space you own that
+   other people are in must be handed to one of them first (People → Make owner); the app lists
+   them. Elsewhere only your membership goes. Your connections are told you've left, and you're
+   signed out everywhere. To leave just one space, use **Leave** on the Account page.
 
 Moving an account to another server (keeping your connections) is a later feature; the export
 format is designed for it.

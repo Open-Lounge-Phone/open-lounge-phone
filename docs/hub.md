@@ -110,6 +110,13 @@ npx openloungephone deploy cloudflare --instance hub --domain hub.openloungephon
   --open-signup --operator <your handle> --funding-balance 150 [--sponsor-url <GitHub Sponsors URL>]
 ```
 
+`--operator` looks each handle up in the hub's own D1 database at deploy time and stores the
+**account id** (`OPERATORS=acc_…`; a handle in `OPERATORS` gives no rights). The account must
+exist first, and the id is kept in `instances/hub.json`, so later deploys keep it without the
+flag (`--operator none` removes it). **Next hub deploy (server 0.5.0):** pass `--operator jesse`
+once; the hub's current `OPERATORS=jesse` (a handle) stops working with 0.5.0, so a deploy without
+the flag and without a stored id leaves the hub with no operator until it is given.
+
 It asks for the TURN key, the Turnstile keys and (optionally) the SFU app without echoing them,
 or takes them from `TURN_KEY_ID`/`TURN_KEY_API_TOKEN`, `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET`
 and `SFU_APP_ID`/`SFU_APP_SECRET` (see [cloudflare.md](cloudflare.md)).
@@ -122,10 +129,16 @@ and `SFU_APP_ID`/`SFU_APP_SECRET` (see [cloudflare.md](cloudflare.md)).
   (Cloudflare dashboard → Realtime → TURN).
 - **Turnstile** protects sign-up (dashboard → Turnstile → add a widget for the domain). Without
   keys there is no check.
-- **Abuse controls:** passkey-only accounts; per-IP limits on sign-up and sign-in (IP addresses
-  are hashed before they're counted); a per-account limit on changes; the fair-use allowance;
-  knock limits; per-server budgets and signature checks for federation.
-- **Operator view** (companion → Operator, for `--operator` handles): counts, find an account,
-  suspend or exempt it, block a server, and see refused server-key changes.
+- **Abuse controls:** passkey-only accounts; the handle and other cheap checks come before the
+  Turnstile check (each Turnstile answer works once, and the app asks for a fresh one after
+  every try); per IP address, the accounts actually made count toward the sign-up limit (10 an
+  hour) and tries have a looser limit of their own (60 an hour); per-IP limits on sign-in and on
+  recovery codes (plus 5 recovery tries an hour per handle); IP addresses are hashed before
+  they're counted; a per-account limit on changes; the fair-use allowance; knock limits;
+  per-server budgets and signature checks for federation.
+- **Operator view** (companion → Operator, for the `--operator` accounts): counts, find an
+  account, suspend or exempt it (a suspension closes its open apps at once), block a server, and
+  see refused server-key changes. Operators can't recover anyone's account: people use their
+  recovery code (or, in a space that's their only one, a sign-in link).
 - What the hub stores and for how long: [privacy.md](privacy.md). How people take their data
   with them: [export.md](export.md).
