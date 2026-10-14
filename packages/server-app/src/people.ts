@@ -9,12 +9,13 @@ import {
 import type { Hono } from "hono";
 import { z } from "zod";
 import { accountView, resolveSession, serverHost } from "./accounts.ts";
+import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, clientIp, guardianOnly, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
 import { dropVoicemailBlobs } from "./voicemail.ts";
-import { auditFrom, roleOf, workplaceSpace } from "./workplace.ts";
+import { roleOf, workplaceSpace } from "./workplace.ts";
 
 const Name = z.string().trim().min(1).max(24);
 

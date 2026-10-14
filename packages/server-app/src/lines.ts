@@ -25,13 +25,14 @@ import { parseAddress } from "@openloungephone/federation";
 import { Id, type LineInfo } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { auditFrom, auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
 import { readGreeting } from "./voicemail.ts";
-import { auditFrom, workplaceSpace } from "./workplace.ts";
+import { workplaceSpace } from "./workplace.ts";
 
 /** What an admin confirms before a line goes public (the companion shows the same words). */
 export const LINE_WARNING =
@@ -333,7 +334,12 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     }
     const { enabled: _e, ...settings } = patch;
     if (Object.keys(settings).length) {
-      await auditFrom(env, c, "line.update", { groupId: group.id, ...settings });
+      // Which settings changed (and who may call, which matters for safety); not their text.
+      await auditFrom(env, c, "line.update", {
+        groupId: group.id,
+        changed: Object.keys(settings),
+        ...(settings.who ? { who: settings.who } : {}),
+      });
     }
     return c.json({ line: view(after, c.req.url) });
   });
@@ -466,6 +472,10 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (!addr) return c.json({ error: "use an address like support@example.org" }, 400);
     const id = await store.lines.addToPhone(p.device.id, `${addr.handle}@${addr.host}`, b.label);
     await live.refreshDevice(user.householdId, p.device.id);
+    await auditPhone(env, c, p.device, "phone.line", {
+      contactId: id,
+      address: `${addr.handle}@${addr.host}`,
+    });
     return c.json({ id });
   });
 
@@ -475,6 +485,9 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if ("error" in p) return c.json({ error: p.error }, p.status);
     await store.lines.removeFromPhone(p.device.id, c.req.param("contactId"));
     await live.refreshDevice(user.householdId, p.device.id);
+    await auditPhone(env, c, p.device, "phone.contact.remove", {
+      contactId: c.req.param("contactId"),
+    });
     return c.body(null, 204);
   });
 }

@@ -9,11 +9,11 @@ import { mayEnableRecording, RECORDING_MAX_MS } from "@openloungephone/core";
 import { deviceMode, newId, type Recording, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { readRecording } from "./voicemail.ts";
-import { auditFrom } from "./workplace.ts";
 
 /** A two-hour call in Opus is ~30 MB at most; leave room for other codecs' overhead. */
 export const MAX_RECORDING_BYTES = 64 * 1024 * 1024;

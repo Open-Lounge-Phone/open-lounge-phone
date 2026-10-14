@@ -13,11 +13,11 @@ import type { Notice } from "@openloungephone/db";
 import { Id } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { readRecording } from "./voicemail.ts";
-import { auditFrom } from "./workplace.ts";
 
 /** Largest recording on a notice (30 s of 8 kHz 16-bit WAV, with room to spare). */
 const NOTICE_AUDIO_MAX_BYTES = 1024 * 1024;
@@ -100,9 +100,9 @@ export function noticeRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
       },
       now,
     );
+    // Who posted it, when, for how long and to which phones; never what it says.
     await auditFrom(env, c, "notice.post", {
       noticeId: n.id,
-      lines: n.lines,
       minutes: b.minutes ?? NOTICE_DEFAULT_MINUTES,
       ...(n.deviceIds ? { deviceIds: n.deviceIds } : {}),
     });
@@ -140,7 +140,7 @@ export function noticeRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     const n = await store.notices.get(c.req.param("id"));
     if (!n || n.householdId !== user.householdId) return c.json({ error: "not found" }, 404);
     if (await store.notices.end(n.id, env.now())) {
-      await auditFrom(env, c, "notice.delete", { noticeId: n.id, lines: n.lines });
+      await auditFrom(env, c, "notice.delete", { noticeId: n.id });
       await live.noticesChanged(user.householdId);
     }
     return c.body(null, 204);

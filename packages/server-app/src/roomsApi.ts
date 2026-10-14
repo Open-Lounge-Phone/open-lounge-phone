@@ -10,11 +10,12 @@ import { opensText, roomOpenAt } from "@openloungephone/core";
 import { handleProblem, type Room, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { auditFrom, auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
-import { auditFrom, Rules } from "./workplace.ts";
+import { Rules } from "./workplace.ts";
 
 /** Most rooms a space may have. */
 export const ROOMS_PER_SPACE = 20;
@@ -179,6 +180,11 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (b instanceof Response) return b;
     const id = await store.rooms.addToPhone(device.id, room.id, b.label);
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.room", {
+      contactId: id,
+      roomId: room.id,
+      name: room.name,
+    });
     return c.json({ id });
   });
 
@@ -188,6 +194,9 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (!device) return c.json({ error: "not found" }, 404);
     await store.rooms.removeFromPhone(device.id, c.req.param("contactId"));
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.contact.remove", {
+      contactId: c.req.param("contactId"),
+    });
     return c.body(null, 204);
   });
 }

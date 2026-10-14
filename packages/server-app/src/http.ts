@@ -29,6 +29,7 @@ import {
   serverHost,
   signupRoutes,
 } from "./accounts.ts";
+import { auditFrom, auditPhone, auditRoutes } from "./audit.ts";
 import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { capReached } from "./fairUse.ts";
@@ -48,7 +49,7 @@ import { roomRoutes } from "./roomsApi.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
-import { auditFrom, workplaceRoutes } from "./workplace.ts";
+import { workplaceRoutes } from "./workplace.ts";
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
@@ -462,6 +463,13 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     const id = await store.upsertRemoteContact(device.id, connection.id, b);
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.contact", {
+      contactId: id,
+      name: connection.peerName,
+      canCall: b.canCallDevice,
+      mayCall: b.deviceCanCall,
+      duringQuietHours: b.bypassQuietHours,
+    });
     // They see (or stop seeing) this phone among the ones they may call.
     await new Connections(env, live).sharePhones(connection.id);
     return c.json({ id });
@@ -478,6 +486,13 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     await store.upsertContact(device.id, { id: target.id, ...b });
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.contact", {
+      contactId: target.id,
+      name: target.name,
+      canCall: b.canCallDevice,
+      mayCall: b.deviceCanCall,
+      duringQuietHours: b.bypassQuietHours,
+    });
     return c.body(null, 204);
   });
 
@@ -492,6 +507,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     await store.removeContact(device.id, id);
     await live.refreshDevice(user.householdId, device.id);
     if (via) await new Connections(env, live).sharePhones(via);
+    await auditPhone(env, c, device, "phone.contact.remove", { contactId: id });
     return c.body(null, 204);
   });
 
@@ -514,6 +530,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     await store.renameDevice(device.id, b.name);
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.rename", { name: b.name });
     return c.body(null, 204);
   });
 
@@ -548,6 +565,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     }
     await store.setButton(device.id, index, b.userId);
     await live.refreshDevice(user.householdId, device.id);
+    await auditPhone(env, c, device, "phone.key", { index, contactId: b.userId });
     return c.body(null, 204);
   });
 
@@ -571,6 +589,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     for (const d of await store.listDevices(user.householdId)) {
       await live.refreshDevice(user.householdId, d.id);
     }
+    await auditFrom(env, c, "quiet.update", { rules: rules.length });
     return c.body(null, 204);
   });
 
@@ -688,6 +707,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     for (const d of await store.listDevices(hh)) {
       if (d.kind === "lounge") await live.refreshDevice(hh, d.id);
     }
+    await auditFrom(env, c, "lounge.settings", {
+      changed: Object.keys(b).filter((k) => b[k as keyof typeof b] !== undefined),
+    });
     return c.body(null, 204);
   });
 
@@ -783,6 +805,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return c.body(null, 204);
   });
 
+  auditRoutes(api, env);
   workplaceRoutes(api, env, live);
   lineRoutes(api, env, live);
   noticeRoutes(api, env, live);

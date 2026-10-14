@@ -1,5 +1,5 @@
 // Team and org spaces as a workplace phone system (docs/workplace.md): the directory,
-// extensions, ring groups, business hours, roles, the space-wide call log and the audit trail.
+// extensions, ring groups, business hours, roles and the space-wide call log.
 // Home spaces are unchanged: every route here answers 400 there.
 import {
   csvCell,
@@ -26,6 +26,7 @@ import { Id } from "@openloungephone/protocol";
 import type { Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
+import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -103,39 +104,6 @@ export async function roleOf(env: ServerEnv, user: User): Promise<SpaceRole> {
   return spaceRole(user.role, owner === user.accountId);
 }
 
-/**
- * Records an admin action in a team/org space's audit trail (who changed what). Homes keep no
- * audit trail. Never throws: a failed audit write is logged, not fatal.
- */
-export async function audit(
-  env: ServerEnv,
-  who: { user: User; account: Account },
-  action: string,
-  detail?: Record<string, unknown>,
-): Promise<void> {
-  try {
-    if (!(await workplaceSpace(env, who.user.householdId))) return;
-    await env.store.workplace.audit({
-      householdId: who.user.householdId,
-      at: env.now(),
-      actorAccount: who.account.id,
-      actorName: who.user.name,
-      action,
-      detail: detail ?? null,
-    });
-  } catch (e) {
-    env.log("warn", "audit write failed", { action, error: String(e) });
-  }
-}
-
-/** `audit` from a request's signed-in member. */
-export const auditFrom = (
-  env: ServerEnv,
-  c: Context<Vars>,
-  action: string,
-  detail?: Record<string, unknown>,
-) => audit(env, { user: c.get("user"), account: c.get("account") }, action, detail);
-
 /** The rules of a request's validated hours, as stored. */
 const toRules = (rules: z.infer<typeof Rules>): HoursRule[] =>
   rules.map((r) => ({ days: [...new Set(r.days)].sort(), start: r.start, end: r.end }));
@@ -166,7 +134,6 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     "/space/hours",
     "/space/calls",
     "/space/calls.csv",
-    "/space/audit",
     "/users/:id/role",
   ]) {
     api.use(path, workplace);
@@ -476,7 +443,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     return c.body(null, 204);
   });
 
-  // --- the space's call log and audit trail (admins) ---------------------------------------
+  // --- the space's call log (admins; the audit trail is in audit.ts) -----------------------
 
   const callRows = async (hh: string, limit: number, before?: number) => {
     const entries = await store.spaceCallLog(hh, limit, before);
@@ -565,10 +532,5 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
         "cache-control": "private, no-store",
       },
     });
-  });
-
-  api.get("/space/audit", admins, async (c) => {
-    const { limit, before } = pageParams(c);
-    return c.json(await wp.auditLog(c.get("user").householdId, limit, before));
   });
 }

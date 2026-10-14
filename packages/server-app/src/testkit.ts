@@ -1,6 +1,6 @@
 // Test helpers shared by the server-app suites (not exported from the package). One
 // `TestServer` is one in-memory server; several can be wired together for federation tests.
-import { Store, type User } from "@openloungephone/db";
+import { type Sql, Store, type User } from "@openloungephone/db";
 import { migrate, openSqlite } from "@openloungephone/db/node";
 import { generateServerKey } from "@openloungephone/federation";
 import {
@@ -107,6 +107,8 @@ export interface HttpInit {
 
 export class TestServer {
   readonly store: Store;
+  /** The database itself, for checks on what is stored (e.g. that a row holds no content). */
+  readonly sql: Sql;
   readonly env: ServerEnv;
   readonly gateway: Gateway;
   readonly api: ReturnType<typeof createApi>;
@@ -129,6 +131,7 @@ export class TestServer {
   ) {
     const { sql, db } = openSqlite(":memory:");
     migrate(db);
+    this.sql = sql;
     this.store = new Store(sql);
     this.timers = opts.timers ?? new ManualTimers();
     const timers = this.timers;

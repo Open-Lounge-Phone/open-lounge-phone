@@ -14,6 +14,7 @@ import {
 } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -483,6 +484,7 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     if (b instanceof Response) return b;
     await store.setVoicemailPrefs({ deviceId: device.id }, b, env.now());
     await live.refreshDevice(device.householdId, device.id);
+    await auditPhone(env, c, device, "phone.voicemail", b);
     return c.body(null, 204);
   });
 
@@ -499,6 +501,7 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     if (rec instanceof Response) return rec;
     await saveGreeting(env, { deviceId: device.id }, rec);
     await live.refreshDevice(device.householdId, device.id);
+    await auditPhone(env, c, device, "phone.greeting", { kind: rec.kind });
     return c.body(null, 204);
   });
 
@@ -507,6 +510,7 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     if (!device) return c.json({ error: "not found" }, 404);
     await resetGreeting(env, { deviceId: device.id });
     await live.refreshDevice(device.householdId, device.id);
+    await auditPhone(env, c, device, "phone.greeting", { kind: "default" });
     return c.body(null, 204);
   });
 }
