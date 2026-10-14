@@ -1,6 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, RoomSummary } from "./api.ts";
 import type { Connection, Snapshot } from "./connection.ts";
+import { addressProblem, requiredProblem } from "./fields.ts";
+import { handleHint, normalizeHandle } from "./handles.ts";
 import { idleSecondsLeft, roomHoursText, roomKindText, whoIsIn } from "./roomText.ts";
 import { HoursEditor } from "./Workplace.tsx";
 import { hoursText } from "./workplaceText.ts";
@@ -25,6 +27,8 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [open, setOpen] = useState(false);
+  const [joinProblem, setJoinProblem] = useState<string>();
+  const [problems, setProblems] = useState<{ name?: string; handle?: string; form?: string }>({});
   /** The room whose opening hours are being edited. */
   const [editing, setEditing] = useState<string>();
 
@@ -53,18 +57,27 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
     }
   };
 
-  const create = (e: FormEvent) => {
+  const create = async (e: FormEvent) => {
     e.preventDefault();
-    void run(async () => {
+    const next = {
+      name: requiredProblem(name, "a name for the room"),
+      handle: kind === "phone" ? handleHint(handle) : undefined,
+    };
+    setProblems(next);
+    if (next.name || next.handle) return;
+    try {
       await api.createRoom({
         kind,
         name: name.trim(),
-        ...(kind === "phone" ? { handle: handle.trim().toLowerCase() } : {}),
+        ...(kind === "phone" ? { handle } : {}),
         ...(kind === "phone" && open ? { access: "connections" as const } : {}),
       });
       setName("");
       setHandle("");
-    });
+      await load();
+    } catch (err) {
+      setProblems({ form: (err as Error).message });
+    }
   };
 
   const inRoom = !!snap.room || !!snap.joining;
@@ -171,26 +184,41 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
 
       <form
         className="stack"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          if (address.trim()) void conn?.joinRoom({ address: address.trim() });
+          const problem = inRoom
+            ? "You're in a room already: leave it first."
+            : !conn
+              ? "Not connected yet. Try again in a moment."
+              : addressProblem(address);
+          setJoinProblem(problem);
+          if (!problem) void conn?.joinRoom({ address: address.trim().toLowerCase() });
         }}
       >
         <label>
           Join a phone room by address
           <input
             value={address}
-            placeholder="standup@example.org"
-            onChange={(e) => setAddress(e.target.value)}
+            onChange={(e) => {
+              setAddress(e.target.value);
+              setJoinProblem(undefined);
+            }}
+            inputMode="email"
+            autoComplete="off"
             autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={joinProblem ? true : undefined}
           />
+          <span className={joinProblem ? "hint error" : "hint"}>
+            {joinProblem ?? "Like name@server, for example standup@example.org."}
+          </span>
         </label>
-        <button type="submit" disabled={inRoom || !address.trim()}>
-          Join
-        </button>
+        <button type="submit">Join</button>
       </form>
 
-      <form className="stack" onSubmit={create}>
+      <form className="stack" noValidate onSubmit={(e) => void create(e)}>
         <h3>New room</h3>
         {guardian && (
           <div className="chips" role="radiogroup" aria-label="Kind of room">
@@ -211,7 +239,16 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
         )}
         <label>
           Name
-          <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required />
+          <input
+            value={name}
+            maxLength={40}
+            onChange={(e) => {
+              setName(e.target.value);
+              setProblems((p) => ({ ...p, name: undefined }));
+            }}
+            aria-invalid={problems.name ? true : undefined}
+          />
+          {problems.name && <span className="hint error">{problems.name}</span>}
         </label>
         {kind === "phone" && (
           <>
@@ -219,11 +256,20 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
               Address
               <input
                 value={handle}
-                placeholder="standup"
-                onChange={(e) => setHandle(e.target.value)}
+                maxLength={30}
+                onChange={(e) => {
+                  setHandle(normalizeHandle(e.target.value));
+                  setProblems((p) => ({ ...p, handle: undefined }));
+                }}
                 autoCapitalize="none"
-                required
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={problems.handle ? true : undefined}
               />
+              <span className={problems.handle ? "hint error" : "hint"}>
+                {problems.handle ??
+                  "The part before @ in the room's address, for example standup. Lower-case letters, digits, dots, dashes or underscores."}
+              </span>
             </label>
             <label>
               <input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} />{" "}
@@ -231,9 +277,12 @@ export function Rooms({ api, conn, snap, guardian, onBack }: Props) {
             </label>
           </>
         )}
-        <button type="submit" disabled={!name.trim() || (kind === "phone" && !handle.trim())}>
-          Make the room
-        </button>
+        {problems.form && (
+          <p className="error" role="alert">
+            {problems.form}
+          </p>
+        )}
+        <button type="submit">Make the room</button>
       </form>
     </section>
   );

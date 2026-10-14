@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { renderSVG } from "uqr";
 import type { Api, ConnectionsInfo, ConnectionView, Retention } from "./api.ts";
 import { daysLeft, groupConnections, hostBadge } from "./connectionGroups.ts";
+import { addressProblem, serverName, serverProblem } from "./fields.ts";
 import { BuddyTimeline } from "./Timeline.tsx";
 import { retentionOptions } from "./timelineText.ts";
 
@@ -63,15 +64,22 @@ export function Connections({
   }, [load, refreshKey]);
 
   const run = async (fn: () => Promise<unknown>, done?: string) => {
+    const problem = await attempt(fn, done);
+    if (problem) setError(problem);
+  };
+  /** Like `run`, for a form: returns what went wrong, so the form shows it next to itself. */
+  const attempt = async (fn: () => Promise<unknown>, done?: string) => {
     setError(undefined);
     setNotice(undefined);
+    let problem: string | undefined;
     try {
       await fn();
       if (done) setNotice(done);
     } catch (e) {
-      setError((e as Error).message);
+      problem = (e as Error).message;
     }
     await load();
+    return problem;
   };
 
   const groups = groupConnections(info?.connections ?? []);
@@ -181,7 +189,7 @@ export function Connections({
 
       <KnockForm
         onKnock={(to, note) =>
-          run(async () => {
+          attempt(async () => {
             const r = await api.knock(to, note);
             if (r.status === "connected") setNotice(`You're connected with ${to}.`);
             else setNotice(`If ${to} exists, they'll get your request.`);
@@ -317,7 +325,9 @@ export function Connections({
         people={groups.blocked}
         servers={info?.blockedServers ?? []}
         onUnblock={(id) => void run(() => api.removeConnection(id))}
-        onBlockServer={(host) => run(() => api.blockServer(host), `Blocked everyone on ${host}.`)}
+        onBlockServer={(host) =>
+          attempt(() => api.blockServer(host), `Blocked everyone on ${host}.`)
+        }
       />
     </section>
   );
@@ -354,12 +364,16 @@ function Who({ c }: { c: ConnectionView }) {
 /** A business's public line: call it by its address, without knocking first. */
 function CallLineForm({ onCall }: { onCall(address: string): void }) {
   const [to, setTo] = useState("");
+  const [problem, setProblem] = useState<string>();
   return (
     <form
       className="card stack"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        onCall(to.trim());
+        const p = addressProblem(to);
+        setProblem(p);
+        if (!p) onCall(to.trim().toLowerCase());
       }}
     >
       <h3>Call a public line</h3>
@@ -367,15 +381,22 @@ function CallLineForm({ onCall }: { onCall(address: string): void }) {
         The line's address
         <input
           value={to}
-          onChange={(e) => setTo(e.target.value)}
-          placeholder="support@example.org"
+          onChange={(e) => {
+            setTo(e.target.value);
+            setProblem(undefined);
+          }}
+          inputMode="email"
+          autoComplete="off"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          required
+          aria-invalid={problem ? true : undefined}
         />
+        <span className={problem ? "hint error" : "hint"}>
+          {problem ?? "Like name@server, for example support@example.org."}
+        </span>
       </label>
-      <button type="submit" className="primary" disabled={!to.includes("@")}>
+      <button type="submit" className="primary">
         Call
       </button>
       <span className="hint">
@@ -385,38 +406,62 @@ function CallLineForm({ onCall }: { onCall(address: string): void }) {
   );
 }
 
-function KnockForm({ onKnock }: { onKnock(to: string, note?: string): Promise<void> }) {
+function KnockForm({
+  onKnock,
+}: {
+  /** Resolves with what went wrong, if anything. */
+  onKnock(to: string, note?: string): Promise<string | undefined>;
+}) {
   const [to, setTo] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const [failed, setFailed] = useState<string>();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const p = addressProblem(to);
+    setProblem(p);
+    setFailed(undefined);
+    if (p) return;
     setBusy(true);
-    await onKnock(to.trim(), note.trim() || undefined);
+    const error = await onKnock(to.trim().toLowerCase(), note.trim() || undefined);
     setBusy(false);
+    if (error) return setFailed(error);
     setTo("");
     setNote("");
   };
   return (
-    <form className="card stack" onSubmit={(e) => void submit(e)}>
+    <form className="card stack" noValidate onSubmit={(e) => void submit(e)}>
       <h3>Add by address</h3>
       <label>
         Their address
         <input
           value={to}
-          onChange={(e) => setTo(e.target.value)}
-          placeholder="name@server"
+          onChange={(e) => {
+            setTo(e.target.value);
+            setProblem(undefined);
+          }}
+          inputMode="email"
+          autoComplete="off"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          required
+          aria-invalid={problem ? true : undefined}
         />
+        <span className={problem ? "hint error" : "hint"}>
+          {problem ?? "Like name@server: they'll find theirs on their Connections page."}
+        </span>
       </label>
       <label>
         A note, so they know it's you (optional)
         <input value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} />
       </label>
-      <button type="submit" className="primary" disabled={busy || !to.includes("@")}>
+      {failed && (
+        <p className="error" role="alert">
+          {failed}
+        </p>
+      )}
+      <button type="submit" className="primary" disabled={busy}>
         {busy ? "Knocking…" : "Knock"}
       </button>
       <span className="hint">You can knock 10 times a day. A knock expires after 30 days.</span>
@@ -433,9 +478,11 @@ function Blocked({
   people: ConnectionView[];
   servers: { id: string; host: string }[];
   onUnblock(id: string): void;
-  onBlockServer(host: string): Promise<void>;
+  /** Resolves with what went wrong, if anything. */
+  onBlockServer(host: string): Promise<string | undefined>;
 }) {
   const [host, setHost] = useState("");
+  const [problem, setProblem] = useState<string>();
   return (
     <details className="card stack blocked">
       <summary>
@@ -460,19 +507,38 @@ function Blocked({
         ))}
       </ul>
       <form
-        className="row"
+        className="stack"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void onBlockServer(host.trim()).then(() => setHost(""));
+          const p = serverProblem(host);
+          setProblem(p);
+          if (p) return;
+          void onBlockServer(serverName(host)).then((error) => {
+            setProblem(error);
+            if (!error) setHost("");
+          });
         }}
       >
-        <input
-          aria-label="Server to block"
-          value={host}
-          onChange={(e) => setHost(e.target.value)}
-          placeholder="spam.example"
-        />
-        <button type="submit" className="danger" disabled={!host.trim()}>
+        <label>
+          Block everyone on a server
+          <input
+            value={host}
+            onChange={(e) => {
+              setHost(e.target.value);
+              setProblem(undefined);
+            }}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={problem ? true : undefined}
+          />
+          <span className={problem ? "hint error" : "hint"}>
+            {problem ?? "The server's name, like example.org."}
+          </span>
+        </label>
+        <button type="submit" className="danger">
           Block server
         </button>
       </form>

@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AdminFederation, Api, OperatorAuditEntry } from "./api.ts";
+import { serverName, serverProblem } from "./fields.ts";
 import { describeAudit } from "./operatorAudit.ts";
 
 type Overview = Awaited<ReturnType<Api["adminOverview"]>>;
@@ -33,6 +34,8 @@ export function Admin({
   const [host, setHost] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string>();
+  const [findProblem, setFindProblem] = useState<string>();
+  const [blockProblem, setBlockProblem] = useState<string>();
 
   const load = useCallback(async () => {
     try {
@@ -63,9 +66,21 @@ export function Admin({
     await load();
   };
 
-  const find = (e: FormEvent) => {
+  const find = async (e: FormEvent) => {
     e.preventDefault();
-    void run(async () => setFound(await api.adminFindAccount(handle.trim())));
+    setFound(undefined);
+    const h = handle.trim().replace(/^@/, "");
+    if (!h) return setFindProblem("Enter a handle or address.");
+    setFindProblem(undefined);
+    try {
+      setFound(await api.adminFindAccount(h));
+    } catch (err) {
+      setFindProblem(
+        (err as { status?: number }).status === 404
+          ? "No account here has that handle."
+          : (err as Error).message,
+      );
+    }
   };
   const refresh = () =>
     found && run(async () => setFound(await api.adminFindAccount(found.handle)));
@@ -149,11 +164,22 @@ export function Admin({
         </div>
       )}
 
-      <form className="card stack" onSubmit={find}>
+      <form className="card stack" noValidate onSubmit={(e) => void find(e)}>
         <h3>Find an account</h3>
         <label>
           Handle or address
-          <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="jesse" />
+          <input
+            value={handle}
+            onChange={(e) => {
+              setHandle(e.target.value);
+              setFindProblem(undefined);
+            }}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={findProblem ? true : undefined}
+          />
+          {findProblem && <span className="hint error">{findProblem}</span>}
         </label>
         <button type="submit">Find</button>
         {found && (
@@ -190,12 +216,22 @@ export function Admin({
 
       <form
         className="card stack"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void run(() => api.adminBlockServer(host.trim(), reason.trim() || undefined)).then(() => {
-            setHost("");
-            setReason("");
-          });
+          const problem = serverProblem(host);
+          setBlockProblem(problem);
+          if (problem) return;
+          setError(undefined);
+          setNotice(undefined);
+          void api.adminBlockServer(serverName(host), reason.trim() || undefined).then(
+            () => {
+              setHost("");
+              setReason("");
+              void load();
+            },
+            (err: Error) => setBlockProblem(err.message),
+          );
         }}
       >
         <h3>Blocked servers</h3>
@@ -217,15 +253,25 @@ export function Admin({
           <input
             ref={blockInput}
             value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="spam.example"
+            onChange={(e) => {
+              setHost(e.target.value);
+              setBlockProblem(undefined);
+            }}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={blockProblem ? true : undefined}
           />
+          <span className={blockProblem ? "hint error" : "hint"}>
+            {blockProblem ?? "Its name, like example.org."}
+          </span>
         </label>
         <label>
           Reason (optional)
           <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
         </label>
-        <button type="submit" className="danger" disabled={!host.trim()}>
+        <button type="submit" className="danger">
           Block server
         </button>
       </form>

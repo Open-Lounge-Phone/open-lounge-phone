@@ -10,6 +10,7 @@ import type {
   User,
 } from "./api.ts";
 import type { Connection, DeviceLive, MemberLive, Snapshot } from "./connection.ts";
+import { serverName } from "./fields.ts";
 import {
   HOUSE_LINE_DIGITS,
   incompleteKeys,
@@ -387,13 +388,19 @@ export function GuestLounge({ link }: { link: LoungeLink }) {
     e.preventDefault();
     const url = guestLoungeUrl(server, link, location.host);
     if (!url) {
-      setError("Enter your address (name@server) or your server's name.");
+      setError(
+        !server.trim()
+          ? "Enter your address (name@server) or your server's name."
+          : serverName(server) === location.host
+            ? "That's this server: sign in or create an account below instead."
+            : "That doesn't look like an address or a server's name. Use name@server.",
+      );
       return;
     }
     location.assign(url);
   };
   return (
-    <form className="card stack guest-lounge" onSubmit={go}>
+    <form className="card stack guest-lounge" noValidate onSubmit={go}>
       <h2>Use this Lounge phone</h2>
       <p className="muted">
         Have an Open Lounge Phone account on another server? Continue there: your server vouches for
@@ -403,18 +410,21 @@ export function GuestLounge({ link }: { link: LoungeLink }) {
         Your address or server
         <input
           value={server}
-          onChange={(e) => setServer(e.target.value)}
-          placeholder="you@your-server"
+          onChange={(e) => {
+            setServer(e.target.value);
+            setError(undefined);
+          }}
+          inputMode="email"
+          autoComplete="off"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          aria-invalid={error ? true : undefined}
         />
+        <span className={error ? "hint error" : "hint"} role={error ? "alert" : undefined}>
+          {error ?? "Your address, like name@server, or just your server's name."}
+        </span>
       </label>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
       <button type="submit" className="primary">
         Continue on my server
       </button>
