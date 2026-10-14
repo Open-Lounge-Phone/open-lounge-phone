@@ -14,6 +14,11 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Why a passkey.** Sign-up, sign-in, the passkey offer and Account explain in plain words why
+  accounts use passkeys instead of passwords, and how to make one without a fingerprint or face
+  sign-in (your phone by QR code, a security key, a password manager, the computer's screen lock).
+  Clearer messages when a passkey is cancelled or the browser can't make one. Account suggests a
+  second passkey.
 ## 0.4.0 (2026-10-14, `server-v0.4.0`)
 
 - **A sign-up you can always finish.** The time zone is a list (starting on the device's own

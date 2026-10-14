@@ -4,6 +4,7 @@ import { AvailabilityToggle } from "./GrownUps.tsx";
 import { YourHouseholds } from "./Households.tsx";
 import { Credit, FairUseCard, FundingCard } from "./HubCards.tsx";
 import { handleHint, normalizeHandle } from "./handles.ts";
+import { PasskeyHelp, PasskeysUnavailable } from "./PasskeyHelp.tsx";
 import {
   defaultPasskeyName,
   passkeyErrorText,
@@ -119,6 +120,12 @@ export function Account({
           No passkeys yet. Without one, you'll need a new sign-in link if you're signed out.
         </p>
       )}
+      {passkeys.length === 1 && (
+        <p className="muted">
+          Add a second passkey on another device or a security key, so losing this one doesn't lock
+          you out.
+        </p>
+      )}
       <ul className="stack">
         {passkeys.map((p) => (
           <li key={p.id} className="card person">
@@ -138,17 +145,16 @@ export function Account({
       {supported ? (
         <div className="card stack">
           <label>
-            Name for this device's passkey
+            Name for the new passkey
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
           </label>
           <button type="button" className="primary" disabled={busy} onClick={() => void add()}>
-            {busy ? "Waiting for your device…" : "Add a passkey on this device"}
+            {busy ? "Waiting for your device…" : "Add a passkey"}
           </button>
+          <PasskeyHelp />
         </div>
       ) : (
-        <p className="muted">
-          This browser can't create passkeys here. Passkeys need HTTPS (or localhost).
-        </p>
+        <PasskeysUnavailable />
       )}
 
       <FairUseCard api={api} />

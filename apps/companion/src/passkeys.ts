@@ -17,13 +17,13 @@ export const passkeysSupported = (): boolean => {
 export function passkeyErrorText(e: unknown): string {
   const err = e as { name?: string; code?: string; message?: string } | undefined;
   if (err?.code === "ERROR_CEREMONY_ABORTED" || err?.name === "NotAllowedError") {
-    return "Cancelled — no passkey was used.";
+    return "No passkey was used. If this device can't make one, try again and choose your phone, a security key or a password manager in the window that opens.";
   }
   if (err?.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
     return "This device already has a passkey for you.";
   }
   if (err?.name === "NotSupportedError" || err?.name === "SecurityError") {
-    return "Passkeys aren't available here. They need HTTPS (or localhost) and a supported browser.";
+    return "This browser can't use passkeys here. Try a recent Safari, Chrome, Edge or Firefox at an https address, or your phone.";
   }
   return err?.message ? `Passkey failed: ${err.message}` : "Passkey failed.";
 }

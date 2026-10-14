@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createApi } from "./api.ts";
+import { PasskeyHelp } from "./PasskeyHelp.tsx";
 import {
   defaultPasskeyName,
   passkeyErrorText,
@@ -36,6 +37,7 @@ export function PasskeyOffer({ token, onDone }: { token: string; onDone(): void 
           Add a passkey so you can sign in on this device next time with your fingerprint, face or
           screen lock — no password needed.
         </p>
+        <PasskeyHelp />
         {error && (
           <p className="error" role="alert">
             {error}

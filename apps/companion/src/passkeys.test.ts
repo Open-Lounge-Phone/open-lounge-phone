@@ -3,12 +3,15 @@ import { defaultPasskeyName, passkeyErrorText } from "./passkeys.ts";
 
 describe("passkeys", () => {
   it("explains common failures", () => {
-    expect(passkeyErrorText({ name: "NotAllowedError" })).toMatch(/Cancelled/);
-    expect(passkeyErrorText({ code: "ERROR_CEREMONY_ABORTED" })).toMatch(/Cancelled/);
+    // Cancelled (or this device can't make one): point at the other ways.
+    expect(passkeyErrorText({ name: "NotAllowedError" })).toMatch(
+      /No passkey was used.*phone, a security key/,
+    );
+    expect(passkeyErrorText({ code: "ERROR_CEREMONY_ABORTED" })).toMatch(/No passkey was used/);
     expect(passkeyErrorText({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toMatch(
       /already has a passkey/,
     );
-    expect(passkeyErrorText({ name: "SecurityError" })).toMatch(/HTTPS/);
+    expect(passkeyErrorText({ name: "SecurityError" })).toMatch(/can't use passkeys here.*https/);
     expect(passkeyErrorText(new Error("server said no"))).toBe("Passkey failed: server said no");
     expect(passkeyErrorText(undefined)).toBe("Passkey failed.");
   });

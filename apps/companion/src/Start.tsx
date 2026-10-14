@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { createApi } from "./api.ts";
 import { handleHint, inviteTokenFrom, normalizeHandle, suggestHandle } from "./handles.ts";
+import { PasskeyHelp, PasskeysUnavailable } from "./PasskeyHelp.tsx";
 import {
   defaultPasskeyName,
   passkeyErrorText,
@@ -103,15 +104,14 @@ export function Start({
             {busy ? "Waiting for your device…" : "Sign in with a passkey"}
           </button>
         ) : (
-          <p className="muted">
-            Passkeys aren't available here. They need HTTPS (or localhost) and a supported browser.
-          </p>
+          <PasskeysUnavailable />
         )}
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
+        {supported && <PasskeyHelp />}
         <p className="muted">
           {signupOpen === true && "Anyone can create an account on this server. "}
           {signupOpen === false &&
@@ -270,8 +270,10 @@ function SignUp({
         <h1>Create an account</h1>
         <p className="muted">
           You'll get your own household for your phones, and an address people can use to reach you.
-          No email or phone number needed: you sign in with a passkey on this device.
+          No email, phone number or password needed: you sign in with a passkey, the way you unlock
+          your device.
         </p>
+        <PasskeyHelp />
         <label>
           Your name
           <input

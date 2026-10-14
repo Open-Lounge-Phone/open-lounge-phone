@@ -1300,3 +1300,22 @@ dl.phone-facts {
   color: var(--danger);
   border-color: currentColor;
 }
+
+/* "Why a passkey?": short, readable, closed until opened. */
+.passkey-help {
+  font-size: 0.92rem;
+}
+.passkey-help p,
+.passkey-help ul {
+  margin: 0.5rem 0;
+}
+.passkey-help ul {
+  padding-left: 1.2rem;
+  list-style: disc;
+}
+.passkey-help a {
+  color: var(--accent);
+}
+.passkey-help li + li {
+  margin-top: 0.25rem;
+}
