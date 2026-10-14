@@ -146,32 +146,53 @@ def build_case():
     for d, y in CORD_HOLES:
         body -= F.Pos(bx0 + WALL / 2, y, -3.0) * F.Rot(0, 90, 0) * Cylinder(d / 2, WALL * 3)
     for x, y in plate_screws():
-        body += F.cyl(x, y, Z_BOT + 2.5, Z_BOT + 7.0, 7.0)
-        body -= F.cyl(x, y, Z_BOT + 2.5 - 0.01, Z_BOT + 2.5 + F.INSERT_L, F.INSERT_D)
+        body += F.cyl(x, y, Z_BOT + PLATE_T, Z_BOT + PLATE_T + 7.0, 7.0)
+        body -= F.cyl(x, y, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + 4.5, F.INSERT_D)
     return body
 
 
+PLATE_T = 2.5
+LIP_H, LIP_T = 2.5, 1.6    # the plate's locating lip: drops inside the walls so it lines up by itself
+SCREW = "M3 x 8 countersunk (ISO 10642)"
+INSERT = "M3 x 4 heat-set insert (OD 4.0-4.2)"
+
+
 def plate_screws():
-    """Bosses on straight stretches of wall (each touches it), clear of the board."""
+    """Seven bosses on straight stretches of wall (each touches it), all clear of the board."""
     kx0, kx1, ky0, ky1 = KEY_BOX
     bx0, bx1, by0, by1 = BED_BOX
     d = WALL + 3.2
-    return [(kx1 - d, ky0 + 25.0), (kx1 - d, ky1 - 25.0), (bx0 + d, by0 + 40.0), (bx0 + d, by1 - 40.0),
-            (bx1 - d, by1 - 30.0)]
+    ymid = (ky0 + ky1) / 2
+    return [(kx1 - d, ky0 + 22.0), (kx1 - d, ymid), (kx1 - d, ky1 - 22.0),
+            (bx0 + d, by0 + 40.0), (bx0 + d, ymid), (bx0 + d, by1 - 40.0), (bx1 - d, by1 - 30.0)]
+
+
+def _outline(inset, z0, z1):
+    kx0, kx1, ky0, ky1 = KEY_BOX
+    bx0, bx1, by0, by1 = BED_BOX
+    o = F.rrect((kx0 + kx1) / 2, (ky0 + ky1) / 2, kx1 - kx0 - 2 * inset, ky1 - ky0 - 2 * inset, KEY_R * CORNER - inset, z0, z1)
+    o += F.rrect((bx0 + bx1) / 2, (by0 + by1) / 2, bx1 - bx0 - 2 * inset, by1 - by0 - 2 * inset, BED_R * CORNER - inset, z0, z1)
+    return o
 
 
 def build_plate():
-    """The bottom: flush inside the pillows' walls, screwed up into six bosses, four feet."""
+    """The bottom: flush inside the pillows' walls, a lip that locates it, seven countersunk M3
+    screws up into heat-set inserts in the case's bosses, four rubber-foot recesses."""
     kx0, kx1, ky0, ky1 = KEY_BOX
     bx0, bx1, by0, by1 = BED_BOX
     g = WALL + 0.3
-    plate = F.rrect((kx0 + kx1) / 2, (ky0 + ky1) / 2, kx1 - kx0 - 2 * g, ky1 - ky0 - 2 * g, KEY_R * CORNER - g, Z_BOT, Z_BOT + 2.5)
-    plate += F.rrect((bx0 + bx1) / 2, (by0 + by1) / 2, bx1 - bx0 - 2 * g, by1 - by0 - 2 * g, BED_R * CORNER - g, Z_BOT, Z_BOT + 2.5)
+    plate = _outline(g, Z_BOT, Z_BOT + PLATE_T)
+    lip = _outline(g, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + LIP_H) - _outline(g + LIP_T, Z_BOT, Z_BOT + PLATE_T + LIP_H + 1)
+    for x, y in plate_screws():                       # the lip steps round each boss
+        lip -= F.cyl(x, y, Z_BOT, Z_BOT + 20, 9.0)
+    # and never reaches under the board (its corner screws' heads are there)
+    lip -= F.rrect(F.BOARD_W / 2, F.BOARD_H / 2, F.BOARD_W + 1.0, F.BOARD_H + 1.0, F.BOARD_R + 0.5, Z_BOT, Z_BOT + 20)
+    plate += lip
     for x, y in plate_screws():
-        plate -= F.cyl(x, y, Z_BOT - 1, Z_BOT + 3.5, 3.4)
-        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + 1.6, 6.4)          # screw head
-    for x, y in ((kx1 - 20, ky0 + 20), (kx1 - 20, ky1 - 20), (bx0 + 20, by0 + 20), (bx0 + 20, by1 - 20)):
-        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + 1.0, 10.5)          # stick-on rubber feet
+        plate -= F.cyl(x, y, Z_BOT - 1, Z_BOT + PLATE_T + 1, 3.4)
+        plate -= F.Pos(x, y, Z_BOT) * F.Cylinder(3.15, 1.7, align=(F.Align.CENTER, F.Align.CENTER, F.Align.MIN))
+    for x, y in ((kx1 - 22, ky0 + 22), (kx1 - 22, ky1 - 22), (bx0 + 22, by0 + 26), (bx0 + 22, by1 - 26)):
+        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + 1.0, 10.5)          # stick-on rubber feet, 10 mm
     return plate
 
 
