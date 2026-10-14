@@ -148,7 +148,7 @@ afterAll(() => {
 });
 
 it.skipIf(!enabled)(
-  "two Cloudflare Workers: knock, accept, call, key rotation mid-call, no-answer voicemail, voicemail, block, and the idle stream closes",
+  "two Cloudflare Workers: knock, accept, call, add-ons, key rotation mid-call, no-answer voicemail, voicemail, block, and the idle stream closes",
   async () => {
     onTestFailed(() =>
       reportLogs(
