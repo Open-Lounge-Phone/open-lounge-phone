@@ -981,6 +981,16 @@ Your connections changed (a knock arrived, someone accepted or disconnected); re
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 
+### `account.notice`
+
+Sent to your other open apps when your account is signed in to in a way that doesn't need your passkey; the session list (`GET /api/sessions`) shows how each session started.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `kind` | `"recovered"` \| `"signin_link"` | yes | `recovered`: someone signed in to your account with its recovery code; `signin_link`: with a sign-in link a guardian or admin made. |
+| `at` | integer (≥0) | yes |  |
+
 ### `lounge.progress`
 
 Progress of your takeover of a Lounge phone, and the end of your session there.

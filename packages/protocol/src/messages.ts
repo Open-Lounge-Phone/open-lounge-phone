@@ -1260,6 +1260,21 @@ export const ConnectionsChanged = z
     "Your connections changed (a knock arrived, someone accepted or disconnected); reload them with `GET /api/connections`.",
   );
 
+export const AccountNotice = z
+  .object({
+    t: z.literal("account.notice"),
+    ...Ref,
+    kind: z
+      .enum(["recovered", "signin_link"])
+      .describe(
+        "`recovered`: someone signed in to your account with its recovery code; `signin_link`: with a sign-in link a guardian or admin made.",
+      ),
+    at: EpochMs,
+  })
+  .describe(
+    "Sent to your other open apps when your account is signed in to in a way that doesn't need your passkey; the session list (`GET /api/sessions`) shows how each session started.",
+  );
+
 export const RoomsChanged = z
   .object({
     t: z.literal("rooms.changed"),
@@ -1287,6 +1302,7 @@ export const RoomOpened = z
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
+  AccountNotice,
   LoungeProgress,
   MemberStatus,
   DeviceStatus,
