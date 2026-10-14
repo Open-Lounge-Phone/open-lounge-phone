@@ -4,7 +4,7 @@
 //                          [--turn-key-id ID --turn-key-token TOKEN] [--new-setup-token]
 //                          [--open-signup] [--fair-use hub|none]
 //                          [--turnstile-site-key KEY --turnstile-secret SECRET]
-//                          [--operator handle[,handle]] [--sponsor-url URL]
+//                          [--operator handle[,handle]|none] [--sponsor-url URL]
 //                          [--funding-balance USD] [--sfu-app-id ID --sfu-app-secret SECRET]
 //
 // --open-signup lets anyone create an account on the instance (a public hub). Without it the
@@ -12,7 +12,10 @@
 // A public instance needs TURN (people on different networks must be able to talk), so
 // --open-signup refuses to deploy until a TURN key was given (now or on an earlier run). It also
 // turns on the hub's fair-use allowance (FAIR_USE=hub; `--fair-use none` for unlimited).
-// Turnstile protects sign-up when both keys are given; --operator names who sees the admin view;
+// Turnstile protects sign-up when both keys are given; --operator names who sees the admin view:
+// each handle is looked up in the instance's D1 database once, here, and its account id (never the
+// handle) becomes OPERATORS; the ids are kept in instances/<instance>.json, so later deploys
+// without --operator keep them (`--operator none` removes them). The account must exist first.
 // --sponsor-url shows a Sponsor button (hidden while unset); --funding-balance shows the funding
 // card (with the hub's cost model, see docs/hub.md).
 // --sfu-app-id/--sfu-app-secret give rooms a media relay (Cloudflare Realtime SFU app, dashboard →
@@ -53,6 +56,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { generateServerKey } from "@openloungephone/federation";
+import { d1Rows, type ResolvedOperator, resolveOperators } from "../src/operators.ts";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const INSTANCES = `${APP}instances`;
@@ -114,6 +118,8 @@ interface InstanceState {
   turnstileSet?: boolean;
   /** SFU_APP_ID / SFU_APP_SECRET were set (rooms' media relay). */
   sfuSet?: boolean;
+  /** Operators as resolved by --operator (OPERATORS holds the ids). */
+  operators?: ResolvedOperator[];
 }
 
 /** SFU credentials from the flags or environment, else instances/sfu.env (never printed). */
@@ -195,6 +201,24 @@ if (!db) {
   console.log(`  exists ${db.uuid}`);
 }
 
+// --- operators: handles → account ids, once ----------------------------------------------
+let operators: ResolvedOperator[] = previous.operators ?? [];
+if (args.operator?.trim() === "none") {
+  operators = [];
+} else if (args.operator) {
+  step("operators");
+  // Only ever this instance's own database (openloungephone-<instance>).
+  const query = (sql: string) =>
+    d1Rows(wrangler(["d1", "execute", dbName, "--remote", "--json", "--command", sql]));
+  try {
+    operators = resolveOperators(args.operator, query);
+  } catch (e) {
+    console.error(`  ${(e as Error).message}`);
+    process.exit(2);
+  }
+  for (const o of operators) console.log(`  ${o.handle ?? "?"} → ${o.id}`);
+}
+
 // --- R2 -----------------------------------------------------------------------------
 const bucket = `openloungephone-${instance}-voicemail`;
 step(`R2 bucket ${bucket}`);
@@ -239,7 +263,7 @@ const config = {
     // Public instances get the hub's fair-use allowance unless told otherwise.
     ...(openSignup && args["fair-use"] !== "none" ? { FAIR_USE: "hub" } : {}),
     ...(turnstileSiteKey ? { TURNSTILE_SITE_KEY: turnstileSiteKey } : {}),
-    ...(args.operator ? { OPERATORS: args.operator } : {}),
+    ...(operators.length ? { OPERATORS: operators.map((o) => o.id).join(",") } : {}),
     ...(sponsorUrl ? { SPONSOR_URL: sponsorUrl } : {}),
     ...(funding !== undefined ? { FUNDING_BALANCE_USD: funding } : {}),
   },
@@ -307,6 +331,7 @@ const state: InstanceState = {
   turnSet: previous.turnSet === true || turnNow,
   turnstileSet,
   sfuSet: previous.sfuSet === true || !!sfu,
+  ...(operators.length ? { operators } : {}),
 };
 writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 
