@@ -7,6 +7,7 @@ import type {
 } from "@openloungephone/core";
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
+import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
 import { RecordingStore } from "./recordings.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
 import type { Sql } from "./sql.ts";
@@ -548,6 +549,15 @@ const roomAsContact = (r: RoomContact): Contact => ({
   bypassQuietHours: false,
 });
 
+/** A public line on a phone's keys: the phone may call it; nobody calls the phone through it. */
+const lineAsContact = (r: LineContact): Contact => ({
+  id: r.id,
+  label: r.label,
+  canCallDevice: false,
+  deviceCanCall: true,
+  bypassQuietHours: false,
+});
+
 /** Remote allow-list entries have ids with this prefix; local ones are user ids. */
 export const isRemoteContactId = (id: string) => id.startsWith("rc_");
 
@@ -573,6 +583,8 @@ export class Store {
   readonly rooms: RoomStore;
   /** Team and org spaces: extensions, ring groups, business hours, the audit trail. */
   readonly workplace: WorkplaceStore;
+  /** Public lines: addresses of ring groups, their blocklist and recent callers. */
+  readonly lines: LineStore;
   /** Call recording: the per-space switch, upload tickets, recordings. */
   readonly recordings: RecordingStore;
 
@@ -581,6 +593,7 @@ export class Store {
     this.connections = new ConnectionStore(sql);
     this.rooms = new RoomStore(sql);
     this.workplace = new WorkplaceStore(sql);
+    this.lines = new LineStore(sql, HANDLE_RESERVE_MS);
     this.recordings = new RecordingStore(sql);
   }
 
@@ -675,8 +688,10 @@ export class Store {
     const r = await this.sql.first<{ n: number }>(
       `SELECT (SELECT COUNT(*) FROM accounts WHERE handle = ?) +
               (SELECT COUNT(*) FROM rooms WHERE handle = ?) +
+              (SELECT COUNT(*) FROM public_lines WHERE handle = ?) +
               (SELECT COUNT(*) FROM released_handles
                WHERE handle = ? AND released_at > ? AND account_id != ?) AS n`,
+      handle,
       handle,
       handle,
       handle,
@@ -698,13 +713,15 @@ export class Store {
         `UPDATE accounts SET handle = ?, handle_changed_at = ? WHERE id = ? AND NOT EXISTS
            (SELECT 1 FROM released_handles
             WHERE handle = ? AND released_at > ? AND account_id != ?)
-           AND NOT EXISTS (SELECT 1 FROM rooms WHERE handle = ?)`,
+           AND NOT EXISTS (SELECT 1 FROM rooms WHERE handle = ?)
+           AND NOT EXISTS (SELECT 1 FROM public_lines WHERE handle = ?)`,
         handle,
         now,
         accountId,
         handle,
         now - HANDLE_RESERVE_MS,
         accountId,
+        handle,
         handle,
       );
       if (changes !== 1) return false;
@@ -993,6 +1010,16 @@ export class Store {
     await this.deleteIds("voicemails", ids(expiredVm));
     await this.deleteIds("call_log", ids(expiredCalls));
     await this.deleteIds("recordings", ids(expiredRec));
+    // A line's recent callers follow the space's history setting too.
+    await this.sql.run(
+      `DELETE FROM line_callers WHERE household_id = ?
+         AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
+         AND (SELECT history_days FROM households WHERE id = ?) > 0`,
+      householdId,
+      now,
+      householdId,
+      householdId,
+    );
     // The audit trail of a team/org space follows the space's history setting too.
     await this.sql.run(
       `DELETE FROM audit_log WHERE household_id = ?
@@ -1637,6 +1664,7 @@ export class Store {
 
   async removeContact(deviceId: string, userId: string): Promise<void> {
     if (isRoomContactId(userId)) return this.rooms.removeFromPhone(deviceId, userId);
+    if (isLineContactId(userId)) return this.lines.removeFromPhone(deviceId, userId);
     if (isRemoteContactId(userId)) {
       await this.sql.run(
         "DELETE FROM remote_contacts WHERE device_id = ? AND id = ?",
@@ -1662,6 +1690,10 @@ export class Store {
       const r = await this.rooms.contact(deviceId, userId);
       return r && roomAsContact(r);
     }
+    if (isLineContactId(userId)) {
+      const r = await this.lines.contact(deviceId, userId);
+      return r && lineAsContact(r);
+    }
     if (isRemoteContactId(userId)) {
       return (await this.listRemoteContacts(deviceId)).find((c) => c.id === userId);
     }
@@ -1686,7 +1718,8 @@ export class Store {
       ({ connection: _c, connectionId: _i, ...c }) => c,
     );
     const rooms = (await this.rooms.onPhone(deviceId)).map(roomAsContact);
-    return [...rows.map(toContact), ...remote, ...rooms];
+    const lines = (await this.lines.onPhone(deviceId)).map(lineAsContact);
+    return [...rows.map(toContact), ...remote, ...rooms, ...lines];
   }
 
   /** People from other households or servers on a phone's allow-list (active connections only). */
@@ -1770,8 +1803,20 @@ export class Store {
         query: "DELETE FROM room_buttons WHERE device_id = ? AND idx = ?",
         params: [deviceId, index],
       },
+      {
+        query: "DELETE FROM line_buttons WHERE device_id = ? AND idx = ?",
+        params: [deviceId, index],
+      },
     ]);
-    if (userId !== null && isRoomContactId(userId)) {
+    if (userId !== null && isLineContactId(userId)) {
+      await this.sql.batch([
+        { query: "DELETE FROM buttons WHERE device_id = ? AND idx = ?", params: [deviceId, index] },
+        {
+          query: "INSERT INTO line_buttons (device_id, idx, line_contact_id) VALUES (?, ?, ?)",
+          params: [deviceId, index, userId],
+        },
+      ]);
+    } else if (userId !== null && isRoomContactId(userId)) {
       await this.sql.batch([
         { query: "DELETE FROM buttons WHERE device_id = ? AND idx = ?", params: [deviceId, index] },
         {
@@ -1805,7 +1850,9 @@ export class Store {
       `SELECT idx, user_id FROM buttons WHERE device_id = ?
        UNION ALL SELECT idx, remote_id AS user_id FROM remote_buttons WHERE device_id = ?
        UNION ALL SELECT idx, room_contact_id AS user_id FROM room_buttons WHERE device_id = ?
+       UNION ALL SELECT idx, line_contact_id AS user_id FROM line_buttons WHERE device_id = ?
        ORDER BY idx`,
+      deviceId,
       deviceId,
       deviceId,
       deviceId,

@@ -14,6 +14,22 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Public lines.** A team or organization can publish a ring group at its own address
+  (`orders@acme.example`) that anyone on any server may call without knocking first: off by
+  default, turned on by an owner or admin after a warning (audited). Callers wait in a queue when
+  nobody is free (their place in line, "Leave a voicemail instead", a longest wait and a longest
+  line), outside business hours the after-hours action applies, and messages go to the group's
+  shared box. Per line: who may call (anyone, people connected to the space, or an allow-list),
+  the name and description callers see, queue and voicemail options, its own greeting, and limits
+  per caller and per server. Members see each caller's verified address; admins see recent
+  callers and can block people and whole servers. Kids' phones can never call a line. A line that
+  doesn't take you answers like one that doesn't exist. Additive protocol: `call.line`,
+  `call.voicemail`, `call.state.queue`, `call.state.line`, `call.ringing.from.address`,
+  `call.ringing.line`, device feature `public-lines`; federation feature `public-lines` (the
+  `line` call target, `call.voicemail` on the stream). Companion: Admin → Ring groups → Public
+  line, Connections → Call a public line, and the queue in the call screen; browser phone: a line
+  on a key, `IN LINE 2` / `1 VOICEMAIL`. Migration 0022.
+
 ## 0.2.0 (2026-10-13, `server-v0.2.0`)
 
 Everything since `server-v0.1.0`; this is what l1 and the public hub run. Device protocol and federation stay at version 1;

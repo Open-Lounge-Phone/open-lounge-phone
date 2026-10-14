@@ -119,6 +119,39 @@ export const CallExtension = z
     "Team/org spaces: dial an extension of your space (a member, a phone, a room or a ring group). Phones: MENU → Dial extension, the digits, then MENU. Refused (`denied`) in homes and for unknown numbers; a ring group that's closed follows its after-hours action.",
   );
 
+export const CallVoicemail = z
+  .object({ t: z.literal("call.voicemail"), ...Ref, callId: Id })
+  .describe(
+    "Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.",
+  );
+
+export const LineQueue = z
+  .object({
+    position: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Your place in line (1 = next). Absent when the line doesn't show positions."),
+    size: z.number().int().min(1).optional().describe("How many callers wait, you included."),
+    voicemail: z
+      .boolean()
+      .optional()
+      .describe("`call.voicemail` leaves a message instead of waiting on."),
+  })
+  .describe(
+    "With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again.",
+  );
+
+export const LineInfo = z
+  .object({
+    name: z.string().min(1).max(64).describe("The line's display name, e.g. `Acme support`."),
+    description: z.string().max(140).optional().describe("One line about it, for callers."),
+    address: z.string().max(300).optional().describe("Its address, `handle@host`."),
+  })
+  .describe("A public line: what callers (and the members it rings) see.");
+export type LineInfo = z.infer<typeof LineInfo>;
+
 export const WorkplacePrompt = z
   .enum(["ext.enter", "ext.unknown", "ext.closed"])
   .describe(
@@ -568,6 +601,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   CallHold,
   CallMerge,
   CallTransfer,
+  CallVoicemail,
   RoomLeave,
   RoomMute,
   RoomLock,
@@ -712,7 +746,17 @@ export const CallRinging = z
     t: z.literal("call.ringing"),
     ...Ref,
     callId: Id,
-    from: z.object({ label: z.string().min(1).max(24) }),
+    from: z.object({
+      label: z.string().min(1).max(24),
+      address: z
+        .string()
+        .max(300)
+        .optional()
+        .describe(
+          "Calls to a public line: the caller's verified address (`handle@host`), checked by their server's signature.",
+        ),
+    }),
+    line: LineInfo.optional().describe("The call is for a public line you answer for."),
   })
   .describe("Incoming call; device rings until answered, hung up, or ended.");
 
@@ -759,6 +803,10 @@ export const CallStateMsg = z
       ),
     recording: RecordingNotice.optional().describe(
       "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it.",
+    ),
+    queue: LineQueue.optional(),
+    line: LineInfo.optional().describe(
+      "Calling a public line: its name (and description), with the first `ringing`.",
     ),
   })
   .describe("Call progress update.");
@@ -959,6 +1007,16 @@ export const CallPhone = z
     "Call a household phone that a connection's guardian put you on the allow-list of (`GET /api/connections` lists them as `phones`). Its own allow-list and quiet hours decide.",
   );
 
+export const CallLine = z
+  .object({
+    t: z.literal("call.line"),
+    ...Ref,
+    address: z.string().min(3).max(300).describe("The line's address, `handle@host`."),
+  })
+  .describe(
+    "Call a public line (a team's or organization's published ring group) on this server or another one; no connection needed. When nobody is free you may wait in line (`call.state.queue`). Kids' phones never may. A line that doesn't exist, is off, or doesn't take your call answers `ended` `unavailable`.",
+  );
+
 export const PresenceSet = z
   .object({ t: z.literal("presence.set"), ...Ref, available: z.boolean() })
   .describe("Whether this person is taking app-to-app calls (persisted).");
@@ -985,6 +1043,7 @@ export const AppToServer = z.discriminatedUnion("t", [
   CallUser,
   CallConnection,
   CallPhone,
+  CallLine,
   PresenceSet,
   LoungeClaim,
   LoungeAppLeave,
@@ -993,6 +1052,7 @@ export const AppToServer = z.discriminatedUnion("t", [
   CallHold,
   CallMerge,
   CallTransfer,
+  CallVoicemail,
   RoomJoin,
   RoomLeave,
   RoomMute,

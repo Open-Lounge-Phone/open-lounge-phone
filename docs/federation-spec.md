@@ -340,7 +340,7 @@ Call and room signaling between two servers travels over one WebSocket per serve
 | `nonce` | string (`^[A-Za-z0-9_-]{16,64}$`) | yes | The dialer's random nonce; `hello.ok` echoes it. |
 | `sig` | string (len ≤128) | yes | base64url Ed25519 signature over `streamStatement(from, to, created, nonce)`. |
 
-**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
+**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal`, `call.voicemail` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
 
 **Room signals** — `msg` of a `room.signal` is one of `room.state`, `room.media`, `room.idle`, `room.ended`, `room.leave`, `room.mute`, `room.remove`, `room.lock`, `room.talk`, `room.here`, `rtc.sdp`, `rtc.ice`.
 
@@ -502,12 +502,13 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 
 | Status | Body | Meaning |
 |---|---|---|
-| 200 | { state: `"ringing"` } \| { state: `"ended"`, reason: `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"`, note?: string (len ≤200), voicemail?: `VoicemailOffer` } | `ringing`, or `ended` with a reason; never a `voicemail` offer (that is the caller's server's to make). |
+| 200 | { state: `"ringing"` } \| { state: `"ended"`, reason: `"hangup"` \| `"declined"` \| `"busy"` \| `"denied"` \| `"voicemail"` \| `"timeout"` \| `"unreachable"` \| `"unavailable"` \| `"error"`, note?: string (len ≤200), voicemail?: `VoicemailOffer` } | `ringing`, or `ended` with a reason; never a `voicemail` offer (that is the caller's server's to make), except for a `line` target, whose server offers its own box. |
 
 **Receiver rules**
 
 - Decided by the receiver alone: an active connection with `from` by stable id (for a phone, an allow-list entry through such a connection with `canCallDevice`), no block of the person or server, then quiet hours (`voicemail`), reachability, availability and busy.
 - `guest` targets are accepted only from the server that vouched for that guest at that Lounge phone.
+- `line` targets (feature `public-lines`) need no connection: the receiver checks that the line is published, its blocklist and the operator's, who the line takes (anyone, people connected to the space, or an allow-list), its limits per caller and per server, and refuses calls from kids' phones (`viaPhone`). Every refusal answers `ended` `unavailable`, the same as a line that doesn't exist. While nobody is free the caller may wait: `call.state` `ringing` with `queue` updates travel on the stream, the caller's server may send `call.voicemail` to stop waiting, and the line's `ended` carries its own `voicemail` offer, which the caller's server relays.
 - Signaling for `callId` then travels on the server-pair stream.
 
 ### `GET /fed/v1/stream`
@@ -783,6 +784,7 @@ One of:
 - { kind: `"person"`, handle: string (`^[a-z0-9._-]{2,30}$`) }
 - { kind: `"phone"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"guest"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
+- { kind: `"line"`, handle: string (`^[a-z0-9._-]{2,30}$`) }
 
 #### `VoicemailOffer`
 
@@ -1020,6 +1022,7 @@ This implementation speaks federation version 1 (`/fed/v1`).
 | `voicemail-greeting` | yes | `POST /fed/v1/greeting`: the callee's greeting for a caller whose call went to voicemail. Without it the caller hears the spoken default greeting. |
 | `presence-batch` | yes | `POST /fed/v1/presence` with `to` listing all of the sender's connections on the receiving server in one request. |
 | `transfer` | yes | Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces). |
+| `public-lines` | no | Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`. |
 <!-- END GENERATED: features -->
 
 New features are added to this registry (and to `FEATURES` in `packages/federation`) in the

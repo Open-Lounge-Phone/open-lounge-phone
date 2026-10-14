@@ -67,7 +67,8 @@ export class RoomStore {
       await this.sql.run(
         `INSERT INTO rooms (id, household_id, kind, name, handle, owner_account, access, locked, created_at)
          SELECT ?, ?, ?, ?, ?, ?, ?, 0, ?
-         WHERE ? IS NULL OR NOT EXISTS (SELECT 1 FROM accounts WHERE handle = ?)`,
+         WHERE ? IS NULL OR (NOT EXISTS (SELECT 1 FROM accounts WHERE handle = ?)
+           AND NOT EXISTS (SELECT 1 FROM public_lines WHERE handle = ?))`,
         id,
         r.householdId,
         r.kind,
@@ -76,6 +77,7 @@ export class RoomStore {
         r.ownerAccount,
         r.access,
         now,
+        r.handle,
         r.handle,
         r.handle,
       );

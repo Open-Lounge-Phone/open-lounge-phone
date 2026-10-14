@@ -4,6 +4,7 @@ export * from "./callRoom.ts";
 export * from "./device.ts";
 export * from "./fingerprint.ts";
 export * from "./funding.ts";
+export * from "./lines.ts";
 export * from "./lounge.ts";
 export * from "./quietHours.ts";
 export * from "./recording.ts";

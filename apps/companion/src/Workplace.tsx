@@ -12,6 +12,7 @@ import type {
   SpaceCall,
 } from "./api.ts";
 import type { Connection } from "./connection.ts";
+import { PublicLineEditor } from "./PublicLine.tsx";
 import { formatDuration } from "./text.ts";
 import { Player } from "./Voicemail.tsx";
 import { afterHoursText, auditText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
@@ -131,6 +132,7 @@ export function Workplace({ api, conn, onBack }: Props) {
                   <div className="device-name">{g.name}</div>
                   <div className="muted small">
                     {g.extension ? `Ext. ${g.extension} · ` : ""}
+                    {g.address ? `${g.address} · ` : ""}
                     {STRATEGY_TEXT[g.strategy]} · {g.members.join(", ") || "nobody yet"}
                   </div>
                 </div>
@@ -576,6 +578,7 @@ function Groups({
           <summary>
             {g.name} · Ext. {g.extension} · {STRATEGY_TEXT[g.strategy]} ·{" "}
             {g.members.map(nameOf).join(", ") || "nobody yet"}
+            {g.line?.enabled ? ` · public: ${g.line.address}` : ""}
           </summary>
           <div className="stack">
             <label className="stack">
@@ -592,6 +595,17 @@ function Groups({
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="row">
+              <span>Ring each step for</span>
+              <input
+                type="number"
+                min={5}
+                max={120}
+                defaultValue={g.ringSeconds}
+                onBlur={(e) => act(api.updateGroup(g.id, { ringSeconds: Number(e.target.value) }))}
+              />
+              <span>seconds</span>
             </label>
             <MemberPicker
               dir={dir}
@@ -615,6 +629,7 @@ function Groups({
               inherit="Same as the space"
               onSave={(afterHours) => act(api.updateGroup(g.id, { afterHours }))}
             />
+            <PublicLineEditor api={api} group={g} dir={dir} />
             <button type="button" className="danger" onClick={() => act(api.deleteGroup(g.id))}>
               Delete group (and its voicemail)
             </button>

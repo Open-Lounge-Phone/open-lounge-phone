@@ -18,6 +18,8 @@ interface Props {
   onCallPhone?:
     | ((c: ConnectionView, phone: { deviceId: string; label: string }) => void)
     | undefined;
+  /** Call a business's public line by its address (no knock needed). */
+  onCallLine?: ((address: string) => void) | undefined;
 }
 
 /**
@@ -25,7 +27,15 @@ interface Props {
  * knocks, and block people or whole servers. Kids' phones are never knockable; a guardian can
  * put a connection on a phone's allow-list from the phone's page.
  */
-export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCallPhone }: Props) {
+export function Connections({
+  api,
+  refreshKey,
+  onBack,
+  onRequests,
+  onCall,
+  onCallPhone,
+  onCallLine,
+}: Props) {
   const [info, setInfo] = useState<ConnectionsInfo>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -178,6 +188,7 @@ export function Connections({ api, refreshKey, onBack, onRequests, onCall, onCal
           })
         }
       />
+      {onCallLine && <CallLineForm onCall={onCallLine} />}
 
       {groups.requests.length > 0 && (
         <>
@@ -337,6 +348,40 @@ function Who({ c }: { c: ConnectionView }) {
       </div>
       <div className="muted small">{c.address}</div>
     </div>
+  );
+}
+
+/** A business's public line: call it by its address, without knocking first. */
+function CallLineForm({ onCall }: { onCall(address: string): void }) {
+  const [to, setTo] = useState("");
+  return (
+    <form
+      className="card stack"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onCall(to.trim());
+      }}
+    >
+      <h3>Call a public line</h3>
+      <label>
+        The line's address
+        <input
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder="support@example.org"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
+      </label>
+      <button type="submit" className="primary" disabled={!to.includes("@")}>
+        Call
+      </button>
+      <span className="hint">
+        Businesses can publish a line anyone may call. They see your address when you call.
+      </span>
+    </form>
   );
 }
 

@@ -259,6 +259,9 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
       }),
     );
     const nameOf = new Map(users.map((u) => [u.id, u.name]));
+    const lines = new Map(
+      (await store.lines.ofSpace(hh)).filter((l) => l.enabled).map((l) => [l.groupId, l]),
+    );
     return c.json({
       members: members.filter((m) => directoryMatch(q, m)),
       phones: devices
@@ -287,6 +290,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
           strategy: g.strategy,
           extension: ext("group", g.id),
           members: g.members.map((m) => nameOf.get(m) ?? ""),
+          ...(lines.has(g.id) ? { address: `${lines.get(g.id)?.handle}@${host}` } : {}),
         }))
         .filter((g) => directoryMatch(q, g)),
       you: { id: user.id, role: await roleOf(env, user) },
@@ -329,7 +333,15 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     const number = (await wp.extensions(hh)).find(
       (e) => e.kind === "group" && e.targetId === g.id,
     )?.number;
-    return { ...g, extension: number ?? null };
+    const line = await store.lines.get(g.id);
+    return {
+      ...g,
+      extension: number ?? null,
+      // Its public line, if it has one (details: GET /groups/:id/line).
+      line: line
+        ? { handle: line.handle, address: `${line.handle}@${ownHost(env)}`, enabled: line.enabled }
+        : null,
+    };
   };
 
   api.get("/groups", async (c) => {
@@ -412,8 +424,10 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     const hh = c.get("user").householdId;
     const group = await wp.group(c.req.param("id"));
     if (!group || group.householdId !== hh) return c.json({ error: "not found" }, 404);
-    // The shared box's audio goes before its rows cascade.
+    // The shared box's audio (and its public line's greeting) go before their rows cascade.
     await dropVoicemailBlobs(env, { groupId: group.id });
+    const line = await store.lines.get(group.id);
+    if (line?.greeting) await env.blobs.delete(line.greeting.blobKey);
     await wp.deleteGroup(group.id);
     await auditFrom(env, c, "group.delete", { groupId: group.id, name: group.name });
     await refreshPhones(hh);

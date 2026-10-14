@@ -76,6 +76,12 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
 
   switch (s->kind) {
     case PH_DIALING:
+      // Waiting in a public line's queue (key 1 leaves a voicemail instead, when offered).
+      if (s->queued) {
+        if (s->queue_pos > 0) snprintf(buf, sizeof buf, "IN LINE %d", s->queue_pos);
+        else snprintf(buf, sizeof buf, "WAITING IN LINE");
+        return set2(out, buf, s->queue_vm ? "1 VOICEMAIL" : (*name ? name : "PLEASE WAIT"));
+      }
       return with_name(out, "CALLING", name, "");
     case PH_INCOMING: {
       int n = with_name(out, "", s->from, "CALLING");

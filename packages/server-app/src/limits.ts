@@ -20,6 +20,10 @@ export interface Limits {
   signInsPerIpPerMinute: number;
   /** Changes (non-GET API requests) one account may make per minute. */
   writesPerAccountPerMinute: number;
+  /** Calls one caller (an address) may place to one public line per hour. */
+  lineCallsPerCallerPerHour: number;
+  /** Calls any one other server's people may place to one public line per hour. */
+  lineCallsPerServerPerHour: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -30,6 +34,8 @@ export const DEFAULT_LIMITS: Limits = {
   signupsPerIpPerHour: 10,
   signInsPerIpPerMinute: 30,
   writesPerAccountPerMinute: 120,
+  lineCallsPerCallerPerHour: 10,
+  lineCallsPerServerPerHour: 300,
 };
 
 export const limitsOf = (env: ServerEnv): Limits => ({ ...DEFAULT_LIMITS, ...env.limits });

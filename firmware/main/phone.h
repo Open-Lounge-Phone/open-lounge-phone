@@ -30,6 +30,12 @@ typedef struct {
   int vm_max_ms;       // voicemail: the longest message accepted
   char held[65];       // offhook / dialing / incall: a call this phone put on hold ("" = none)
   bool transfer_pending;  // incall: the next key transfers the call to that key's person
+  // dialing: waiting in a public line's queue (call.state.queue): the place in line (0 = not
+  // shown), how many wait, and whether key 1 leaves a voicemail instead.
+  bool queued;
+  int queue_pos;
+  int queue_size;
+  bool queue_vm;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */

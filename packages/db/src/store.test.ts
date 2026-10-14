@@ -865,3 +865,85 @@ describe("0021_voicemail_play", () => {
     old.db.close();
   });
 });
+
+describe("0022_public_lines", () => {
+  it("keeps groups, phones and voicemail; line addresses share the handle namespace", async () => {
+    const old = openBefore("0022");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Olga", handle: "olga" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Acme", timeZone: "UTC", guardianName: "Olga", accountId: owner?.id, type: "team" },
+      T0,
+    );
+    const group = await s.workplace.createGroup(
+      {
+        householdId: hh.id,
+        name: "Support",
+        strategy: "simultaneous",
+        ringSeconds: 20,
+        members: [guardian.id],
+      },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const desk = await s.claimPairing(
+      { code, householdId: hh.id, name: "Desk", ownerUserId: guardian.id },
+      T0,
+    );
+    if (!desk) throw new Error("pairing failed");
+    // A key, and a handle someone released (it stays theirs for 90 days).
+    old.db.exec(`
+      INSERT INTO buttons (device_id, idx, user_id) VALUES ('${desk.id}', 0, '${guardian.id}');
+      INSERT INTO released_handles (handle, account_id, released_at)
+        VALUES ('old-name', '${owner?.id}', ${T0});
+    `);
+    expect(migrate(old.db)).toContain("0022_public_lines.sql");
+    expect((await s.workplace.group(group.id))?.members).toEqual([guardian.id]);
+    expect(await s.listButtons(desk.id)).toEqual(new Map([[0, guardian.id]]));
+    // Taken by an account, reserved, or free.
+    expect(await s.lines.setHandle(group.id, hh.id, "olga", T0)).toBe(false);
+    expect(await s.lines.setHandle(group.id, hh.id, "old-name", T0)).toBe(false);
+    expect(await s.lines.setHandle(group.id, hh.id, "acme-help", T0)).toBe(true);
+    expect(await s.lines.get(group.id)).toMatchObject({
+      handle: "acme-help",
+      enabled: false,
+      who: "anyone",
+      queue: true,
+      queueMax: 10,
+      queueWaitSeconds: 600,
+      atMaxWait: { kind: "voicemail" },
+    });
+    // Now nobody else may take it: not an account, a room or another line.
+    expect(await s.handleAvailable("acme-help", T0)).toBe(false);
+    expect(
+      await s.rooms.create(
+        {
+          householdId: hh.id,
+          kind: "phone",
+          name: "Room",
+          handle: "acme-help",
+          ownerAccount: null,
+          access: "space",
+        },
+        T0,
+      ),
+    ).toBeUndefined();
+    expect(await s.setHandle(owner?.id as string, "acme-help", T0 + 1)).toBe(false);
+    // A line on a phone's key, removed with the phone's other entries.
+    const ln = await s.lines.addToPhone(desk.id, "Help@Far.Example", "Help");
+    await s.setButton(desk.id, 1, ln);
+    expect(await s.listButtons(desk.id)).toEqual(
+      new Map([
+        [0, guardian.id],
+        [1, ln],
+      ]),
+    );
+    expect(await s.getContact(desk.id, ln)).toMatchObject({ label: "Help", deviceCanCall: true });
+    await s.removeContact(desk.id, ln);
+    expect(await s.listButtons(desk.id)).toEqual(new Map([[0, guardian.id]]));
+    // Deleting the group drops its line (the address is free again).
+    await s.workplace.deleteGroup(group.id);
+    expect(await s.lines.byHandle("acme-help")).toBeUndefined();
+    old.db.close();
+  });
+});

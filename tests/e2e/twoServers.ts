@@ -650,3 +650,59 @@ export async function rotateMidCall(jesse: Person, bob: Person) {
   const ours = (await api(jesse, "/admin/audit")).json as { action: string }[];
   expect(ours.map((e) => e.action)).toContain("fedkey.rotate");
 }
+
+/**
+ * A public line (docs/workplace.md "Public lines"): Dora's shop on server A publishes its
+ * "Orders" ring group as `shop-orders@<A>` after confirming the warning. Bob on server B calls
+ * it without any connection; nobody in the group is free, so he waits in line (his place shows),
+ * then leaves a voicemail instead. His own server relays the line's offer; the message lands in
+ * the group's shared box on A, and the line's recent callers show his verified address.
+ */
+export async function publicLineAcross(server: ServerTarget, bob: Person) {
+  const doraHome = await signUp(server, "dora", "Dora");
+  const made = await api(doraHome, "/spaces", { body: { name: "Shop", type: "team" } });
+  expect(made.status, JSON.stringify(made.json)).toBe(201);
+  const dora: Person = { ...doraHome, householdId: made.json.household.id };
+  const group = await api(dora, "/groups", {
+    body: { name: "Orders", extension: "400", members: [made.json.user.id] },
+  });
+  expect(group.status, JSON.stringify(group.json)).toBe(201);
+  const path = `/groups/${group.json.id}/line`;
+  expect((await api(dora, path, { method: "PUT", body: { handle: "shop-orders" } })).status).toBe(
+    200,
+  );
+  // Public only once the warning is confirmed.
+  const unconfirmed = await api(dora, path, { method: "PUT", body: { enabled: true } });
+  expect(unconfirmed.status).toBe(409);
+  const on = await api(dora, path, {
+    method: "PUT",
+    body: { enabled: true, confirm: true, displayName: "Shop orders" },
+  });
+  expect(on.status, JSON.stringify(on.json)).toBe(200);
+  const address = on.json.line.address as string;
+  expect(address).toBe(`shop-orders@${new URL(server.origin).host}`);
+
+  // Dora has no app open: nobody is free, and Bob waits in line.
+  const bApp = await appSocket(bob);
+  bApp.send({ t: "call.line", address });
+  let queued: Record<string, unknown> | undefined;
+  for (let named = false; !queued; ) {
+    const m = await bApp.next("call.state");
+    expect(m.state).toBe("ringing");
+    if ((m.line as { name?: string } | undefined)?.name === "Shop orders") named = true;
+    if (m.queue) queued = m;
+    if (queued) expect(named).toBe(true);
+  }
+  expect(queued.queue).toEqual({ position: 1, size: 1, voicemail: true });
+  bApp.send({ t: "call.voicemail", callId: queued.callId as string });
+  const ended = await endedState(bApp);
+  expect(ended).toMatchObject({ reason: "voicemail", voicemail: { name: "Orders" } });
+  const ticket = (ended.voicemail as { ticket: string }).ticket;
+  const res = await leaveMessage(bob.server, ticket, new Uint8Array([9, 8, 7, 6]), 2500);
+  expect(res.status).toBe(201);
+  const inbox = await api(dora, "/voicemails");
+  expect(inbox.json).toMatchObject([{ box: "Orders", fromLabel: "Bob" }]);
+  const callers = await api(dora, `${path}/callers`);
+  expect(callers.json[0]).toMatchObject({ address: bob.address, outcome: "voicemail" });
+  bApp.ws.close();
+}

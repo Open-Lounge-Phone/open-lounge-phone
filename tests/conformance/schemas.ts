@@ -50,9 +50,13 @@ export const PROTOCOL_SCHEMAS: Record<string, z.ZodType> = {
 
 /**
  * Enum values and union variants added within v1 behind a federation feature (`compare`'s
- * `gated`), by schema. Empty: v1 has added none so far.
+ * `gated`), by schema.
  */
-export const GATED: Record<string, string[]> = {};
+export const GATED: Record<string, string[]> = {
+  // Feature `public-lines`: the `line` call target.
+  CallTarget: ["#line"],
+  CallBody: ["to#line"],
+};
 
 export const snapshotAll = (schemas: Record<string, z.ZodType>): Record<string, JsonSchema> =>
   Object.fromEntries(Object.entries(schemas).map(([k, s]) => [k, snapshotOf(s)]));

@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -251,6 +251,15 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 | `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
 | `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } \| { extension: string (`^[0-9]{2,6}$`) } \| { groupId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
 | `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
+
+### `call.voicemail`
+
+Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
 
 ### `room.leave`
 
@@ -494,7 +503,8 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24) } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
+| `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 
 ### `call.state`
 
@@ -512,6 +522,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`
 
@@ -682,6 +694,15 @@ Call a household phone that a connection's guardian put you on the allow-list of
 | `connectionId` | string (len ≤64) | yes |  |
 | `deviceId` | string (len ≤64) | yes |  |
 
+### `call.line`
+
+Call a public line (a team's or organization's published ring group) on this server or another one; no connection needed. When nobody is free you may wait in line (`call.state.queue`). Kids' phones never may. A line that doesn't exist, is off, or doesn't take your call answers `ended` `unavailable`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `address` | string (len ≥3, len ≤300) | yes | The line's address, `handle@host`. |
+
 ### `presence.set`
 
 Whether this person is taking app-to-app calls (persisted).
@@ -758,6 +779,15 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 | `callId` | string (len ≤64) | yes | The call to hand over (the other person in it is transferred). |
 | `to` | { button: integer (≥0, ≤15) } \| { userId: string (len ≤64) } \| { deviceId: string (len ≤64) } \| { connectionId: string (len ≤64) } \| { extension: string (`^[0-9]{2,6}$`) } \| { groupId: string (len ≤64) } |  | Blind transfer: ring this target for them; you leave at once. Allowed only if they could call the target themselves. |
 | `toCall` | string (len ≤64) |  | Attended transfer: your other call (consult); the two other people are connected and you leave both calls. |
+
+### `call.voicemail`
+
+Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
 
 ### `room.join`
 
@@ -961,7 +991,8 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24) } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
+| `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 
 ### `call.state`
 
@@ -979,6 +1010,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`
 

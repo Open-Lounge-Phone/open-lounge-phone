@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { afterHoursText, auditText, hoursText } from "./workplaceText.ts";
+import { afterHoursText, auditText, hoursText, queueText } from "./workplaceText.ts";
+
+describe("public line words", () => {
+  it("the caller's place in line", () => {
+    expect(queueText({ position: 1, size: 3 })).toBe("You're next in line");
+    expect(queueText({ position: 2, size: 3 })).toBe("You're 2nd in line");
+    expect(queueText({ position: 23 })).toBe("You're 23rd in line");
+    expect(queueText({ voicemail: true })).toBe("Waiting in line");
+  });
+  it("audit entries", () => {
+    expect(auditText("line.enable", { address: "help@acme.example" })).toBe(
+      "made help@acme.example public (confirmed the warning)",
+    );
+    expect(auditText("line.block", { value: "far.example" })).toBe(
+      "blocked far.example from the public lines",
+    );
+  });
+});
 
 describe("workplace words", () => {
   it("hours", () => {

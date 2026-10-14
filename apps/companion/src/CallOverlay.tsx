@@ -4,6 +4,7 @@ import { canLeaveVoicemail } from "./calls.ts";
 import type { Connection, Snapshot } from "./connection.ts";
 import { LeaveVoicemail } from "./LeaveVoicemail.tsx";
 import { endReasonText, formatDuration } from "./text.ts";
+import { queueText } from "./workplaceText.ts";
 
 interface Props {
   snap: Snapshot;
@@ -195,6 +196,15 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
               {call.label.slice(0, 1).toUpperCase()}
             </div>
             <div className="who">{call.label}</div>
+            {call.phase === "outgoing" && call.line?.description && (
+              <div className="muted small">{call.line.description}</div>
+            )}
+            {call.phase === "incoming" && call.address && (
+              <div className="muted small">
+                {call.address}
+                {call.line ? ` · calling ${call.line}` : ""}
+              </div>
+            )}
             {(call.phase === "active" || call.phase === "connecting") && call.recording && (
               <div className="recording-mark" role="status">
                 <span className="rec-dot" aria-hidden /> Recording · this call is recorded by{" "}
@@ -203,7 +213,8 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
             )}
             <div className="what">
               {call.phase === "incoming" && "is calling…"}
-              {call.phase === "outgoing" && (call.ringing ? "Ringing…" : "Calling…")}
+              {call.phase === "outgoing" &&
+                (call.queue ? queueText(call.queue) : call.ringing ? "Ringing…" : "Calling…")}
               {call.phase === "connecting" && "Connecting…"}
               {call.phase === "active" &&
                 (call.hold === "them"
@@ -240,6 +251,15 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                     Answer
                   </button>
                 </>
+              )}
+              {call.phase === "outgoing" && call.queue?.voicemail && (
+                <button
+                  type="button"
+                  className="round"
+                  onClick={() => conn.leaveVoicemailInstead()}
+                >
+                  Leave a voicemail instead
+                </button>
               )}
               {(call.phase === "outgoing" ||
                 call.phase === "connecting" ||

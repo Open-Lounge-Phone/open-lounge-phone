@@ -355,3 +355,34 @@ describe("dialing an extension (team/org spaces)", () => {
     });
   });
 });
+
+describe("public lines (waiting in a queue)", () => {
+  const queued = (q: { position?: number; size?: number; voicemail?: boolean }): DeviceInput => ({
+    type: "server",
+    msg: { t: "call.state", callId: "c1", state: "ringing", queue: q },
+  });
+
+  it("keeps the place in line; key 1 leaves a voicemail instead; ringing again clears it", () => {
+    const waiting = run([hook("up"), button(3), queued({ position: 2, size: 2, voicemail: true })]);
+    expect(waiting.state).toEqual({
+      kind: "dialing",
+      button: 3,
+      callId: "c1",
+      queue: { position: 2, size: 2, voicemail: true },
+    });
+    expect(soundFor(waiting.state)).toBe("hold");
+    const pressed = run([button(0)], waiting.state);
+    expect(pressed.sent).toEqual([{ t: "call.voicemail", callId: "c1" }]);
+    expect(pressed.state).toEqual(waiting.state);
+    const again = run([callState("c1", "ringing")], waiting.state).state;
+    expect(again).toEqual({ kind: "dialing", button: 3, callId: "c1" });
+    expect(soundFor(again)).toBe("ringback");
+  });
+
+  it("key 1 does nothing when the line doesn't offer voicemail, or nobody waits", () => {
+    const waiting = run([hook("up"), button(3), queued({ position: 1, size: 1 })]).state;
+    expect(run([button(0)], waiting).sent).toEqual([]);
+    const ringingOnly = run([hook("up"), button(3), callState("c1", "ringing")]).state;
+    expect(run([button(0)], ringingOnly).sent).toEqual([]);
+  });
+});

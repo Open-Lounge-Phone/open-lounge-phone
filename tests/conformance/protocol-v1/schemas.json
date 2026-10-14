@@ -589,6 +589,28 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "call.voicemail"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "callId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "room.leave"
           },
           "id": {
@@ -1377,9 +1399,28 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 24
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
               }
             },
             "required": ["label"]
+          },
+          "line": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "from"]
@@ -1523,6 +1564,39 @@
               }
             },
             "required": ["by"]
+          },
+          "queue": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "voicemail": {
+                "type": "boolean"
+              }
+            }
+          },
+          "line": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "state"]
@@ -2157,6 +2231,27 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "call.line"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "address": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": ["t", "address"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "presence.set"
           },
           "id": {
@@ -2411,6 +2506,28 @@
             ]
           },
           "toCall": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "callId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.voicemail"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
@@ -3070,9 +3187,28 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 24
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
               }
             },
             "required": ["label"]
+          },
+          "line": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "from"]
@@ -3216,6 +3352,39 @@
               }
             },
             "required": ["by"]
+          },
+          "queue": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "voicemail": {
+                "type": "boolean"
+              }
+            }
+          },
+          "line": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "state"]

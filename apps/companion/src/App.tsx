@@ -631,6 +631,7 @@ function SignedIn({
             onBack={() => setRoute({ name: "home" })}
             onCall={(c) => void conn?.callConnection(c.id, c.name)}
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
+            onCallLine={(address) => void conn?.callLine(address)}
           />
         )}
         {me && route.name === "rooms" && (

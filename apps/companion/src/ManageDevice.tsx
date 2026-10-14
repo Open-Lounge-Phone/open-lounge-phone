@@ -47,6 +47,12 @@ export function ManageDevice({
   /** The space's rooms, and which are on this phone (`rk_…` id by room id). */
   const [spaceRooms, setSpaceRooms] = useState<RoomSummary[]>([]);
   const [phoneRooms, setPhoneRooms] = useState<{ id: string; roomId: string; label: string }[]>([]);
+  /** Public lines on this phone's keys (`ln_…`). */
+  const [phoneLines, setPhoneLines] = useState<{ id: string; address: string; label: string }[]>(
+    [],
+  );
+  const [lineAddress, setLineAddress] = useState("");
+  const [lineLabel, setLineLabel] = useState("");
   /** A fresh copy of the phone (last seen and software change while it's connected). */
   const [fresh, setFresh] = useState<DeviceSummary>();
   const [error, setError] = useState<string>();
@@ -62,6 +68,7 @@ export function ManageDevice({
       ]);
       setSpaceRooms(rooms?.rooms ?? []);
       setPhoneRooms(c.rooms ?? []);
+      setPhoneLines(c.lines ?? []);
       setFresh(list?.find((d) => d.id === deviceId));
       setUsers(u);
       setContacts(c.contacts);
@@ -97,7 +104,7 @@ export function ManageDevice({
   };
   const byId = new Map(contacts.map((c) => [c.id, c]));
   // Rooms are on the list too (`rk_…`), but they're edited in their own section.
-  const peopleListed = contacts.filter((c) => !c.id.startsWith("rk_"));
+  const peopleListed = contacts.filter((c) => !c.id.startsWith("rk_") && !c.id.startsWith("ln_"));
   const onPhone = new Set(phoneRooms.map((r) => r.roomId));
   const roomsAddable = spaceRooms.filter((r) => !onPhone.has(r.id));
   const others = users.filter((u) => !byId.has(u.id));
@@ -239,6 +246,60 @@ export function ManageDevice({
               ))}
             </div>
           )}
+        </>
+      )}
+
+      {device?.ownerUserId && device.kind !== "lounge" && (
+        <>
+          <h3>Public lines</h3>
+          <p className="muted small">
+            A business's line, like support@example.org: anyone may call it without connecting
+            first. Put one on a key below. (Kids' phones can't call public lines.)
+          </p>
+          <ul className="stack">
+            {phoneLines.map((l) => (
+              <li key={l.id} className="row">
+                <span className="grow">
+                  {l.label} <span className="muted small">{l.address}</span>
+                </span>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => void run(() => api.removeLineFromPhone(deviceId, l.id))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="row wrap"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(() =>
+                api.addLineToPhone(deviceId, lineAddress.trim(), lineLabel.trim().slice(0, 24)),
+              );
+              setLineAddress("");
+              setLineLabel("");
+            }}
+          >
+            <input
+              aria-label="Line address"
+              placeholder="support@example.org"
+              value={lineAddress}
+              onChange={(e) => setLineAddress(e.target.value)}
+            />
+            <input
+              aria-label="Key label"
+              placeholder="Label, e.g. Support"
+              maxLength={24}
+              value={lineLabel}
+              onChange={(e) => setLineLabel(e.target.value)}
+            />
+            <button type="submit" disabled={!lineAddress.includes("@") || !lineLabel.trim()}>
+              Add line
+            </button>
+          </form>
         </>
       )}
 

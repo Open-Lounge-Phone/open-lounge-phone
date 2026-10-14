@@ -75,6 +75,91 @@ Voicemail inbox marked "in Support's shared box"; `voicemail.inbox` carries `box
 member to play one marks it **heard by** them (`heardByName`), for everyone. The box goes when
 the group is deleted (audio included); retention follows the space's voicemail setting.
 
+## Public lines
+
+A ring group can be published as a **public line**: an address of its own, like
+`orders@acme.example`, that anyone may call from their own phone or app, on any server, without
+knocking or connecting first. It is the one exception to knock-first (see
+[security-model.md](security-model.md)), so it is **off by default** and every rule below can only
+make it stricter.
+
+- **Only owners and admins of a team or organization space** can publish one (homes have no ring
+  groups). `PUT /api/groups/:id/line {handle}` gives the group its address (it starts off); the
+  handle shares the namespace of people's and rooms' handles (reserved and recently released
+  handles included). Turning it on needs `{enabled: true, confirm: true}`: the companion shows the
+  warning first, in these words: "Anyone on a server you haven't blocked can call this line.
+  Their verified address shows on every call, and you can block people and whole servers."
+  Publishing, turning off, changing the address and every setting go into the audit trail.
+  `DELETE /api/groups/:id/line` frees the address.
+- **Callers:** any person on this server or another one, from their app, their personal desk
+  phone (a line can sit on a speed-dial key: `PUT /api/devices/:id/lines {address, label}`), or a
+  Lounge phone they're signed in at. **Never a kids' phone:** its own server refuses the call
+  (`denied`, "Kids' phones can't call public lines"), a line can't be put on its keys, and a
+  line's server refuses any call flagged as coming from a kids' phone. Members of a line are
+  people; their own phones ring, never a kids' phone.
+- **Members see who is calling:** the caller's verified address (`handle@host`, vouched for by
+  their server's signature) shows with the name on every ring.
+- **No enumeration:** a line that doesn't exist, is off, or doesn't take this caller (blocked, not
+  allowed, over a limit, a kids' phone) answers exactly like an unavailable one (`ended`
+  `unavailable`).
+- **Calling:** `call.line {address}` from the companion (Connections → Call a public line) or a
+  key on a personal phone. The first `call.state ringing` carries `line {name, description,
+  address}`.
+
+### The queue
+
+When nobody in the group is free (all busy, offline, not taking calls, or the ring time passed
+without an answer), the caller waits in the line's **queue**, first come first served. They get
+`call.state ringing` with `queue {position, size, voicemail}`, again whenever their place changes.
+When a member frees up, the line rings for the caller at the front (a `ringing` without `queue`);
+if nobody answers, they go back to their place. At any time the caller may **leave a voicemail
+instead** (`call.voicemail {callId}`; the call ends with the line's voicemail offer, into the
+group's shared box). The companion shows "You're 2nd in line" and a "Leave a voicemail instead"
+button; a phone shows `IN LINE 2` / `1 VOICEMAIL` and key 1 leaves the message. The longest wait
+(10 minutes by default) does what the line says (below); a full queue (10 by default) sends the
+next caller to voicemail at once (`busy` with the offer). Outside business hours the group's
+after-hours action applies and nobody queues. The queue survives the server sleeping: each
+waiting call keeps its place and its longest wait.
+
+### Settings
+
+`GET /api/groups/:id/line` and `PUT /api/groups/:id/line` (owner and admins; the companion: Admin
+→ Ring groups → a group → Public line).
+
+| Setting | Default | What it does |
+|---|---|---|
+| `who` | `anyone` | `anyone` on a server that isn't blocked; `connections`: the space's members and people with an active connection to one of them; `allowlist`: only the servers (`partner.example`) and addresses (`ann@far.example`) in `allow` |
+| `displayName`, `description` | the group's name, none | what callers see (64 and 140 characters) |
+| ring mode, ring time, members, business hours, after-hours action | the group's own | as for any ring group (above) |
+| `queue` | on | off: nobody free goes straight to voicemail (or ends as unavailable without voicemail) |
+| `queueMax` | 10 | most callers waiting (1-50); the next one is offered voicemail |
+| `queueWaitSeconds` | 600 | the longest wait (30 s to 1 hour) |
+| `atMaxWait` | voicemail | `voicemail`; `group` (ring another ring group of the space, once); `user` (ring a member); `end` (with an optional `message`) |
+| `showPosition` | on | off: callers see "Waiting in line" without a number |
+| `offerVoicemail` | on | "Leave a voicemail instead" while waiting |
+| `voicemail` | on | off: no voicemail at all (no offer when the call isn't answered, the longest wait ends the call) |
+| greeting | the spoken default | `PUT /api/groups/:id/line/greeting?kind=custom&durationMs=` (raw audio, 30 s), `DELETE` for the default |
+| `callerPerHour`, `serverPerHour` | the server's: 10 and 300 | calls per hour from one address, and from one other server's people; a line can only be stricter |
+
+### Blocking and recent callers
+
+`GET /api/groups/:id/line/callers` lists the line's recent callers (newest first, the last 100):
+verified address, name, when, and how it went (`answered`, `voicemail`, `missed`, `hung up`,
+`closed`, `line full`, `nobody free`, `refused`). From there an admin can block **the person or
+their whole server**: `POST /api/space/line-blocks {entry: "ann@far.example" | "far.example"}`
+(one list for all the space's public lines; `GET` lists it, `DELETE
+/api/space/line-blocks/:kind/:value` lifts a block). The server operator's blocklist applies
+before any of this. Recent callers follow the space's history retention.
+
+### Across servers
+
+A line on another server is called through `/fed/v1/calls` with the target `{kind: "line",
+handle}` (federation feature `public-lines`; a server that doesn't list it is never asked, and the
+caller hears "That server doesn't take calls to public lines yet"). Queue updates travel as
+`call.state` on the server-pair stream, the caller's server sends `call.voicemail` to stop
+waiting, and the line's server offers its own box with `ended`; the caller's own server relays the
+greeting and the message, as for a transfer. See [federation-spec.md](federation-spec.md).
+
 ## Call log and audit trail (admins)
 
 - `GET /api/space/calls` — the space's call log, one row per party here (who, which direction,
@@ -82,7 +167,8 @@ the group is deleted (audio included); retention follows the space's voicemail s
   /api/space/calls.csv` exports it (spreadsheet formulas in names are defused); the export is
   itself audited.
 - `GET /api/space/audit` — who changed what: extensions, ring groups, hours, roles, invites,
-  removed people, phones added and removed, privacy and recording settings.
+  removed people, phones added and removed, privacy and recording settings, public lines and
+  their blocklist.
 
 Both are kept as long as the space's history retention (`PUT /api/space/privacy`), and deleted
 by the same sweep as call history.

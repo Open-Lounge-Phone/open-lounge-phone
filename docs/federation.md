@@ -14,7 +14,8 @@ hub is just one more server.
 Design choices:
 - **Knock, then talk.** Anyone may send one contact request (a *knock*) to `name@server`. It is
   rate-limited and blockable, and calling works only after it's accepted. Kids' phones are never
-  knockable.
+  knockable. The one exception: a team's or organization's **public line**, which it publishes on
+  purpose for anyone to call ([workplace.md](workplace.md#public-lines)).
 - **No regular phone network, ever.** No PSTN or phone-number bridge: a closed, spam-free
   network.
 - **Onboarding = a public hub plus people's own servers.** `hub.openloungephone.app` has open
@@ -184,7 +185,7 @@ change). The endpoints:
 | `POST /fed/v1/knock` | `{from, to: handle, note?}` | always `202` |
 | `POST /fed/v1/connections/accept` | `{from, to: handle}` — `from` accepts `to`'s knock | `202` (ignored unless `to` knocked `from`) |
 | `POST /fed/v1/connections/remove` | `{from, to: handle}` — disconnect / cancel / block | `202` |
-| `POST /fed/v1/calls` | `{callId, from, to: {kind: "person", handle} \| {kind: "phone", deviceId}, viaPhone?, guestOf?}` | `{state: "ringing"}` or `{state: "ended", reason}` |
+| `POST /fed/v1/calls` | `{callId, from, to: {kind: "person", handle} \| {kind: "phone", deviceId} \| {kind: "line", handle}, viaPhone?, guestOf?}` | `{state: "ringing"}` or `{state: "ended", reason}` (a `line` may add its `voicemail` offer) |
 | `GET /fed/v1/stream?from=<host>` | WebSocket: the server-pair stream (below) | `101` |
 | `POST /fed/v1/voicemail?to=<deviceId>&from=&fromId=&name=&durationMs=` | raw `audio/*`, ≤ 2 MB | `201`, or `403` if not on the phone's allow-list |
 | `POST /fed/v1/voicemail?kind=person&to=<handle>&from=&fromId=&name=&durationMs=&via=` | raw `audio/*`, ≤ 2 MB — for a person (`via`: the kid's phone that called, through its guardian) | `201`, or `403` without an active connection |

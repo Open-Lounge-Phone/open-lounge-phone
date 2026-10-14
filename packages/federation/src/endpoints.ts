@@ -111,12 +111,13 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
       {
         status: 200,
         schema: CallResult,
-        note: "`ringing`, or `ended` with a reason; never a `voicemail` offer (that is the caller's server's to make).",
+        note: "`ringing`, or `ended` with a reason; never a `voicemail` offer (that is the caller's server's to make), except for a `line` target, whose server offers its own box.",
       },
     ],
     rules: [
       "Decided by the receiver alone: an active connection with `from` by stable id (for a phone, an allow-list entry through such a connection with `canCallDevice`), no block of the person or server, then quiet hours (`voicemail`), reachability, availability and busy.",
       "`guest` targets are accepted only from the server that vouched for that guest at that Lounge phone.",
+      "`line` targets (feature `public-lines`) need no connection: the receiver checks that the line is published, its blocklist and the operator's, who the line takes (anyone, people connected to the space, or an allow-list), its limits per caller and per server, and refuses calls from kids' phones (`viaPhone`). Every refusal answers `ended` `unavailable`, the same as a line that doesn't exist. While nobody is free the caller may wait: `call.state` `ringing` with `queue` updates travel on the stream, the caller's server may send `call.voicemail` to stop waiting, and the line's `ended` carries its own `voicemail` offer, which the caller's server relays.",
       "Signaling for `callId` then travels on the server-pair stream.",
     ],
   },

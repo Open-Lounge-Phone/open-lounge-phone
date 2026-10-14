@@ -18,6 +18,7 @@ import {
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
+import { admitLineCall } from "./lines.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 
 /** A call to ring here on behalf of someone elsewhere (see `HouseholdHub.remoteRing`). */
@@ -32,7 +33,9 @@ export interface RemoteRing {
     | { kind: "person"; userId: string }
     | { kind: "phone"; deviceId: string; contactId: string }
     /** A Lounge phone here where the caller's server's account is a guest. */
-    | { kind: "guest"; deviceId: string; guestId: string };
+    | { kind: "guest"; deviceId: string; guestId: string }
+    /** A public line (a published ring group), already admitted by `admitLineCall`. */
+    | { kind: "line"; groupId: string };
   /** Ring only here: a branch of a call another household here owns (no further fan-out). */
   noBranches?: boolean;
   /** The caller, for the call log: `handle@host`. */
@@ -129,6 +132,32 @@ export class FedCalls implements CallLinks {
         ...(body.viaPhone ? { fromKidsPhone: true } : {}),
       });
     }
+    if (body.to.kind === "line") {
+      // A public line: no connection needed, the line's own rules instead. Every refusal looks
+      // like an unavailable line (unknown, off, blocked, not allowed, over a limit, kids' phone).
+      const unavailable = { state: "ended", reason: "unavailable" } as const;
+      const line = await store.lines.byHandle(body.to.handle);
+      if (!line?.enabled) return unavailable;
+      const address = `${from.handle}@${host || ownHost(this.env)}`;
+      const admitted = await admitLineCall(this.env, line, {
+        address,
+        host,
+        accountId: from.id,
+        name: from.name,
+        kidsPhone: !!body.viaPhone,
+      });
+      if (!admitted) return unavailable;
+      await this.register(host, body.callId, line.householdId);
+      return this.live.ringRemote(line.householdId, {
+        callId: body.callId,
+        host,
+        key,
+        address,
+        label: from.name.slice(0, 24),
+        target: { kind: "line", groupId: line.groupId },
+        ...(peerHousehold ? { peerHousehold } : {}),
+      });
+    }
     if (body.to.kind === "guest") {
       // The guest's own server rings its account at our Lounge phone; the hub checks that this
       // server is the one that vouched for the guest there.
@@ -174,6 +203,7 @@ export class FedCalls implements CallLinks {
     const needs: Feature[] = [
       ...(body.recording ? (["recording-flag"] as const) : []),
       ...(body.to.kind === "guest" ? (["lounge-guests"] as const) : []),
+      ...(body.to.kind === "line" ? (["public-lines"] as const) : []),
     ];
     for (const feature of needs) {
       if (!(await peerSupports(this.env, host, feature))) {

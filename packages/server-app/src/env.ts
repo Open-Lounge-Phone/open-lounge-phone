@@ -235,6 +235,11 @@ export interface PeerInfo {
   kidsPhone?: boolean;
   /** A phone whose client can record calls (the browser phone; not yet firmware). */
   canRecord?: boolean;
+  /**
+   * Remote peers: someone calling one of our public lines. They get the line's queue updates
+   * (`call.state ringing` + `queue`) and its voicemail offer, through their server.
+   */
+  line?: boolean;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */
@@ -268,6 +273,33 @@ export interface RoomSnapshot {
   recording?: { by: string; ours: boolean };
   /** Never recorded (e.g. we called a kids' phone elsewhere). */
   noRecording?: boolean;
+  /** A call to one of our public lines: its place in the line's queue. */
+  line?: LineCallState;
+  /** A call to a public line elsewhere: its queue updates and voicemail offer pass through. */
+  farLine?: boolean;
+}
+
+/** A call to a public line, waiting in its queue or ringing its members (see the hub). */
+export interface LineCallState {
+  /** The line's ring group (the queue it waits in). */
+  groupId: string;
+  /** What the caller and the members see of the line. */
+  info: import("@openloungephone/protocol").LineInfo;
+  /** Who's calling: their verified address and name (for members and "Recent callers"). */
+  address: string;
+  name: string;
+  /** When they joined the line: their place in it. */
+  since: number;
+  /** Waiting in line now; false while the line rings its members (or after it's answered). */
+  waiting: boolean;
+  /** When the line's longest wait runs out. */
+  waitUntil: number;
+  /** The longest wait ran out while members were ringing: it applies when that ends. */
+  expired?: boolean;
+  /** Left the line for good (voicemail, overflow): never queues again. */
+  done?: boolean;
+  /** The queue update last sent to the caller (only changes are sent). */
+  sent?: string;
 }
 
 /** A call ringing a ring group, step by step (see `huntSteps` in `packages/core`). */
