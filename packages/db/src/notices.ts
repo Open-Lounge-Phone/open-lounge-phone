@@ -88,9 +88,12 @@ export class NoticeStore {
     now: number,
   ): Promise<Notice> {
     const id = newId("ntc");
+    // Strictly after the space's latest notice, so "the newest" is never a tie (two posts in the
+    // same millisecond would otherwise fall back to comparing random ids).
     await this.sql.run(
       `INSERT INTO notices (id, household_id, created_by, author_name, line1, line2, device_ids,
-         created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?,
+         MAX(?, COALESCE((SELECT MAX(created_at) + 1 FROM notices WHERE household_id = ?), 0)), ?)`,
       id,
       n.householdId,
       n.createdBy,
@@ -99,6 +102,7 @@ export class NoticeStore {
       n.lines[1] ?? null,
       n.deviceIds ? JSON.stringify(n.deviceIds) : null,
       now,
+      n.householdId,
       n.expiresAt,
     );
     return (await this.get(id)) as Notice;

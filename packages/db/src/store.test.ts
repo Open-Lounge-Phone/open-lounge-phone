@@ -1037,6 +1037,34 @@ describe("0023_line_callbacks", () => {
 });
 
 describe("0024_notices", () => {
+  it("two notices posted in the same millisecond: the later one is newer, never a tie", async () => {
+    const old = openBefore("0024");
+    const s = new Store(old.sql);
+    migrate(old.db);
+    const owner = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: owner?.id },
+      T0,
+    );
+    const make = (text: string) =>
+      s.notices.create(
+        {
+          householdId: hh.id,
+          createdBy: guardian.id,
+          authorName: "Mom",
+          lines: [text],
+          deviceIds: null,
+          expiresAt: T0 + 60_000,
+        },
+        T0,
+      );
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) ids.push((await make(`N${i}`)).id);
+    const live = await s.notices.live(hh.id, T0 + 1);
+    expect(live.map((x) => x.id)).toEqual([...ids].reverse());
+    expect(new Set(live.map((x) => x.createdAt)).size).toBe(6);
+  });
+
   it("keeps spaces and phones; notices come, are dismissed per phone, and are swept", async () => {
     const old = openBefore("0024");
     const s = new Store(old.sql);
