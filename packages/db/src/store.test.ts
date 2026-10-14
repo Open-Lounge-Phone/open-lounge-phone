@@ -1341,3 +1341,53 @@ describe("sign-in records", () => {
     expect(await store.auth.sessions(guardian.accountId, 0)).toHaveLength(1);
   });
 });
+
+describe("0028 add-ons", () => {
+  it("keeps everything as it was; add-ons link only with an add-on's code and go with their owner", async () => {
+    const old = openBefore("0028");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code: phoneCode } = await s.createPairing(KEY, T0);
+    const phone = await s.claimPairing({ code: phoneCode, householdId: hh.id, name: "Kid" }, T0);
+    const bob = await s.createAccount({ name: "Bob", handle: "bob" }, T0);
+    old.db.exec(`
+      INSERT INTO connections (id, account_id, peer_host, peer_handle, peer_account, peer_name,
+        state, direction, created_at, updated_at) VALUES ('con_1', '${guardian.accountId}', '',
+        'bob', '${bob?.id}', 'Bob', 'active', 'none', 1, 1);
+    `);
+    const pending = await s.createPairing("p".repeat(43), T0);
+    expect(migrate(old.db)).toEqual(["0028_addons.sql"]);
+    expect(await s.getDevice(phone?.id ?? "")).toMatchObject({ name: "Kid", kind: "kids" });
+    expect((await s.connections.get("con_1"))?.state).toBe("active");
+    // A phone's code stays a phone's: it can't be linked as an add-on.
+    const who = { accountId: guardian.accountId, householdId: hh.id, userId: guardian.id };
+    expect(await s.addons.link({ ...who, code: pending.code, name: "seat" }, T0)).toBe("no_code");
+
+    const { code } = await s.createPairing("a".repeat(43), T0, "ed25519", "addon");
+    expect(await s.peekPairing(code, T0)).toMatchObject({ addon: true, mode: null });
+    // …and an add-on's code is never a phone's.
+    expect(await s.claimPairing({ code, householdId: hh.id, name: "x" }, T0)).toBeUndefined();
+    const addon = await s.addons.link({ ...who, code, name: "Seat" }, T0);
+    if (typeof addon === "string") throw new Error(addon);
+    expect(addon).toMatchObject({ name: "seat", accountId: guardian.accountId });
+    const account = await s.getAccount(guardian.accountId);
+    expect((await s.addons.byAddress(account?.handle ?? "", "SEAT"))?.id).toBe(addon.id);
+    expect(await s.addons.byAddress("bob", "seat")).toBeUndefined();
+    // A second link with the same name is refused; the first code was single use.
+    const { code: code2 } = await s.createPairing("b".repeat(43), T0, "ed25519", "addon");
+    expect(await s.addons.link({ ...who, code: code2, name: "seat" }, T0)).toBe("name_taken");
+    expect(await s.addons.link({ ...who, code, name: "other" }, T0)).toBe("no_code");
+    // Only the owner's own connections can be on its list; they go when the connection goes.
+    await s.addons.setAllowed(addon.id, ["con_1", "con_nope"]);
+    expect(await s.addons.allowed(addon.id)).toEqual(["con_1"]);
+    await s.connections.delete("con_1");
+    expect(await s.addons.allowed(addon.id)).toEqual([]);
+    // The owner leaving the space it was linked in removes it.
+    old.db.exec(`DELETE FROM users WHERE id = '${guardian.id}'`);
+    expect(await s.addons.get(addon.id)).toBeUndefined();
+    old.db.close();
+  });
+});

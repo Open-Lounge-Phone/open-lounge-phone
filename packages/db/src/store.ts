@@ -8,6 +8,7 @@ import {
   sessionShouldSlide,
   type Weekday,
 } from "@openloungephone/core";
+import { AddonStore } from "./addons.ts";
 import {
   AuthStore,
   type InviteRow,
@@ -626,6 +627,8 @@ export class Store {
   readonly notices: NoticeStore;
   /** Sign-in: sessions, recovery codes, outstanding invites and sign-in links. */
   readonly auth: AuthStore;
+  /** Add-ons linked to people's accounts, and who may talk to them. */
+  readonly addons: AddonStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -636,6 +639,7 @@ export class Store {
     this.recordings = new RecordingStore(sql);
     this.notices = new NoticeStore(sql);
     this.auth = new AuthStore(sql);
+    this.addons = new AddonStore(sql);
   }
 
   // --- settings -----------------------------------------------------------
@@ -1594,7 +1598,7 @@ export class Store {
     publicKey: string,
     now: number,
     keyAlg: KeyAlg = "ed25519",
-    kind?: PhoneMode,
+    kind?: PhoneMode | "addon",
   ): Promise<{ code: string; expiresAt: number }> {
     await this.sql.run(
       "DELETE FROM pairings WHERE expires_at <= ? OR public_key = ?",
@@ -1621,7 +1625,9 @@ export class Store {
   async peekPairing(
     code: string,
     now: number,
-  ): Promise<{ publicKey: string; keyAlg: KeyAlg; mode: PhoneMode | null } | undefined> {
+  ): Promise<
+    { publicKey: string; keyAlg: KeyAlg; mode: PhoneMode | null; addon: boolean } | undefined
+  > {
     const r = await this.sql.first<{ public_key: string; key_alg: KeyAlg; kind: string | null }>(
       "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ?",
       code,
@@ -1629,10 +1635,13 @@ export class Store {
     );
     if (!r) return undefined;
     const mode = PHONE_MODES.includes(r.kind as PhoneMode) ? (r.kind as PhoneMode) : null;
-    return { publicKey: r.public_key, keyAlg: r.key_alg, mode };
+    return { publicKey: r.public_key, keyAlg: r.key_alg, mode, addon: r.kind === "addon" };
   }
 
-  /** Claims a pairing code for a household, creating the device. Single use. */
+  /**
+   * Claims a pairing code for a household, creating the device. Single use. Never an add-on's
+   * code (those are linked with `addons.link`).
+   */
   async claimPairing(
     input: {
       code: string;
@@ -1649,7 +1658,7 @@ export class Store {
       key_alg: KeyAlg;
       kind: string | null;
     }>(
-      "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ?",
+      "SELECT public_key, key_alg, kind FROM pairings WHERE code = ? AND expires_at > ? AND (kind IS NULL OR kind != 'addon')",
       input.code,
       now,
     );
@@ -1724,7 +1733,10 @@ export class Store {
    * Remembers removed phones (by id and key) so each is told to wipe itself when it next
    * connects. Rows older than a year are forgotten.
    */
-  async recordRemovedDevices(devices: Device[], now: number): Promise<void> {
+  async recordRemovedDevices(
+    devices: Pick<Device, "id" | "publicKey" | "keyAlg">[],
+    now: number,
+  ): Promise<void> {
     await this.sql.batch([
       {
         query: "DELETE FROM removed_devices WHERE removed_at < ?",

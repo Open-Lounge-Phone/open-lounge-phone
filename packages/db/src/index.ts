@@ -1,3 +1,4 @@
+export * from "./addons.ts";
 export * from "./auth.ts";
 export * from "./connections.ts";
 export * from "./crypto.ts";
