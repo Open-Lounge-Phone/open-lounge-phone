@@ -222,6 +222,19 @@ TEST(phone_asks_a_line_to_call_back) {
   CHECK(s_n == 0);
 }
 
+TEST(phone_marks_an_addon_calling) {
+  phone_state_t s;
+  phone_init(&s);
+  server(&s,
+         "{\"t\":\"call.ringing\",\"callId\":\"c1\",\"from\":{\"label\":\"seat\","
+         "\"address\":\"jo+seat@x.example\",\"kind\":\"addon\"}}");
+  CHECK(s.kind == PH_INCOMING && s.addon);
+  CHECK_STR(s.from, "seat");
+  phone_init(&s);
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c2\",\"from\":{\"label\":\"Mom\"}}");
+  CHECK(s.kind == PH_INCOMING && !s.addon);
+}
+
 TEST(phone_free_lounge_phone_told_to_sign_in_for_a_line) {
   phone_state_t s;
   phone_init(&s);

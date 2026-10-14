@@ -50,6 +50,12 @@ static const char *end_text(const char *r) {
   return NULL;  // hangup, unavailable: no message
 }
 
+void strip_addon_label(char *dst, const char *name) {
+  char buf[96];
+  snprintf(buf, sizeof buf, "%s - ADD-ON", name);
+  clip(dst, strlen(buf) <= STATUS_WIDTH ? buf : name);
+}
+
 void strip_owner_line(char *dst, const phone_config_t *c) {
   char buf[96];
   if (!strcmp(c->owner_mode, "personal") && c->owner_person[0])
@@ -91,6 +97,13 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       return with_name(out, "CALLING", name, "");
     case PH_INCOMING: {
       if (s->callback) return set2(out, s->from, "CALLS YOU BACK");
+      if (s->addon) {
+        char label[STATUS_MAX + 1];
+        strip_addon_label(label, s->from);
+        char name_only[STATUS_MAX + 1];
+        clip(name_only, s->from);
+        return set2(out, label, strcmp(label, name_only) ? "LIFT TO ANSWER" : "ADD-ON CALLING");
+      }
       int n = with_name(out, "", s->from, "CALLING");
       if (n == 1) clip(out[1], "LIFT TO ANSWER");
       return 2;

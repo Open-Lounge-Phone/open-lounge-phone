@@ -110,6 +110,32 @@ TEST(strip_call_me_back) {
   CHECK_STR(out[1], "CALLS YOU BACK");
 }
 
+TEST(strip_labels_an_addon_calling) {
+  phone_state_t ph;
+  phone_init(&ph);
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  ph.kind = PH_INCOMING;
+  ph.addon = true;
+  snprintf(ph.from, sizeof ph.from, "seat");
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "SEAT - ADD-ON");
+  CHECK_STR(out[1], "LIFT TO ANSWER");
+  snprintf(ph.from, sizeof ph.from, "notes taker");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "NOTES TAKER");
+  CHECK_STR(out[1], "ADD-ON CALLING");
+  char label[STATUS_MAX + 1];
+  strip_addon_label(label, "seat");
+  CHECK_STR(label, "SEAT - ADD-ON");
+  // Anyone else: as before.
+  ph.addon = false;
+  snprintf(ph.from, sizeof ph.from, "Mom");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "MOM CALLING");
+}
+
 TEST(strip_names_a_missed_call_back) {
   phone_state_t ph;
   phone_init(&ph);

@@ -924,7 +924,13 @@ static void on_message(char *text) {
     phone_kind_t before = s_phone.kind;
     if (phone_server(&s_phone, m, emit)) {
       if (s_phone.kind == PH_INCOMING && before != PH_INCOMING) {
-        copy(s_active_label, sizeof s_active_label, s_phone.from);
+        if (s_phone.addon) {
+          char label[STATUS_MAX + 1];
+          strip_addon_label(label, s_phone.from);  // ≤ 24 characters: the name fits
+          snprintf(s_active_label, sizeof s_active_label, "%.24s", label);
+        } else {
+          copy(s_active_label, sizeof s_active_label, s_phone.from);
+        }
         menu_close(&s_menu);
       }
       if (s_phone.kind == PH_VOICEMAIL && before != PH_VOICEMAIL) {

@@ -1,5 +1,13 @@
 # Firmware changelog
 
+## 0.9.3 — 2026-10-14: add-on callers
+
+- **Add-ons** (services someone linked to their account, such as an AI companion): when one calls,
+  the phone shows its name with a label, `SEAT - ADD-ON` / `LIFT TO ANSWER` (or the name and
+  `ADD-ON CALLING` when both don't fit on one line), and the label stays on the call screen. The
+  display's font has no middle dot, so the browser phone's `SEAT · ADD-ON` reads `SEAT - ADD-ON`
+  here. Older firmware shows such a call like any other (`SEAT CALLING`).
+
 ## 0.9.2 — 2026-10-14: public lines, notices, call backs
 
 - **Missed call backs**: when a public line calls you back and nobody takes it, your own phone

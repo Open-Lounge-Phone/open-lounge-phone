@@ -213,6 +213,8 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       CPY(s->call_id, id);
       CPY(s->from, from);
       s->callback = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "callback"));
+      const char *kind = str(cJSON_GetObjectItemCaseSensitive(m, "from"), "kind");
+      s->addon = kind && !strcmp(kind, "addon");
     } else if (!(s->call_id[0] && !strcmp(s->call_id, id))) {
       // Busy: decline so the caller hears it at once instead of waiting for a timeout.
       emit_call(emit, "call.hangup", id);

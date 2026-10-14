@@ -47,6 +47,8 @@ typedef struct {
   bool callback;
   // offhook: a Lounge phone with nobody signed in tried a public line (SIGN IN TO CALL).
   bool sign_in;
+  // incoming: the caller is an add-on (call.ringing from.kind "addon"): shown "SEAT - ADD-ON".
+  bool addon;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */
