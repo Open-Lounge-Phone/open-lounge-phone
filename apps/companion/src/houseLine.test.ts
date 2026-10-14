@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { incompleteKeys, indexOfDigit, parseTarget, setKey, targetValue } from "./houseLine.ts";
+import {
+  incompleteKeys,
+  indexOfDigit,
+  keyProblem,
+  parseTarget,
+  setKey,
+  targetValue,
+} from "./houseLine.ts";
 
 describe("house-line keys", () => {
   it("maps digits to button indexes like the phone (0 is the tenth key)", () => {
@@ -39,5 +46,27 @@ describe("house-line keys", () => {
     });
     expect(incompleteKeys(keys)).toEqual([0]);
     expect(setKey(keys, 0, undefined).map((k) => k.index)).toEqual([2, 4]);
+  });
+
+  it("says what's missing on each key, like the server checks it", () => {
+    const user = { kind: "user" as const, userId: "u" };
+    expect(keyProblem({ index: 0, label: "  ", target: user })).toBe("Give it a label.");
+    expect(keyProblem({ index: 0, label: "Desk", target: user })).toBeUndefined();
+    const group = (n: number) => ({
+      index: 1,
+      label: "Staff",
+      target: { kind: "group" as const, userIds: Array.from({ length: n }, (_, i) => `u${i}`) },
+    });
+    expect(keyProblem(group(0))).toBe("Pick at least one person.");
+    expect(keyProblem(group(10))).toBeUndefined();
+    expect(keyProblem(group(11))).toBe("Pick at most 10 people.");
+    const line = (address: string) => ({
+      index: 2,
+      label: "Taxi",
+      target: { kind: "line" as const, address },
+    });
+    expect(keyProblem(line(""))).toMatch(/Enter an address/);
+    expect(keyProblem(line("cabs.example"))).toMatch(/That's a server/);
+    expect(keyProblem(line("taxi@cabs.example"))).toBeUndefined();
   });
 });

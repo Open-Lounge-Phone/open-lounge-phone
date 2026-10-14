@@ -9,6 +9,7 @@ import type {
   User,
 } from "./api.ts";
 import { hostBadge } from "./connectionGroups.ts";
+import { addressProblem, requiredProblem } from "./fields.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
@@ -53,6 +54,7 @@ export function ManageDevice({
   );
   const [lineAddress, setLineAddress] = useState("");
   const [lineLabel, setLineLabel] = useState("");
+  const [lineProblem, setLineProblem] = useState<string>();
   /** A fresh copy of the phone (last seen and software change while it's connected). */
   const [fresh, setFresh] = useState<DeviceSummary>();
   const [error, setError] = useState<string>();
@@ -273,32 +275,57 @@ export function ManageDevice({
             ))}
           </ul>
           <form
-            className="row wrap"
+            className="stack"
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
-              void run(() =>
-                api.addLineToPhone(deviceId, lineAddress.trim(), lineLabel.trim().slice(0, 24)),
+              const problem =
+                addressProblem(lineAddress) ?? requiredProblem(lineLabel, "a label for its key");
+              setLineProblem(problem);
+              if (problem) return;
+              setError(undefined);
+              api.addLineToPhone(deviceId, lineAddress.trim().toLowerCase(), lineLabel.trim()).then(
+                () => {
+                  setLineAddress("");
+                  setLineLabel("");
+                  void load();
+                },
+                (err: Error) => setLineProblem(err.message),
               );
-              setLineAddress("");
-              setLineLabel("");
             }}
           >
-            <input
-              aria-label="Line address"
-              placeholder="support@example.org"
-              value={lineAddress}
-              onChange={(e) => setLineAddress(e.target.value)}
-            />
-            <input
-              aria-label="Key label"
-              placeholder="Label, e.g. Support"
-              maxLength={24}
-              value={lineLabel}
-              onChange={(e) => setLineLabel(e.target.value)}
-            />
-            <button type="submit" disabled={!lineAddress.includes("@") || !lineLabel.trim()}>
-              Add line
-            </button>
+            <div className="row wrap">
+              <label>
+                <span className="muted small">Line address</span>
+                <input
+                  value={lineAddress}
+                  onChange={(e) => {
+                    setLineAddress(e.target.value);
+                    setLineProblem(undefined);
+                  }}
+                  inputMode="email"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                <span className="muted small">Key label</span>
+                <input
+                  maxLength={24}
+                  value={lineLabel}
+                  onChange={(e) => {
+                    setLineLabel(e.target.value);
+                    setLineProblem(undefined);
+                  }}
+                />
+              </label>
+              <button type="submit">Add line</button>
+            </div>
+            <span className={lineProblem ? "hint error" : "hint"}>
+              {lineProblem ?? "For example, support@example.org with the label Support."}
+            </span>
           </form>
         </>
       )}

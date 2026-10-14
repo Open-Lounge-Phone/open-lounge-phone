@@ -1,4 +1,8 @@
 import type { HouseLineKey, HouseLineTarget } from "./api.ts";
+import { addressProblem } from "./fields.ts";
+
+/** The server's limit on people in one key's group. */
+export const HOUSE_LINE_GROUP_MAX = 10;
 
 /** The keys in keypad order: digits 1–9 then 0 (button index 0–9). */
 export const HOUSE_LINE_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0] as const;
@@ -34,14 +38,20 @@ export function setKey(
   return next.sort((a, b) => a.index - b.index);
 }
 
-/** Keys the server would refuse: a group with nobody in it, a line without an address, or a missing label. */
+/** What the server would refuse about a key, in plain words; undefined when it's fine. */
+export function keyProblem(k: HouseLineKey): string | undefined {
+  if (!k.label.trim()) return "Give it a label.";
+  if (k.target.kind === "group") {
+    if (k.target.userIds.length === 0) return "Pick at least one person.";
+    if (k.target.userIds.length > HOUSE_LINE_GROUP_MAX) {
+      return `Pick at most ${HOUSE_LINE_GROUP_MAX} people.`;
+    }
+  }
+  if (k.target.kind === "line") return addressProblem(k.target.address);
+  return undefined;
+}
+
+/** Keys the server would refuse (see `keyProblem`). */
 export function incompleteKeys(keys: HouseLineKey[]): number[] {
-  return keys
-    .filter(
-      (k) =>
-        !k.label.trim() ||
-        (k.target.kind === "group" && k.target.userIds.length === 0) ||
-        (k.target.kind === "line" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(k.target.address.trim())),
-    )
-    .map((k) => k.index);
+  return keys.filter((k) => keyProblem(k) !== undefined).map((k) => k.index);
 }

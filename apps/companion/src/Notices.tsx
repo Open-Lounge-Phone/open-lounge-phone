@@ -3,6 +3,7 @@
 import { NOTICE_LINE_CHARS, noticeLines } from "@openloungephone/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api, DeviceSummary, NoticeView } from "./api.ts";
+import { sentence } from "./fields.ts";
 import { VoicemailRecorder } from "./recording.ts";
 
 const DURATIONS: { minutes: number; label: string }[] = [
@@ -33,8 +34,13 @@ export function Notices({ api, devices }: { api: Api; devices: DeviceSummary[] }
   }, [load]);
   useEffect(() => () => recorder.current?.cancel(), []);
 
-  const parsed = text.trim() ? noticeLines(text) : undefined;
-  const problem = parsed && "error" in parsed ? parsed.error : undefined;
+  /** Set once Send was pressed: empty text and an empty "only some phones" then say so. */
+  const [tried, setTried] = useState(false);
+  const parsed = noticeLines(text);
+  const lines = "lines" in parsed ? parsed.lines : undefined;
+  // Too long or odd characters show while typing; "write a notice" only after Send.
+  const problem = "error" in parsed && (text.trim() || tried) ? sentence(parsed.error) : undefined;
+  const phonesProblem = tried && some && !picked.length ? "Pick at least one phone." : undefined;
 
   const record = async () => {
     setRecording(true);
@@ -58,14 +64,17 @@ export function Notices({ api, devices }: { api: Api; devices: DeviceSummary[] }
 
   const post = async () => {
     setError(undefined);
+    setTried(true);
+    if (!lines || (some && !picked.length)) return;
     try {
       const n = await api.postNotice({
-        text,
+        text: lines.join("\n"),
         minutes,
         ...(some && picked.length ? { deviceIds: picked } : {}),
       });
       if (audio) await api.setNoticeAudio(n.id, audio.blob, audio.durationMs);
       setText("");
+      setTried(false);
       setAudio(undefined);
       await load();
     } catch (e) {
@@ -87,11 +96,15 @@ export function Notices({ api, devices }: { api: Api; devices: DeviceSummary[] }
           aria-label="Notice"
           rows={2}
           value={text}
-          placeholder={"Dinner's ready"}
+          aria-invalid={problem ? true : undefined}
           onChange={(e) => setText(e.target.value)}
         />
       </label>
-      {problem && <span className="error small">{problem}</span>}
+      {problem ? (
+        <span className="error small">{problem}</span>
+      ) : (
+        <span className="hint">For example, Dinner's ready. Phones show it in capitals.</span>
+      )}
       <label className="row">
         <span>For</span>
         <select
@@ -126,6 +139,7 @@ export function Notices({ api, devices }: { api: Api; devices: DeviceSummary[] }
           ))}
         </div>
       )}
+      {phonesProblem && <span className="error small">{phonesProblem}</span>}
       <div className="row">
         {recording ? (
           <button type="button" className="primary" onClick={() => recorder.current?.stop()}>
@@ -145,12 +159,7 @@ export function Notices({ api, devices }: { api: Api; devices: DeviceSummary[] }
           </>
         )}
       </div>
-      <button
-        type="button"
-        className="primary"
-        disabled={!parsed || !!problem || recording || (some && !picked.length)}
-        onClick={() => void post()}
-      >
+      <button type="button" className="primary" disabled={recording} onClick={() => void post()}>
         Send to the phones
       </button>
       {error && (

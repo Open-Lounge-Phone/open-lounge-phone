@@ -10,11 +10,12 @@ import type {
   User,
 } from "./api.ts";
 import type { Connection, DeviceLive, MemberLive, Snapshot } from "./connection.ts";
-import { serverName } from "./fields.ts";
+import { serverName, timeProblem, wholeNumber } from "./fields.ts";
 import {
   HOUSE_LINE_DIGITS,
   incompleteKeys,
   indexOfDigit,
+  keyProblem,
   parseTarget,
   setKey,
   targetValue,
@@ -265,17 +266,28 @@ function LoungeSettings({
   const [policy, setPolicy] = useState<LoungeSessionPolicy>(info.session ?? "idle");
   const [dayEnd, setDayEnd] = useState(info.dayEnd ?? "00:00");
   const [note, setNote] = useState<string>();
+  const [error, setError] = useState<string>();
+  const fail = (message: string) => {
+    setNote(undefined);
+    setError(message);
+  };
   const save = async () => {
+    setNote(undefined);
+    setError(undefined);
+    const idle = wholeNumber(minutes, 1, 240);
+    if (policy === "idle" && "problem" in idle) return fail(idle.problem);
+    const late = policy === "end_of_day" ? timeProblem(dayEnd, "when the day ends") : undefined;
+    if (late) return fail(late);
     try {
       await api.setLoungeSettings({
         session: policy,
-        ...(policy === "idle" ? { idleMinutes: Number(minutes) } : {}),
+        ...(policy === "idle" && "value" in idle ? { idleMinutes: idle.value } : {}),
         ...(policy === "end_of_day" ? { dayEnd } : {}),
       });
       setNote("Saved.");
       onSaved();
     } catch (e) {
-      setNote((e as Error).message);
+      fail((e as Error).message);
     }
   };
   const nameOf = (id: string) => devices.find((d) => d.id === id)?.name ?? "a phone";
@@ -301,11 +313,13 @@ function LoungeSettings({
           <span className="inline">
             <input
               type="number"
+              inputMode="numeric"
               min={1}
               max={240}
               value={minutes}
               onChange={(e) => setMinutes(e.target.value)}
               aria-label="Idle minutes"
+              aria-invalid={error && policy === "idle" ? true : undefined}
             />{" "}
             minutes hung up and unused
           </span>
@@ -328,7 +342,13 @@ function LoungeSettings({
       <button type="button" onClick={() => void save()}>
         Save
       </button>
-      {note && <span className="hint"> {note}</span>}
+      {note && <span className="hint ok"> {note}</span>}
+      {error && (
+        <span className="hint error" role="alert">
+          {" "}
+          {error}
+        </span>
+      )}
       {info.idle && (
         <IdleOptions
           api={api}
@@ -336,7 +356,7 @@ function LoungeSettings({
           people={people}
           desks={devices.filter((d) => d.mode === "personal")}
           onSaved={onSaved}
-          onError={setNote}
+          onError={fail}
         />
       )}
       <label className="check">
@@ -346,7 +366,7 @@ function LoungeSettings({
           onChange={(e) =>
             void api
               .setLoungeGuests(e.target.checked)
-              .then(onSaved, (err: Error) => setNote(err.message))
+              .then(onSaved, (err: Error) => fail(err.message))
           }
         />
         <span>
@@ -456,6 +476,8 @@ function IdleOptions({
   const [enabled, setEnabled] = useState(idle.houseLine.enabled);
   const [keys, setKeys] = useState<HouseLineKey[]>(idle.houseLine.keys);
   const unfinished = incompleteKeys(keys);
+  /** Set once Save was pressed with unfinished keys: each one then says what it needs. */
+  const [checked, setChecked] = useState(false);
   const save = (patch: Parameters<Api["setLoungeSettings"]>[0]) =>
     api.setLoungeSettings(patch).then(onSaved, (e: Error) => onError(e.message));
   return (
@@ -493,6 +515,7 @@ function IdleOptions({
             const group = key?.target.kind === "group" ? key.target.userIds : [];
             const update = (label: string, target: HouseLineTarget | undefined) =>
               setKeys((ks) => setKey(ks, index, target ? { label, target } : undefined));
+            const problem = checked && key ? keyProblem(key) : undefined;
             return (
               <li key={digit} className="stack">
                 <div className="row">
@@ -531,6 +554,7 @@ function IdleOptions({
                       value={key.label}
                       maxLength={24}
                       placeholder="Label"
+                      aria-invalid={problem ? true : undefined}
                       onChange={(e) => update(e.target.value, key.target)}
                     />
                   )}
@@ -540,7 +564,11 @@ function IdleOptions({
                     aria-label={`Key ${digit} public line address`}
                     value={key.target.address}
                     maxLength={300}
-                    placeholder="orders@acme.example"
+                    inputMode="email"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     onChange={(e) =>
                       update(key.label, { kind: "line", address: e.target.value.trim() })
                     }
@@ -567,6 +595,10 @@ function IdleOptions({
                     ))}
                   </div>
                 )}
+                {problem && <span className="hint error">{problem}</span>}
+                {!problem && key?.target.kind === "line" && (
+                  <span className="hint">The line's address, like name@server.</span>
+                )}
               </li>
             );
           })}
@@ -575,15 +607,31 @@ function IdleOptions({
       {(enabled || idle.houseLine.enabled) && (
         <button
           type="button"
-          disabled={unfinished.length > 0}
-          onClick={() => void save({ houseLine: { enabled, keys } })}
+          onClick={() => {
+            setChecked(true);
+            if (unfinished.length === 0) {
+              void save({
+                houseLine: {
+                  enabled,
+                  keys: keys.map((k) => ({
+                    ...k,
+                    label: k.label.trim(),
+                    ...(k.target.kind === "line"
+                      ? { target: { kind: "line", address: k.target.address.toLowerCase() } }
+                      : {}),
+                  })),
+                },
+              });
+            }
+          }}
         >
           Save house-line keys
         </button>
       )}
-      {unfinished.length > 0 && (
-        <span className="hint">
-          Give every key a label, pick people for each group, and an address for each public line.
+      {checked && unfinished.length > 0 && (
+        <span className="hint error" role="alert">
+          {unfinished.length === 1 ? "One key needs" : `${unfinished.length} keys need`} more before
+          saving: see above.
         </span>
       )}
     </div>
