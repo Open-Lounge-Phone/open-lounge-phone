@@ -53,7 +53,14 @@ export function SpaceSettings({
         </div>
       )}
       <SpacePrivacy api={api} guardian={canEdit} />
-      {canEdit && <Changes api={api} home={kidSafe(household.type)} />}
+      {canEdit && (
+        // Read again after a change here, so it shows at once.
+        <Changes
+          key={`${household.name}|${household.timeZone}`}
+          api={api}
+          home={kidSafe(household.type)}
+        />
+      )}
     </section>
   );
 }
@@ -79,7 +86,11 @@ function NameAndZone({
     e.preventDefault();
     const problem = requiredProblem(name, "a name");
     setNameProblem(problem);
-    if (problem || zoneProblem(timeZone) || !changed) return;
+    if (problem || zoneProblem(timeZone)) return;
+    if (!changed) {
+      setError("Nothing changed: edit the name or pick another time zone first.");
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
@@ -109,6 +120,7 @@ function NameAndZone({
             setName(e.target.value);
             setNameProblem(undefined);
             setSaved(false);
+            setError(undefined);
           }}
         />
         <span className={nameProblem ? "hint error" : "hint"}>
@@ -120,6 +132,7 @@ function NameAndZone({
         onChange={(z) => {
           setTimeZone(z);
           setSaved(false);
+          setError(undefined);
         }}
         hint={
           home
@@ -133,7 +146,7 @@ function NameAndZone({
         </p>
       )}
       {saved && !changed && <p className="muted small">Saved. The phones have it now.</p>}
-      <button type="submit" className="primary" disabled={busy || !changed}>
+      <button type="submit" className="primary" disabled={busy}>
         {busy ? "Saving…" : "Save"}
       </button>
     </form>

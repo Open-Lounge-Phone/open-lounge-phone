@@ -1,4 +1,5 @@
 /** A space's audit trail in words ("changed quiet hours"). Pure. */
+import { zoneLabel } from "./timeZones.ts";
 
 /** The digit on a phone for a key index (0-8 → 1-9, 9 → 0). */
 const digit = (index: unknown) =>
@@ -12,7 +13,7 @@ export function auditText(action: string, d: Record<string, unknown> | null): st
     case "space.rename":
       return `renamed "${s("from")}" to "${s("to")}"`;
     case "space.timezone":
-      return `changed the time zone to ${s("to").replace(/_/g, " ")} (was ${s("from").replace(/_/g, " ")})`;
+      return `changed the time zone to ${zoneLabel(s("to"))} (was ${zoneLabel(s("from"))})`;
     case "quiet.update":
       return "changed quiet hours";
     case "extension.set":

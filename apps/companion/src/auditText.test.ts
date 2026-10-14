@@ -33,7 +33,7 @@ describe("audit trail words", () => {
       'renamed "Mom\'s home" to "The Smiths"',
     );
     expect(auditText("space.timezone", { from: "UTC", to: "America/New_York" })).toBe(
-      "changed the time zone to America/New York (was UTC)",
+      "changed the time zone to New York (was UTC)",
     );
   });
 
