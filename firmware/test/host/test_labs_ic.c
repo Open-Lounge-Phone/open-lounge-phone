@@ -56,6 +56,50 @@ TEST(ic_all_rooms_first_lift_wins_and_busy) {
   CHECK_STR(l[1], "IS BUSY");
 }
 
+/** Delivers the lines in `o` to one phone only (UDP order differs per receiver). */
+static void deliver_to(ic_t *p, uint32_t from_ip, ic_out_t *o, int64_t now, ic_out_t *reply) {
+  for (int k = 0; k < o->n; k++) icom_msg(p, from_ip, o->lines[k], now, reply);
+}
+
+TEST(ic_all_rooms_two_lift_at_once) {
+  ic_t a, b, c;
+  icom_init(&a, "A"); icom_init(&b, "B"); icom_init(&c, "C");
+  ic_t *all[] = {&a, &b, &c};
+  ic_out_t o = {0};
+  icom_call(&a, "*", false, 7, 0, &o); deliver(all, 3, 100, &o, 0);
+  // B and C lift at the same instant: each sends ANSWER before hearing the other's.
+  ic_out_t ob = {0}, oc = {0}, back = {0};
+  icom_hook(&b, true, 5, &ob);
+  icom_hook(&c, true, 5, &oc);
+  CHECK(b.st == IC_TALK && c.st == IC_TALK);
+  // A hears B first: B has the call. Then C's answer: A tells C it went elsewhere.
+  deliver_to(&a, 101, &ob, 5, &back);
+  deliver_to(&c, 101, &ob, 5, &back);   // C ignores B's answer (it is talking)
+  CHECK(back.n == 0);
+  deliver_to(&a, 102, &oc, 5, &back);
+  deliver_to(&b, 102, &oc, 5, &back);   // B ignores C's answer too
+  CHECK(back.n == 1 && strstr(back.lines[0], "OLP1|TAKEN|00000007|C|B") == back.lines[0]);
+  deliver(all, 3, 100, &back, 6);
+  CHECK(a.st == IC_TALK && b.st == IC_TALK && c.st == IC_IDLE);
+  CHECK(a.peer_ip == 101 && !strcmp(a.peer, "B"));
+  char l[2][41];
+  CHECK(icom_lines(&c, 7, l) == 2);
+  CHECK_STR(l[0], "ANSWERED ELSEWHERE");
+  CHECK_STR(l[1], "B");
+  // C hangs up (it is idle: says nothing), A and B keep talking.
+  icom_hook(&c, false, 8, &o);
+  CHECK(o.n == 0);
+  // Even a stray BYE from C (sent before the TAKEN arrived) leaves A and B alone.
+  icom_msg(&a, 102, "OLP1|BYE|00000007|C", 9, &o);
+  icom_msg(&b, 102, "OLP1|BYE|00000007|C", 9, &o);
+  CHECK(a.st == IC_TALK && b.st == IC_TALK);
+  // Only the caller decides: a TAKEN about someone else changes nothing.
+  icom_msg(&b, 100, "OLP1|TAKEN|00000007|C|B", 10, &o);
+  CHECK(b.st == IC_TALK);
+  icom_hook(&b, false, 11, &o); deliver(all, 3, 101, &o, 11);
+  CHECK(a.st == IC_IDLE && b.st == IC_IDLE);
+}
+
 TEST(ic_doorbell_rings_on_hook_and_times_out) {
   ic_t door, hall;
   icom_init(&door, "Front door"); icom_init(&hall, "Hall");

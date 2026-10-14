@@ -24,7 +24,7 @@ static void to_idle(ic_t *ic) {
   ic->id = 0;
   ic->peer[0] = '\0';
   ic->peer_ip = 0;
-  ic->door = ic->to_all = false;
+  ic->door = ic->to_all = ic->caller = false;
 }
 
 void icom_init(ic_t *ic, const char *me) {
@@ -46,6 +46,7 @@ bool icom_call(ic_t *ic, const char *to, bool door, uint32_t id, int64_t now, ic
   ic->id = id ? id : 1;
   ic->door = door;
   ic->to_all = !strcmp(to, "*");
+  ic->caller = true;
   ic->since = now;
   CPY(ic->peer, ic->to_all ? "ALL ROOMS" : to);
   char b[12];
@@ -151,6 +152,18 @@ void icom_msg(ic_t *ic, uint32_t ip, const char *line, int64_t now, ic_out_t *ou
     } else if (ic->st == IC_RINGING && strcmp(f[3], ic->me)) {
       note(ic, ic->peer, "ANSWERED", now);                   // another room got it
       to_idle(ic);
+    } else if (ic->st == IC_TALK && ic->caller && strcmp(f[3], ic->peer)) {
+      // Two rooms lifted at the same instant: the first answer we heard has the call; tell the
+      // other one (every time it answers, in case a line got lost).
+      emit(out, "OLP1|TAKEN|%s|%s|%s", f[2], f[3], ic->peer, "");
+    }
+  } else if (!strcmp(t, "TAKEN") && n >= 5) {
+    // We lifted too, but the caller is talking to another room: back to idle, quietly (no BYE,
+    // which would end their call).
+    if (id == ic->id && !ic->caller && !strcmp(f[3], ic->me) &&
+        (ic->st == IC_TALK || ic->st == IC_RINGING)) {
+      note(ic, "ANSWERED ELSEWHERE", f[4], now);
+      to_idle(ic);
     }
   } else if (!strcmp(t, "BUSY") && n >= 4) {
     if (id == ic->id && ic->st == IC_CALLING && !ic->to_all) {
@@ -158,7 +171,9 @@ void icom_msg(ic_t *ic, uint32_t ip, const char *line, int64_t now, ic_out_t *ou
       to_idle(ic);
     }
   } else if (!strcmp(t, "BYE") && n >= 4) {
-    if (id == ic->id && ic->st != IC_IDLE && strcmp(f[3], ic->me)) {
+    // While talking only our own peer can end it (not a room that lifted too late).
+    bool from_peer = ic->st != IC_TALK || !strcmp(f[3], ic->peer);
+    if (id == ic->id && ic->st != IC_IDLE && strcmp(f[3], ic->me) && from_peer) {
       bool was_talking = ic->st == IC_TALK;
       if (was_talking) note(ic, f[3], "HUNG UP", now);
       to_idle(ic);

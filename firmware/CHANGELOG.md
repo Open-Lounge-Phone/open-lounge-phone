@@ -6,6 +6,9 @@
   from a personal phone. While waiting in the line's queue the screen shows `IN LINE 2` /
   `1 VOICEMAIL` with the soft waiting tone, and key 1 leaves a voicemail instead
   (`call.voicemail`). Older firmware ignores the queue and just shows `CALLING`.
+- **Labs intercom**: when two rooms answer an all-rooms ring at the same instant, the caller
+  keeps the first and tells the other (`TAKEN`), which shows `ANSWERED ELSEWHERE` and goes back
+  to idle instead of staying connected to nobody. A late room's hang-up no longer ends the call.
 
 ## 0.9.1 — 2026-10-13: Lounge phones, extensions, safer setup
 
