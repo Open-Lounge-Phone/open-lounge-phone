@@ -4,6 +4,7 @@ import {
   HANDLE_CHANGE_INTERVAL_MS,
   handleProblem,
   newId,
+  type Session,
   SPACE_TYPES,
   type SpaceType,
   type Store,
@@ -19,6 +20,7 @@ import { capReached } from "./fairUse.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, clientIp, HOUSEHOLD_HEADER, ipBucket, relyingParty, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
+import { closeAccountApps, sessionOptions } from "./sessions.ts";
 
 /** Households one account may be a guardian of (a cheap guard until P4's quotas). */
 export const MAX_GUARDIANSHIPS_PER_ACCOUNT = 10;
@@ -123,14 +125,38 @@ export async function resolveSession(
   householdHint: string | undefined,
   now: number,
 ): Promise<
-  { account: Account; member: User | undefined } | "unauthorized" | "not_member" | "suspended"
+  | { account: Account; member: User | undefined; session: Session }
+  | "unauthorized"
+  | "not_member"
+  | "suspended"
 > {
-  const session = token ? await store.sessionForToken(token, now) : undefined;
-  if (!session) return "unauthorized";
-  if (session.account.suspendedAt !== null) return "suspended";
-  if (!householdHint) return { account: session.account, member: session.user };
-  const member = await store.membership(session.account.id, householdHint);
-  return member ? { account: session.account, member } : "not_member";
+  const found = token ? await store.sessionForToken(token, now) : undefined;
+  if (!found) return "unauthorized";
+  if (found.account.suspendedAt !== null) return "suspended";
+  const { account, session } = found;
+  if (!householdHint) return { account, member: found.user, session };
+  const member = await store.membership(account.id, householdHint);
+  return member ? { account, member, session } : "not_member";
+}
+
+/** Whether this account may start a space here now (a short reason when it may not). */
+export async function spaceAllowance(
+  env: ServerEnv,
+  account: Account,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guardianships = await env.store.countGuardianships(account.id);
+  // On an invite-only server, only people who already run a household may start another.
+  if (!env.openSignup && guardianships === 0) {
+    return { ok: false, error: "only guardians can add a household on this server" };
+  }
+  if (guardianships >= MAX_GUARDIANSHIPS_PER_ACCOUNT) {
+    return { ok: false, error: "that's as many households as one account can run" };
+  }
+  const cap = await capReached(env, account.id, "spacesPerAccount", guardianships);
+  if (cap !== undefined) {
+    return { ok: false, error: `one account can run ${cap} spaces on this server (fair use)` };
+  }
+  return { ok: true };
 }
 
 /** Open sign-up: passkey registration creates an account and its own household. */
@@ -146,19 +172,29 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
     if (!env.openSignup) return closed();
     const b = await body(c.req.raw, SignupOptionsBody);
     if (b instanceof Response) return b;
+    const now = env.now();
+    // Cheap checks first, so a taken handle doesn't use up the person check (each Turnstile
+    // answer works once) or an attempt.
+    const problem = handleProblem(b.handle) ?? timeZoneProblem(b.timeZone);
+    if (problem) return c.json({ error: problem }, 400);
+    if (!(await store.handleAvailable(b.handle, now))) {
+      return c.json({ error: "that handle is taken" }, 409);
+    }
     const ip = clientIp(env, c);
-    const perHour = limitsOf(env).signupsPerIpPerHour;
-    const bucket = await ipBucket("signup-ip", ip);
-    if (!(await store.connections.hit(bucket, 3_600_000, perHour, env.now()))) {
+    const limits = limitsOf(env);
+    // Accounts made from here count toward the hourly limit; tries have a looser one of their own.
+    const made = await store.connections.counted(await ipBucket("signup-ip", ip), 3_600_000, now);
+    const tryOk = await store.connections.hit(
+      await ipBucket("signup-try-ip", ip),
+      3_600_000,
+      limits.signupAttemptsPerIpPerHour,
+      now,
+    );
+    if (made >= limits.signupsPerIpPerHour || !tryOk) {
       return c.json({ error: "too many sign-ups from here; try again in an hour" }, 429);
     }
     if (env.turnstile && !(await turnstileOk(env, b.turnstileToken, ip))) {
       return c.json({ error: "please complete the check that you're a person" }, 403);
-    }
-    const problem = handleProblem(b.handle) ?? timeZoneProblem(b.timeZone);
-    if (problem) return c.json({ error: problem }, 400);
-    if (!(await store.handleAvailable(b.handle, env.now()))) {
-      return c.json({ error: "that handle is taken" }, 409);
     }
     const { rpID } = relyingParty(env, c.req.url);
     const host = serverHost(env, c.req.url);
@@ -216,8 +252,18 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
       return c.json({ error: "could not verify the passkey" }, 400);
     }
     const { handle, name, householdName, timeZone } = data.data;
+    const ip = clientIp(env, c);
+    const signupBucket = await ipBucket("signup-ip", ip);
+    if (
+      (await store.connections.counted(signupBucket, 3_600_000, now)) >=
+      limitsOf(env).signupsPerIpPerHour
+    ) {
+      return c.json({ error: "too many sign-ups from here; try again in an hour" }, 429);
+    }
     const account = await store.createAccount({ name, handle }, now);
     if (!account) return c.json({ error: "that handle was just taken; pick another" }, 409);
+    // Only accounts actually made count toward the per-IP limit.
+    await store.connections.hit(signupBucket, 3_600_000, Number.MAX_SAFE_INTEGER, now);
     await store.addPasskey({
       id: credential.id,
       accountId: account.id,
@@ -231,7 +277,12 @@ export function signupRoutes(api: Hono<Vars>, env: ServerEnv): void {
       { name: householdName, timeZone, guardianName: name, accountId: account.id },
       now,
     );
-    const token = await store.createAccountSession(account.id, guardian.id, now);
+    const token = await store.createAccountSession(
+      account.id,
+      guardian.id,
+      now,
+      sessionOptions(c, "signup", { passkey: true }),
+    );
     return c.json(
       {
         token,
@@ -271,13 +322,22 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
         role: m.user.role,
       })),
       openSignup: env.openSignup === true,
+      /** Whether "Add a household / team" works for this account on this server. */
+      canAddSpace: (await spaceAllowance(env, account)).ok,
       operator: isOperator(env, account),
       sharePresence: account.sharePresence,
+      recoveryCode: account.hasRecoveryCode,
+      passkeys: (await store.listPasskeys(account.id)).length,
+      session: sessionView(c.get("session")),
+      ...(user ? { owner: (await store.spaceOwnerUser(user.householdId)) === user.id } : {}),
     });
   });
 
   api.post("/logout", async (c) => {
     await store.deleteSession(c.get("token"));
+    // Its open app sockets close too: nothing keeps working on them.
+    const id = c.get("session").id;
+    if (id) await closeAccountApps(env, live, c.get("account").id, { only: [id] });
     return c.body(null, 204);
   });
 
@@ -299,18 +359,8 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
     const account = c.get("account");
     const b = await body(c.req.raw, HouseholdBody);
     if (b instanceof Response) return b;
-    const guardianships = await store.countGuardianships(account.id);
-    // On an invite-only server, only people who already run a household may start another.
-    if (!env.openSignup && guardianships === 0) {
-      return c.json({ error: "only guardians can add a household on this server" }, 403);
-    }
-    if (guardianships >= MAX_GUARDIANSHIPS_PER_ACCOUNT) {
-      return c.json({ error: "that's as many households as one account can run" }, 403);
-    }
-    const cap = await capReached(env, account.id, "spacesPerAccount", guardianships);
-    if (cap !== undefined) {
-      return c.json({ error: `one account can run ${cap} spaces on this server (fair use)` }, 403);
-    }
+    const allowed = await spaceAllowance(env, account);
+    if (!allowed.ok) return c.json({ error: allowed.error }, 403);
     const member = c.get("member");
     const current = member ? await store.getHousehold(member.householdId) : undefined;
     const timeZone = b.timeZone ?? current?.timeZone ?? "UTC";
@@ -375,9 +425,46 @@ export function accountRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
   });
 }
 
-/** Whether an account runs this server (`OPERATORS`, by handle). */
+/**
+ * Whether an account runs this server: `OPERATORS` lists account ids (`acc_…`), never handles,
+ * so a renamed, released or re-registered handle never carries operator rights.
+ */
 export const isOperator = (env: ServerEnv, account: Account) =>
-  (env.operators ?? []).includes(account.handle);
+  (env.operators ?? []).some((id) => id.startsWith("acc_") && id === account.id);
+
+/**
+ * What's wrong with an `OPERATORS` list (for the host to log at startup): handles, which give
+ * no rights (with the account id to use instead), and ids of no account here.
+ */
+export async function operatorProblems(store: Store, operators: string[]): Promise<string[]> {
+  const problems: string[] = [];
+  for (const entry of operators) {
+    if (entry.startsWith("acc_")) {
+      if (!(await store.getAccount(entry))) {
+        problems.push(`OPERATORS: no account ${entry} on this server`);
+      }
+      continue;
+    }
+    const account = await store.accountByHandle(entry.replace(/^@/, "").replace(/@.*$/, ""));
+    problems.push(
+      account
+        ? `OPERATORS: "${entry}" is a handle, which gives no operator rights (handles can change hands). Use the account id instead: OPERATORS=${account.id}`
+        : `OPERATORS: "${entry}" is not an account id (acc_…); it gives no operator rights`,
+    );
+  }
+  return problems;
+}
+
+/** What the app needs to know about its own session (never the token). */
+export function sessionView(s: Session) {
+  return {
+    id: s.id,
+    via: s.via,
+    passkey: s.passkey,
+    limited: s.limited,
+    expiresAt: s.expiresAt,
+  };
+}
 
 /** Reads the household hint a companion sends with each request. */
 export const householdHint = (header: (name: string) => string | undefined) =>

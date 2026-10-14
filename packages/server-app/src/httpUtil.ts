@@ -1,4 +1,4 @@
-import { type Account, sha256, type User } from "@openloungephone/db";
+import { type Account, type Session, sha256, type User } from "@openloungephone/db";
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
@@ -6,12 +6,18 @@ import type { ServerEnv } from "./env.ts";
 import { validationText } from "./validation.ts";
 
 /**
- * Per-request auth state. `account` and `token` are set for every signed-in request; `member` is
+ * Per-request auth state. `account`, `token` and `session` are set for every signed-in request; `member` is
  * the active membership if the account has one; `user` (= `member`) is set on the routes that
  * act inside a household, which is every route after the account routes.
  */
 export type Vars = {
-  Variables: { user: User; account: Account; token: string; member: User | undefined };
+  Variables: {
+    user: User;
+    account: Account;
+    token: string;
+    session: Session;
+    member: User | undefined;
+  };
 };
 
 /** Header a client sends to act in one of its households (else the session's active one). */

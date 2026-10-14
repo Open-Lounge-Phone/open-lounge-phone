@@ -9,6 +9,7 @@ import {
 } from "@openloungephone/federation";
 import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
 import {
+  type AppCloseFilter,
   type BlobStore,
   type CallbackMissed,
   type CallbackRing,
@@ -70,7 +71,7 @@ export interface Env {
   /** Public hub: Cloudflare Turnstile on sign-up (site key is a var, the secret a secret). */
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;
-  /** Comma-separated handles of the operators (admin view). */
+  /** Comma-separated account ids (`acc_…`) of the operators (admin view); deploy.ts resolves handles. */
   OPERATORS?: string;
   /** Fair-use allowance (`hub` = the hub's defaults) and overrides, see limits.ts. */
   FAIR_USE?: string;
@@ -202,9 +203,10 @@ function serverEnv(
   if (env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET) {
     server.turnstile = { siteKey: env.TURNSTILE_SITE_KEY, secret: env.TURNSTILE_SECRET };
   }
+  // Account ids are case-sensitive: kept as given.
   const operators = (env.OPERATORS ?? "")
     .split(",")
-    .map((h) => h.trim().toLowerCase())
+    .map((h) => h.trim())
     .filter(Boolean);
   if (operators.length) server.operators = operators;
   // Federated calls: placement over signed HTTP, signaling through the FederationObject for the
@@ -395,6 +397,10 @@ export class HouseholdObject extends GatewayObject {
 
   notifyUser(userId: string, msg: ServerToApp): Promise<void> {
     return this.gateway.hub(this.householdId).sendToUser(userId, msg);
+  }
+
+  closeApps(userId: string, filter?: AppCloseFilter): Promise<void> {
+    return this.gateway.closeApps(this.householdId, userId, filter);
   }
 
   ringRemote(req: RemoteRing): Promise<RingResult> {
@@ -599,6 +605,7 @@ function coordinator(env: Env): Coordinator {
     spaceChanged: (hh) => env.HOUSEHOLD.getByName(hh).spaceChanged(),
     roomHoursChanged: (hh) => env.HOUSEHOLD.getByName(hh).roomHoursChanged(),
     lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
+    closeApps: (hh, userId, filter) => env.HOUSEHOLD.getByName(hh).closeApps(userId, filter),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));
       for (const m of await store.listMemberships(accountId)) {

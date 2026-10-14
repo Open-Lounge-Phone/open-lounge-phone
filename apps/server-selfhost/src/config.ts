@@ -30,8 +30,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET
         ? { siteKey: env.TURNSTILE_SITE_KEY, secret: env.TURNSTILE_SECRET }
         : undefined,
-    /** Handles of this server's operators (the admin view). */
-    operators: list(env.OPERATORS).map((h) => h.toLowerCase()),
+    /**
+     * Account ids (`acc_…`, case-sensitive) of this server's operators (the admin view). A
+     * handle here gives no rights; the server logs the id to use instead.
+     */
+    operators: list(env.OPERATORS),
     /** Funding transparency and the Sponsor link (public hubs). */
     hub: hubInfoFromVars(env),
     /** Trust X-Forwarded-For for client IPs (only behind your own reverse proxy). */

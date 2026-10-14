@@ -1,5 +1,7 @@
 // Leaving a server: take your data with you (export), then delete your account. See
 // docs/export.md for the export format and docs/privacy.md for what is kept.
+import { ownedSpacesBlockingDelete } from "@openloungephone/core";
+import type { Account } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { Connections } from "./connections.ts";
@@ -7,6 +9,7 @@ import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
+import { closeAccountApps } from "./sessions.ts";
 import { dropVoicemailBlobs } from "./voicemail.ts";
 
 export const EXPORT_FORMAT = "openloungephone-export";
@@ -110,9 +113,10 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
   });
 
   /**
-   * Deletes your account. Spaces where you are the only guardian go with it (their phones are
-   * unpaired and their voicemail deleted); in shared spaces only your membership goes. Your
-   * connections are told you've left. Your handle stays reserved for 90 days.
+   * Deletes your account. Spaces you own that other people are in must be handed on first (the
+   * answer lists them); spaces you're alone in go with the account (their phones are wiped and
+   * their voicemail deleted); elsewhere only your membership goes. Your connections are told
+   * you've left, your apps are signed out, and your handle stays reserved for 90 days.
    */
   api.delete("/account", async (c) => {
     const account = c.get("account");
@@ -121,29 +125,86 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
     if (b.confirm !== account.handle) {
       return c.json({ error: "type your handle to confirm" }, 400);
     }
-    const now = env.now();
-    const service = new Connections(env, live);
-    for (const conn of await store.connections.list(account.id)) {
-      if (conn.state === "active" || (conn.state === "requested" && conn.direction === "out")) {
-        await service.remove(account, conn);
-      }
+    const blocking = await spacesToHandOn(env, account.id);
+    if (blocking.length > 0) {
+      return c.json(
+        {
+          error: `hand these spaces to someone else first: ${blocking.map((s) => s.name).join(", ")}`,
+          code: "owner_must_transfer",
+          spaces: blocking,
+        },
+        409,
+      );
     }
-    for (const { user, household } of await store.listMemberships(account.id)) {
-      const alone = user.role === "guardian" && (await store.guardianCount(household.id)) === 1;
-      if (!alone) {
-        await dropVoicemailBlobs(env, { userId: user.id });
-        await store.deleteUser(user.id, now);
-        continue;
-      }
-      await dropVoicemailBlobs(env, { householdId: household.id });
-      const devices = await store.listDevices(household.id);
-      // Its phones wipe themselves (now, or when they next connect).
-      await store.recordRemovedDevices(devices, now);
-      await store.deleteHousehold(household.id);
-      for (const d of devices) await live.forgetDevice(household.id, d.id);
-    }
-    await dropVoicemailBlobs(env, { accountId: account.id });
-    await store.deleteAccount(account.id, now);
+    await deleteAccountEverywhere(env, live, account);
     return c.body(null, 204);
   });
+}
+
+/** Spaces this account owns that other people are in (handed on before the account can go). */
+export async function spacesToHandOn(
+  env: ServerEnv,
+  accountId: string,
+): Promise<{ id: string; name: string; type: string }[]> {
+  const spaces = await Promise.all(
+    (await env.store.listMemberships(accountId)).map(async ({ user, household }) => ({
+      id: household.id,
+      name: household.name,
+      type: household.type,
+      owner: (await env.store.spaceOwnerUser(household.id)) === user.id,
+      members: await env.store.memberCount(household.id),
+    })),
+  );
+  return ownedSpacesBlockingDelete(spaces).map(({ id, name, type }) => ({ id, name, type }));
+}
+
+/**
+ * Deletes a space and everything in it: its phones wipe themselves (now, or when they next
+ * connect) and its voicemail audio goes.
+ */
+export async function deleteSpace(env: ServerEnv, live: Coordinator, householdId: string) {
+  const now = env.now();
+  await dropVoicemailBlobs(env, { householdId });
+  const devices = await env.store.listDevices(householdId);
+  await env.store.recordRemovedDevices(devices, now);
+  await env.store.deleteHousehold(householdId);
+  for (const d of devices) await live.forgetDevice(householdId, d.id);
+}
+
+/**
+ * Deletes an account (the caller checked it owns no space with other people in it): its
+ * connections are told, its apps signed out, spaces it is alone in deleted, its other
+ * memberships removed. Also used when someone is removed from their only space.
+ */
+export async function deleteAccountEverywhere(
+  env: ServerEnv,
+  live: Coordinator,
+  account: Account,
+): Promise<void> {
+  const { store } = env;
+  const now = env.now();
+  const service = new Connections(env, live);
+  for (const conn of await store.connections.list(account.id)) {
+    if (conn.state === "active" || (conn.state === "requested" && conn.direction === "out")) {
+      await service.remove(account, conn);
+    }
+  }
+  // Nothing keeps working on an open socket.
+  await closeAccountApps(env, live, account.id);
+  await store.auth.endSessions(account.id);
+  for (const { user, household } of await store.listMemberships(account.id)) {
+    const alone = (await store.memberCount(household.id)) === 1;
+    if (alone) {
+      await deleteSpace(env, live, household.id);
+      continue;
+    }
+    await dropVoicemailBlobs(env, { userId: user.id });
+    await store.deleteUser(user.id, now);
+    // A Lounge phone they were using forgets them now.
+    for (const d of await store.listDevices(household.id)) {
+      if (d.kind === "lounge") await live.refreshDevice(household.id, d.id);
+    }
+  }
+  await dropVoicemailBlobs(env, { accountId: account.id });
+  await store.deleteAccount(account.id, now);
 }

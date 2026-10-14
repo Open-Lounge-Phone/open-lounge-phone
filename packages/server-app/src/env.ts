@@ -119,7 +119,7 @@ export interface ServerEnv {
   fairUse?: import("./limits.ts").FairUse;
   /** Cloudflare Turnstile on sign-up; skipped when unset. */
   turnstile?: { siteKey: string; secret: string };
-  /** Handles of the server's operators (the admin view). */
+  /** Account ids (`acc_…`) of the server's operators (the admin view); never handles. */
   operators?: string[];
   /** Public-hub details: funding transparency, Sponsor link. */
   hub?: import("./limits.ts").HubInfo;
@@ -216,6 +216,8 @@ export interface PeerInfo {
   id: string;
   label: string;
   guardian: boolean;
+  /** A companion's sign-in session (its public id): signing that session out closes the socket. */
+  auth?: string;
   hook?: "up" | "down";
   /** A device that is a person's own phone: their user id. */
   owner?: string;
@@ -254,6 +256,21 @@ export interface PeerInfo {
    * (`call.state ringing` + `queue`) and its voicemail offer, through their server.
    */
   line?: boolean;
+}
+
+/** Which of a member's companion sockets to close (see `Coordinator.closeApps`). */
+export interface AppCloseFilter {
+  /** Only sockets of these sign-in sessions (public ids). */
+  only?: string[];
+  /** All but this session's sockets. */
+  except?: string;
+  /**
+   * Close code `removed` (they left the space, or their role there changed: the app reloads and
+   * reconnects if it still can); otherwise they were signed out.
+   */
+  removed?: boolean;
+  /** The close reason sent with `removed`. */
+  reason?: string;
 }
 
 /** Per-connection state a sleeping host keeps alongside the socket (≤16 KiB serialized). */
@@ -362,6 +379,8 @@ export const CloseCode = {
   replaced: 4000,
   badHandshake: 4400,
   unauthorized: 4401,
+  /** The person left or was removed from this space; their session (and other spaces) remain. */
+  removed: 4403,
   timeout: 4408,
 } as const;
 

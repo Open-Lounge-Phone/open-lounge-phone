@@ -17,6 +17,7 @@ import {
   Gateway,
   LinkRegistry,
   type LinkSocket,
+  operatorProblems,
   presenceFlusher,
   presenceHook,
   type ServerEnv,
@@ -120,6 +121,9 @@ export async function start(config: Config) {
     log: (level, msg, extra) => console[level](`[${level}] ${msg}`, extra ?? ""),
   };
   if (applied.length) env.log("info", "applied migrations", { applied });
+  for (const problem of await operatorProblems(env.store, config.operators)) {
+    env.log("warn", problem);
+  }
 
   const gateway = new Gateway(env);
   // Federated calls: server-pair streams (dialed with `ws`), placement and presence sharing.

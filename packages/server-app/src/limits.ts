@@ -14,8 +14,14 @@ export interface Limits {
   fedRequestsPerMinute: number;
   /** Knocks any one other server may deliver per day. */
   fedKnocksPerDay: number;
-  /** Sign-up attempts from one IP address per hour. */
+  /** Accounts one IP address may create per hour (successful sign-ups). */
   signupsPerIpPerHour: number;
+  /** Sign-up attempts (passkey ceremonies started) from one IP address per hour. */
+  signupAttemptsPerIpPerHour: number;
+  /** Recovery-code attempts from one IP address per hour. */
+  recoveryAttemptsPerIpPerHour: number;
+  /** Recovery-code attempts for one handle per hour (from anywhere). */
+  recoveryAttemptsPerHandlePerHour: number;
   /** Passkey sign-in attempts from one IP address per minute. */
   signInsPerIpPerMinute: number;
   /** Changes (non-GET API requests) one account may make per minute. */
@@ -32,6 +38,9 @@ export const DEFAULT_LIMITS: Limits = {
   fedRequestsPerMinute: 300,
   fedKnocksPerDay: 500,
   signupsPerIpPerHour: 10,
+  signupAttemptsPerIpPerHour: 60,
+  recoveryAttemptsPerIpPerHour: 20,
+  recoveryAttemptsPerHandlePerHour: 5,
   signInsPerIpPerMinute: 30,
   writesPerAccountPerMinute: 120,
   lineCallsPerCallerPerHour: 10,

@@ -38,6 +38,26 @@ export async function api(
   return { status: res.status, json: text ? JSON.parse(text) : undefined };
 }
 
+/**
+ * An operator account written straight into a server's database before it starts: operators
+ * are account ids (`OPERATORS=acc_…`), which don't exist until an account does. Returns the id,
+ * a session token for it, and the SQL that makes both (only the token's hash is stored).
+ */
+export async function operatorSeed(handle: string) {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const id = `acc_${toBase64Url(bytes)}`;
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const hash = toBase64Url(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))),
+  );
+  const now = Date.now();
+  const sql = [
+    `INSERT INTO accounts (id, handle, name, created_at) VALUES ('${id}', '${handle}', 'Operator', ${now})`,
+    `INSERT INTO sessions (token_hash, account_id, user_id, created_at, expires_at, id) VALUES ('${hash}', '${id}', NULL, ${now}, ${now + 86_400_000}, 'ses_${handle}')`,
+  ];
+  return { id, token, sql };
+}
+
 /** Open sign-up with a (software) passkey: account + personal household + session. */
 export async function signUp(server: ServerTarget, handle: string, name: string): Promise<Person> {
   const opts = await api({ server }, "/signup/options", {
@@ -598,12 +618,16 @@ async function wellKnown(server: ServerTarget) {
 }
 
 /**
- * Jesse's server rotates its federation key in the middle of a call (her operator: she is one on
- * A). The call carries on over the already authenticated stream; the next signed requests carry
+ * Jesse's server rotates its federation key in the middle of a call (its operator does). The call carries on over the already authenticated stream; the next signed requests carry
  * the new key and Bob's server re-pins by itself from the signed hand-over in `.well-known`, so
- * calls both ways still work. Needs OPERATORS to name jesse on A and bob on B.
+ * calls both ways still work. `operators`: sessions of an account in A's and in B's OPERATORS
+ * (see `operatorSeed`).
  */
-export async function rotateMidCall(jesse: Person, bob: Person) {
+export async function rotateMidCall(
+  jesse: Person,
+  bob: Person,
+  operators: { a: string; b: string },
+) {
   const before = await wellKnown(jesse.server);
   const [row] = await connections(jesse);
   const jApp = await appSocket(jesse);
@@ -621,7 +645,9 @@ export async function rotateMidCall(jesse: Person, bob: Person) {
     for (;;) if ((await app.next("call.state")).state === "active") break;
   }
 
-  const rotated = await api(jesse, "/admin/federation/rotate-key", { body: {} });
+  const opA = { server: jesse.server, token: operators.a };
+  const opB = { server: bob.server, token: operators.b };
+  const rotated = await api(opA, "/admin/federation/rotate-key", { body: {} });
   expect(rotated.status, JSON.stringify(rotated.json)).toBe(200);
   const after = await wellKnown(jesse.server);
   expect(after.server_key).not.toBe(before.server_key);
@@ -639,15 +665,15 @@ export async function rotateMidCall(jesse: Person, bob: Person) {
   // New calls both ways: A's requests are signed with the new key.
   await callAcross(jesse, bob);
   await callAcross(bob, jesse);
-  const view = await api(bob, "/admin/federation");
+  const view = await api(opB, "/admin/federation");
   expect(view.status).toBe(200);
   const peer = (view.json.peers as { host: string; fingerprint: string; status: string }[]).find(
     (p) => p.host === new URL(jesse.server.origin).host,
   );
   expect(peer).toMatchObject({ fingerprint: rotated.json.to, status: "pinned" });
-  const audit = (await api(bob, "/admin/audit")).json as { action: string }[];
+  const audit = (await api(opB, "/admin/audit")).json as { action: string }[];
   expect(audit.map((e) => e.action)).toContain("fedkey.rotated");
-  const ours = (await api(jesse, "/admin/audit")).json as { action: string }[];
+  const ours = (await api(opA, "/admin/audit")).json as { action: string }[];
   expect(ours.map((e) => e.action)).toContain("fedkey.rotate");
 }
 

@@ -18,6 +18,7 @@ import {
 } from "@openloungephone/protocol";
 import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
+  type AppCloseFilter,
   CloseCode,
   type ConferenceSnapshot,
   type Conn,
@@ -109,6 +110,12 @@ export interface Coordinator {
   forgetDevice(householdId: string, deviceId: string): Promise<void>;
   /** Sends a message to every open companion session of an account, in all its households. */
   notifyAccount(accountId: string, msg: ServerToApp): Promise<void>;
+  /**
+   * Closes a member's companion sockets in one household: all of them, or only those of the
+   * sign-in sessions in `only`, or all but `except`. `removed` = they left the space (their
+   * session still works elsewhere); otherwise they were signed out.
+   */
+  closeApps(householdId: string, userId: string, filter?: AppCloseFilter): Promise<void>;
   /** Rings someone in a household for a caller elsewhere (see `HouseholdHub.remoteRing`). */
   ringRemote(householdId: string, req: RemoteRing): Promise<RingResult>;
   /** Signaling for a household's call with another household or server. */
@@ -235,6 +242,10 @@ export class Gateway implements Coordinator {
     for (const m of await this.env.store.listMemberships(accountId)) {
       await this.hubs.get(m.household.id)?.sendToUser(m.user.id, msg);
     }
+  }
+
+  async closeApps(householdId: string, userId: string, filter?: AppCloseFilter): Promise<void> {
+    await this.hubs.get(householdId)?.closeApps(userId, filter);
   }
 
   ringRemote(householdId: string, req: RemoteRing): Promise<RingResult> {
@@ -536,7 +547,9 @@ export class Gateway implements Coordinator {
       // The household comes from the hello, else the object's own household (Cloudflare routes
       // by `?household=`), else the session's active one. It must be one of the account's.
       const found = await this.env.store.sessionForToken(msg.token, this.env.now());
-      const session = found?.account.suspendedAt === null ? found : undefined;
+      // Suspended accounts, and a recovery code's session (it may only add a passkey), get no socket.
+      const session =
+        found?.account.suspendedAt === null && !found.session.limited ? found : undefined;
       const target = msg.household ?? this.household;
       const user =
         session && target
@@ -548,7 +561,7 @@ export class Gateway implements Coordinator {
       }
       cancelHello();
       const hub = this.hub(user.householdId);
-      const peer = await hub.connectApp(user, conn);
+      const peer = await hub.connectApp(user, conn, session?.session.id || undefined);
       if (closed()) return hub.disconnect(peer);
       phase = { kind: "ready", hub, peer };
     };

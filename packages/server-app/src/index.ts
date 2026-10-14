@@ -1,3 +1,4 @@
+export { isOperator, operatorProblems } from "./accounts.ts";
 export * from "./connections.ts";
 export * from "./deviceAuth.ts";
 export * from "./env.ts";

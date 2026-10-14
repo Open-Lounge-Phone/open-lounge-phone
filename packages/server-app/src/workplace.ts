@@ -84,7 +84,8 @@ const HoursBody = z
   .refine((b) => b.hours !== undefined || b.afterHours !== undefined, {
     message: "nothing to change",
   });
-const RoleBody = z.object({ role: z.enum(["admin", "member"]) });
+/** Homes say guardian/contact, teams admin/member: either works in both. */
+const RoleBody = z.object({ role: z.enum(["admin", "member", "guardian", "contact"]) });
 
 const notWorkplace = "only team and org spaces have a directory, extensions and ring groups";
 
@@ -133,7 +134,6 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     "/space/hours",
     "/space/calls",
     "/space/calls.csv",
-    "/users/:id/role",
   ]) {
     api.use(path, workplace);
   }
@@ -426,7 +426,10 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
 
   // --- roles -------------------------------------------------------------------------------
 
-  /** The owner makes members admins and back. */
+  /**
+   * The owner makes members admins and back (guardians and contacts in a home): every space
+   * type, so a home's owner can make someone else a guardian before handing it on.
+   */
   api.patch("/users/:id/role", async (c) => {
     const me = c.get("user");
     const b = await body(c.req.raw, RoleBody);
@@ -435,10 +438,18 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     if (!target || target.householdId !== me.householdId) {
       return c.json({ error: "not found" }, 404);
     }
-    const check = mayChangeRole(await roleOf(env, me), await roleOf(env, target), b.role);
+    const to = b.role === "admin" || b.role === "guardian" ? "admin" : "member";
+    const check = mayChangeRole(await roleOf(env, me), await roleOf(env, target), to);
     if (!check.ok) return c.json({ error: check.error }, 403);
-    await store.setRole(target.id, b.role === "admin" ? "guardian" : "contact");
-    await auditFrom(env, c, "role.change", { userId: target.id, name: target.name, role: b.role });
+    const home = !(await workplaceSpace(env, me.householdId));
+    await store.setRole(target.id, to === "admin" ? "guardian" : "contact");
+    await auditFrom(env, c, "role.change", {
+      userId: target.id,
+      name: target.name,
+      role: home ? (to === "admin" ? "guardian" : "contact") : to,
+    });
+    // Their open apps reconnect with the new role.
+    await live.closeApps(me.householdId, target.id, { removed: true, reason: "role changed" });
     return c.body(null, 204);
   });
 

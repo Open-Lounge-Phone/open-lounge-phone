@@ -16,9 +16,11 @@ import { isOperator } from "./accounts.ts";
 import type { ServerEnv } from "./env.ts";
 import { resetsOn } from "./fairUse.ts";
 import { ownHost } from "./federation.ts";
+import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { operatorAudit, ownKeys, rotateOwnKey } from "./ownKey.ts";
 import { knownOffers } from "./peers.ts";
+import { closeAccountApps } from "./sessions.ts";
 
 /** Public: what this server asks of its users and how it's funded (hubs only). */
 export function publicHubRoutes(api: Hono<Vars>, env: ServerEnv): void {
@@ -43,7 +45,7 @@ const Fingerprint = z.string().regex(/^SHA256:[A-Za-z0-9_-]{43}$/);
 /** Re-trust needs both fingerprints the operator was shown: proof they saw this exact change. */
 const RetrustBody = z.object({ from: Fingerprint, to: Fingerprint });
 
-export function hubRoutes(api: Hono<Vars>, env: ServerEnv): void {
+export function hubRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): void {
   const { store } = env;
 
   /** Your use this month against the fair-use allowance (null limits = unlimited). */
@@ -97,6 +99,8 @@ export function hubRoutes(api: Hono<Vars>, env: ServerEnv): void {
     if (!target) return c.json({ error: "not found" }, 404);
     if (target.id === c.get("account").id) return c.json({ error: "not yourself" }, 400);
     await store.setSuspended(target.id, b.suspended ? env.now() : null);
+    // A suspended account's open apps close now (its sessions stop working at once).
+    if (b.suspended) await closeAccountApps(env, live, target.id);
     await operatorAudit(
       env,
       c.get("account"),

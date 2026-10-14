@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fairUseFromVars, HUB_FAIR_USE, hubInfoFromVars } from "./limits.ts";
-import { expectStatus, type FakeConn, TestServer } from "./testkit.ts";
+import { expectStatus, type FakeConn, fakeRegistration, TestServer } from "./testkit.ts";
 
 const MINUTE = 60_000;
 
@@ -190,20 +190,47 @@ describe("abuse controls", () => {
     expectStatus(await opts(), 200);
   });
 
-  it("limits sign-ups per IP address and changes per account", async () => {
+  it("limits sign-ups per IP address (accounts made, and tries) and changes per account", async () => {
     s.env.openSignup = true;
-    s.env.limits = { signupsPerIpPerHour: 2, writesPerAccountPerMinute: 3 };
-    const opts = (ip: string) =>
+    s.env.limits = {
+      signupsPerIpPerHour: 2,
+      signupAttemptsPerIpPerHour: 5,
+      writesPerAccountPerMinute: 3,
+    };
+    let n = 0;
+    const opts = (ip: string, handle = `h${++n}x`) =>
       s.http("/signup/options", {
-        body: { handle: `h${ip.replace(/\D/g, "")}x`, name: "J", timeZone: "UTC" },
+        body: { handle, name: "J", timeZone: "UTC" },
         headers: { "cf-connecting-ip": ip },
       });
+    const signUp = async (ip: string) => {
+      const o = await opts(ip);
+      expectStatus(o, 200);
+      return s.http("/signup", {
+        body: {
+          challengeId: o.json.challengeId,
+          response: await fakeRegistration(
+            o.json.options,
+            new URL(s.env.publicUrl ?? "http://localhost").origin,
+          ),
+        },
+        headers: { "cf-connecting-ip": ip },
+      });
+    };
+    // Tries that don't make an account (a person gave up, a handle was taken) don't count as
+    // sign-ups, and a taken handle is answered before anything is counted.
     expectStatus(await opts("1.1.1.1"), 200);
-    expectStatus(await opts("1.1.1.1"), 200);
+    for (let i = 0; i < 10; i++) expectStatus(await opts("1.1.1.1", "admin"), 400);
+    expectStatus(await signUp("1.1.1.1"), 201);
+    expectStatus(await signUp("1.1.1.1"), 201);
+    // Two accounts made from here this hour: that's the limit.
     expectStatus(await opts("1.1.1.1"), 429);
-    expectStatus(await opts("2.2.2.2"), 200);
+    expectStatus(await signUp("2.2.2.2"), 201);
     s.timers.advance(60 * MINUTE);
-    expectStatus(await opts("1.1.1.1"), 200);
+    expectStatus(await signUp("1.1.1.1"), 201);
+    // Tries have a looser limit of their own, so they can't be hammered either.
+    for (let i = 0; i < 5; i++) expectStatus(await opts("3.3.3.3"), 200);
+    expectStatus(await opts("3.3.3.3"), 429);
 
     const mom = await s.person("mom");
     const change = () =>
@@ -214,9 +241,13 @@ describe("abuse controls", () => {
   });
 
   it("lets operators suspend and exempt accounts and block servers; nobody else", async () => {
-    s.env.operators = ["boss"];
     const boss = await s.person("boss");
     const eve = await s.person("eve");
+    // A handle gives no rights (it could be renamed, released and taken by someone else).
+    s.env.operators = ["boss"];
+    expect((await s.http("/me", { token: boss.token })).json.operator).toBe(false);
+    expectStatus(await s.http("/admin/overview", { token: boss.token }), 403);
+    s.env.operators = [boss.account.id];
     expect((await s.http("/me", { token: boss.token })).json.operator).toBe(true);
     expect((await s.http("/me", { token: eve.token })).json.operator).toBe(false);
     for (const path of ["/admin/overview", "/admin/accounts?handle=boss"]) {
@@ -239,7 +270,8 @@ describe("abuse controls", () => {
       }),
       204,
     );
-    // Suspended: no API, no new sockets, and knocks to them go nowhere.
+    // Suspended: the open app is closed, no API, no new sockets, and knocks go nowhere.
+    expect(eveApp.closed?.code).toBe(4401);
     expect(await s.http("/me", { token: eve.token })).toMatchObject({ status: 403 });
     const again = s.openApp();
     again.write({ t: "app.hello", proto: 1, token: eve.token });

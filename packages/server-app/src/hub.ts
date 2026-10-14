@@ -90,6 +90,7 @@ import {
   type VoicemailOffer,
 } from "@openloungephone/protocol";
 import {
+  type AppCloseFilter,
   CloseCode,
   CONNECT_TIMEOUT_MS,
   type ConferenceSnapshot,
@@ -637,7 +638,7 @@ export class HouseholdHub {
     });
   }
 
-  connectApp(user: User, conn: Conn): Promise<Peer> {
+  connectApp(user: User, conn: Conn, auth?: string): Promise<Peer> {
     return this.run(async () => {
       const peer: Peer = {
         session: newId("s"),
@@ -648,6 +649,7 @@ export class HouseholdHub {
         label: user.name,
         conn,
         guardian: user.role === "guardian",
+        ...(auth ? { auth } : {}),
       };
       const set = this.apps.get(user.id) ?? new Set<Peer>();
       const cameOnline = set.size === 0 && !this.userOnline(user.id);
@@ -964,6 +966,25 @@ export class HouseholdHub {
   sendToUser(userId: string, msg: ServerToApp): Promise<void> {
     return this.run(() => {
       for (const app of this.apps.get(userId) ?? []) app.conn.send(msg);
+    });
+  }
+
+  /**
+   * Closes a member's companion sockets (signed out, or no longer in this space): nothing keeps
+   * working on a socket opened before. See `Coordinator.closeApps`.
+   */
+  closeApps(userId: string, filter: AppCloseFilter = {}): Promise<void> {
+    return this.run(() => {
+      for (const app of [...(this.apps.get(userId) ?? [])]) {
+        if (filter.only && !(app.auth && filter.only.includes(app.auth))) continue;
+        if (filter.except !== undefined && app.auth === filter.except) continue;
+        this.dropPeer(app);
+        if (filter.removed) app.conn.close(CloseCode.removed, filter.reason ?? "not in this space");
+        else {
+          app.conn.send({ t: "error", code: "unauthorized", message: "signed out" });
+          app.conn.close(CloseCode.unauthorized, "signed out");
+        }
+      }
     });
   }
 

@@ -41,16 +41,21 @@ import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { lineRoutes } from "./lines.ts";
+import { memberRoutes } from "./members.ts";
 import { noticeRoutes, publicNoticeRoutes } from "./notices.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
 import { publicRecordingRoutes, recordingRoutes } from "./recordings.ts";
 import { roomRoutes } from "./roomsApi.ts";
+import { publicRecoveryRoutes, sessionOptions, sessionRoutes } from "./sessions.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
 import { workplaceRoutes } from "./workplace.ts";
+
+/** What a recovery code's session may do: make a passkey, see who it is, or sign out. */
+const LIMITED_SESSION_PATHS = /\/(passkeys\/register\/(options|verify)|me|logout)$/;
 
 /** Settings key holding the hash of the one-time first-run setup token. */
 export const SETUP_TOKEN_KEY = "setup_token_hash";
@@ -231,7 +236,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       { name: b.householdName, timeZone: b.timeZone, guardianName: b.guardianName },
       now,
     );
-    const token = await store.createSession(guardian.id, now);
+    const token = await store.createAccountSession(
+      guardian.accountId,
+      guardian.id,
+      now,
+      sessionOptions(c, "setup"),
+    );
     const account = await store.getAccount(guardian.accountId);
     return c.json(
       {
@@ -245,11 +255,12 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   signupRoutes(api, env);
-  publicPeopleRoutes(api, env);
+  publicPeopleRoutes(api, env, live);
   publicHubRoutes(api, env);
   publicVoicemailRoutes(api, env, live);
   publicRecordingRoutes(api, env);
   publicNoticeRoutes(api, env);
+  publicRecoveryRoutes(api, env, live);
 
   // --- authenticated --------------------------------------------------------
 
@@ -263,8 +274,14 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       env.now(),
     );
     if (session === "unauthorized") return c.json({ error: "unauthorized" }, 401);
-    if (session === "suspended") return c.json({ error: "this account is suspended" }, 403);
+    if (session === "suspended") {
+      return c.json({ error: "this account is suspended", code: "suspended" }, 403);
+    }
     if (session === "not_member") return c.json({ error: "not a member of that household" }, 403);
+    // A recovery code's session may only add a passkey (then it becomes a full session).
+    if (session.session.limited && !LIMITED_SESSION_PATHS.test(c.req.path)) {
+      return c.json({ error: "add a passkey first", code: "passkey_required" }, 403);
+    }
     // A fair per-account pace for changes (reads are free).
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       const perMinute = limitsOf(env).writesPerAccountPerMinute;
@@ -277,11 +294,13 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     c.set("account", session.account);
     c.set("member", session.member);
     c.set("token", token);
+    c.set("session", session.session);
     await next();
   });
 
   accountRoutes(api, env, live);
-  hubRoutes(api, env);
+  sessionRoutes(api, env, live);
+  hubRoutes(api, env, live);
   leavingRoutes(api, env, live);
   connectionRoutes(api, env, live);
   timelineRoutes(api, env);
@@ -312,7 +331,29 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     return user.role === "guardian" || device.ownerUserId === user.id ? device : undefined;
   };
 
-  api.get("/users", async (c) => c.json(await store.listUsers(c.get("user").householdId)));
+  /**
+   * The people in this space. `owner` marks who owns it; guardians (admins) also see `onlyHere`:
+   * whether this is the person's only space here (a sign-in link works only then, and removing
+   * them deletes their account).
+   */
+  api.get("/users", async (c) => {
+    const me = c.get("user");
+    const [users, owner] = await Promise.all([
+      store.listUsers(me.householdId),
+      store.spaceOwnerUser(me.householdId),
+    ]);
+    return c.json(
+      await Promise.all(
+        users.map(async (u) => ({
+          ...u,
+          owner: u.id === owner,
+          ...(me.role === "guardian"
+            ? { onlyHere: (await store.listMemberships(u.accountId)).length === 1 }
+            : {}),
+        })),
+      ),
+    );
+  });
 
   api.get("/devices", async (c) => {
     const user = c.get("user");
@@ -853,6 +894,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   });
 
   auditRoutes(api, env);
+  memberRoutes(api, env, live);
   workplaceRoutes(api, env, live);
   lineRoutes(api, env, live);
   noticeRoutes(api, env, live);

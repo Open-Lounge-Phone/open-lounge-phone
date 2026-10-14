@@ -61,7 +61,7 @@ describe("handle reservation", () => {
       0,
     );
     const gran = await s.store.getAccount(kid.accountId);
-    expectStatus(await s.http(`/users/${kid.id}`, { method: "DELETE", token: mom.token }), 204);
+    expectStatus(await s.http(`/users/${kid.id}`, { method: "DELETE", token: mom.token }), 200);
     expect(await s.store.getAccount(kid.accountId)).toBeUndefined();
     expect(await s.store.handleAvailable(gran?.handle as string, s.timers.now)).toBe(false);
     s.timers.advance(HANDLE_RESERVE_MS + 1);

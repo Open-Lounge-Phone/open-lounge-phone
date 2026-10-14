@@ -142,7 +142,7 @@ describe("team and org spaces: directory, extensions, roles", () => {
     );
     expectStatus(
       await s.http(`/users/${t.ada.user.id}`, { method: "DELETE", token: t.olga.token }),
-      204,
+      200,
     );
   });
 

@@ -16,6 +16,7 @@ import {
   callAcross,
   knockAndAccept,
   noAnswerAcross,
+  operatorSeed,
   rotateMidCall,
   type ServerTarget,
   signUp,
@@ -32,6 +33,8 @@ interface Instance extends ServerTarget {
   log: ProcLog;
 }
 const running: Instance[] = [];
+/** Each Worker's operator (an account id in its OPERATORS, made before it starts). */
+const operators = new Map<string, { id: string; token: string }>();
 
 function stop(inst: Instance) {
   try {
@@ -46,6 +49,8 @@ async function start(name: string, attempt: number): Promise<Instance> {
   const dir = mkdtempSync(join(tmpdir(), `olp-cf-${name}-`));
   const origin = `http://${name}.localhost:${port}`;
   const envFile = join(dir, "dev.env");
+  const op = await operatorSeed(`op-${name}`);
+  operators.set(name, op);
   writeFileSync(
     envFile,
     [
@@ -53,7 +58,7 @@ async function start(name: string, attempt: number): Promise<Instance> {
       "OPEN_SIGNUP=1",
       "DEV_LOOPBACK=1",
       "STUN_URLS=",
-      "OPERATORS=jesse,bob",
+      `OPERATORS=${op.id}`,
       `FED_PRIVATE_KEY='${await generateServerKey()}'`,
     ].join("\n"),
   );
@@ -63,6 +68,23 @@ async function start(name: string, attempt: number): Promise<Instance> {
     { cwd: APP, input: "y\n", encoding: "utf8" },
   );
   if (migrate.status !== 0) throw new Error(`migrations failed:\n${migrate.stderr}`);
+  // The operator account, written into local D1 before the Worker starts.
+  const seed = spawnSync(
+    "npx",
+    [
+      "wrangler",
+      "d1",
+      "execute",
+      "DB",
+      "--local",
+      "--persist-to",
+      dir,
+      "--command",
+      op.sql.join("; "),
+    ],
+    { cwd: APP, encoding: "utf8" },
+  );
+  if (seed.status !== 0) throw new Error(`operator seed failed:\n${seed.stderr}`);
   const proc = spawn(
     "npx",
     [
@@ -137,7 +159,10 @@ it.skipIf(!enabled)(
     await knockAndAccept(jesse, bob);
     await callAcross(jesse, bob);
     // The rotated key is sealed in local D1 by FED_PRIVATE_KEY and read by every Durable Object.
-    await rotateMidCall(jesse, bob);
+    await rotateMidCall(jesse, bob, {
+      a: operators.get("a")?.token as string,
+      b: operators.get("b")?.token as string,
+    });
     await noAnswerAcross(jesse, bob);
     await voicemailAcross(jesse, bob);
     // The server that dialed the stream closes it about a minute after the last signal.

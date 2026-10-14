@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { migrate, openSqlite } from "@openloungephone/db/node";
 import { afterAll, beforeAll, it, onTestFailed } from "vitest";
 import { freePort, ProcLog, reportLogs, retryOnce, saveLogs } from "./procs.ts";
 import {
@@ -14,6 +15,7 @@ import {
   knockAndAccept,
   mergeAcross,
   noAnswerAcross,
+  operatorSeed,
   publicLineAcross,
   removeAndWipe,
   roomsAcross,
@@ -27,6 +29,8 @@ import {
 
 const MAIN = fileURLToPath(new URL("../../apps/server-selfhost/src/main.ts", import.meta.url));
 const running: { proc: ChildProcess; dir: string; log: ProcLog }[] = [];
+/** Each server's operator (an account id in its OPERATORS, made before it starts). */
+const operators = new Map<string, { id: string; token: string }>();
 
 function stop(entry: { proc: ChildProcess; dir: string }) {
   entry.proc.kill("SIGTERM");
@@ -37,6 +41,13 @@ async function start(name: string, attempt: number): Promise<ServerTarget> {
   const port = await freePort();
   const dir = mkdtempSync(join(tmpdir(), `olp-${name}-`));
   const origin = `http://${name}.localhost:${port}`;
+  // Its operator: written into the database before it starts (OPERATORS holds account ids).
+  const op = await operatorSeed(`op-${name}`);
+  const { db } = openSqlite(join(dir, "openloungephone.sqlite"));
+  migrate(db);
+  for (const statement of op.sql) db.exec(statement);
+  db.close();
+  operators.set(name, op);
   const proc = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", MAIN], {
     env: {
       ...process.env,
@@ -46,8 +57,8 @@ async function start(name: string, attempt: number): Promise<ServerTarget> {
       DATA_DIR: dir,
       OPEN_SIGNUP: "1",
       STUN_URLS: "",
-      // Each server's own account runs it (the key rotation step).
-      OPERATORS: "jesse,bob",
+      // The key rotation step runs as this server's operator.
+      OPERATORS: op.id,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -105,7 +116,10 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key 
   await callAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);
-  await rotateMidCall(jesse, bob);
+  await rotateMidCall(jesse, bob, {
+    a: operators.get("a")?.token as string,
+    b: operators.get("b")?.token as string,
+  });
   await removeAndWipe(bob);
   await voicemailAcross(jesse, bob);
   // Rooms without a relay (a peer-to-peer mesh), and a 3-way merge across households and servers.

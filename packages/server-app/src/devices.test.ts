@@ -134,7 +134,8 @@ describe("remove = wipe", () => {
   });
 
   it("wipes the phones of a space deleted with its account", async () => {
-    const { mom } = await home();
+    // Alone in her home (with others in it, she'd hand it on first: accounts.test.ts).
+    const mom = await s.person("mom", "Mom");
     const phone = await unpaired("kids");
     await pair(mom.token, phone.code);
     const { deviceId } = await phone.conn.next("pair.done");

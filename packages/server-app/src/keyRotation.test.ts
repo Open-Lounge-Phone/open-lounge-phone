@@ -56,10 +56,13 @@ let jesse: Person;
 
 beforeEach(async () => {
   net = new Network();
-  a = await net.server("a.test", { env: { operators: ["root"] } });
-  b = await net.server("b.test", { env: { operators: ["root"] } });
+  a = await net.server("a.test");
+  b = await net.server("b.test");
   opA = await a.person("root", "Ada");
   opB = await b.person("root", "Bo");
+  // Operators are account ids (never handles).
+  a.env.operators = [opA.account.id];
+  b.env.operators = [opB.account.id];
   jesse = await a.person("jesse", "Jesse");
   for (const h of ["bob", "dan", "eve"]) await b.person(h);
   expectStatus(await knock(a, jesse, "bob@b.test"), 202); // b pins a's key
