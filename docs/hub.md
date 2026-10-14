@@ -34,7 +34,12 @@ metered when it ends.
 **A self-hosted server has no allowance unless you set one.** An operator can exempt an account
 (for example a venue with Lounge phones). The companion shows "Fair use this month: … of …" with
 the reset date, only on servers that have an allowance. Minutes count against the person who
-placed the call (for a household phone, the space's first guardian).
+placed the call (for a household phone, the space's first guardian), and an add-on's against its
+owner, whoever placed the call.
+
+**Add-ons** ([add-ons.md](add-ons.md)) are off on a server unless its deploy passes `--addons`
+(`ADDONS=on` when self-hosting). The hub runs without them for now; turning them on is the
+owner's call.
 
 ## Why it's cheap
 

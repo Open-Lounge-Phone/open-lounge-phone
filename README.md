@@ -63,9 +63,10 @@ The software works end to end today. The hardware has its first **early dev boar
 | P3.5 | Rooms: party lines (always open, or at set hours that ring the members' phones at opening), phone rooms with addresses (`standup@host`, dialable from any phone's key), host mute/remove/lock, cross-server join; hold, instant 3-way (Add caller → Merge) and blind/attended transfer; a peer-to-peer mesh (≤ 4) or a relay (Cloudflare Realtime SFU, or LiveKit when self-hosting) with top-3 forwarding, idle drop and fair-use metering | done (software); relayed rooms are encrypted in transit, end-to-end (SFrame) planned |
 | P6 (C1) | Team and org spaces as a workplace phone system: owner/admin/member roles, searchable directory, extensions (companion and phone MENU → Dial ext), ring groups (simultaneous, sequential, round robin), business hours with after-hours actions, shared voicemail boxes ("heard by"), call log with CSV export, audit trail, transfer across households and servers inside the space; public lines (a ring group with its own address anyone may call without connecting, with a queue, voicemail and "call me back"; a call back nobody took shows on the phones as a missed call) ([docs/workplace.md](docs/workplace.md)) | done (software) |
 | Notices | A space's guardians (owner and admins in a team) post a short notice to its phones ("Bus is here"), with an optional recording: a chime and the text on the ready screen, lifting the handset plays it, a key clears it; it expires (an hour by default) ([docs/notices.md](docs/notices.md)) | done (server, apps, browser phone, firmware; not yet on a real board) |
+| Add-ons | Services you link to your own account (an AI companion, a notes taker) with an address on it, `you+seat@host`: they link like a phone pairs, only you and the connections you choose can talk to them (both ways, here or on other servers), every call tells them who is calling, kids' phones never reach one, phones and apps label them; off unless the server's operator turns them on (`ADDONS=on`). The add-on bridge ([sdk/python](sdk/python/README.md), Python, Apache-2.0) gives a service the calls as events and PCM audio ([docs/add-ons.md](docs/add-ons.md)) | done (server, apps, browser phone, bridge with an echo demo; firmware 0.9.3 shows the label, not yet on a real board) |
 | P5 | Interop tests in CI (two self-hosted servers and two Workers under `wrangler dev`, on every push) and a versioned federation spec, [docs/federation-spec.md](docs/federation-spec.md) | done |
 | Versions | Servers advertise their software, federation versions and features and negotiate per peer (degrading in plain words); phones and servers exchange protocol ranges (`UPDATE NEEDED` on a too-old phone); v1 frozen by conformance vectors (`tests/conformance/`); CI runs this server against the previous release (`server-v*`) both ways | done |
-| Firmware | ESP32-S3 firmware ([firmware/](firmware/README.md), ESP-IDF; changes in [firmware/CHANGELOG.md](firmware/CHANGELOG.md)): Wi-Fi and server setup from a phone, pairing, calls with two-way audio, leaving and playing voicemail, hold and transfer, extensions, Lounge phones, signed updates (off in source builds), encrypted storage, the phone check and self-test. The labs build ([firmware/labs/](firmware/labs/README.md), 0.0.0) adds the experiments above | 0.9.2: end-to-end tests in the QEMU simulator. The v0.1 dev boards run the experimental labs build (0.0.0) for now, lightly tested; full testing waits on the Wi-Fi antennas ([hardware/BRINGUP.md](hardware/BRINGUP.md)). Labs features come to the phone firmware later, where they make sense |
+| Firmware | ESP32-S3 firmware ([firmware/](firmware/README.md), ESP-IDF; changes in [firmware/CHANGELOG.md](firmware/CHANGELOG.md)): Wi-Fi and server setup from a phone, pairing, calls with two-way audio, leaving and playing voicemail, hold and transfer, extensions, Lounge phones, signed updates (off in source builds), encrypted storage, the phone check and self-test. The labs build ([firmware/labs/](firmware/labs/README.md), 0.0.0) adds the experiments above | 0.9.3: 0.9.2 passed end-to-end tests in the QEMU simulator; 0.9.3 adds the add-on label (host tests and a build only). The v0.1 dev boards run the experimental labs build (0.0.0) for now, lightly tested; full testing waits on the Wi-Fi antennas ([hardware/BRINGUP.md](hardware/BRINGUP.md)). Labs features come to the phone firmware later, where they make sense |
 | Hardware | A minimal 2-layer board (ESP32-S3, 12 hot-swap keys + hook switch, a 2.13" e-paper display module on a header, 3.5 mm jack + codec for an analog handset, piezo ringer, one status LED; USB-C power, no battery, NFC, speaker or hardware mute) in a 3D-printable base | **v0.1 early dev board prototype** ([`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1), rev A): four phones built and working, lightly tested; expect a revision (we recommend board v1.0 for building your own); 3D-printable cases: the prototype box, a wall unit and the plush desk case |
 
 Versions and changes: the server and apps in [CHANGELOG.md](CHANGELOG.md) (releases are tagged
@@ -75,7 +76,7 @@ hardware as `hw-vX.Y` releases; how they fit together:
 
 More: [architecture](docs/architecture.md), [the phone's UX](docs/phone-ux.md), [federation](docs/federation.md) (and its
 [spec](docs/federation-spec.md)),
-[the public hub](docs/hub.md), [privacy](docs/privacy.md), [hardware](hardware/README.md).
+[the public hub](docs/hub.md), [add-ons](docs/add-ons.md), [privacy](docs/privacy.md), [hardware](hardware/README.md).
 
 ## Layout
 
@@ -138,7 +139,9 @@ against the previous release in both directions, federating with each other).
 
 ## License
 
-Software: [AGPL-3.0-or-later](LICENSE). Hardware designs: [CERN-OHL-S-2.0](hardware/LICENSE).
+Software: [AGPL-3.0-or-later](LICENSE), except the add-on bridge in [sdk/python](sdk/python/)
+([Apache-2.0](sdk/python/LICENSE)), so any service can use it. Hardware designs:
+[CERN-OHL-S-2.0](hardware/LICENSE).
 If you run a modified Open Lounge Phone server for others, you must share your changes.
 
 Proudly supported by [unsubscribe.llc](https://www.unsubscribe.llc/).

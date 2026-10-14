@@ -69,6 +69,9 @@ Turnstile keys come only from the environment or its prompts):
   (dashboard → Turnstile → add a widget for the domain). Without keys there's no check.
 - `--refuse-recorded-calls`: other servers' recorded calls don't reach your people (sets the
   `REFUSE_RECORDED_CALLS` var on every deploy; see [security-model.md](security-model.md)).
+- `--addons`: people may link add-ons to their accounts ([add-ons.md](add-ons.md)). Sets the
+  `ADDONS` var on every deploy, so leaving the flag out turns add-ons off again (linked ones then
+  can't connect or be called until it's back).
 - `--operator <handle[,handle]>`: who sees the Operator view (suspend or exempt accounts, block
   servers, rotate the federation key, re-trust other servers' keys, the audit trail). Each handle
   is looked up once in the instance's own D1 (`wrangler d1 execute openloungephone-<instance>

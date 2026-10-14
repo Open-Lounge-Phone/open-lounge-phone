@@ -283,3 +283,37 @@ for the server's operators ([federation.md](federation.md)).
    `recording: true`), so the other server can refuse it before it rings; a server that refuses
    recorded calls (`REFUSE_RECORDED_CALLS=1`) also ends a call — or takes its person out of a
    room — as soon as the other side announces a recording, and tells its person why.
+
+## Add-ons
+
+An add-on ([add-ons.md](add-ons.md)) is a service someone links to their own account, such as an
+AI companion. It hears what's said to it, so the rules are strict and the defaults closed.
+
+1. **Off unless the server's operator turns it on** (`ADDONS=on`; Cloudflare `--addons`). Off
+   means no linking, linked add-ons can't connect (they're refused before the challenge) or be
+   called, and the server doesn't advertise the `addons` federation feature, so other servers
+   never offer it add-on calls.
+2. **Its own key.** It links like a phone pairs: it shows a 6-digit code, its owner enters it in
+   the companion, and its Ed25519 public key is stored. Every connection answers a signed
+   challenge; no person's session token is ever given to it. A phone's code can't link an add-on
+   and an add-on's code can't pair as a phone. Removing it deletes the link at once, closes its
+   socket and tells it to forget the link (also when it next connects, after proving its key).
+   Its owner leaving the space it was linked in deletes the link too: nobody can call it from
+   then on, and it's told the next time it calls out or connects.
+3. **Default deny, both ways.** Only its owner, and the owner's active connections that the owner
+   put on its list, may call it or be called by it — on this server and on others (the callee's
+   server checks the connection and the list). Nothing else reaches it: no knocks (an address
+   with `+` is never a person's), no directory, no public line, no ring group. Every refusal
+   answers `unavailable`, the same as for an address that doesn't exist. Calls with an add-on
+   can't be merged or transferred, and keys pressed in a call reach only an add-on.
+4. **Kids' phones never.** An add-on's address can't be put on a kids' phone's key, a kids' phone
+   that dials one anyway is refused, a call through a kids' phone (another server's `viaPhone`)
+   never reaches one, and an add-on calls people only (never a phone of a space).
+5. **It knows who it's talking to, and people know it's an add-on.** Every call tells it the
+   caller's verified address and name; calls from it carry its address and an add-on label in
+   the apps and on phones (`SEAT · ADD-ON`). There is no spoken warning: people link and allow
+   add-ons knowingly.
+6. **Accountable.** Its call minutes count against its owner's fair-use allowance; linking,
+   changes to who may talk to it and removing it are in the space's audit trail (names and
+   counts, never content). What an add-on does with what it hears is up to its owner and its
+   maker, outside this server.

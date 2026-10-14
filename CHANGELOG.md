@@ -14,6 +14,35 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Add-ons** ([docs/add-ons.md](docs/add-ons.md)): a service you link to your own account (an AI
+  companion, a notes taker) gets an address on it, `you+name@host`, and takes part in calls like a
+  phone. Off unless the server's operator turns it on (`ADDONS=on` self-hosted, `deploy.ts
+  --addons` / `npx openloungephone deploy cloudflare --addons` on Cloudflare); while it's off nobody
+  can link one and linked ones can't connect or be called.
+  - Linking works like pairing a phone: the add-on asks for a code (`pair.begin` `kind:
+    "addon"`), you enter it under **Settings → Add-ons → Link an add-on**, choose its name and
+    who may talk to it; every connection then answers a signed challenge. Removing it cuts it off
+    at once and tells it to forget its link.
+  - Default deny, both ways: only you, and connections you put on its list, can call it or be
+    called by it, on this server or others (feature `addons`, never offered to a server that
+    doesn't list it). Nobody can knock on it, it's in no directory, kids' phones never reach one,
+    and a call with one can't be merged or transferred. Every call tells it who is calling
+    (verified address and name).
+  - Apps and phones label it: an "add-on" badge in the apps (call screen, the space's call list),
+    `SEAT · ADD-ON` on the browser phone, `SEAT - ADD-ON` on firmware 0.9.3. A call with one has a
+    keypad; keys reach only add-ons (`call.key`). You can put your add-on on a key of your own
+    phone (and so on your keys at a Lounge phone); a connection calls one by address
+    (Connections → Call an add-on).
+  - Its call minutes count against its owner's fair-use allowance; linking, changes to who may
+    talk to it and removing it go in the space's audit trail.
+  - Protocol (additive): `call.address`, `call.key`, `call.ringing.from.kind`, `config.addon`,
+    `hello.model` and `pair.begin.kind` `addon` (device feature `addons`). Federation (feature
+    `addons`): the `addon` call target, `CallBody.addon`, `call.key` on the stream. Migration
+    `0028_addons.sql` (two new tables).
+  - **The add-on bridge** ([sdk/python](sdk/python/README.md), Python 3.10+, Apache-2.0): links,
+    keeps the key and answers the challenge, reconnects, and turns calls into events and 16-bit
+    PCM frames at the rate you ask for (Opus and PCMU handled by aiortc), with an echo demo.
+
 ## 0.5.0 (2026-10-14, `server-v0.5.0`)
 
 - **Why a passkey.** Sign-up, sign-in, the passkey offer and Account explain in plain words why
