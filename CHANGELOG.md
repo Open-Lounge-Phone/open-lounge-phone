@@ -10,10 +10,14 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-10-14, `server-v0.4.0`)
 
-On `main`, not tagged yet.
-
+- **A sign-up you can always finish.** The time zone is a list (starting on the device's own
+  zone), the "are you a person?" check says when it's still checking or didn't load (with Try
+  again), and the start screen never claims "invite-only" before the server answers.
+- **The browser phone's MENU 2 works like the hardware's.** A person's own phone plays its
+  unheard voicemail with 1 and clears messages and missed call backs with 3; the greeting moved
+  to 4.
 - **Forms say what to fix.** Every companion form keeps its button enabled and, on submit,
   says next to the field what's wrong in plain words ("Use 2 to 6 digits.", "That's a server.
   Add the name in front: name@server."), checked like the server checks it. No grey example
