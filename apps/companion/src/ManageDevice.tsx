@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { addonAddressProblem, isAddonAddress } from "./addonText.ts";
 import type {
   Api,
   ConnectionView,
@@ -253,10 +254,11 @@ export function ManageDevice({
 
       {device?.ownerUserId && device.kind !== "lounge" && (
         <>
-          <h3>Public lines</h3>
+          <h3>Public lines and add-ons</h3>
           <p className="muted small">
             A business's line, like support@example.org: anyone may call it without connecting
-            first. Put one on a key below. (Kids' phones can't call public lines.)
+            first. Or an add-on you may talk to, like your own you+seat@example.org. Put one on a
+            key below. (Kids' phones can't call either.)
           </p>
           <ul className="stack">
             {phoneLines.map((l) => (
@@ -280,7 +282,10 @@ export function ManageDevice({
             onSubmit={(e) => {
               e.preventDefault();
               const problem =
-                addressProblem(lineAddress) ?? requiredProblem(lineLabel, "a label for its key");
+                (isAddonAddress(lineAddress.trim())
+                  ? addonAddressProblem(lineAddress)
+                  : addressProblem(lineAddress)) ??
+                requiredProblem(lineLabel, "a label for its key");
               setLineProblem(problem);
               if (problem) return;
               setError(undefined);
@@ -296,7 +301,7 @@ export function ManageDevice({
           >
             <div className="row wrap">
               <label>
-                <span className="muted small">Line address</span>
+                <span className="muted small">Address</span>
                 <input
                   value={lineAddress}
                   onChange={(e) => {
@@ -321,7 +326,7 @@ export function ManageDevice({
                   }}
                 />
               </label>
-              <button type="submit">Add line</button>
+              <button type="submit">Add</button>
             </div>
             <span className={lineProblem ? "hint error" : "hint"}>
               {lineProblem ?? "For example, support@example.org with the label Support."}
