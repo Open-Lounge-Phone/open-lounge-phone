@@ -53,7 +53,21 @@ export function auditText(action: string, d: Record<string, unknown> | null): st
     case "phone.room":
       return `put room ${s("name")} on ${phone}`;
     case "phone.line":
-      return `put public line ${s("address")} on ${phone}`;
+      return s("address").includes("+")
+        ? `put add-on ${s("address")} on ${phone}`
+        : `put public line ${s("address")} on ${phone}`;
+    case "addon.link": {
+      const n = typeof d?.allowed === "number" ? d.allowed : 0;
+      return `linked add-on ${s("name")}${n ? ` (${n} ${n === 1 ? "connection" : "connections"} may talk to it)` : ""}`;
+    }
+    case "addon.allow": {
+      const n = typeof d?.allowed === "number" ? d.allowed : 0;
+      return n
+        ? `let ${n} ${n === 1 ? "connection" : "connections"} talk to add-on ${s("name")}`
+        : `made add-on ${s("name")} theirs alone`;
+    }
+    case "addon.remove":
+      return `removed add-on ${s("name")}`;
     case "phone.voicemail":
       return `changed ${phone}'s voicemail settings`;
     case "phone.greeting":

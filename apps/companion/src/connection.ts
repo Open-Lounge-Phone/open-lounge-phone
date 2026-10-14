@@ -255,6 +255,24 @@ export class Connection {
     );
   }
 
+  /**
+   * Calls an add-on by its address (`you+seat@example.org`): your own, or one whose owner allowed
+   * you. The server refuses anything else (`unavailable`).
+   */
+  async callAddon(address: string, label: string): Promise<void> {
+    await this.dialWith(
+      { type: "dial", label, person: true, addon: true },
+      { t: "call.address", address },
+    );
+  }
+
+  /** In a call with an add-on: a key pressed on the keypad (`0`–`9`, `*`, `#`). */
+  sendKey(key: string): void {
+    const call = this.snap.call;
+    if (call.phase !== "active" || !call.addon) return;
+    this.socket.send({ t: "call.key", callId: call.callId, key });
+  }
+
   /** Waiting in a public line's queue: leave a voicemail instead (the line's offer follows). */
   leaveVoicemailInstead(): void {
     const call = this.snap.call;
@@ -280,7 +298,8 @@ export class Connection {
           | "call.connection"
           | "call.phone"
           | "call.extension"
-          | "call.line";
+          | "call.line"
+          | "call.address";
       }
     >,
   ): Promise<void> {

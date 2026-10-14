@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { renderSVG } from "uqr";
+import { addonAddressProblem } from "./addonText.ts";
 import type { Api, ConnectionsInfo, ConnectionView, Retention } from "./api.ts";
 import { daysLeft, groupConnections, hostBadge } from "./connectionGroups.ts";
 import { addressProblem, serverName, serverProblem } from "./fields.ts";
@@ -21,6 +22,8 @@ interface Props {
     | undefined;
   /** Call a business's public line by its address (no knock needed). */
   onCallLine?: ((address: string) => void) | undefined;
+  /** Call an add-on by its address (its owner must have allowed you). */
+  onCallAddon?: ((address: string) => void) | undefined;
 }
 
 /**
@@ -36,6 +39,7 @@ export function Connections({
   onCall,
   onCallPhone,
   onCallLine,
+  onCallAddon,
 }: Props) {
   const [info, setInfo] = useState<ConnectionsInfo>();
   const [error, setError] = useState<string>();
@@ -197,6 +201,7 @@ export function Connections({
         }
       />
       {onCallLine && <CallLineForm onCall={onCallLine} />}
+      {onCallAddon && <CallAddonForm onCall={onCallAddon} />}
 
       {groups.requests.length > 0 && (
         <>
@@ -401,6 +406,52 @@ function CallLineForm({ onCall }: { onCall(address: string): void }) {
       </button>
       <span className="hint">
         Businesses can publish a line anyone may call. They see your address when you call.
+      </span>
+    </form>
+  );
+}
+
+/** Someone's add-on that its owner lets you talk to: call it by its address. */
+function CallAddonForm({ onCall }: { onCall(address: string): void }) {
+  const [to, setTo] = useState("");
+  const [problem, setProblem] = useState<string>();
+  return (
+    <form
+      className="card stack"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        const p = addonAddressProblem(to);
+        setProblem(p);
+        if (!p) onCall(to.trim().toLowerCase());
+      }}
+    >
+      <h3>Call an add-on</h3>
+      <label>
+        The add-on's address
+        <input
+          value={to}
+          onChange={(e) => {
+            setTo(e.target.value);
+            setProblem(undefined);
+          }}
+          inputMode="email"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-invalid={problem ? true : undefined}
+        />
+        <span className={problem ? "hint error" : "hint"}>
+          {problem ?? "Like name+seat@server, for example jo+seat@example.org."}
+        </span>
+      </label>
+      <button type="submit" className="primary">
+        Call
+      </button>
+      <span className="hint">
+        An add-on is a service linked to someone's account. Only people its owner chose can call it;
+        it's told who is calling.
       </span>
     </form>
   );

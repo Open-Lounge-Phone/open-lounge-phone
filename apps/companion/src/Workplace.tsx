@@ -1,6 +1,8 @@
 // Team and org spaces as a workplace phone system: the directory with extensions for everyone,
 // and for admins the extensions, ring groups, business hours, roles, call log and audit trail.
+
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { isAddonAddress } from "./addonText.ts";
 import type {
   AfterHours,
   Api,
@@ -490,6 +492,7 @@ function Admin({
                 <span className="grow">
                   {new Date(c.startedAt).toLocaleString()} · {c.who}{" "}
                   {c.direction === "out" ? "→" : "←"} {c.peerLabel || c.peer}
+                  {isAddonAddress(c.peer) && <span className="badge">add-on</span>}
                 </span>
                 <span className="muted">
                   {c.answered ? formatDuration(c.durationMs) : (c.endReason ?? "missed")}

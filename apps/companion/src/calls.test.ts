@@ -382,3 +382,36 @@ describe("public lines", () => {
     expect(missed).toMatchObject({ phase: "ended", voicemail: offer });
   });
 });
+
+describe("add-ons", () => {
+  it("an add-on's call keeps its add-on mark from ringing to active", () => {
+    const addonRing: CallEvent = {
+      type: "server",
+      now: 1000,
+      msg: {
+        t: "call.ringing",
+        callId: "c1",
+        from: { label: "seat", address: "jo+seat@x.example", kind: "addon" },
+      },
+    };
+    let { view } = run([addonRing]);
+    expect(view).toMatchObject({ phase: "incoming", addon: true, address: "jo+seat@x.example" });
+    view = run([{ type: "answer" }, state("c1", "connecting"), state("c1", "active")], view).view;
+    expect(view).toMatchObject({ phase: "active", addon: true });
+    expect(run([ringing("c2")]).view).not.toHaveProperty("addon");
+  });
+
+  it("calling one marks the call as with an add-on until it ends", () => {
+    const { view } = run([
+      { type: "dial", label: "seat", person: true, addon: true },
+      state("c1", "ringing"),
+      state("c1", "connecting"),
+      state("c1", "active"),
+    ]);
+    expect(view).toMatchObject({ phase: "active", addon: true, offerer: true });
+    expect(run([state("c1", "ended", "hangup")], view).view).toMatchObject({
+      phase: "ended",
+      addon: true,
+    });
+  });
+});

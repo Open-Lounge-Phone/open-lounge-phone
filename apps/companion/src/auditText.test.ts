@@ -37,6 +37,23 @@ describe("audit trail words", () => {
     );
   });
 
+  it("add-ons: linking, who may talk to them, removing, a key on a phone", () => {
+    expect(auditText("addon.link", { name: "seat", allowed: 0 })).toBe("linked add-on seat");
+    expect(auditText("addon.link", { name: "seat", allowed: 2 })).toBe(
+      "linked add-on seat (2 connections may talk to it)",
+    );
+    expect(auditText("addon.allow", { name: "seat", allowed: 1 })).toBe(
+      "let 1 connection talk to add-on seat",
+    );
+    expect(auditText("addon.allow", { name: "seat", allowed: 0 })).toBe(
+      "made add-on seat theirs alone",
+    );
+    expect(auditText("addon.remove", { name: "seat" })).toBe("removed add-on seat");
+    expect(auditText("phone.line", { phone: "Desk", address: "jo+seat@x.example" })).toBe(
+      "put add-on jo+seat@x.example on Desk",
+    );
+  });
+
   it("anything newer than this app: its name", () => {
     expect(auditText("something.new", null)).toBe("something.new");
   });

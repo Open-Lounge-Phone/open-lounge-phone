@@ -107,11 +107,27 @@ function Picker({
   );
 }
 
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+
+/** Keys for an add-on (it hears them as `call.key`, e.g. "press 1 for…"). */
+function Keypad({ onKey }: { onKey(key: string): void }) {
+  return (
+    <fieldset className="keypad" aria-label="Keypad">
+      {KEYS.map((k) => (
+        <button key={k} type="button" onClick={() => onKey(k)}>
+          {k}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
 export function CallOverlay({ snap, conn, people = [], api, extensions }: Props) {
   const audio = useRef<HTMLAudioElement>(null);
   const call = snap.call;
   const held = snap.held;
   const [picking, setPicking] = useState<"add" | "transfer">();
+  const [keypad, setKeypad] = useState(false);
 
   useEffect(() => {
     if (audio.current) audio.current.srcObject = snap.remote ?? null;
@@ -205,7 +221,17 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
             <div className="avatar" aria-hidden>
               {call.label.slice(0, 1).toUpperCase()}
             </div>
-            <div className="who">{call.label}</div>
+            <div className="who">
+              {call.label}
+              {call.addon && (
+                <>
+                  {" "}
+                  <span className="badge" title="A service linked to someone's account">
+                    add-on
+                  </span>
+                </>
+              )}
+            </div>
             {call.phase === "outgoing" && call.line?.description && (
               <div className="muted small">{call.line.description}</div>
             )}
@@ -246,6 +272,9 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                 label={call.label}
                 onClose={() => conn.dismiss()}
               />
+            )}
+            {keypad && call.phase === "active" && call.addon && (
+              <Keypad onKey={(k) => conn.sendKey(k)} />
             )}
             {picking === "transfer" && call.phase === "active" && (
               <Picker
@@ -294,7 +323,17 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                   >
                     {snap.muted ? "Unmute" : "Mute"}
                   </button>
-                  {call.phase === "active" && !held && call.hold !== "them" && (
+                  {call.phase === "active" && call.addon && (
+                    <button
+                      type="button"
+                      className={`round ${keypad ? "on" : ""}`}
+                      aria-pressed={keypad}
+                      onClick={() => setKeypad(!keypad)}
+                    >
+                      Keypad
+                    </button>
+                  )}
+                  {call.phase === "active" && !call.addon && !held && call.hold !== "them" && (
                     <>
                       <button type="button" className="round" onClick={() => conn.hold()}>
                         Hold

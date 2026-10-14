@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Account } from "./Account.tsx";
+import { Addons } from "./Addons.tsx";
 import { Admin } from "./Admin.tsx";
 import {
   type Api,
@@ -777,6 +778,12 @@ function SignedIn({
             onCall={(c) => void conn?.callConnection(c.id, c.name)}
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
             onCallLine={(address) => void conn?.callLine(address)}
+            onCallAddon={(address) =>
+              void conn?.callAddon(
+                address,
+                address.slice(address.indexOf("+") + 1).split("@")[0] ?? address,
+              )
+            }
           />
         )}
         {me && route.name === "rooms" && (
@@ -799,6 +806,9 @@ function SignedIn({
             onChanged={loadMe}
             onBack={() => setRoute({ name: "home" })}
           />
+        )}
+        {me && route.name === "settings" && (
+          <Addons api={api} conn={conn} address={meInfo?.account?.address} />
         )}
         {meInfo?.operator && route.name === "admin" && (
           <Admin api={baseApi} sessionToken={token} onBack={() => setRoute({ name: "home" })} />

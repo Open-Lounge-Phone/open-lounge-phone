@@ -278,6 +278,23 @@ export interface ConnectionsInfo {
   sharePresence?: boolean;
 }
 
+/** One of your add-ons (Settings → Add-ons, docs/add-ons.md). */
+export interface AddonView {
+  id: string;
+  name: string;
+  /** `handle+name@host`. */
+  address: string;
+  /** Connected to the server right now (as the server reports it). */
+  online: boolean;
+  lastSeen: number | null;
+  fw: string | null;
+  createdAt: number;
+  /** The space it was linked in. */
+  space: string;
+  /** Connection ids that may talk to it besides you. */
+  allow: string[];
+}
+
 /** A connection on a phone's allow-list (its `rc_…` id is also in `contacts`). */
 export interface RemoteContactInfo {
   id: string;
@@ -841,6 +858,14 @@ export function createApi(opts: ApiOptions) {
 
     // Connections (knock, then talk)
     connections: () => request<ConnectionsInfo>("GET", "/connections"),
+
+    // Add-ons (Settings → Add-ons)
+    addons: () => request<{ enabled: boolean; addons: AddonView[] }>("GET", "/addons"),
+    linkAddon: (input: { code: string; name: string; allow: string[] }) =>
+      request<AddonView>("POST", "/addons/link", input),
+    setAddonAllow: (id: string, connections: string[]) =>
+      request<{ allow: string[] }>("PUT", `/addons/${enc(id)}/allow`, { connections }),
+    removeAddon: (id: string) => request<void>("DELETE", `/addons/${enc(id)}`),
     knock: (to: string, note?: string) =>
       request<{ status: "sent" | "connected"; connection: ConnectionView }>(
         "POST",

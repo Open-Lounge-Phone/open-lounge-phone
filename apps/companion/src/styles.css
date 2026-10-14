@@ -519,7 +519,8 @@ details summary {
 .round.decline {
   background: #d93a2f;
 }
-.round.mute.on {
+.round.mute.on,
+.round.on {
   background: #fff;
   color: #1d2321;
 }
@@ -1345,4 +1346,23 @@ dl.phone-facts {
 }
 .passkey-help li + li {
   margin-top: 0.25rem;
+}
+
+/* A call with an add-on: its keypad (keys go to the add-on). */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 3.5rem);
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0.75rem 0;
+  border: none;
+  padding: 0;
+}
+.keypad button {
+  min-height: 2.75rem;
+  font-size: 1.25rem;
+  border-radius: 999px;
+  border: none;
+  background: rgb(255 255 255 / 18%);
+  color: #fff;
 }

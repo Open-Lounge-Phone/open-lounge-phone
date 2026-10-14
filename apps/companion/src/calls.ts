@@ -28,6 +28,8 @@ export type CallView =
       line?: LineInfo;
       /** Waiting in the line's queue (nobody free yet). */
       queue?: QueueView;
+      /** Calling an add-on (shown with an add-on badge). */
+      addon?: boolean;
     }
   | {
       phase: "incoming";
@@ -38,6 +40,8 @@ export type CallView =
       line?: string;
       /** A public line calling you back, as you asked (answering calls it in your place). */
       callback?: boolean;
+      /** An add-on is calling (`address` is its `handle+name@host`). */
+      addon?: boolean;
     }
   | {
       phase: "connecting" | "active";
@@ -49,6 +53,8 @@ export type CallView =
       hold?: "you" | "them";
       /** The call is recorded (announced to everyone): by this space. Stays until it ends. */
       recording?: string;
+      /** The other side is an add-on (keys pressed go to it: `call.key`). */
+      addon?: boolean;
     }
   | {
       phase: "ended";
@@ -64,10 +70,18 @@ export type CallView =
       voicemail?: VoicemailOffer;
       /** You asked a public line to call you back: your place is kept until then (epoch ms). */
       callbackUntil?: number;
+      addon?: boolean;
     };
 
 export type CallEvent =
-  | { type: "dial"; label: string; deviceId?: string; person?: boolean; via?: string }
+  | {
+      type: "dial";
+      label: string;
+      deviceId?: string;
+      person?: boolean;
+      via?: string;
+      addon?: boolean;
+    }
   | { type: "answer" }
   | { type: "hangup" }
   | { type: "dismiss" }
@@ -107,16 +121,23 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           ...(e.deviceId ? { deviceId: e.deviceId } : {}),
           ...(e.person ? { person: true } : {}),
           ...(e.via ? { via: e.via } : {}),
+          ...(e.addon ? { addon: true } : {}),
         },
       };
     case "answer":
       if (view.phase !== "incoming") return { view };
       return {
-        view: { phase: "connecting", callId: view.callId, label: view.label, offerer: false },
+        view: {
+          phase: "connecting",
+          callId: view.callId,
+          label: view.label,
+          offerer: false,
+          ...addonOf(view),
+        },
       };
     case "hangup":
       if (view.phase === "idle" || view.phase === "ended") return { view };
-      return { view: { phase: "ended", label: labelOf(view), reason: "hangup" } };
+      return { view: { phase: "ended", label: labelOf(view), reason: "hangup", ...addonOf(view) } };
     case "dismiss":
       return view.phase === "ended" ? { view: { phase: "idle" } } : { view };
     case "server":
@@ -134,6 +155,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           ...(msg.from.address ? { address: msg.from.address } : {}),
           ...(msg.line ? { line: msg.line.name } : {}),
           ...(msg.callback ? { callback: true } : {}),
+          ...(msg.from.kind === "addon" ? { addon: true } : {}),
         },
       };
     }
@@ -154,6 +176,10 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
 function labelOf(v: CallView): string {
   return v.phase === "idle" ? "" : v.label;
 }
+
+/** The other side is an add-on: carried from phase to phase. */
+const addonOf = (v: CallView): { addon?: true } =>
+  v.phase !== "idle" && v.addon ? { addon: true } : {};
 
 function stateFor(
   view: CallView,
@@ -194,6 +220,7 @@ function stateFor(
           ...(msg.note ? { note: msg.note } : {}),
           ...(msg.voicemail && view.phase === "outgoing" ? { voicemail: msg.voicemail } : {}),
           ...(msg.callback ? { callbackUntil: msg.callback.until } : {}),
+          ...addonOf(view),
         },
       };
     case "requesting":
@@ -213,7 +240,7 @@ function stateFor(
     }
     case "connecting":
       if (view.phase === "connecting" || view.phase === "active") return { view };
-      return { view: { phase: "connecting", callId, label, offerer } };
+      return { view: { phase: "connecting", callId, label, offerer, ...addonOf(view) } };
     case "active": {
       const hold = msg.hold ? { hold: msg.hold } : {};
       const recording = msg.recording ? { recording: msg.recording.by } : {};
@@ -231,6 +258,7 @@ function stateFor(
           startedAt: now,
           ...hold,
           ...recording,
+          ...addonOf(view),
         },
       };
     }
