@@ -58,8 +58,8 @@ export function Welcome({
             <div>
               <strong>A phone</strong>
               <p className="muted small">
-                A simple desk phone with keys and a handset. The hardware isn't finished yet, so you
-                can use a virtual phone in a browser.
+                A simple desk phone with keys and a handset: an Open Lounge Phone, or a virtual
+                phone in a browser.
               </p>
             </div>
           </div>

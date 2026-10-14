@@ -73,9 +73,22 @@ export function virtualPhoneUrl(userId: string, name: string, pair: boolean): st
   return `/device/?${q.toString()}`;
 }
 
-/** Shown on an offline phone's card: why a virtual phone goes offline, and what to do. */
-export const OFFLINE_HINT =
-  "Offline — a virtual phone only stays connected while its page is open and visible. On iPhone, open it on another device (a laptop or tablet) and leave it there.";
+/** The browser phone reports this model; hardware phones report their board. */
+export const VIRTUAL_MODEL = "web-emulator";
+
+/**
+ * Shown on an offline phone's card: why it may be offline and what to do, for the kind of phone
+ * it is (a phone that never reported its model gets the hint for both).
+ */
+export function offlineHint(phone: { model?: string | null }): string {
+  if (phone.model === VIRTUAL_MODEL) {
+    return "Offline: a virtual phone only stays connected while its page is open and visible. On iPhone, open it on another device (a laptop or tablet) and leave it there.";
+  }
+  if (phone.model) {
+    return "Offline: check it's plugged in and on Wi-Fi. On the phone, MENU 7 shows the Wi-Fi signal and why it can't connect.";
+  }
+  return "Offline: a hardware phone needs power and Wi-Fi (MENU 7 on the phone shows why it can't connect); a virtual phone only stays connected while its page is open.";
+}
 
 /**
  * Link to open your virtual phone on another device. If that browser is signed in to this

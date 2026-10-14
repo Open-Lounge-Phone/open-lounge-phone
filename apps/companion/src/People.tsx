@@ -168,7 +168,7 @@ export function People({
         <p className="muted small">
           They'll get a link. Opening it adds them to {householdName} in this app, where they can
           call and be called. They can also set up their own phone (a virtual phone in a browser, or
-          an Open Lounge Phone when the hardware is ready).
+          an Open Lounge Phone).
         </p>
         <label>
           Name (as it appears on the phone)

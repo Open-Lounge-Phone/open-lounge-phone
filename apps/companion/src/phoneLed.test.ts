@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canManage,
+  offlineHint,
   type PhoneLedInput,
   phoneLed,
   pickPhone,
@@ -86,5 +87,19 @@ describe("shareLink / canManage", () => {
     expect(canManage({ ownerUserId: "u1" }, "u1", false)).toBe(true);
     expect(canManage({ ownerUserId: "u2" }, "u1", false)).toBe(false);
     expect(canManage({ ownerUserId: null }, "u1", false)).toBe(false);
+  });
+});
+
+describe("offlineHint", () => {
+  it("names the cause for the kind of phone it is", () => {
+    expect(offlineHint({ model: "web-emulator" })).toMatch(/virtual phone only stays connected/);
+    expect(offlineHint({ model: "web-emulator" })).not.toMatch(/MENU 7/);
+    const hw = offlineHint({ model: "minimal-revA" });
+    expect(hw).toMatch(/plugged in and on Wi-Fi/);
+    expect(hw).not.toMatch(/virtual/);
+    // never reported a model (an old phone): both causes, neither assumed
+    const unknown = offlineHint({ model: null });
+    expect(unknown).toMatch(/hardware phone/);
+    expect(unknown).toMatch(/virtual phone/);
   });
 });

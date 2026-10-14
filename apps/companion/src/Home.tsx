@@ -3,7 +3,7 @@ import type { DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
 import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
 import { UseOldDeviceHint } from "./Pair.tsx";
-import { OFFLINE_HINT, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
+import { offlineHint, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
@@ -60,6 +60,7 @@ export function Home({
         <MyPhone
           phone={myPhone}
           live={myPhone ? live[myPhone.id] : undefined}
+          householdPhones={household.length}
           meId={meId}
           userName={userName ?? "My"}
           now={now}
@@ -101,7 +102,7 @@ export function Home({
                       ⚠ {powerWarning(l?.power)}
                     </div>
                   )}
-                  {!online && <p className="hint offline-hint">{OFFLINE_HINT}</p>}
+                  {!online && <p className="hint offline-hint">{offlineHint(d)}</p>}
                 </div>
               </div>
               <div className="device-actions">
@@ -135,6 +136,7 @@ export function Home({
 function MyPhone({
   phone,
   live,
+  householdPhones,
   meId,
   userName,
   now,
@@ -143,6 +145,8 @@ function MyPhone({
 }: {
   phone: DeviceSummary | undefined;
   live: DeviceLive | undefined;
+  /** Phones here that belong to the household, not to anyone: none of them is "my" phone. */
+  householdPhones: number;
   meId: string;
   userName: string;
   now: number;
@@ -158,8 +162,9 @@ function MyPhone({
       <div className="card stack my-phone" id="my-phone">
         <div className="device-name">My phone</div>
         <p className="small">
-          No phone yet. Set up a virtual phone — open it on your computer or an always-on tablet and
-          leave it open. (The Open Lounge Phone hardware is on its way.)
+          {householdPhones > 0
+            ? "None of the phones here is set up as yours: the ones below belong to the household. To make one of them your own phone, remove it and pair it again as “My own phone”. Or set up a virtual phone:"
+            : "You don't have your own phone here yet. Pair an Open Lounge Phone as “My own phone”, or set up a virtual phone: open it on your computer or an always-on tablet and leave it open."}
         </p>
         <button type="button" className="primary" onClick={() => open(true)}>
           Add my virtual phone here
@@ -186,7 +191,7 @@ function MyPhone({
               : `Your phone · offline · last seen ${formatLastSeen(live?.lastSeen ?? phone.lastSeen, now)}`}
             {live?.battery && ` · 🔋 ${formatBattery(live.battery)}`}
           </div>
-          {!online && <p className="hint offline-hint">{OFFLINE_HINT}</p>}
+          {!online && <p className="hint offline-hint">{offlineHint(phone)}</p>}
         </div>
       </div>
       <div className="device-actions">

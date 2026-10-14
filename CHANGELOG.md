@@ -14,6 +14,14 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+## 0.3.1 (2026-10-13, `server-v0.3.1`)
+
+- **Companion: phone status says what's true.** "My phone" no longer says "No phone yet" when the
+  household has phones: it says none of them is set up as yours, and how to make one yours. An
+  offline phone's note fits the phone: a virtual phone's page must stay open; a hardware phone
+  needs power and Wi-Fi (MENU 7 shows why); a phone that never reported its kind gets both. The
+  app no longer says the hardware isn't ready.
+
 ## 0.3.0 (2026-10-13, `server-v0.3.0`)
 
 What l1 and the public hub run.

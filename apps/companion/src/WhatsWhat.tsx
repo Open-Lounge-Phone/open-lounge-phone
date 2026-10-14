@@ -8,7 +8,7 @@ export const TERMS: { term: string; means: string }[] = [
   {
     term: "Phone",
     means:
-      "A simple desk phone with keys and a handset. The hardware isn't finished yet, so you can use a virtual phone: the same phone, in a browser window.",
+      "A simple desk phone with keys and a handset: an Open Lounge Phone (you can build one; the first boards are early prototypes), or a virtual phone, the same phone in a browser window.",
   },
   {
     term: "Virtual phone",
