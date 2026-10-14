@@ -7,7 +7,9 @@ caps (a flange under the face, a puffy button through it). The hook key's button
 the floor under the handset's lower cup, like a classic cradle's plunger: the cup's weight
 presses it and the floor stops it. The status light shows as a jewel on the bed's front through
 an angled light pipe; the buzzer sounds out through the bottom plate. The plate drops in on a
-locating lip and five screws hide under the rubber feet.
+locating lip; six screws of one size hold it: four up through the board's own holes (posts on the
+plate clamp the board to the face's bosses) and two into columns at the bed's ends. Four feet sit
+at the outer ends of the L, apart from the screws.
 
     .venv/bin/python plush.py
 
@@ -18,7 +20,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from build123d import Box, Cylinder, Pos, export_step, export_stl, fillet, Text, extrude, FontStyle
+from build123d import Box, Cone, Cylinder, Pos, export_step, export_stl, fillet, Text, extrude, FontStyle
 
 import faceplate as F  # noqa: E402  (sets OLP_DISPLAY=2.13 and the captive-cap stack)
 import handset as HS
@@ -53,16 +55,26 @@ FLARE_H = 8.0
 JEWEL = (-10.0, 18.0)      # x and height of the jewel on the bed's front
 CORD_HOLES = ((8.0, 150.0), (7.0, 164.0))   # (diameter, y) through the bed pillow's outer side
 
-# The bottom: one plate on a locating lip, five countersunk M3 screws hidden under the rubber
-# feet, up into heat-set inserts in columns from the top shell.
+# The bottom: one plate on a locating lip, held by six countersunk M3 screws of one size, from
+# below. Four go up through the board's mounting holes H1-H4: posts on the plate push the board
+# against the face's bosses, so the same screw holds the plate and the board. Two go into columns
+# at the bed's ends, each tied to the outer wall with a rib. The feet go where they steady the L,
+# not over the screws (screws want structure; feet want the footprint's extremes).
 PLATE_T = 3.5
 LIP_H, LIP_T = 2.5, 1.6
-FEET = ((KEY_BOX[1] - WALL - 4.0, 14.0), (KEY_BOX[1] - WALL - 4.0, 74.0), (-26.0, -12.0),
-        (-26.0, 182.0), (12.0, 188.0))
-FOOT_D, FOOT_DEPTH = 11.0, 1.0
-COLUMN_D = 8.0
-SCREW = "M3 x 8 countersunk (ISO 10642)"
+STANDOFF_D = 7.0           # the plate's posts under H1-H4, up to the board's underside
+BED_COLUMNS = ((-30.0, -6.0), (-30.0, 175.0))   # mirror images about the bed's middle
+COLUMN_D, RIB_T = 8.0, 2.0
+INSERT_L = 4.0             # M3 x 4 heat-set insert in every boss and column
+SCREW_L = 14.0             # plate 3.5 + post 4.9 + board 1.6 + 4 into the insert
+SCREW = "M3 x 14 countersunk (ISO 10642)"
 INSERT = "M3 x 4 heat-set insert (OD 4.0-4.2)"
+CSK_R, CSK_H = 3.45, 1.9   # ISO 10642 M3 head: dk 6.72, k 1.86
+FEET = ((140.0, 80.0), (140.0, 8.0), (-10.0, 185.7), (-10.0, -16.7))
+FOOT_D, FOOT_DEPTH = 11.0, 1.0
+PIN_D = 2.0                # pinholes under the board's RESET and BOOT buttons
+PINHOLES = tuple((x, P.BOARD_H - y) for x, y, _ in P.BUTTONS)
+EDGE_MARGIN, GAP = 3.0, 2.0    # every bottom feature this far inside the plate edge and from each other
 GRILLE_AT = (-16.0, 73.0)  # the buzzer's sound leaves through the bottom plate, beside the board
 
 
@@ -85,6 +97,53 @@ def pillow(x0, x1, y0, y1, z0, z1, r):
 def inside(x0, x1, y0, y1, r, z0, z1):
     """The room inside a pillow: its outline WALL in, the same rounding less the wall."""
     return F.rrect((x0 + x1) / 2, (y0 + y1) / 2, x1 - x0 - 2 * WALL, y1 - y0 - 2 * WALL, r * CORNER - WALL, z0, z1)
+
+
+def bed_wall_x(y):
+    """The inside of the bed pillow's outer (-x) wall at height y, in plan."""
+    bx0, _, by0, by1 = BED_BOX
+    r = BED_R * CORNER - WALL
+    c0, c1 = by0 + BED_R * CORNER, by1 - BED_R * CORNER
+    dy = max(0.0, c0 - y, y - c1)
+    return bx0 + BED_R * CORNER - math.sqrt(r * r - dy * dy)
+
+
+def plate_edge(x, y):
+    """How far (x, y) is inside the bottom plate's outline (negative: outside)."""
+    g = WALL + 0.3
+    best = -1e9
+    for (x0, x1, y0, y1), r in ((KEY_BOX, KEY_R * CORNER), (BED_BOX, BED_R * CORNER)):
+        x0, x1, y0, y1, r = x0 + g, x1 - g, y0 + g, y1 - g, r - g
+        cx, cy = min(max(x, x0 + r), x1 - r), min(max(y, y0 + r), y1 - r)
+        best = max(best, r - math.hypot(x - cx, y - cy))
+    return best
+
+
+def bottom_features():
+    """Everything on the plate's underside, as (name, x, y, radius)."""
+    return ([("foot", x, y, FOOT_D / 2) for x, y in FEET]
+            + [("board screw", x, F.Y(y), CSK_R) for x, y in F.HOLES]
+            + [("bed screw", x, y, CSK_R) for x, y in BED_COLUMNS]
+            + [("pinhole", x, y, PIN_D / 2) for x, y in PINHOLES]
+            + [("grille", GRILLE_AT[0], GRILLE_AT[1], 11.0)])
+
+
+def layout_check():
+    """Fail the build if anything on the bottom is near the plate's edge or another feature."""
+    bad, feats = [], bottom_features()
+    for n, x, y, r in feats:
+        if plate_edge(x, y) - r < EDGE_MARGIN:
+            bad.append(f"{n} at ({x:.1f}, {y:.1f}) is {plate_edge(x, y) - r:.1f} mm from the plate edge")
+    for i, (n, x, y, r) in enumerate(feats):
+        for m, u, v, q in feats[i + 1:]:
+            if math.hypot(x - u, y - v) - r - q < GAP:
+                bad.append(f"{n} ({x:.1f}, {y:.1f}) and {m} ({u:.1f}, {v:.1f}) are too close")
+    for x, y in BED_COLUMNS:
+        if F.BOARD_W + 1 > x > -1 and F.BOARD_H + 1 > y > -1:
+            bad.append(f"bed column ({x}, {y}) is under the board")
+    if bad:
+        raise SystemExit("bottom layout:\n  " + "\n  ".join(bad))
+    return min(plate_edge(x, y) - r for _, x, y, r in feats)
 
 
 def hook_xy():
@@ -151,10 +210,11 @@ def build_case():
     body -= F.rrect(wx, wy, ww, wh, F.WIN_R, F.DISP_TOP, zt + 1)
     body -= F.rrect(wx, wy, ww + 2 * F.WIN_BEVEL, wh + 2 * F.WIN_BEVEL, F.WIN_R + F.WIN_BEVEL, zt - F.WIN_BEVEL, zt + 1)
 
-    # board screws: insert bosses down to the board at H1-H4
+    # bosses down to the board at H1-H4: the plate's screws come up through the board into them
     for x, y in F.HOLES:
         body += F.cyl(x, F.Y(y), 0.0, zu + 0.01, F.BOSS_D)
-        body -= F.cyl(x, F.Y(y), -0.01, F.INSERT_L, F.INSERT_D)
+        body -= F.cyl(x, F.Y(y), -0.01, INSERT_L + 0.5, F.INSERT_D)
+        body -= F.cyl(x, F.Y(y), -0.01, Z_BOT + SCREW_L + 1.5, 3.2)          # room past the tip
 
     # the handset's bed: soft-rimmed pockets; the lower one's floor is the face with the hook button
     yc = HS.LENGTH / 2 - HS.CUP_D / 2
@@ -174,11 +234,15 @@ def build_case():
     for d, y in CORD_HOLES:
         body -= Pos(bx0 + WALL / 2, y, -3.0) * F.Rot(0, 90, 0) * Cylinder(d / 2, WALL * 3)
 
-    # columns for the bottom plate's screws (hidden under the feet)
-    for x, y in FEET:
-        top = 0.5 if x > F.BOARD_W else HOLLOW_TOP + 0.01
-        body += F.cyl(x, y, Z_BOT + PLATE_T, top, COLUMN_D)
-        body -= F.cyl(x, y, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + 5.0, F.INSERT_D)
+    # the bed's two columns, hanging from its hollow's ceiling, each tied to the outer wall by a rib
+    # that stays above the plate's lip
+    for x, y in BED_COLUMNS:
+        body += F.cyl(x, y, Z_BOT + PLATE_T, HOLLOW_TOP + 0.01, COLUMN_D)
+        wx = bed_wall_x(y) - 1.0                                               # 1 mm into the wall
+        rz = Z_BOT + PLATE_T + LIP_H + 0.3
+        body += F.Pos((x + wx) / 2, y, (rz + HOLLOW_TOP) / 2) * Box(x - wx, RIB_T, HOLLOW_TOP - rz)
+        body -= F.cyl(x, y, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + INSERT_L + 0.5, F.INSERT_D)
+        body -= F.cyl(x, y, Z_BOT + PLATE_T, Z_BOT + SCREW_L + 1.5, 3.2)
     return body
 
 
@@ -191,19 +255,23 @@ def _outline(inset, z0, z1):
 
 
 def build_plate():
-    """The bottom: flush inside the walls on a locating lip; five countersunk M3 screws into the
-    columns, each under a rubber foot; a grille for the buzzer beside the board."""
+    """The bottom: flush inside the walls on a locating lip; posts that clamp the board; six
+    countersunk M3 screws; four foot recesses; pinholes for RESET and BOOT; the buzzer's grille."""
     g = WALL + 0.3
     plate = _outline(g, Z_BOT, Z_BOT + PLATE_T)
     lip = _outline(g, Z_BOT + PLATE_T - 0.01, Z_BOT + PLATE_T + LIP_H) - _outline(g + LIP_T, Z_BOT, Z_BOT + PLATE_T + LIP_H + 1)
-    for x, y in FEET:
-        lip -= F.cyl(x, y, Z_BOT, Z_BOT + 20, COLUMN_D + 2.0)
     lip -= F.rrect(F.BOARD_W / 2, F.BOARD_H / 2, F.BOARD_W + 1.0, F.BOARD_H + 1.0, F.BOARD_R + 0.5, Z_BOT, Z_BOT + 20)
     plate += lip
+    for x, y in F.HOLES:                                  # posts up to the board's underside
+        plate += F.cyl(x, F.Y(y), Z_BOT + PLATE_T - 0.01, -F.BOARD_T, STANDOFF_D)
+    for _, x, y, _ in [f for f in bottom_features() if f[0].endswith("screw")]:
+        plate -= F.cyl(x, y, Z_BOT - 1, 0.0, 3.4)
+        plate -= F.Pos(x, y, Z_BOT - 0.01) * Cone(CSK_R, CSK_R - CSK_H, CSK_H + 0.01,
+                                                  align=(F.Align.CENTER, F.Align.CENTER, F.Align.MIN))
     for x, y in FEET:
-        plate -= F.cyl(x, y, Z_BOT - 1, Z_BOT + PLATE_T + 1, 3.4)
-        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + FOOT_DEPTH, FOOT_D)                  # the foot
-        plate -= F.Pos(x, y, Z_BOT + FOOT_DEPTH - 0.01) * F.Cylinder(3.2, 1.75, align=(F.Align.CENTER, F.Align.CENTER, F.Align.MIN))
+        plate -= F.cyl(x, y, Z_BOT - 0.01, Z_BOT + FOOT_DEPTH, FOOT_D)
+    for x, y in PINHOLES:
+        plate -= F.cyl(x, y, Z_BOT - 1, Z_BOT + PLATE_T + 1, PIN_D)
     gx, gy = GRILLE_AT
     for i in range(-3, 4):
         half = math.sqrt(max(0.0, 11.0 ** 2 - (i * 3.0) ** 2))
@@ -231,6 +299,7 @@ def build_puffy_cap(label: str):
 
 
 def main() -> None:
+    margin = layout_check()
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "caps").mkdir(exist_ok=True)
     parts = {"plush-case": build_case(), "plush-bottom": build_plate()}
@@ -247,7 +316,9 @@ def main() -> None:
     yc = HS.LENGTH / 2 - HS.CUP_D / 2
     print(f"hook: the lower cup rests on the hook button (top {F.CAP_TOP:.1f}) and stops on the face at "
           f"{LOW_FLOOR:.1f}: {F.CAP_TOP - LOW_FLOOR:.1f} mm of travel (switches at 2, bottoms at 4)")
-    print(f"screws: {len(FEET)} x {SCREW} under the feet, into {INSERT}s; light pipe ~{lift(*jewel_path())[1]:.0f} mm")
+    print(f"screws: {len(F.HOLES) + len(BED_COLUMNS)} x {SCREW} into {INSERT}s (4 through the board); "
+          f"{len(FEET)} feet; every bottom feature >= {margin:.1f} mm inside the plate edge; "
+          f"light pipe ~{lift(*jewel_path())[1]:.0f} mm")
 
 
 if __name__ == "__main__":
