@@ -281,7 +281,7 @@ a piezo ringer, one status LED and Wi-Fi/BLE. Hardware details and part choices 
 1. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, `esp_peer` WebRTC) implementing the same
    protocol and the `deviceStep` state machine from `packages/core`
    ([firmware/README.md](../firmware/README.md)). It runs in the QEMU simulator with end-to-end
-   tests against a server, and on the v0.1 dev boards (lightly tested so far).
+   tests against a server. The v0.1 dev boards run the experimental labs build (0.0.0) for now.
 2. **Custom PCB** — the minimal board in a compact 3D-printed base: an
    off-the-shelf analog G-style handset (3.5 mm TRRS plug, e.g. the Opis 60s Micro) on a raised
    hook rest that presses an MX hook switch, USB-C power (also flashing and the console), 12
