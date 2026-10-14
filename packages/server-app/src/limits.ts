@@ -20,8 +20,11 @@ export interface Limits {
   signupAttemptsPerIpPerHour: number;
   /** Recovery-code attempts from one IP address per hour. */
   recoveryAttemptsPerIpPerHour: number;
-  /** Recovery-code attempts for one handle per hour (from anywhere). */
+  /** Recovery-code attempts for one handle from one IP address per hour (so a stranger
+   * guessing elsewhere can't lock the owner out). */
   recoveryAttemptsPerHandlePerHour: number;
+  /** Recovery-code attempts for one handle per day, from anywhere. */
+  recoveryAttemptsPerHandlePerDay: number;
   /** Passkey sign-in attempts from one IP address per minute. */
   signInsPerIpPerMinute: number;
   /** Changes (non-GET API requests) one account may make per minute. */
@@ -41,6 +44,7 @@ export const DEFAULT_LIMITS: Limits = {
   signupAttemptsPerIpPerHour: 60,
   recoveryAttemptsPerIpPerHour: 20,
   recoveryAttemptsPerHandlePerHour: 5,
+  recoveryAttemptsPerHandlePerDay: 100,
   signInsPerIpPerMinute: 30,
   writesPerAccountPerMinute: 120,
   lineCallsPerCallerPerHour: 10,

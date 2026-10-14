@@ -62,7 +62,7 @@ const newCode = async (token: string) => {
 };
 
 describe("recovery codes", () => {
-  it("one code, made on request, used once: a passkey-only session, then a new passkey and code", async () => {
+  it("one code, made on request: a passkey-only session, then a new passkey (which uses it up) and code", async () => {
     const jo = await signUp("jo", "Jo");
     expect((await s.http("/me", { token: jo.token })).json.recoveryCode).toBe(false);
     const code = await newCode(jo.token);
@@ -94,17 +94,22 @@ describe("recovery codes", () => {
     const app = s.openApp();
     app.write({ t: "app.hello", proto: 1, token: limited });
     await expect.poll(() => app.closed?.code).toBe(4401);
-    // The code is used up.
-    expectStatus(await recover("jo", code), 401);
-    expect((await s.store.getAccount(jo.accountId))?.hasRecoveryCode).toBe(false);
+    // Not used up yet: a cancelled or failed passkey prompt can start again with it.
+    expect((await s.store.getAccount(jo.accountId))?.hasRecoveryCode).toBe(true);
+    const again = await recover("jo", code);
+    expectStatus(again, 200);
 
     // Their other app hears about it; every space they're in has it in the audit trail.
     expect((await otherApp.next("account.notice")).kind).toBe("recovered");
     const trail = (await s.http("/space/audit", { token: jo.token })).json;
     expect(trail.map((e: { action: string }) => e.action)).toContain("account.recovered");
 
-    // A new passkey makes it a full session; then a new code.
+    // A new passkey makes it a full session and uses the code up; then a new code.
     expectStatus(await addPasskey(limited), 201);
+    expect((await s.store.getAccount(jo.accountId))?.hasRecoveryCode).toBe(false);
+    expectStatus(await recover("jo", code), 401);
+    // The other recovery with the same code can't add a passkey any more.
+    expectStatus(await addPasskey(again.json.token), 409);
     expect((await s.http("/me", { token: limited })).json.session).toMatchObject({
       limited: false,
       passkey: true,
@@ -133,21 +138,28 @@ describe("recovery codes", () => {
     expectStatus(await recover("jo", second), 200);
   });
 
-  it("limits tries per handle and per address, the same for handles that don't exist", async () => {
+  it("limits tries per handle and network, per network and per handle a day, the same for handles that don't exist", async () => {
     const jo = await signUp("jo");
     const code = await newCode(jo.token);
-    s.env.limits = { recoveryAttemptsPerHandlePerHour: 3, recoveryAttemptsPerIpPerHour: 5 };
+    s.env.limits = {
+      recoveryAttemptsPerHandlePerHour: 3,
+      recoveryAttemptsPerIpPerHour: 5,
+      recoveryAttemptsPerHandlePerDay: 6,
+    };
     const wrong = "BBBB-BBBB-BBBB-BBBB-BBBB-BBBB-BBBB";
-    for (let i = 0; i < 3; i++) expectStatus(await recover("jo", wrong, `10.0.0.${i}`), 401);
-    // Per handle: even the right code from a new address waits now.
-    expectStatus(await recover("jo", code, "10.0.0.9"), 429);
-    for (let i = 0; i < 3; i++) expectStatus(await recover("ghost", wrong, `10.0.1.${i}`), 401);
+    // A stranger guessing at jo from one network is stopped there...
+    for (let i = 0; i < 3; i++) expectStatus(await recover("jo", wrong, "10.0.0.1"), 401);
+    expectStatus(await recover("jo", wrong, "10.0.0.1"), 429);
+    // ...and doesn't lock jo out from jo's own network.
+    expectStatus(await recover("jo", code, "10.0.0.9"), 200);
+    // A handle (real or not) has a daily cap from anywhere.
+    for (let i = 0; i < 6; i++) expectStatus(await recover("ghost", wrong, `10.0.1.${i}`), 401);
     expectStatus(await recover("ghost", wrong, "10.0.1.9"), 429);
     // Per address, across handles.
     for (let i = 0; i < 5; i++) expectStatus(await recover(`h${i}x`, wrong, "10.9.9.9"), 401);
     expectStatus(await recover("h9x", wrong, "10.9.9.9"), 429);
-    s.timers.advance(60 * 60 * 1000);
-    expectStatus(await recover("jo", code, "10.0.0.9"), 200);
+    s.timers.advance(24 * 60 * 60 * 1000);
+    expectStatus(await recover("ghost", wrong, "10.0.1.9"), 401);
   });
 
   it("a suspended account can't recover", async () => {

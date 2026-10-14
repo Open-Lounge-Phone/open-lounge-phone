@@ -102,28 +102,40 @@ export function publicRecoveryRoutes(api: Hono<Vars>, env: ServerEnv, live: Coor
     const limits = limitsOf(env);
     // `handle@host` works too (people copy their whole address).
     const handle = b.handle.replace(/@.*$/, "");
+    const ip = clientIp(env, c);
     const ipOk = await store.connections.hit(
-      await ipBucket("recover-ip", clientIp(env, c)),
+      await ipBucket("recover-ip", ip),
       3_600_000,
       limits.recoveryAttemptsPerIpPerHour,
       now,
     );
-    // Counted per handle whether or not it exists, so the limit says nothing about that either.
-    const handleOk = await store.connections.hit(
-      `recover-handle:${(await sha256(`olp-handle:${handle}`)).slice(0, 22)}`,
+    // Counted per handle whether or not it exists, so the limit says nothing about that either:
+    // tightly per handle from one network (a stranger guessing elsewhere can't lock the owner
+    // out), and loosely per handle from anywhere.
+    const handleKey = (await sha256(`olp-handle:${handle}`)).slice(0, 22);
+    const handleHereOk = await store.connections.hit(
+      `recover-handle-ip:${handleKey}:${(await sha256(`olp-ip:${ip}`)).slice(0, 16)}`,
       3_600_000,
       limits.recoveryAttemptsPerHandlePerHour,
       now,
     );
-    if (!ipOk || !handleOk) {
+    const handleOk = await store.connections.hit(
+      `recover-handle:${handleKey}`,
+      86_400_000,
+      limits.recoveryAttemptsPerHandlePerDay,
+      now,
+    );
+    if (!ipOk || !handleHereOk || !handleOk) {
       return c.json({ error: "too many tries; wait an hour and try again" }, 429);
     }
     const account = handle ? await store.accountByHandle(handle) : undefined;
     const code = normalizeRecoveryCode(b.code) ?? "";
     // Same work and the same answer for an unknown handle, a wrong code and a code in the wrong
     // shape; a suspended account can't recover either (no hint that it exists).
-    const used = await store.auth.useRecoveryCode(account?.id, code);
-    if (!used || !account || account.suspendedAt !== null) {
+    // The code stays valid until the new passkey is saved, so a cancelled passkey prompt
+    // doesn't lock anyone out.
+    const ok = await store.auth.checkRecoveryCode(account?.id, code);
+    if (!ok || !account || account.suspendedAt !== null) {
       return c.json({ error: NO_MATCH }, 401);
     }
     const member = (await store.listMemberships(account.id))[0]?.user;

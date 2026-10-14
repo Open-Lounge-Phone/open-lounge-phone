@@ -106,10 +106,11 @@ export class AuthStore {
   }
 
   /**
-   * Uses a recovery code: true (and the code is gone) when it is this account's code. The
-   * comparison takes the same time whether or not the account has a code.
+   * Checks a recovery code: true when it is this account's code. It stays valid: it's used up
+   * only when the recovery ends in a new passkey (`consumeRecoveryCode`). The comparison takes
+   * the same time whether or not the account has a code.
    */
-  async useRecoveryCode(accountId: string | undefined, normalizedCode: string): Promise<boolean> {
+  async checkRecoveryCode(accountId: string | undefined, normalizedCode: string): Promise<boolean> {
     // The same query whether or not the handle named an account.
     const row = await this.sql.first<{ recovery_hash: string | null }>(
       "SELECT recovery_hash FROM accounts WHERE id = ?",
@@ -117,12 +118,18 @@ export class AuthStore {
     );
     const stored = row?.recovery_hash ?? DUMMY_HASH;
     const given = await recoveryHash(accountId ?? "", normalizedCode);
-    if (!constantTimeEqual(stored, given) || !accountId || !row?.recovery_hash) return false;
-    // Single use, even if two requests race with the same code.
+    return constantTimeEqual(stored, given) && !!accountId && !!row?.recovery_hash;
+  }
+
+  /**
+   * Uses up an account's recovery code when a recovery ends in a new passkey: true when there
+   * was one to use (only one of two racing recoveries gets it).
+   */
+  async consumeRecoveryCode(accountId: string): Promise<boolean> {
     const { changes } = await this.sql.run(
-      "UPDATE accounts SET recovery_hash = NULL, recovery_created_at = NULL WHERE id = ? AND recovery_hash = ?",
+      `UPDATE accounts SET recovery_hash = NULL, recovery_created_at = NULL
+       WHERE id = ? AND recovery_hash IS NOT NULL`,
       accountId,
-      stored,
     );
     return changes === 1;
   }

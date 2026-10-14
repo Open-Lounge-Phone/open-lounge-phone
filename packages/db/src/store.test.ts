@@ -1309,11 +1309,15 @@ describe("sign-in records", () => {
       .get(guardian.accountId) as { recovery_hash: string };
     // Only a hash is kept.
     expect(stored?.recovery_hash).not.toContain(code);
-    expect(await store.auth.useRecoveryCode(guardian.accountId, "B".repeat(28))).toBe(false);
-    expect(await store.auth.useRecoveryCode(undefined, code)).toBe(false);
-    expect(await store.auth.useRecoveryCode("acc_other", code)).toBe(false);
-    expect(await store.auth.useRecoveryCode(guardian.accountId, code)).toBe(true);
-    expect(await store.auth.useRecoveryCode(guardian.accountId, code)).toBe(false);
+    expect(await store.auth.checkRecoveryCode(guardian.accountId, "B".repeat(28))).toBe(false);
+    expect(await store.auth.checkRecoveryCode(undefined, code)).toBe(false);
+    expect(await store.auth.checkRecoveryCode("acc_other", code)).toBe(false);
+    // Checking leaves it valid; using it up works once.
+    expect(await store.auth.checkRecoveryCode(guardian.accountId, code)).toBe(true);
+    expect(await store.auth.checkRecoveryCode(guardian.accountId, code)).toBe(true);
+    expect(await store.auth.consumeRecoveryCode(guardian.accountId)).toBe(true);
+    expect(await store.auth.consumeRecoveryCode(guardian.accountId)).toBe(false);
+    expect(await store.auth.checkRecoveryCode(guardian.accountId, code)).toBe(false);
     expect((await store.getAccount(guardian.accountId))?.hasRecoveryCode).toBe(false);
   });
 

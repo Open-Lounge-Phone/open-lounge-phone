@@ -437,6 +437,14 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
       if (!result.verified || !result.registrationInfo) {
         return c.json({ error: "could not verify the passkey" }, 400);
       }
+      // A recovery ends here: its code is used up before the passkey is saved, so of two
+      // recoveries with the same code only one gets a passkey.
+      if (c.get("session").limited && !(await store.auth.consumeRecoveryCode(account.id))) {
+        return c.json(
+          { error: "this recovery code was already used; start again with your newest code" },
+          409,
+        );
+      }
       const { credential } = result.registrationInfo;
       await store.addPasskey({
         id: credential.id,

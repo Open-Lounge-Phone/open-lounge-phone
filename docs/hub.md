@@ -133,7 +133,7 @@ and `SFU_APP_ID`/`SFU_APP_SECRET` (see [cloudflare.md](cloudflare.md)).
   Turnstile check (each Turnstile answer works once, and the app asks for a fresh one after
   every try); per IP address, the accounts actually made count toward the sign-up limit (10 an
   hour) and tries have a looser limit of their own (60 an hour); per-IP limits on sign-in and on
-  recovery codes (plus 5 recovery tries an hour per handle); IP addresses are hashed before
+  recovery codes (plus 5 recovery tries an hour per handle from one network and 100 a day per handle); IP addresses are hashed before
   they're counted; a per-account limit on changes; the fair-use allowance; knock limits;
   per-server budgets and signature checks for federation.
 - **Operator view** (companion → Operator, for the `--operator` accounts): counts, find an

@@ -23,8 +23,9 @@ On `main`, not tagged yet.
   sign-up, the first invite), shown once with Copy, Download and a re-type check; accounts
   without one see a reminder until they make one (Account → Recovery code). "Lost your passkey?"
   on the start screen (also `/#recover`) takes your handle and code, has you make a new passkey,
-  then shows a new code and signs you out everywhere else (on by default). The code is used up,
-  stored only as a hash, rate-limited per handle and per address, and never logged, audited or
+  then shows a new code and signs you out everywhere else (on by default). The code is used up
+  when the new passkey is saved (a cancelled prompt can start again), stored only as a hash,
+  rate-limited per handle and network, per address and per handle a day, and never logged, audited or
   exported; the recovery is audited in every space and your other open apps are told
   (`account.notice`, additive). No email and no operator recovery.
 - **Sessions.** Sessions now slide: 90 days after their last use when a passkey backs them;

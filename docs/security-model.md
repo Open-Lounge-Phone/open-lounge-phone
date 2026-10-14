@@ -96,10 +96,12 @@ passkey's public key.
   account, compares in constant time, and never logs, audits or exports it. Making a new one stops
   the old one working.
 - **Recovering.** "Lost your passkey?" (or `/#recover`): your handle and the code. A wrong handle
-  and a wrong code get the same answer; tries are limited per handle (5 an hour, from anywhere)
-  and per IP address (20 an hour). The code is used up at once. The session it gives lasts 30
-  minutes and may only add a passkey (no API, no app socket) until one is made; then the person
-  gets a new code and is offered "Sign out everywhere else" (on by default). `account.recovered`
+  and a wrong code get the same answer; tries are limited per handle from one network (5 an hour,
+  so a stranger guessing elsewhere can't lock the owner out), per IP address (20 an hour) and per
+  handle from anywhere (100 a day). The session it gives lasts 30 minutes and may only add a
+  passkey (no API, no app socket). The code stays valid until that new passkey is saved, so a
+  cancelled passkey prompt can start again; saving the passkey uses the code up first, so of two
+  recoveries with the same code only one gets a passkey. Then the person gets a new code and is offered "Sign out everywhere else" (on by default). `account.recovered`
   goes into the audit trail of every space they're in, and their other open apps are told
   (`account.notice`). A suspended account can't recover. There is no email recovery and no
   operator recovery.
