@@ -47,11 +47,32 @@ void prov_ap_ssid(const uint8_t mac[6], char *out, size_t n);
 /** 8 digits from 32 random bits (WPA2 needs at least 8 characters). */
 void prov_ap_password(uint32_t random, char out[9]);
 
+#define PROV_FORM_MISSING (-1)  // the key isn't in the body
+#define PROV_FORM_BAD (-2)      // the value doesn't fit `out` (or is badly encoded)
+
 /**
  * Finds `key` in an application/x-www-form-urlencoded body and URL-decodes its value into `out`.
- * Returns the decoded length, or -1 if the key is missing or the value doesn't fit.
+ * Returns the decoded length, PROV_FORM_MISSING, or PROV_FORM_BAD.
  */
 int prov_form_get(const char *body, const char *key, char *out, size_t n);
+
+/** The setup page's answers, sized to what the phone stores (Wi-Fi: 32-byte name, 64 password). */
+typedef struct {
+  char ssid[33];   // the picked network ("" = keep the saved one)
+  char other[33];  // a network name typed in (wins over the picked one)
+  char pass[65];
+  char srv[8];     // "own", "hub" or ""
+  char addr[160];  // the server address as typed
+} prov_answers_t;
+
+/**
+ * Reads the setup page's form into `a`. NULL if every field fit, else why not, for the page
+ * (a name or password that doesn't fit is never silently dropped).
+ */
+const char *prov_form_answers(const char *body, prov_answers_t *a);
+
+/** The most the setup page posts (the form at its longest, every character percent-encoded). */
+#define PROV_BODY_MAX 1024
 
 /** NULL if a network can be saved with these, else why not (shown on the page). */
 const char *prov_check(const char *ssid, const char *pass);

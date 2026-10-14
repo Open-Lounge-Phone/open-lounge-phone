@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Setup page**: a network name, password or server address too long for what the phone stores
+  is refused with a message (a typed name that didn't fit used to fall back silently to the
+  network picked in the list). Typing a server address picks "My own server" by itself. The
+  grey example in the address box is gone (it read as filled in); the example is under it. A
+  64-character password says it can only use 0-9 and a-f, and a long form shows the page again
+  with a message instead of a bare error.
 - **Public lines**: a line put on a key (a business's address, from the companion) can be called
   from a personal phone. While waiting in the line's queue the screen shows `IN LINE 2` /
   `1 VOICEMAIL` with the soft waiting tone, and key 1 leaves a voicemail instead

@@ -181,8 +181,16 @@ static void reboot_task(void *arg) {
 
 static esp_err_t post_save(httpd_req_t *req) {
   if (!from_setup_network(req)) return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "setup only");
-  if (req->content_len > 512) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "too long");
-  char body[513];
+  if (req->content_len > PROV_BODY_MAX) {
+    // Not the raw "400": the page again, saying what to check (the rest of the body is dropped).
+    send_page(req,
+              "That's more than the phone can take. Check the network name, password and "
+              "address.");
+    return ESP_OK;
+  }
+  // One handler runs at a time: static keeps the form off the server task's stack.
+  static char body[PROV_BODY_MAX + 1];
+  static prov_answers_t a;
   int got = 0;
   while (got < (int)req->content_len) {
     int r = httpd_req_recv(req, body + got, req->content_len - got);
@@ -190,31 +198,26 @@ static esp_err_t post_save(httpd_req_t *req) {
     got += r;
   }
   body[got] = '\0';
-  char ssid[65] = "", other[65] = "", pass[80] = "", srv[8] = "", addr[160] = "";
-  prov_form_get(body, "ssid", ssid, sizeof ssid);
-  prov_form_get(body, "other", other, sizeof other);
-  if (prov_form_get(body, "pass", pass, sizeof pass) < 0) pass[0] = '\0';
-  prov_form_get(body, "srv", srv, sizeof srv);
-  prov_form_get(body, "addr", addr, sizeof addr);
-  const char *name = other[0] ? other : ssid;
+  const char *err = prov_form_answers(body, &a);
+  const char *name = a.other[0] ? a.other : a.ssid;
   char saved[33] = "", ip[16];
   int rssi;
   net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
-  bool keep_wifi = !name[0] && saved[0] && net_has_wifi();
-  const char *err = keep_wifi ? NULL : prov_check(name, pass);
-  if (!err && !keep_wifi && !pass[0]) {  // a network the scan saw as secured needs its password
+  bool keep_wifi = !err && !name[0] && saved[0] && net_has_wifi();
+  if (!err && !keep_wifi) err = prov_check(name, a.pass);
+  if (!err && !keep_wifi && !a.pass[0]) {  // a network the scan saw as secured needs its password
     for (int i = 0; i < s_naps; i++)
       if (s_aps[i].secure && !strcmp(s_aps[i].ssid, name)) err = "That network needs its password.";
   }
   char current[PROV_SERVER_MAX], server[PROV_SERVER_MAX];
   net_server_url(current, sizeof current);
-  if (!err) err = prov_server_choice(srv, addr, current, server, sizeof server);
+  if (!err) err = prov_server_choice(a.srv, a.addr, current, server, sizeof server);
   if (err) {
     ESP_LOGW(TAG, "setup page: %s", err);
     send_page(req, err);
     return ESP_OK;
   }
-  if (!keep_wifi) net_save_wifi(name, pass);
+  if (!keep_wifi) net_save_wifi(name, a.pass);
   if (strcmp(server, current)) {
     net_set_server(server);
     identity_set_device_id("");  // another server: the phone pairs there again

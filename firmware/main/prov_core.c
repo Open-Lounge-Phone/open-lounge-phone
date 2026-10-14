@@ -84,15 +84,15 @@ int prov_form_get(const char *body, const char *key, char *out, size_t n) {
           c = ' ';
         } else if (c == '%') {
           int hi = v + 2 < end ? hexval(v[1]) : -1, lo = v + 2 < end ? hexval(v[2]) : -1;
-          if (hi < 0 || lo < 0) return -1;
+          if (hi < 0 || lo < 0) return PROV_FORM_BAD;
           c = (char)(hi << 4 | lo);
           v += 2;
         }
-        if (o + 1 >= n) return -1;
+        if (o + 1 >= n) return PROV_FORM_BAD;
         out[o++] = c;
       }
       out[o] = '\0';
-      if (strlen(out) != o) return -1;  // an encoded NUL: refuse
+      if (strlen(out) != o) return PROV_FORM_BAD;  // an encoded NUL: refuse
       return (int)o;
     }
     if ((size_t)(end - p) == klen && !strncmp(p, key, klen)) {  // "key" without "="
@@ -101,7 +101,22 @@ int prov_form_get(const char *body, const char *key, char *out, size_t n) {
     }
     p = *end ? end + 1 : end;
   }
-  return -1;
+  return PROV_FORM_MISSING;
+}
+
+const char *prov_form_answers(const char *body, prov_answers_t *a) {
+  *a = (prov_answers_t){0};
+  const char *err = NULL;
+  if (prov_form_get(body, "ssid", a->ssid, sizeof a->ssid) == PROV_FORM_BAD ||
+      prov_form_get(body, "other", a->other, sizeof a->other) == PROV_FORM_BAD)
+    err = "That network name is too long.";
+  else if (prov_form_get(body, "pass", a->pass, sizeof a->pass) == PROV_FORM_BAD)
+    err = "That password is too long.";
+  else if (prov_form_get(body, "addr", a->addr, sizeof a->addr) == PROV_FORM_BAD)
+    err = "That address is too long.";
+  if (prov_form_get(body, "srv", a->srv, sizeof a->srv) < 0) a->srv[0] = '\0';
+  if (err) *a = (prov_answers_t){0};  // never half-read: the page asks again
+  return err;
 }
 
 const char *prov_check(const char *ssid, const char *pass) {
@@ -113,7 +128,8 @@ const char *prov_check(const char *ssid, const char *pass) {
   if (k > 64) return "That password is too long.";
   if (k == 64) {
     for (size_t i = 0; i < 64; i++)
-      if (hexval(pass[i]) < 0) return "That password doesn't look right. Check it and try again.";
+      if (hexval(pass[i]) < 0)
+        return "A 64-character password can only use 0-9 and a-f. Check it and try again.";
   }
   return NULL;
 }
@@ -257,9 +273,11 @@ const char *prov_server_choice(const char *choice, const char *addr, const char 
     snprintf(out, n, "%s", PROV_HUB_URL);
     return NULL;
   }
-  if (!strcmp(choice, "own")) return prov_server_url(addr, out, n);
+  // An address typed in without picking "My own server" means that server.
+  bool typed = addr[strspn(addr, " \t")] != '\0';
+  if (!strcmp(choice, "own") || (!choice[0] && typed)) return prov_server_url(addr, out, n);
   snprintf(out, n, "%s", current);
-  return current[0] ? NULL : "Choose a server.";
+  return current[0] ? NULL : "Choose a server: your own, or the public hub.";
 }
 
 void prov_server_host(const char *url, char *out, size_t n) {
@@ -281,7 +299,8 @@ size_t prov_server_form(const char *current, char *out, size_t n) {
   int w = snprintf(out, n,
                    "<h2>Server</h2><label class=net><input type=radio name=srv value=own%s> My own "
                    "server<input type=text name=addr maxlength=120 autocapitalize=none "
-                   "autocorrect=off placeholder=phone.example.com value=\"%s\"></label>"
+                   "autocorrect=off spellcheck=false oninput=\"this.form.srv[0].checked=true\" "
+                   "value=\"%s\"><small>Its address, for example phone.example.com</small></label>"
                    "<label class=net><input type=radio name=srv value=hub%s> Public hub "
                    "<small>(free, to try it)</small></label>",
                    own ? " checked" : "", esc, hub ? " checked" : "");

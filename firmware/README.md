@@ -238,8 +238,10 @@ With no Wi-Fi saved (a new phone, or after a factory reset) the phone opens **"O
 `OPEN 192.168.4.1`. Phones usually open the page by themselves: every DNS name answers with the
 phone's address and the OS connectivity checks (`/generate_204`, `/hotspot-detect.html`, …) are
 redirected to the page. The page lists nearby networks (strongest first) or takes a typed name,
-and a password (checked: 8-63 characters or 64 hex); **Save and restart** stores it and the phone
-restarts onto it. The page answers only on the setup network, never on the home LAN.
+and a password (checked: 8-63 characters or 64 hex); a typed name holds 32 bytes, like the
+phone stores it. Anything that doesn't fit is refused with a message on the page, never cut or
+dropped, and an address typed in the server box counts as choosing "My own server". **Save and
+restart** stores it and the phone restarts onto it. The page answers only on the setup network, never on the home LAN.
 
 It also opens when the saved Wi-Fi has been unreachable for 3 minutes (it closes again if the
 saved one comes back), from MENU → 3 Wi-Fi → 1 or MENU → 4 Server → 1, from the console (`setup`), and with **MENU+BACK

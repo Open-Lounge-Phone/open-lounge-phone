@@ -85,14 +85,47 @@ TEST(prov_form_decoding) {
   CHECK_STR(v, "p&ss=word");
   CHECK(prov_form_get(body, "empty", v, sizeof v) == 0);
   CHECK(prov_form_get(body, "flag", v, sizeof v) == 0);
-  CHECK(prov_form_get(body, "missing", v, sizeof v) == -1);
-  CHECK(prov_form_get(body, "ss", v, sizeof v) == -1);  // no prefix matches
-  // Too long for the buffer, bad escapes and encoded NULs are refused.
+  CHECK(prov_form_get(body, "missing", v, sizeof v) == PROV_FORM_MISSING);
+  CHECK(prov_form_get(body, "ss", v, sizeof v) == PROV_FORM_MISSING);  // no prefix matches
+  // Too long for the buffer, bad escapes and encoded NULs are refused, and told apart from missing.
   char small[4];
-  CHECK(prov_form_get("ssid=abcdef", "ssid", small, sizeof small) == -1);
-  CHECK(prov_form_get("ssid=%zz", "ssid", v, sizeof v) == -1);
-  CHECK(prov_form_get("ssid=%4", "ssid", v, sizeof v) == -1);
-  CHECK(prov_form_get("ssid=a%00b", "ssid", v, sizeof v) == -1);
+  CHECK(prov_form_get("ssid=abcdef", "ssid", small, sizeof small) == PROV_FORM_BAD);
+  CHECK(prov_form_get("ssid=%zz", "ssid", v, sizeof v) == PROV_FORM_BAD);
+  CHECK(prov_form_get("ssid=%4", "ssid", v, sizeof v) == PROV_FORM_BAD);
+  CHECK(prov_form_get("ssid=a%00b", "ssid", v, sizeof v) == PROV_FORM_BAD);
+}
+
+static const char *or_none(const char *s) { return s ? s : "(none)"; }
+
+TEST(prov_form_answers_never_drop_a_field) {
+  prov_answers_t a;
+  CHECK(prov_form_answers("ssid=Home&other=&pass=secret12&srv=own&addr=phone.example.com", &a) ==
+        NULL);
+  CHECK_STR(a.ssid, "Home");
+  CHECK_STR(a.other, "");
+  CHECK_STR(a.pass, "secret12");
+  CHECK_STR(a.srv, "own");
+  CHECK_STR(a.addr, "phone.example.com");
+  // A typed name longer than the phone stores (32 bytes) is an error, not a silent switch to the
+  // network picked above it: "é" is 2 bytes, so 17 of them are 34.
+  char body[512] = "ssid=Home&other=";
+  for (int i = 0; i < 17; i++) strcat(body, "%C3%A9");
+  strcat(body, "&pass=secret12");
+  CHECK_STR(or_none(prov_form_answers(body, &a)), "That network name is too long.");
+  CHECK_STR(a.ssid, "");
+  // 32 bytes fit.
+  CHECK(prov_form_answers("other=12345678901234567890123456789012&pass=secret12", &a) == NULL);
+  CHECK_STR(a.other, "12345678901234567890123456789012");
+  // A password over 64 characters, an address over the box.
+  char pass[128] = "ssid=Home&pass=";
+  for (int i = 0; i < 65; i++) strcat(pass, "a");
+  CHECK_STR(or_none(prov_form_answers(pass, &a)), "That password is too long.");
+  char addr[512] = "srv=own&addr=";
+  for (int i = 0; i < 160; i++) strcat(addr, "a");
+  CHECK_STR(or_none(prov_form_answers(addr, &a)), "That address is too long.");
+  // Missing fields read as empty.
+  CHECK(prov_form_answers("", &a) == NULL);
+  CHECK_STR(a.srv, "");
 }
 
 TEST(prov_checks) {
@@ -106,7 +139,7 @@ TEST(prov_checks) {
   hex64[64] = '\0';
   CHECK(prov_check("home", hex64) == NULL);
   hex64[10] = 'z';
-  CHECK(prov_check("home", hex64) != NULL);
+  CHECK(strstr(or_none(prov_check("home", hex64)), "0-9 and a-f") != NULL);
 }
 
 TEST(prov_scan_sorting) {
@@ -237,6 +270,10 @@ TEST(prov_server_choice_own_hub_or_keep) {
   CHECK(prov_server_choice("", "", "wss://mine.example.org", u, sizeof u) == NULL);
   CHECK_STR(u, "wss://mine.example.org");
   CHECK(prov_server_choice("own", "bad address", "wss://mine.example.org", u, sizeof u) != NULL);
+  // An address typed without picking "My own server" is that server, not "Choose a server".
+  CHECK(prov_server_choice("", "phone.example.com", "", u, sizeof u) == NULL);
+  CHECK_STR(u, "wss://phone.example.com");
+  CHECK(strstr(or_none(prov_server_choice("", "  ", "", u, sizeof u)), "Choose a server") != NULL);
 }
 
 TEST(prov_server_form_preselects) {
@@ -245,10 +282,13 @@ TEST(prov_server_form_preselects) {
   prov_server_form("", html, sizeof html);
   CHECK(strstr(html, "name=srv value=own>") != NULL);
   CHECK(strstr(html, "name=srv value=hub>") != NULL);
-  CHECK(strstr(html, "checked") == NULL);
+  CHECK(strstr(html, "checked>") == NULL);
   CHECK(strstr(html, "My own server") != NULL);
   CHECK(strstr(html, "Public hub") != NULL);
   CHECK(strstr(html, "free, to try it") != NULL);
+  // No grey example in the box (it reads as filled in): the example is a hint under it.
+  CHECK(strstr(html, "placeholder") == NULL);
+  CHECK(strstr(html, "for example phone.example.com") != NULL);
   prov_server_form(PROV_HUB_URL, html, sizeof html);
   CHECK(strstr(html, "value=hub checked") != NULL);
   CHECK(strstr(html, "value=own checked") == NULL);
