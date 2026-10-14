@@ -8,6 +8,21 @@ beforeEach(() => {
   s = new TestServer();
 });
 
+describe("sign-up passkeys", () => {
+  it("lets you create an account with any kind of passkey, a security key too", async () => {
+    s.env.openSignup = true;
+    const r = await s.http("/signup/options", {
+      body: { handle: "newperson", name: "New", timeZone: "UTC" },
+    });
+    expectStatus(r, 200);
+    const sel = r.json.options.authenticatorSelection;
+    expect(sel.authenticatorAttachment).toBeUndefined();
+    expect(sel.residentKey).toBe("required");
+    const algs = r.json.options.pubKeyCredParams.map((p: { alg: number }) => p.alg);
+    expect(algs).toContain(-7);
+  });
+});
+
 describe("handle reservation", () => {
   it("keeps a released handle for its last owner for 90 days", async () => {
     const jesse = await s.person("jesse");

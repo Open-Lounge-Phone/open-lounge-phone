@@ -32,7 +32,8 @@ export function PasskeyHelp({ open = false }: { open?: boolean }) {
           phone's camera. The passkey stays on your phone.
         </li>
         <li>
-          <strong>A security key</strong> (a small USB or NFC key such as a YubiKey).
+          <strong>A security key</strong> such as a YubiKey (USB or NFC): the strongest choice. The
+          passkey can't be copied off the key, and it only works when you touch it.
         </li>
         <li>
           <strong>A password manager</strong> that stores passkeys, such as iCloud Keychain, Google

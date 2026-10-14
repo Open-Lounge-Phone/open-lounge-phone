@@ -882,6 +882,20 @@ describe("P-256 devices", () => {
 });
 
 describe("passkeys", () => {
+  it("accepts any kind of passkey: built-in, a phone, a password manager or a security key", async () => {
+    const g = await setup();
+    const reg = await http("/passkeys/register/options", { method: "POST", token: g.token });
+    const sel = reg.json.options.authenticatorSelection;
+    // No "platform only" (that would refuse YubiKeys and phones by QR code), a passkey stored on
+    // the authenticator (FIDO2 security keys can), and the PIN or touch asked for when it has one.
+    expect(sel.authenticatorAttachment).toBeUndefined();
+    expect(sel.residentKey).toBe("required");
+    expect(sel.userVerification).toBe("preferred");
+    // ES256 is what security keys use; Ed25519 and RS256 cover the rest.
+    const algs = reg.json.options.pubKeyCredParams.map((p: { alg: number }) => p.alg);
+    expect(algs).toEqual(expect.arrayContaining([-7, -8, -257]));
+  });
+
   it("issues options and rejects forged or replayed responses", async () => {
     const g = await setup();
     const reg = await http("/passkeys/register/options", { method: "POST", token: g.token });
