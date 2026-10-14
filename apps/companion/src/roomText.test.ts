@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { idleSecondsLeft, roomKindText, whoIsIn } from "./roomText.ts";
+import { idleSecondsLeft, roomHoursText, roomKindText, whoIsIn } from "./roomText.ts";
 
 describe("room words", () => {
   it("says who's in", () => {
@@ -14,5 +14,16 @@ describe("room words", () => {
     expect(idleSecondsLeft(1_000, 5_000)).toBe(0);
     expect(roomKindText("party")).toBe("Party line");
     expect(roomKindText("call")).toBe("3-way call");
+  });
+});
+
+describe("party line hours in words", () => {
+  it("open until, opens when, or nothing for an always-open room", () => {
+    const time = () => "21:00";
+    expect(roomHoursText({ hours: null, open: true }, time)).toBeUndefined();
+    expect(roomHoursText({ hours: [{}], open: true, until: 1 }, time)).toBe("Open until 21:00");
+    expect(roomHoursText({ hours: [{}], open: false, opens: "Opens Fri 19:00" }, time)).toBe(
+      "Opens Fri 19:00",
+    );
   });
 });

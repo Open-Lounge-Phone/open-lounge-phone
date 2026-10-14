@@ -30,6 +30,7 @@ import {
   nextRoundRobin,
   noQueueOutcome,
   noticeFor,
+  opensText,
   type PartyCall,
   pickRecorder,
   queueAdmit,
@@ -38,10 +39,14 @@ import {
   RECORDING_MAX_MS,
   RECORDING_MODELS,
   type RoomEvent,
+  type RoomHours,
+  type RoomHoursStep,
   type RoomState,
   recordingDecision,
   resolveButton,
   roomAccess,
+  roomHoursStep,
+  roomOpenAt,
   roomStep,
   utcOffsetMinutes,
 } from "@openloungephone/core";
@@ -381,6 +386,8 @@ export class HouseholdHub {
    * here): if their server ends the old call instead of following, the new one ends too.
    */
   private readonly handoffs = new Map<string, string>();
+  /** Party lines with hours: the closing each room's people were warned of (by room id). */
+  private readonly closingWarned = new Map<string, number>();
   /** Lines calling our people back right now, by the call id they waited under. */
   private readonly callbackRings = new Map<string, CallbackRinging>();
   /** Some line of ours may have callers waiting for a call back (checked in the store). */
@@ -970,6 +977,8 @@ export class HouseholdHub {
       await this.pumpLines();
       // Notices: one that expired leaves the phones.
       await this.updateNotices();
+      // Party lines with hours: opening, closing soon, closed.
+      await this.checkRoomHours();
       await this.scheduleWake();
     });
   }
@@ -1924,6 +1933,9 @@ export class HouseholdHub {
     // Rooms: the next idle warning or drop.
     const roomDue = this.conf.nextDeadline(now);
     if (roomDue !== undefined) at = at === undefined ? roomDue : Math.min(at, roomDue);
+    // Party lines with hours: the next opening, warning or closing.
+    const hoursDue = await this.roomHoursDue();
+    if (hoursDue !== undefined) at = at === undefined ? hoursDue : Math.min(at, hoursDue);
     // Notices: the next one to expire leaves the phones then.
     const noticeDue = nextNoticeExpiry(await store.notices.live(this.householdId, now), now);
     if (noticeDue !== undefined) at = at === undefined ? noticeDue : Math.min(at, noticeDue);
@@ -3855,6 +3867,125 @@ export class HouseholdHub {
     await this.apply(room, { type: "end", reason: "voicemail" });
   }
 
+  // --- party line hours ----------------------------------------------------------------------
+
+  /** A room's hours in the space's time zone (undefined: always open). */
+  private async hoursOf(room: StoredRoom): Promise<RoomHours | undefined> {
+    if (!room.hours) return undefined;
+    const space = await this.env.store.getHousehold(this.householdId);
+    return space ? { timeZone: space.timeZone, rules: room.hours } : undefined;
+  }
+
+  /** What each scheduled room needs now, without doing it. */
+  private async roomHoursSteps(): Promise<
+    { room: StoredRoom; hours: RoomHours; step: RoomHoursStep }[]
+  > {
+    const now = this.env.now();
+    const out = [];
+    for (const room of await this.env.store.rooms.list(this.householdId)) {
+      const hours = await this.hoursOf(room);
+      if (!hours) continue;
+      const step = roomHoursStep(hours, now, {
+        announcedUntil: room.announcedUntil,
+        ...(this.closingWarned.has(room.id) ? { warnedFor: this.closingWarned.get(room.id) } : {}),
+        occupied: (this.conf.get(room.id)?.participants.size ?? 0) > 0,
+      });
+      out.push({ room, hours, step });
+    }
+    return out;
+  }
+
+  /** The next time a scheduled room needs looking at (now, if something is due). */
+  private async roomHoursDue(): Promise<number | undefined> {
+    let at: number | undefined;
+    for (const { step } of await this.roomHoursSteps()) {
+      const due = step.announce || step.warn || step.close ? this.env.now() : step.next;
+      if (due !== undefined) at = at === undefined ? due : Math.min(at, due);
+    }
+    return at;
+  }
+
+  /**
+   * Party lines with hours: at opening tell its members (apps, and the phones with its key) once;
+   * a minute before closing warn the people in it; at closing end it politely.
+   */
+  private async checkRoomHours(): Promise<void> {
+    const now = this.env.now();
+    for (const { room, hours, step } of await this.roomHoursSteps()) {
+      if (step.announce) {
+        await this.env.store.rooms.setAnnounced(room.id, step.announce.closesAt);
+        await this.announceOpening(room, step.announce.closesAt);
+      }
+      const live = this.conf.get(room.id);
+      if (step.warn && live) {
+        this.closingWarned.set(room.id, step.warn.closesAt);
+        for (const p of live.participants.values()) {
+          p.peer.conn.send({
+            t: "room.idle",
+            roomId: room.id,
+            dropAt: step.warn.closesAt,
+            closing: true,
+          });
+        }
+      }
+      if (step.close) {
+        this.closingWarned.delete(room.id);
+        const opens = opensText(hours, now);
+        await this.conf.close(room.id, opens ? `Closed. ${opens}` : "Closed");
+      }
+    }
+  }
+
+  /**
+   * A room just opened: the space's apps hear it (`room.opened`), and the phones with its key get
+   * a notice (`PARTY LINE OPEN` and its name, until it closes), with a chime. A kids' phone in
+   * its quiet hours isn't told.
+   */
+  private async announceOpening(room: StoredRoom, closesAt: number): Promise<void> {
+    const { store } = this.env;
+    const name = room.name.slice(0, 40);
+    for (const set of this.apps.values()) {
+      for (const app of set) app.conn.send({ t: "room.opened", roomId: room.id, name, closesAt });
+    }
+    const schedule = await store.getSchedule(this.householdId);
+    const now = new Date(this.env.now());
+    const phones: string[] = [];
+    for (const id of await store.rooms.phonesWith(room.id)) {
+      const d = await store.getDevice(id);
+      if (!d || d.householdId !== this.householdId) continue;
+      if (deviceMode(d) === "kids" && isQuietAt(schedule, now)) continue;
+      phones.push(id);
+    }
+    if (!phones.length) return;
+    const title = room.kind === "party" ? "PARTY LINE OPEN" : "ROOM OPEN";
+    await store.notices.create(
+      {
+        householdId: this.householdId,
+        createdBy: null,
+        authorName: name,
+        lines: [
+          title,
+          name
+            .toUpperCase()
+            .replace(/[^ -~]/g, "?")
+            .slice(0, 16),
+        ],
+        deviceIds: phones,
+        expiresAt: closesAt,
+      },
+      this.env.now(),
+    );
+    await this.updateNotices();
+  }
+
+  /** A room's hours changed: open, warn or close it as they say now. */
+  roomHoursChanged(): Promise<void> {
+    return this.run(async () => {
+      await this.checkRoomHours();
+      await this.scheduleWake();
+    });
+  }
+
   // --- notices (docs/notices.md) ------------------------------------------------------------
 
   /** Notices changed (posted, recorded, taken down): every phone gets what it should show. */
@@ -5123,6 +5254,12 @@ export class HouseholdHub {
    */
   private async joinLocal(peer: Peer, stored: StoredRoom): Promise<void> {
     if (this.busy(peer.key)) return this.refuseRoom(peer, "busy", stored.id);
+    // A party line with hours is closed outside them.
+    const hours = await this.hoursOf(stored);
+    if (!roomOpenAt(hours, this.env.now()).open) {
+      const opens = opensText(hours, this.env.now());
+      return this.refuseRoom(peer, "closed", stored.id, opens ? `Closed. ${opens}` : "Closed");
+    }
     const { store } = this.env;
     let kidsPhone: { allowListed: boolean } | undefined;
     let account: string | undefined;
@@ -5333,6 +5470,11 @@ export class HouseholdHub {
       const stored = await store.rooms.get(req.roomId);
       if (!stored || stored.householdId !== this.householdId || stored.kind !== "phone") {
         return { ok: false, reason: "denied" };
+      }
+      const hours = await this.hoursOf(stored);
+      if (!roomOpenAt(hours, this.env.now()).open) {
+        const opens = opensText(hours, this.env.now());
+        return { ok: false, reason: "denied", note: opens ? `Closed. ${opens}` : "Closed" };
       }
       const inSpace =
         req.host === LOCAL_HOST && !!(await store.membership(req.from.id, this.householdId));

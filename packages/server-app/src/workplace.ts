@@ -39,7 +39,8 @@ export const GROUP_MAX_MEMBERS = 20;
 
 const Number_ = z.string().regex(/^[0-9]{2,6}$/, "an extension is 2–6 digits");
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
-const Rules = z
+/** Weekly windows (business hours, a party line's hours): days 0-6, HH:MM to HH:MM. */
+export const Rules = z
   .array(
     z.object({
       days: z.array(z.number().int().min(0).max(6)).min(1).max(7),

@@ -18,6 +18,14 @@ On `main`, not tagged yet.
   line (here or on another server) as the space: the line sees the phone's name and the space
   owner's verified address. A member signed in at a Lounge phone gets the lines on their own
   phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Party line hours**: a room can be open only at set weekly times (the space's time zone,
+  windows past midnight, the same rules as quiet hours). Outside them nobody gets in ("Closed.
+  Opens Fri 19:00"). At opening the space's apps get `room.opened` (the companion offers to join)
+  and phones with the room's key get a `PARTY LINE OPEN` notice with a chime (not a kids' phone
+  in its quiet hours); a minute before closing the people in it are warned (`room.idle` with
+  `closing`), and at closing it ends for everyone. `PATCH /api/rooms/:id {hours}`; companion:
+  Rooms → Hours; browser phone: `CLOSING SOON`. Additive protocol: `room.opened`,
+  `room.idle.closing`. Migration 0025.
 - **Notices**: a space's guardians (in a team: the owner and admins) post a short notice to its
   phones, all of them or some: one or two lines of 16 characters, an optional 30-second
   recording, an hour unless they choose otherwise (up to a day). Phones show it on the ready

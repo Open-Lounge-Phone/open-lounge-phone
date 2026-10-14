@@ -6,6 +6,7 @@
 // - A room goes on a phone's allow-list (and a key) only through its guardians (or its owner, for
 //   a personal phone), and only rooms of the phone's own space: a kids' phone can only join rooms
 //   a guardian allowed.
+import { opensText, roomOpenAt } from "@openloungephone/core";
 import { handleProblem, type Room, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
@@ -13,6 +14,7 @@ import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
+import { auditFrom, Rules } from "./workplace.ts";
 
 /** Most rooms a space may have. */
 export const ROOMS_PER_SPACE = 20;
@@ -29,6 +31,8 @@ const PatchRoom = z
     name: Name.optional(),
     access: z.enum(["space", "connections"]).optional(),
     locked: z.boolean().optional(),
+    /** Open only at these times (the space's time zone); null or [] = always open. */
+    hours: Rules.nullable().optional(),
   })
   .strict();
 const PhoneRoom = z.object({ label: z.string().trim().min(1).max(24) });
@@ -39,29 +43,43 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
   const mayManage = (user: User, accountId: string, room: Room) =>
     user.role === "guardian" || room.ownerAccount === accountId;
 
-  const view = (room: Room, host: string, people: string[], mine: boolean) => ({
-    id: room.id,
-    kind: room.kind,
-    name: room.name,
-    ...(room.handle ? { address: `${room.handle}@${host}` } : {}),
-    access: room.access,
-    locked: room.locked,
-    mine,
-    people,
-  });
+  const view = (room: Room, host: string, people: string[], mine: boolean, timeZone: string) => {
+    const hours = room.hours ? { timeZone, rules: room.hours } : undefined;
+    const now = env.now();
+    const state = roomOpenAt(hours, now);
+    return {
+      id: room.id,
+      kind: room.kind,
+      name: room.name,
+      ...(room.handle ? { address: `${room.handle}@${host}` } : {}),
+      access: room.access,
+      locked: room.locked,
+      mine,
+      people,
+      // Opening hours: null = always open; `open` now, until when, or when it opens next.
+      hours: room.hours,
+      open: state.open,
+      ...(hours && state.until !== undefined ? { until: state.until } : {}),
+      ...(hours && !state.open ? { opens: opensText(hours, now) } : {}),
+    };
+  };
 
   /** The space's rooms, who's in each right now, and how their audio travels here. */
   api.get("/rooms", async (c) => {
     const user = c.get("user");
     const account = c.get("account");
-    const [rooms, people] = await Promise.all([
+    const [rooms, people, space] = await Promise.all([
       store.rooms.list(user.householdId),
       live.roomPeople(user.householdId).catch(() => ({}) as Record<string, string[]>),
+      store.getHousehold(user.householdId),
     ]);
+    const tz = space?.timeZone ?? "UTC";
     const host = ownHost(env, c.req.url);
     const relay = env.relay?.kind;
     return c.json({
-      rooms: rooms.map((r) => view(r, host, people[r.id] ?? [], mayManage(user, account.id, r))),
+      rooms: rooms.map((r) =>
+        view(r, host, people[r.id] ?? [], mayManage(user, account.id, r), tz),
+      ),
       // How rooms carry audio on this server (for honest labelling in the app).
       media: relay === "cloudflare" ? "sfu" : relay === "livekit" ? "livekit" : "mesh",
     });
@@ -101,7 +119,8 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
       env.now(),
     );
     if (!room) return c.json({ error: "that address is taken" }, 409);
-    return c.json(view(room, ownHost(env, c.req.url), [], true), 201);
+    const tz = (await store.getHousehold(user.householdId))?.timeZone ?? "UTC";
+    return c.json(view(room, ownHost(env, c.req.url), [], true, tz), 201);
   });
 
   api.patch("/rooms/:id", async (c) => {
@@ -114,7 +133,18 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (room.kind === "party" && b.access === "connections") {
       return c.json({ error: "a party line is for its space" }, 400);
     }
-    await store.rooms.update(room.id, b);
+    const { hours, ...patch } = b;
+    await store.rooms.update(room.id, patch);
+    if (hours !== undefined) {
+      const rules = (hours ?? []).map((r) => ({
+        days: [...new Set(r.days)].sort(),
+        start: r.start,
+        end: r.end,
+      }));
+      await store.rooms.setHours(room.id, rules.length ? rules : null);
+      await auditFrom(env, c, "room.hours", { roomId: room.id, hours: rules });
+      await live.roomHoursChanged(user.householdId);
+    }
     return c.body(null, 204);
   });
 

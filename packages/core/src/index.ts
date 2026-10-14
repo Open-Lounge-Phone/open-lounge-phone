@@ -9,6 +9,7 @@ export * from "./lounge.ts";
 export * from "./notices.ts";
 export * from "./quietHours.ts";
 export * from "./recording.ts";
+export * from "./roomHours.ts";
 export * from "./rooms.ts";
 export * from "./voicemail.ts";
 export * from "./workplace.ts";

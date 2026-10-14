@@ -206,7 +206,7 @@ function DirList({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** One open window per week pattern, or always open. */
-function HoursEditor({
+export function HoursEditor({
   value,
   onSave,
   inherit,

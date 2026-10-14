@@ -193,7 +193,9 @@ let lingerTimer: ReturnType<typeof setTimeout> | undefined;
 /** The room this phone is in (a party line, a phone room or a 3-way call). */
 let roomAudio: RoomAudio | undefined;
 let roomPending: Extract<ServerToDevice, { t: "room.media" | "rtc.sdp" | "rtc.ice" }>[] = [];
-let room: { name: string; people: number; muted: boolean; idleWarning?: boolean } | undefined;
+let room:
+  | { name: string; people: number; muted: boolean; idleWarning?: boolean; closing?: boolean }
+  | undefined;
 /** The room's microphone copy and the others' audio (for a recording this phone makes). */
 let roomMic: MediaStream | undefined;
 let roomStreams: MediaStream[] = [];
@@ -439,6 +441,12 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
     }
     case "room.idle":
+      // A party line's hours end at `dropAt` (it closes for everyone), or the idle warning.
+      if (msg.closing) {
+        if (room) room = { ...room, closing: true };
+        speak(`${room?.name ?? "The party line"} closes in a minute.`);
+        break;
+      }
       if (room) room = { ...room, idleWarning: true };
       speak(CALL_PROMPT_TEXT["room.idle"]);
       break;

@@ -66,6 +66,12 @@ export interface RoomSummary {
   /** You may change or delete it (its owner, or a guardian). */
   mine: boolean;
   people: string[];
+  /** Open only at these times (the space's time zone); null = always open. */
+  hours: HoursRule[] | null;
+  /** Open now; `until` when that changes; `opens` in words ("Opens Fri 19:00") when closed. */
+  open: boolean;
+  until?: number;
+  opens?: string;
 }
 
 export interface ContactEntry {
@@ -713,7 +719,12 @@ export function createApi(opts: ApiOptions) {
     }) => request<RoomSummary>("POST", "/rooms", room),
     updateRoom: (
       roomId: string,
-      patch: { name?: string; access?: "space" | "connections"; locked?: boolean },
+      patch: {
+        name?: string;
+        access?: "space" | "connections";
+        locked?: boolean;
+        hours?: HoursRule[] | null;
+      },
     ) => request<void>("PATCH", `/rooms/${enc(roomId)}`, patch),
     deleteRoom: (roomId: string) => request<void>("DELETE", `/rooms/${enc(roomId)}`),
     putRemoteContact: (deviceId: string, connectionId: string, contact: Omit<ContactEntry, "id">) =>

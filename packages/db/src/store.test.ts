@@ -1099,3 +1099,47 @@ describe("0024_notices", () => {
     old.db.close();
   });
 });
+
+describe("0025_room_hours", () => {
+  it("keeps rooms (always open); hours and the announced window come and go", async () => {
+    const old = openBefore("0025");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Mom", handle: "mom" }, T0);
+    const { household: hh } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom", accountId: owner?.id },
+      T0,
+    );
+    const room = await s.rooms.create(
+      {
+        householdId: hh.id,
+        kind: "party",
+        name: "Family line",
+        handle: null,
+        ownerAccount: owner?.id ?? null,
+        access: "space",
+      },
+      T0,
+    );
+    if (!room) throw new Error("no room");
+    const { code } = await s.createPairing(KEY, T0);
+    const kid = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    if (!kid) throw new Error("pairing failed");
+    const rk = await s.rooms.addToPhone(kid.id, room.id, "Family");
+    expect(migrate(old.db)).toContain("0025_room_hours.sql");
+    expect(await s.rooms.get(room.id)).toMatchObject({
+      name: "Family line",
+      hours: null,
+      announcedUntil: null,
+    });
+    expect(await s.rooms.phonesWith(room.id)).toEqual([kid.id]);
+    expect(rk.startsWith("rk_")).toBe(true);
+    const hours = [{ days: [1, 3], start: "19:00", end: "21:00" }];
+    await s.rooms.setHours(room.id, hours);
+    await s.rooms.setAnnounced(room.id, T0 + 1000);
+    expect(await s.rooms.get(room.id)).toMatchObject({ hours, announcedUntil: T0 + 1000 });
+    // New hours announce afresh; none = always open.
+    await s.rooms.setHours(room.id, null);
+    expect(await s.rooms.get(room.id)).toMatchObject({ hours: null, announcedUntil: null });
+    old.db.close();
+  });
+});

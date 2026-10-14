@@ -19,7 +19,14 @@ export interface StatusInput {
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
   /** In a room: its name, how many are in, whether you're muted, and an idle warning. */
-  room?: { name: string; people: number; muted: boolean; idleWarning?: boolean };
+  room?: {
+    name: string;
+    people: number;
+    muted: boolean;
+    idleWarning?: boolean;
+    /** Its hours end in a minute. */
+    closing?: boolean;
+  };
   /** Leaving a voicemail after an unanswered call (and its outcome, shortly after hang-up). */
   leave?: { stage: "greeting" | "recording" | "sending" | "sent" | "failed"; remainingMs?: number };
   /** The call or room is recorded (announced): the strip says REC, next to the recording light. */
@@ -114,6 +121,7 @@ export function statusLines(input: StatusInput): StatusLines {
     case "inroom": {
       const room = input.room;
       if (!s.roomId || !room) return ["JOINING ROOM"];
+      if (room.closing) return ["CLOSING SOON", clip(room.name)];
       if (room.idleWarning) return ["STILL THERE?", "PRESS ANY KEY"];
       const count = `${input.recording ? "REC " : ""}${room.people} IN ROOM${s.muted ? " MUTED" : ""}`;
       return [clip(room.name), clip(count)];

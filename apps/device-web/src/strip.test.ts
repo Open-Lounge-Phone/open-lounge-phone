@@ -377,3 +377,14 @@ describe("notices on the strip", () => {
     expect(lines({ config })[0]).not.toBe("BUS IS HERE");
   });
 });
+
+describe("a party line closing", () => {
+  it("says so in the room", () => {
+    expect(
+      lines({
+        deviceState: { kind: "inroom", roomId: "r1", muted: false },
+        room: { name: "Family line", people: 2, muted: false, closing: true },
+      }),
+    ).toEqual(["CLOSING SOON", "FAMILY LINE"]);
+  });
+});

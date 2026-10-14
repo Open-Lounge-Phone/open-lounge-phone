@@ -635,13 +635,14 @@ Rooms with a relay (`media: sfu`): the one peer connection to the relay. The cli
 
 ### `room.idle`
 
-10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `dropAt` | integer (≥0) | yes |  |
+| `closing` | boolean |  | The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do. |
 
 ### `room.ended`
 
@@ -1134,13 +1135,14 @@ Rooms with a relay (`media: sfu`): the one peer connection to the relay. The cli
 
 ### `room.idle`
 
-10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.
+10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `dropAt` | integer (≥0) | yes |  |
+| `closing` | boolean |  | The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do. |
 
 ### `room.ended`
 
@@ -1162,6 +1164,17 @@ Someone came into or left one of your space's rooms ("members see who's in").
 | `id` | string (len ≤64) |  |  |
 | `roomId` | string (len ≤64) | yes |  |
 | `people` | string (len ≤24)[] | yes | Who's in the room now (names), for members who aren't in it. |
+
+### `room.opened`
+
+A room of your space with opening hours just opened ("party line open"): join it like any room. Sent once per opening to the members' apps; phones with the room on a key get a notice.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `roomId` | string (len ≤64) | yes |  |
+| `name` | string (len ≤40) | yes |  |
+| `closesAt` | integer (≥0) | yes | When its hours end. |
 
 ### `error`
 

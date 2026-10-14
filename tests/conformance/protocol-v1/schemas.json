@@ -2079,6 +2079,9 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "closing": {
+            "type": "boolean"
           }
         },
         "required": ["t", "roomId", "dropAt"]
@@ -3918,6 +3921,9 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "closing": {
+            "type": "boolean"
           }
         },
         "required": ["t", "roomId", "dropAt"]
@@ -3993,6 +3999,38 @@
           }
         },
         "required": ["t", "roomId", "people"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "room.opened"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "roomId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "closesAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["t", "roomId", "name", "closesAt"]
       },
       {
         "type": "object",

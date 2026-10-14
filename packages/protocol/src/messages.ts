@@ -330,9 +330,20 @@ export const RoomState = z
   .describe("You're in a room: who's there and how its audio travels. Sent on every change.");
 
 export const RoomIdle = z
-  .object({ t: z.literal("room.idle"), ...Ref, roomId: Id, dropAt: EpochMs })
+  .object({
+    t: z.literal("room.idle"),
+    ...Ref,
+    roomId: Id,
+    dropAt: EpochMs,
+    closing: z
+      .boolean()
+      .optional()
+      .describe(
+        "The room's hours end at `dropAt` (a party line with hours): it closes for everyone then, whatever you do.",
+      ),
+  })
   .describe(
-    "10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`.",
+    "10 minutes of silence and no interaction: you'll be dropped at `dropAt` unless you speak or interact (`room.here`). Phones play prompt `room.idle`. With `closing`, the room closes at `dropAt`.",
   );
 
 export const RoomEnded = z
@@ -1242,6 +1253,18 @@ export const RoomsChanged = z
   })
   .describe("Someone came into or left one of your space's rooms (\"members see who's in\").");
 
+export const RoomOpened = z
+  .object({
+    t: z.literal("room.opened"),
+    ...Ref,
+    roomId: Id,
+    name: z.string().min(1).max(40),
+    closesAt: EpochMs.describe("When its hours end."),
+  })
+  .describe(
+    'A room of your space with opening hours just opened ("party line open"): join it like any room. Sent once per opening to the members\' apps; phones with the room on a key get a notice.',
+  );
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
@@ -1260,6 +1283,7 @@ export const ServerToApp = z.discriminatedUnion("t", [
   RoomIdle,
   RoomEnded,
   RoomsChanged,
+  RoomOpened,
   ErrorMsg,
   Pong,
 ]);
