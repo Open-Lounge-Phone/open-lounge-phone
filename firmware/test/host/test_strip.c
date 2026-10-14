@@ -55,3 +55,25 @@ TEST(strip_keeps_long_names_whole) {
   CHECK_STR(out[0], "MISSED CALL");
   CHECK_STR(out[1], "CLAUDE TEST PHONE");  // scrolls on screen, not cut to 16
 }
+
+TEST(strip_public_line_queue) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_DIALING;
+  ph.queued = true;
+  ph.queue_pos = 2;
+  ph.queue_size = 3;
+  ph.queue_vm = true;
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1, .active_label = "Help"};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "IN LINE 2");
+  CHECK_STR(out[1], "1 VOICEMAIL");
+  ph.queue_vm = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "HELP");
+  ph.queue_pos = 0;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "WAITING IN LINE");
+}

@@ -181,7 +181,7 @@ static tone_t tone_for(const phone_state_t *p) {
     case PH_OFFHOOK:
       if (p->held[0]) return TONE_HOLD;  // a call on hold: a soft reminder
       return !p->last_end[0] || !strcmp(p->last_end, "hangup") ? TONE_DIAL : TONE_BUSY;
-    case PH_DIALING: return TONE_RINGBACK;
+    case PH_DIALING: return p->queued ? TONE_HOLD : TONE_RINGBACK;  // waiting in a line's queue
     case PH_INCALL: return p->held_by_them ? TONE_HOLD : TONE_NONE;
     default: return TONE_NONE;
   }

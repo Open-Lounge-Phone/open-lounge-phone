@@ -152,3 +152,32 @@ TEST(phone_transfers_to_an_extension) {
   phone_transfer_extension(&s, "204", emit);  // not in a call (on hold): nothing
   CHECK(s_n == 0);
 }
+
+TEST(phone_waits_in_a_public_lines_queue) {
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_button(&s, 3, emit);
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ringing\","
+         "\"queue\":{\"position\":2,\"size\":3,\"voicemail\":true}}");
+  CHECK(s.kind == PH_DIALING && s.queued && s.queue_pos == 2 && s.queue_size == 3 && s.queue_vm);
+  s_n = 0;
+  phone_button(&s, 0, emit);  // key 1: leave a voicemail instead
+  CHECK(s_n == 1);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.voicemail\",\"callId\":\"c1\"}");
+  CHECK(s.kind == PH_DIALING);
+  // Ringing again (no queue): key 1 does nothing.
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ringing\"}");
+  CHECK(!s.queued && !s.queue_vm);
+  s_n = 0;
+  phone_button(&s, 0, emit);
+  CHECK(s_n == 0);
+  // A line that offers no voicemail: key 1 does nothing either.
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ringing\","
+         "\"queue\":{\"position\":1,\"size\":1}}");
+  CHECK(s.queued && !s.queue_vm);
+  phone_button(&s, 0, emit);
+  CHECK(s_n == 0);
+}

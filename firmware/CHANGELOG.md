@@ -1,5 +1,12 @@
 # Firmware changelog
 
+## Unreleased
+
+- **Public lines**: a line put on a key (a business's address, from the companion) can be called
+  from a personal phone. While waiting in the line's queue the screen shows `IN LINE 2` /
+  `1 VOICEMAIL` with the soft waiting tone, and key 1 leaves a voicemail instead
+  (`call.voicemail`). Older firmware ignores the queue and just shows `CALLING`.
+
 ## 0.9.1 — 2026-10-13: Lounge phones, extensions, safer setup
 
 - **Lounge phones** work on the hardware: the takeover QR code on the e-paper, `PRESS KEY 7`

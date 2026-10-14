@@ -101,6 +101,11 @@ void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
     CPY(s->held, held);
     return;
   }
+  // Waiting in a public line's queue: key 1 leaves a voicemail instead (when the line offers it).
+  if (s->kind == PH_DIALING && s->queued && s->queue_vm && s->call_id[0] && index == 0) {
+    emit_call(emit, "call.voicemail", s->call_id);
+    return;
+  }
   if (s->kind == PH_INCALL && s->transfer_pending) {
     s->transfer_pending = false;
     cJSON *m = msg("call.transfer");
@@ -247,6 +252,14 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         s->recorded = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "recording"));
       } else {
         CPY(s->call_id, id);
+        // A public line's queue: the place in line; `ringing` without one = ringing again.
+        const cJSON *q = cJSON_GetObjectItemCaseSensitive(m, "queue");
+        const cJSON *pos = cJSON_IsObject(q) ? cJSON_GetObjectItemCaseSensitive(q, "position") : NULL;
+        const cJSON *size = cJSON_IsObject(q) ? cJSON_GetObjectItemCaseSensitive(q, "size") : NULL;
+        s->queued = cJSON_IsObject(q);
+        s->queue_pos = cJSON_IsNumber(pos) ? pos->valueint : 0;
+        s->queue_size = cJSON_IsNumber(size) ? size->valueint : 0;
+        s->queue_vm = s->queued && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(q, "voicemail"));
       }
       break;
     }
