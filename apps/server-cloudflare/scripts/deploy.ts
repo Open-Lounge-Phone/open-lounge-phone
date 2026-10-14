@@ -6,6 +6,7 @@
 //                          [--turnstile-site-key KEY --turnstile-secret SECRET]
 //                          [--operator handle[,handle]|none] [--sponsor-url URL]
 //                          [--funding-balance USD] [--sfu-app-id ID --sfu-app-secret SECRET]
+//                          [--addons]
 //
 // --open-signup lets anyone create an account on the instance (a public hub). Without it the
 // instance is invite-only; every deploy sets the flag, so omitting it closes sign-up again.
@@ -22,6 +23,8 @@
 // Realtime → SFU), stored as secrets; when not given they're read from instances/sfu.env
 // (SFU_APP_ID=…, SFU_APP_SECRET=…, gitignored) if it exists. Without them rooms are peer to peer
 // and hold 4 people. 1:1 calls never use the relay.
+// --addons lets people link add-ons (services such as an AI companion) to their accounts
+// (docs/add-ons.md). Every deploy sets the flag, so omitting it turns add-ons off again.
 //
 // The public hub:
 //   node scripts/deploy.ts --instance hub --domain hub.openloungephone.app --open-signup \
@@ -71,6 +74,7 @@ const { values: args } = parseArgs({
     "new-setup-token": { type: "boolean", default: false },
     "open-signup": { type: "boolean", default: false },
     "refuse-recorded-calls": { type: "boolean", default: false },
+    addons: { type: "boolean", default: false },
     "fair-use": { type: "string" },
     "turnstile-site-key": { type: "string" },
     "turnstile-secret": { type: "string" },
@@ -259,6 +263,7 @@ const config = {
     ...(base.vars as object | undefined),
     OPEN_SIGNUP: openSignup ? "1" : "0",
     REFUSE_RECORDED_CALLS: args["refuse-recorded-calls"] === true ? "1" : "0",
+    ADDONS: args.addons === true ? "on" : "off",
     PUBLIC_URL: `https://${domain}`,
     // Public instances get the hub's fair-use allowance unless told otherwise.
     ...(openSignup && args["fair-use"] !== "none" ? { FAIR_USE: "hub" } : {}),
@@ -340,6 +345,11 @@ console.log(
   openSignup
     ? "  Open sign-up is ON: anyone can create an account (fair-use allowance applies)."
     : "  Invite-only (pass --open-signup to let anyone create an account).",
+);
+console.log(
+  args.addons === true
+    ? "  Add-ons are ON: people may link add-ons to their accounts."
+    : "  Add-ons are off (pass --addons to let people link them).",
 );
 console.log(
   state.sfuSet

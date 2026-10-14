@@ -12,6 +12,8 @@ export interface DeployOptions {
   sponsorUrl?: string;
   fundingBalance?: string;
   refuseRecordedCalls: boolean;
+  /** Let people link add-ons to their accounts (docs/add-ons.md). */
+  addons?: boolean;
   newSetupToken: boolean;
   /** Don't ask anything; fail if something required is missing. */
   yes: boolean;
@@ -113,6 +115,7 @@ function parseDeploy(argv: string[]): Command {
     "sponsor-url": { type: "string" },
     "funding-balance": { type: "string" },
     "refuse-recorded-calls": { type: "boolean" },
+    addons: { type: "boolean" },
     "new-setup-token": { type: "boolean" },
     yes: { type: "boolean", short: "y" },
     "dry-run": { type: "boolean" },
@@ -133,6 +136,7 @@ function parseDeploy(argv: string[]): Command {
   const opts: DeployOptions = {
     ai: values["no-ai"] !== true,
     refuseRecordedCalls: values["refuse-recorded-calls"] === true,
+    ...(values.addons === true ? { addons: true } : {}),
     newSetupToken: values["new-setup-token"] === true,
     yes: values.yes === true,
     dryRun: values["dry-run"] === true,
@@ -257,6 +261,7 @@ Asks for anything not given. Creates or reuses only resources named openloungeph
   --sponsor-url <https://…>  show a Sponsor button
   --funding-balance <usd>    show the funding card
   --refuse-recorded-calls    other servers' recorded calls don't reach your people
+  --addons                   let people link add-ons (services) to their accounts
   --new-setup-token          issue a new one-time setup link
   --dry-run                  preflight and summary only; change nothing
   -y, --yes                  don't ask; fail if something required is missing

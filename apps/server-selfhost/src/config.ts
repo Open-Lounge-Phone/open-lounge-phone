@@ -41,6 +41,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
     /** REFUSE_RECORDED_CALLS=1: other servers' recorded calls don't reach this server's people. */
     refuseRecordedCalls: env.REFUSE_RECORDED_CALLS === "1" || env.REFUSE_RECORDED_CALLS === "true",
+    /** ADDONS=on: people may link add-ons to their accounts (docs/add-ons.md). Off by default. */
+    addons: ["on", "1", "true"].includes((env.ADDONS ?? "").toLowerCase()),
     /** Federation (connections with other servers) is on unless FEDERATION=0. */
     federation: env.FEDERATION !== "0" && env.FEDERATION !== "false",
     transcribe: env.TRANSCRIBE_URL

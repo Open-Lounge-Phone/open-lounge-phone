@@ -53,6 +53,7 @@ import {
 } from "@openloungephone/core";
 import {
   type Account,
+  type Addon,
   type Device,
   deviceMode,
   type HouseLineKey,
@@ -70,10 +71,12 @@ import {
   type VoicemailOwner,
 } from "@openloungephone/db";
 import {
+  type AddonAddress,
   type CallBody,
   type FedSignal,
   type LineCallbackMissedResult,
   type Party,
+  parseAddonAddress,
   parseAddress,
   type RoomJoinResult,
   type RoomSignalMsg,
@@ -89,6 +92,7 @@ import {
   toBase64Url,
   type VoicemailOffer,
 } from "@openloungephone/protocol";
+import { addonAddress, mayTalk } from "./addons.ts";
 import {
   type AppCloseFilter,
   CloseCode,
@@ -125,7 +129,7 @@ import { admitLineCall, lineInfo, logLineCaller } from "./lines.ts";
 import { type LiveRoom, LiveRooms, type RoomInbound } from "./liveRooms.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 import { SWEEP_EVERY_MS, sweepSpace } from "./timeline.ts";
-import { SERVER_INFO } from "./version.ts";
+import { serverInfo } from "./version.ts";
 import {
   issueGreetingTicket,
   issueVoicemailOffer,
@@ -224,7 +228,13 @@ class FedConn implements Conn {
       this.room(msg as RoomSignalMsg);
       return;
     }
-    if (msg.t !== "call.state" && msg.t !== "rtc.sdp" && msg.t !== "rtc.ice") return;
+    if (
+      msg.t !== "call.state" &&
+      msg.t !== "rtc.sdp" &&
+      msg.t !== "rtc.ice" &&
+      msg.t !== "call.key"
+    )
+      return;
     if (msg.t === "call.state" && msg.state === "ringing" && !this.lineCaller) return;
     // A voicemail offer never crosses to the other server, except to a Lounge phone there where
     // one of our accounts is a guest, and to someone whose call our team/org space transferred
@@ -356,6 +366,10 @@ type Here = { name: string; where: string };
 
 const deviceKey = (id: string) => `dev:${id}`;
 const userKey = (id: string) => `usr:${id}`;
+const addonKey = (id: string) => `addon:${id}`;
+
+/** An add-on of ours, or the far end of a call that is someone's add-on elsewhere. */
+const isAddonParty = (p: Peer | undefined): boolean => p?.kind === "addon" || !!p?.addon;
 
 /**
  * All live connections and calls for one household. Calls never cross households, so this is the
@@ -366,6 +380,8 @@ const userKey = (id: string) => `usr:${id}`;
  */
 export class HouseholdHub {
   private readonly devices = new Map<string, DevicePeer>();
+  /** Connected add-ons of this household (docs/add-ons.md), by add-on id. */
+  private readonly addonPeers = new Map<string, Peer>();
   /** Labs check-in alerts sent, by phone (at most one in 12 hours each). */
   private readonly checkinAlerts = new Map<string, number>();
   private readonly apps = new Map<string, Set<Peer>>();
@@ -523,10 +539,17 @@ export class HouseholdHub {
     const peers = entries.map(({ info, conn }) => {
       const peer: Peer = {
         ...info,
-        key: info.kind === "device" ? deviceKey(info.id) : userKey(info.id),
+        key:
+          info.kind === "device"
+            ? deviceKey(info.id)
+            : info.kind === "addon"
+              ? addonKey(info.id)
+              : userKey(info.id),
         conn,
       };
-      if (peer.kind === "device") {
+      if (peer.kind === "addon") {
+        this.addonPeers.set(peer.id, peer);
+      } else if (peer.kind === "device") {
         const device = peer as DevicePeer;
         device.hook ??= "down";
         this.devices.set(peer.id, device);
@@ -656,7 +679,7 @@ export class HouseholdHub {
       this.apps.set(user.id, set);
       set.add(peer);
       this.remember(peer);
-      conn.send({ t: "app.ready", userId: user.id, server: SERVER_INFO });
+      conn.send({ t: "app.ready", userId: user.id, server: serverInfo(this.env) });
       // Everyone's presence for this session, then tell the others this person is online.
       const available = await this.env.store.availability(this.householdId);
       for (const [userId, avail] of available) {
@@ -706,6 +729,9 @@ export class HouseholdHub {
       if (peer.owner && !this.userOnline(peer.owner)) void this.announceMember(peer.owner);
       this.broadcastStatus(peer as DevicePeer, false);
       if (this.devices.size === 0 && !session) void this.scheduleWake();
+    } else if (peer.kind === "addon") {
+      if (this.addonPeers.get(peer.id) !== peer) return;
+      this.addonPeers.delete(peer.id);
     } else {
       const set = this.apps.get(peer.id);
       if (!set?.delete(peer)) return;
@@ -733,13 +759,14 @@ export class HouseholdHub {
   }
 
   isOnline(deviceId: string): boolean {
-    return this.devices.has(deviceId);
+    return this.devices.has(deviceId) || this.addonPeers.has(deviceId);
   }
 
   // --- inbound messages -----------------------------------------------------
 
   handleDevice(peer: Peer, msg: DeviceToServer): Promise<void> {
     return this.run(async () => {
+      if (peer.kind === "addon") return this.handleAddon(peer, msg);
       const device = this.devices.get(peer.id);
       if (device !== peer) return; // stale connection
       switch (msg.t) {
@@ -753,6 +780,11 @@ export class HouseholdHub {
           return this.deviceDial(device, msg.index);
         case "call.extension":
           return this.extensionDial(device, msg.number);
+        case "call.address":
+          // Phones dial with their keys (an add-on's address can be on one).
+          return this.refuse(device, "unavailable");
+        case "call.key":
+          return this.callKey(peer, msg);
         case "lounge.press":
           return this.loungePress(device, msg.index);
         case "lounge.leave":
@@ -853,6 +885,12 @@ export class HouseholdHub {
           return;
         case "call.line":
           return this.lineDial(peer, msg.address);
+        case "call.address": {
+          const addon = parseAddonAddress(msg.address);
+          return addon ? this.addonDial(peer, addon) : this.refuse(peer, "unavailable");
+        }
+        case "call.key":
+          return this.callKey(peer, msg);
         case "lounge.claim":
           return this.loungeClaim(peer, msg.deviceId, msg.nonce);
         case "lounge.leave": {
@@ -913,7 +951,7 @@ export class HouseholdHub {
    */
   forgetDevice(deviceId: string): Promise<void> {
     return this.run(() => {
-      const peer = this.devices.get(deviceId);
+      const peer = this.devices.get(deviceId) ?? this.addonPeers.get(deviceId);
       if (!peer) return;
       peer.conn.send({ t: "wipe", reason: "removed" });
       this.dropPeer(peer);
@@ -1149,6 +1187,11 @@ export class HouseholdHub {
     as?: { id: string },
   ): Promise<{ payer: string | undefined; note: string | undefined }> {
     const { store } = this.env;
+    if (peer.kind === "addon") {
+      // An add-on's calls count against its owner's allowance.
+      const payer = peer.addon?.accountId;
+      return { payer, note: await fairUseProblem(this.env, payer, "call") };
+    }
     const person =
       as && as.id !== peer.id ? as.id : peer.kind === "user" ? peer.id : personOf(peer);
     let payer: string | undefined;
@@ -1187,7 +1230,7 @@ export class HouseholdHub {
     if (isRoomContactId(contact.id)) return this.joinFromPhone(device, contact.id);
     if (isLineContactId(contact.id)) {
       const entry = await this.env.store.lines.contact(device.id, contact.id);
-      return entry ? this.lineDial(device, entry.address) : this.refuse(device, "denied");
+      return entry ? this.addressDial(device, entry.address) : this.refuse(device, "denied");
     }
     if (isRemoteContactId(contact.id)) return this.remoteContactDial(device, contact.id);
     const from = await this.vmCaller(device, device.label);
@@ -1348,19 +1391,31 @@ export class HouseholdHub {
 
   /** Rings a person's targets here, and starts their branches elsewhere. */
   private ringAll(room: Room, targets: Peer[], plans: BranchPlan[], label: string): void {
-    // A public line's call shows who is calling, as their server vouches for them.
+    // A public line's call shows who is calling, as their server vouches for them; so does an
+    // add-on's (labelled as one).
     const line = room.line;
+    const addon = room.caller.addon;
     for (const t of targets) {
       t.conn.send({
         t: "call.ringing",
         callId: room.id,
-        from: { label, ...(line ? { address: line.address } : {}) },
+        from: {
+          label,
+          ...(line
+            ? { address: line.address }
+            : addon
+              ? { address: addon.address, kind: "addon" as const }
+              : {}),
+        },
         ...(line ? { line: line.info } : {}),
       });
     }
     const calls = this.env.calls;
     if (!calls) return;
     for (const plan of plans) {
+      // An add-on's call rings this server only (a guest's Lounge phone elsewhere couldn't
+      // label it).
+      if (addon && plan.kind === "away") continue;
       const leg = newId("call");
       const branch = this.remotePeer({
         host: plan.kind === "space" ? LOCAL_HOST : plan.host,
@@ -1382,6 +1437,7 @@ export class HouseholdHub {
               target: { kind: "person", userId: plan.userId },
               peerHousehold: this.householdId,
               noBranches: true,
+              ...(addon ? { addon: { name: addon.name, address: addon.address } } : {}),
             })
           : calls.register(plan.host, leg, this.householdId).then(() =>
               calls.place(
@@ -1897,7 +1953,7 @@ export class HouseholdHub {
           ...(await this.idleLoungeConfig(peer)),
           quiet: false,
           ...(owner ? { owner } : {}),
-          server: SERVER_INFO,
+          server: serverInfo(this.env),
         });
         return;
       }
@@ -1909,7 +1965,7 @@ export class HouseholdHub {
         quiet: false,
         ...(owner ? { owner } : {}),
         ...(extensions ? { extensions: true } : {}),
-        server: SERVER_INFO,
+        server: serverInfo(this.env),
       });
       return;
     }
@@ -1958,7 +2014,7 @@ export class HouseholdHub {
           }
         : {}),
       ...(extensions ? { extensions: true } : {}),
-      server: SERVER_INFO,
+      server: serverInfo(this.env),
     });
   }
 
@@ -2467,7 +2523,7 @@ export class HouseholdHub {
       return this.guestDial(device, session.guest, entry);
     }
     const as = { id: session.userId, label: session.name };
-    if (entry.kind === "line") return this.lineDial(device, entry.id);
+    if (entry.kind === "line") return this.addressDial(device, entry.id);
     if (entry.kind === "device") return this.appDial(device, entry.id, as);
     if (entry.kind === "connection") return this.connectionDial(device, entry.id, as);
     return this.userDial(device, entry.id, as);
@@ -2549,6 +2605,9 @@ export class HouseholdHub {
     if (peer?.kind === "remote") {
       return { peer: peer.address ?? (peer.host || ownHost(this.env)), label: peer.label };
     }
+    if (peer?.kind === "addon" && peer.addon) {
+      return { peer: peer.addon.address, label: peer.label };
+    }
     if (peer?.kind === "device") return { peer: `device:${peer.id}`, label: peer.label };
     const userId = peer?.kind === "user" ? peer.id : key.startsWith("usr:") ? idOf(key) : undefined;
     if (!userId) return { peer: key, label: peer?.label ?? "" };
@@ -2618,6 +2677,247 @@ export class HouseholdHub {
     }
   }
 
+  // --- add-ons (docs/add-ons.md) ------------------------------------------------------------
+
+  /**
+   * One of this household's add-ons connected (after its signed challenge). It gets a `config`
+   * that says who it is and whose it is; its calls are handled like a phone's, without keys.
+   */
+  connectAddon(addon: Addon, conn: Conn): Promise<Peer> {
+    return this.run(async () => {
+      const { store } = this.env;
+      const old = this.addonPeers.get(addon.id);
+      if (old) {
+        this.dropPeer(old, true);
+        old.conn.close(CloseCode.replaced, "replaced by a newer connection");
+      }
+      const [account, owner] = await Promise.all([
+        store.getAccount(addon.accountId),
+        store.getUser(addon.userId),
+      ]);
+      const handle = account?.handle ?? "";
+      const peer: Peer = {
+        session: newId("s"),
+        householdId: this.householdId,
+        kind: "addon",
+        id: addon.id,
+        key: addonKey(addon.id),
+        label: addon.name.slice(0, 24),
+        conn,
+        guardian: false,
+        addon: {
+          name: addon.name,
+          address: addonAddress(this.env, handle, addon.name),
+          accountId: addon.accountId,
+          ownerUserId: addon.userId,
+        },
+      };
+      this.addonPeers.set(addon.id, peer);
+      conn.send({
+        t: "config",
+        buttons: [],
+        quiet: false,
+        now: this.env.now(),
+        server: serverInfo(this.env),
+        addon: {
+          name: addon.name,
+          address: addonAddress(this.env, handle, addon.name),
+          owner: {
+            name: (owner?.name ?? account?.name ?? handle).slice(0, 64),
+            address: `${handle}@${ownHost(this.env)}`,
+          },
+        },
+      });
+      this.remember(peer);
+      return peer;
+    });
+  }
+
+  /** What an add-on may send: call control for its own calls, and `call.address`. */
+  private async handleAddon(peer: Peer, msg: DeviceToServer): Promise<void> {
+    if (this.addonPeers.get(peer.id) !== peer) return;
+    switch (msg.t) {
+      case "ping":
+        peer.conn.send({ t: "pong" });
+        return;
+      case "call.address":
+        return this.addonCall(peer, msg.address);
+      case "call.answer":
+      case "call.hangup":
+        return this.callMessage(peer, msg);
+      case "rtc.sdp":
+      case "rtc.ice":
+        if (msg.peer) break;
+        return this.callMessage(peer, msg);
+      case "status":
+        return;
+      default:
+        break;
+    }
+    peer.conn.send({
+      t: "error",
+      code: "bad_message",
+      message: `not for add-ons: ${msg.t}`,
+      ...(msg.id ? { ref: msg.id } : {}),
+    });
+  }
+
+  /**
+   * Still linked? A removed add-on (or one whose owner left the space) is told to forget its link
+   * and closed, and nothing reaches it.
+   */
+  private async addonStillLinked(peer: Peer): Promise<Addon | undefined> {
+    const addon = this.env.addons ? await this.env.store.addons.get(peer.id) : undefined;
+    if (addon) return addon;
+    if (this.env.addons) peer.conn.send({ t: "wipe", reason: "removed" });
+    this.dropPeer(peer);
+    peer.conn.close(CloseCode.unauthorized, "removed");
+    return undefined;
+  }
+
+  /** A phone's address key (or a Lounge session's): an add-on, else a public line. */
+  private async addressDial(peer: Peer, address: string): Promise<void> {
+    const addon = parseAddonAddress(address);
+    return addon ? this.addonDial(peer, addon) : this.lineDial(peer, address);
+  }
+
+  /**
+   * Someone here calls an add-on by its address: from their app, or from their own phone (a key),
+   * or a Lounge phone they're signed in at. Only its owner or a connection its owner allowed;
+   * never a kids' phone. Every other refusal looks the same (`unavailable`).
+   */
+  private async addonDial(peer: Peer, addr: AddonAddress): Promise<void> {
+    const { store } = this.env;
+    if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_ADDONS);
+    if (!this.env.addons || peer.kind === "addon") return this.refuse(peer, "unavailable");
+    const as = await this.callingAs(peer);
+    const user = as && (await store.getUser(as.id));
+    const account = user && (await store.getAccount(user.accountId));
+    if (!as || !account) return this.refuse(peer, "denied");
+    if (!this.canDial(peer)) return this.refuse(peer, "busy");
+    const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
+    const body = {
+      from: partyOf(account),
+      to: { kind: "addon" as const, handle: addr.handle, name: addr.name },
+    };
+    const label = addr.name.slice(0, 24);
+    const callee = { name: addr.name, address: `${addr.handle}+${addr.name}@${ownHost(this.env)}` };
+    if (host !== LOCAL_HOST) {
+      return this.dialRemote(peer, {
+        as,
+        host,
+        key: `fed:${host}:addon:${addr.handle}+${addr.name}`,
+        label,
+        peerHousehold: undefined,
+        body,
+        addon: { name: addr.name, address: `${addr.handle}+${addr.name}@${host}` },
+      });
+    }
+    const addon = await store.addons.byAddress(addr.handle, addr.name);
+    if (!addon) return this.refuse(peer, "unavailable");
+    if (addon.householdId !== this.householdId) {
+      // Linked in another household here: its hub decides, as for a call from elsewhere.
+      return this.dialRemote(peer, {
+        as,
+        host: LOCAL_HOST,
+        key: addonKey(addon.id),
+        label,
+        peerHousehold: addon.householdId,
+        body,
+        addon: callee,
+        free: true,
+      });
+    }
+    const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+    if (!(await mayTalk(this.env, addon, who))) return this.refuse(peer, "unavailable");
+    const target = this.addonPeers.get(addon.id);
+    if (!target) return this.refuse(peer, "unreachable");
+    if (this.busy(target.key)) return this.refuse(peer, "busy");
+    const note = await fairUseProblem(this.env, addon.accountId, "call");
+    if (note) return this.refuse(peer, "denied", note);
+    const room = this.openRoom(peer, target.key);
+    room.payer = addon.accountId;
+    room.calleePeer = target;
+    this.roomsDirty = true;
+    peer.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
+    target.conn.send({
+      t: "call.ringing",
+      callId: room.id,
+      from: { label: as.label.slice(0, 24), address: `${account.handle}@${ownHost(this.env)}` },
+    });
+  }
+
+  /**
+   * Rings one of our add-ons for a caller in another household here or on another server,
+   * already authorized by `FedCalls.receive`. Its owner's allowance pays.
+   */
+  private async ringAddon(
+    remote: Peer,
+    callId: string,
+    target: { addonId: string; accountId: string },
+    label: string,
+    address: string,
+  ): Promise<RingResult> {
+    const peer = this.addonPeers.get(target.addonId);
+    if (!peer || !(await this.addonStillLinked(peer))) {
+      return { state: "ended", reason: "unreachable" };
+    }
+    if (this.busy(peer.key)) return { state: "ended", reason: "busy" };
+    const note = await fairUseProblem(this.env, target.accountId, "call");
+    if (note) return { state: "ended", reason: "denied", note };
+    const room = this.openRoom(remote, peer.key, callId);
+    room.payer = target.accountId;
+    room.calleePeer = peer;
+    this.roomsDirty = true;
+    peer.conn.send({
+      t: "call.ringing",
+      callId: room.id,
+      from: { label: label.slice(0, 24), ...(address ? { address } : {}) },
+    });
+    return { state: "ringing" };
+  }
+
+  /**
+   * An add-on calls by address (`call.address`): its owner, or one of the owner's connections
+   * on its allow-list. People only (apps, own phones, Lounge sessions): never a phone of a space,
+   * so never a kids' phone.
+   */
+  private async addonCall(peer: Peer, address: string): Promise<void> {
+    const { store } = this.env;
+    const addon = await this.addonStillLinked(peer);
+    if (!addon) return;
+    const addr = parseAddress(address);
+    const account = await store.getAccount(addon.accountId);
+    if (!addr || !account) return this.refuse(peer, "unavailable");
+    const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
+    const as = { id: addon.userId, label: peer.label };
+    if (host === LOCAL_HOST && addr.handle === account.handle) {
+      // Its owner: wherever they can be rung, like any call to them.
+      if (!this.canDial(peer)) return this.refuse(peer, "busy");
+      return this.userDial(peer, addon.userId, { id: addonKey(addon.id), label: peer.label });
+    }
+    const conn = await store.connections.find(addon.accountId, host, addr.handle);
+    if (
+      conn?.state !== "active" ||
+      !conn.peerAccount ||
+      !(await store.addons.isAllowed(addon.id, conn.id))
+    ) {
+      return this.refuse(peer, "unavailable");
+    }
+    return this.connectionDial(peer, conn.id, as);
+  }
+
+  /** A key pressed during a call: passed on only to an add-on (here, or through its server). */
+  private callKey(peer: Peer, msg: { callId: string; key: string }): void {
+    const room = this.rooms.get(msg.callId);
+    const party = room && this.partyOf(room, peer);
+    if (!room || !party || room.state.phase !== "active") return;
+    const other = party === "caller" ? room.calleePeer : room.caller;
+    if (other && isAddonParty(other)) {
+      other.conn.send({ t: "call.key", callId: room.id, key: msg.key });
+    }
+  }
+
   // --- calls with other households and servers ------------------------------------------------
 
   private remotePeer(info: {
@@ -2631,6 +2931,7 @@ export class HouseholdHub {
     transferred?: boolean;
     kidsPhone?: boolean;
     line?: boolean;
+    addon?: { name: string; address: string } | undefined;
   }): Peer {
     return this.remoteFromInfo({
       session: newId("s"),
@@ -2647,6 +2948,7 @@ export class HouseholdHub {
       ...(info.transferred ? { transferred: true } : {}),
       ...(info.kidsPhone ? { kidsPhone: true } : {}),
       ...(info.line ? { line: true } : {}),
+      ...(info.addon ? { addon: info.addon } : {}),
       // The key rides along in `id`-independent form; see remoteFromInfo.
       ...({ key: info.key } as object),
     } as PeerInfo);
@@ -2793,6 +3095,13 @@ export class HouseholdHub {
       line?: boolean;
       /** This call's id (chosen ahead, e.g. a call back's transfer notice names it). */
       callId?: string;
+      /** Calling an add-on: its name and address (the far end is labelled as one). */
+      addon?: { name: string; address: string };
+      /**
+       * Not metered here: an add-on's calls count against its owner, on the add-on's side (a
+       * call to an add-on in another household on this server).
+       */
+      free?: boolean;
     },
   ): Promise<void> {
     const calls = this.env.calls;
@@ -2809,17 +3118,26 @@ export class HouseholdHub {
     if (!calls) return this.refuse(caller, "unreachable");
     if (!this.canDial(caller)) return this.refuse(caller, "busy");
     if (this.busy(target.key)) return this.refuse(caller, "busy", undefined, vm);
-    const allowance = await this.allowance(caller, target.as);
+    const allowance = target.free
+      ? { payer: undefined, note: undefined }
+      : await this.allowance(caller, target.as);
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
     const to = target.body.to;
+    // An add-on calls people only, and says so (the far side labels it).
+    const fromAddon = caller.kind === "addon" ? caller.addon?.name : undefined;
+    if (caller.kind === "addon" && (to.kind !== "person" || !fromAddon)) {
+      return this.refuse(caller, "unavailable");
+    }
     const host = target.host || ownHost(this.env);
-    const { line: _line, callId: _id, ...peerInfo } = target;
+    const { line: _line, callId: _id, free: _free, ...peerInfo } = target;
     const remote = this.remotePeer({
       ...peerInfo,
       address:
         to.kind === "person" || to.kind === "line"
           ? `${to.handle}@${host}`
-          : `device:${to.deviceId}@${host}`,
+          : to.kind === "addon"
+            ? `${to.handle}+${to.name}@${host}`
+            : `device:${to.deviceId}@${host}`,
     });
     // The far end decides when it stops ringing (its own ring time); this is only a backstop.
     const room = this.openRoom(
@@ -2843,6 +3161,7 @@ export class HouseholdHub {
       ...target.body,
       callId: room.id,
       ...(recording ? { recording: true } : {}),
+      ...(fromAddon ? { addon: fromAddon } : {}),
     };
     void calls.place(target.host, body, this.householdId).then(
       (r) =>
@@ -2882,7 +3201,11 @@ export class HouseholdHub {
         peerHousehold: req.peerHousehold,
         ...(req.address ? { address: req.address } : {}),
         ...(req.fromKidsPhone ? { kidsPhone: true } : {}),
+        ...(req.addon ? { addon: req.addon } : {}),
       });
+      if (req.target.kind === "addon") {
+        return this.ringAddon(remote, req.callId, req.target, req.label, req.address ?? "");
+      }
       if (req.target.kind === "person") {
         const userId = req.target.userId;
         const targets = this.reachable(userId);
@@ -3060,6 +3383,8 @@ export class HouseholdHub {
       if (room.state.phase !== "connecting" && room.state.phase !== "active") return;
       const other = party === "caller" ? room.calleePeer : room.caller;
       if (!other) return;
+      // Keys pressed in a call reach an add-on only.
+      if (msg.t === "call.key" && (other.kind !== "addon" || room.state.phase !== "active")) return;
       other.conn.send({ ...msg, callId: room.id });
       if (msg.t === "rtc.sdp" && msg.type === "answer")
         await this.apply(room, { type: "connected" });
@@ -4905,6 +5230,7 @@ export class HouseholdHub {
     const b = this.otherParty(r1, peer);
     const c = this.otherParty(r2, peer);
     if (!b || !c) return this.refuseControl(peer, "no such call");
+    if (isAddonParty(b) || isAddonParty(c)) return this.refuseControl(peer, ADDON_ONE_TO_ONE);
     if (!(await this.kidsMayMeet([peer, b, c]))) {
       return this.refuseControl(peer, "a kids' phone can only be with people on its list");
     }
@@ -4966,6 +5292,7 @@ export class HouseholdHub {
     if (!room || !other || !check.ok || !msg.to) {
       return this.refuseControl(peer, check.ok ? "no such call" : check.error);
     }
+    if (isAddonParty(other)) return this.refuseControl(peer, ADDON_ONE_TO_ONE);
     // Someone in another household or on another server: only inside a team/org space.
     if (other.kind === "remote") return this.transferRemote(peer, room, other, msg.to);
     const target = await this.transferTarget(peer, msg.to);
@@ -5240,6 +5567,7 @@ export class HouseholdHub {
     const b = this.otherParty(r1, peer);
     const c = this.otherParty(r2, peer);
     if (!b || !c) return this.refuseControl(peer, "no such call");
+    if (isAddonParty(b) || isAddonParty(c)) return this.refuseControl(peer, ADDON_ONE_TO_ONE);
     const remotes = [b, c].filter((p) => p.kind === "remote").length;
     // Someone elsewhere may be connected only with someone of this team/org space.
     if (remotes === 2 || (remotes === 1 && !(await this.isWorkplace()))) {
@@ -5643,6 +5971,10 @@ type Refusal = { reason: EndReason; note?: string; vm?: VmTarget };
 const NO_EXTENSION = NO_EXTENSION_NOTE;
 /** Why a kids' phone's call to a public line is refused (on the phone, before anything else). */
 const KIDS_NO_LINES = "Kids' phones can't call public lines";
+/** Why a kids' phone's call to an add-on is refused. */
+const KIDS_NO_ADDONS = "Kids' phones can't call add-ons";
+/** Calls with an add-on stay between two: no 3-way, no transfer. */
+const ADDON_ONE_TO_ONE = "a call with an add-on can't be merged or transferred";
 const REMOTE_TRANSFER =
   "someone from another household or server can only be transferred inside a team or org space";
 const REMOTE_TARGET =

@@ -18,6 +18,7 @@ import {
   type RoomJoinBody,
   RoomJoinResult,
 } from "@openloungephone/federation";
+import { mayTalk } from "./addons.ts";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -41,7 +42,9 @@ export interface RemoteRing {
      * A public line (a published ring group), already admitted by `admitLineCall`.
      * `callbackSince`: the caller answered the line's call back; their place in line.
      */
-    | { kind: "line"; groupId: string; callbackSince?: number };
+    | { kind: "line"; groupId: string; callbackSince?: number }
+    /** One of our add-ons, already authorized (`mayTalk`); its owner's account pays. */
+    | { kind: "addon"; addonId: string; accountId: string };
   /** Ring only here: a branch of a call another household here owns (no further fan-out). */
   noBranches?: boolean;
   /** The caller, for the call log: `handle@host`. */
@@ -50,6 +53,8 @@ export interface RemoteRing {
   peerHousehold?: string;
   /** A kids' phone is calling (through its guardian's connection): never recorded. */
   fromKidsPhone?: boolean;
+  /** The caller is an add-on: its name and address (`handle+name@host`), for the label. */
+  addon?: { name: string; address: string };
   /** The caller's account on their server (for a public line's call back). */
   from?: { id: string; handle: string };
 }
@@ -138,6 +143,35 @@ export class FedCalls implements CallLinks {
     if (body.recording && host !== LOCAL_HOST && this.env.refuseRecordedCalls) {
       return { state: "ended", reason: "denied", note: REFUSES_RECORDING };
     }
+    // Add-ons: none of it while they're off here, a call from one only to a person (never a
+    // phone, so never a kids' phone), and nothing that came through a kids' phone or a guest.
+    if (body.addon !== undefined || body.to.kind === "addon") {
+      const plain = !body.viaPhone && body.guestOf === undefined && body.ringLabel === undefined;
+      const ok =
+        this.env.addons && plain && (body.addon !== undefined) !== (body.to.kind === "addon");
+      if (!ok || (body.addon !== undefined && body.to.kind !== "person")) {
+        return { state: "ended", reason: "unavailable" };
+      }
+    }
+    if (body.to.kind === "addon") {
+      // Its owner, or a connection its owner allowed; everything else looks the same.
+      const unavailable = { state: "ended", reason: "unavailable" } as const;
+      const addon = await store.addons.byAddress(body.to.handle, body.to.name);
+      if (!addon) return unavailable;
+      if (!(await mayTalk(this.env, addon, { host, accountId: from.id, handle: from.handle }))) {
+        return unavailable;
+      }
+      await this.register(host, body.callId, addon.householdId);
+      return this.live.ringRemote(addon.householdId, {
+        callId: body.callId,
+        host,
+        key,
+        address: `${from.handle}@${host || ownHost(this.env)}`,
+        label: from.name.slice(0, 24),
+        target: { kind: "addon", addonId: addon.id, accountId: addon.accountId },
+        ...(peerHousehold ? { peerHousehold } : {}),
+      });
+    }
     if (body.to.kind === "person") {
       const account = await store.accountByHandle(body.to.handle);
       if (!account || account.suspendedAt !== null) return deny;
@@ -148,17 +182,22 @@ export class FedCalls implements CallLinks {
       const home = await primaryHousehold(this.env, account.id);
       if (!home) return { state: "ended", reason: "unreachable" };
       const who = conn.peerName || from.name;
-      const label = body.viaPhone ? `${body.viaPhone.label} (${who})` : who;
+      const label = body.addon ?? (body.viaPhone ? `${body.viaPhone.label} (${who})` : who);
+      const fromHost = host || ownHost(this.env);
       await this.register(host, body.callId, home.household.id);
       return this.live.ringRemote(home.household.id, {
         callId: body.callId,
         host,
-        key,
-        address: `${from.handle}@${host || ownHost(this.env)}`,
+        // An add-on is busy on its own, not when its owner is.
+        key: body.addon ? `${key}:addon:${body.addon}` : key,
+        address: `${from.handle}@${fromHost}`,
         label: label.slice(0, 24),
         target: { kind: "person", userId: home.user.id },
         ...(peerHousehold ? { peerHousehold } : {}),
         ...(body.viaPhone ? { fromKidsPhone: true } : {}),
+        ...(body.addon
+          ? { addon: { name: body.addon, address: `${from.handle}+${body.addon}@${fromHost}` } }
+          : {}),
       });
     }
     if (body.to.kind === "line") {
@@ -253,6 +292,7 @@ export class FedCalls implements CallLinks {
       ...(body.to.kind === "guest" ? (["lounge-guests"] as const) : []),
       ...(body.to.kind === "line" ? (["public-lines"] as const) : []),
       ...(body.to.kind === "line" && body.to.callback ? (["line-callback"] as const) : []),
+      ...(body.to.kind === "addon" || body.addon ? (["addons"] as const) : []),
     ];
     for (const feature of needs) {
       if (!(await peerSupports(this.env, host, feature))) {

@@ -131,6 +131,12 @@ export interface ServerEnv {
    * people (they're told why). Our own spaces' recording is unaffected.
    */
   refuseRecordedCalls?: boolean;
+  /**
+   * Add-ons (`ADDONS=on`, docs/add-ons.md): people may link services to their accounts. Off by
+   * default: then nobody can link one, linked ones can't connect or be called, and the server
+   * doesn't advertise the `addons` feature.
+   */
+  addons?: boolean;
   now(): number;
   /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
   iceServers(): Promise<IceServer[]>;
@@ -211,8 +217,11 @@ export interface PeerInfo {
   /** Unique per connection; rooms refer to peers by it. */
   session: string;
   householdId: string;
-  /** `remote` = the far end of a call with another household or server (no socket here). */
-  kind: "device" | "user" | "remote";
+  /**
+   * `remote` = the far end of a call with another household or server (no socket here);
+   * `addon` = an add-on linked to someone's account (docs/add-ons.md).
+   */
+  kind: "device" | "user" | "remote" | "addon";
   id: string;
   label: string;
   guardian: boolean;
@@ -249,6 +258,11 @@ export interface PeerInfo {
    * a call with it is never recorded.
    */
   kidsPhone?: boolean;
+  /**
+   * An add-on: its name and address (`handle+name@host`). For our own add-ons (`kind` `addon`)
+   * also its owner's account and membership here; for a remote peer, the far end is an add-on.
+   */
+  addon?: { name: string; address: string; accountId?: string; ownerUserId?: string };
   /** A phone whose client can record calls (the browser phone; not yet firmware). */
   canRecord?: boolean;
   /**

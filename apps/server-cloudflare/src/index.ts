@@ -60,6 +60,8 @@ export interface Env {
   OPEN_SIGNUP?: string;
   /** "1" = other servers' recorded calls don't reach this server's people. */
   REFUSE_RECORDED_CALLS?: string;
+  /** "on" = people may link add-ons to their accounts (`scripts/deploy.ts --addons`). */
+  ADDONS?: string;
   TURN_KEY_ID?: string;
   TURN_KEY_API_TOKEN?: string;
   /** Comma-separated; used when no TURN key is configured. */
@@ -232,6 +234,7 @@ function baseEnv(
     defer: waitUntil,
     openSignup: env.OPEN_SIGNUP === "1",
     refuseRecordedCalls: env.REFUSE_RECORDED_CALLS === "1",
+    addons: env.ADDONS === "on" || env.ADDONS === "1",
     ...(env.DEV_LOOPBACK === "1"
       ? { fetch: (req: Request) => fetch(new Request(loopback(env, req.url), req)) }
       : {}),
@@ -575,7 +578,7 @@ export class PairingObject extends GatewayObject {
     super(ctx, env, { pairingOnly: true }, {});
   }
 
-  notifyPaired(code: string, device: Device): Promise<void> {
+  notifyPaired(code: string, device: Pick<Device, "id" | "householdId">): Promise<void> {
     return this.gateway.notifyPaired(code, device);
   }
 }
@@ -662,7 +665,11 @@ app.all("/api/*", (c) => {
 // account is a member of that household.
 app.get("/ws/device", async (c) => {
   const deviceId = c.req.query("device") ?? null;
-  const device = isId(deviceId) ? await new Store(d1Sql(c.env.DB)).getDevice(deviceId) : undefined;
+  const store = new Store(d1Sql(c.env.DB));
+  // A phone, or an add-on (docs/add-ons.md): both live in their household's object.
+  const device = isId(deviceId)
+    ? ((await store.getDevice(deviceId)) ?? (await store.addons.get(deviceId)))
+    : undefined;
   const stub = device
     ? c.env.HOUSEHOLD.getByName(device.householdId)
     : c.env.PAIRING.getByName(PAIRING_OBJECT);

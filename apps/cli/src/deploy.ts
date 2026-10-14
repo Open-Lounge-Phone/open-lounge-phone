@@ -115,6 +115,7 @@ export function planDeploy(r: Resolved): DeployPlan | { error: string } {
   if (r.openSignup) args.push("--open-signup");
   if (opts.fairUse) args.push("--fair-use", opts.fairUse);
   if (opts.refuseRecordedCalls) args.push("--refuse-recorded-calls");
+  if (opts.addons) args.push("--addons");
   if (opts.newSetupToken) args.push("--new-setup-token");
   if (opts.operator) args.push("--operator", opts.operator);
   if (opts.sponsorUrl) args.push("--sponsor-url", opts.sponsorUrl);

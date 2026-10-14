@@ -105,6 +105,7 @@ export async function start(config: Config) {
     ...(config.hub ? { hub: config.hub } : {}),
     trustProxy: config.trustProxy,
     refuseRecordedCalls: config.refuseRecordedCalls,
+    addons: config.addons,
     ...(config.federation
       ? {
           federationKey: await federationKeyFile(config.dataDir),
@@ -226,6 +227,7 @@ export async function start(config: Config) {
   const setupToken = await ensureSetupToken(env);
   console.log(`Open Lounge Phone listening on ${config.publicUrl}`);
   if (config.openSignup) console.log("  Open sign-up is ON: anyone can create an account.");
+  if (config.addons) console.log("  Add-ons are ON: people may link add-ons to their accounts.");
   if (setupToken) {
     console.log(`\n  First run! Open this link to create your household:\n`);
     console.log(`    ${config.publicUrl}/#setup=${setupToken}\n`);

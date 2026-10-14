@@ -30,6 +30,7 @@ import {
   serverHost,
   signupRoutes,
 } from "./accounts.ts";
+import { ADDON_CODE, addonRoutes } from "./addons.ts";
 import { auditFrom, auditPhone, auditRoutes } from "./audit.ts";
 import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
@@ -387,6 +388,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b instanceof Response) return b;
     const pending = await store.peekPairing(b.code, env.now());
     if (!pending) return c.json({ error: "unknown or expired code" }, 404);
+    if (pending.addon) return c.json({ error: ADDON_CODE }, 400);
     // "Check these words match": the phone shows the same four under MENU → About.
     return c.json({ mode: pending.mode, fingerprint: await deviceFingerprint(pending.publicKey) });
   });
@@ -398,8 +400,10 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (b.forMe && b.kind === "lounge") {
       return c.json({ error: "a Lounge phone is shared; pair it as a household phone" }, 400);
     }
+    const pending = await store.peekPairing(b.code, env.now());
+    if (pending?.addon) return c.json({ error: ADDON_CODE }, 400);
     const chosen = b.mode ?? (b.forMe ? "personal" : b.kind);
-    const mode: PhoneMode = chosen ?? (await store.peekPairing(b.code, env.now()))?.mode ?? "kids";
+    const mode: PhoneMode = chosen ?? pending?.mode ?? "kids";
     if (mode !== "personal" && user.role !== "guardian") {
       return c.json({ error: "only guardians can add household phones" }, 403);
     }
@@ -897,6 +901,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   memberRoutes(api, env, live);
   workplaceRoutes(api, env, live);
   lineRoutes(api, env, live);
+  addonRoutes(api, env, live);
   noticeRoutes(api, env, live);
   recordingRoutes(api, env);
   peopleRoutes(api, env, live);

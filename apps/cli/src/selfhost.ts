@@ -121,6 +121,9 @@ export function selfhostFiles(
     c.openSignup
       ? "# Anyone may create an account (a public server).\nOPEN_SIGNUP=1"
       : "# Invite-only: people join by invite. OPEN_SIGNUP=1 lets anyone sign up.\n# OPEN_SIGNUP=1",
+    "",
+    "# Add-ons (services people link to their accounts, docs/add-ons.md) are off. ADDONS=on allows them.",
+    "# ADDONS=on",
     ...(local
       ? ["", "# A localhost server can't federate with public servers; set an https:// PUBLIC_URL."]
       : []),

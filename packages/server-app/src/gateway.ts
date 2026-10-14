@@ -1,4 +1,4 @@
-import type { Device } from "@openloungephone/db";
+import type { Addon, Device } from "@openloungephone/db";
 import type {
   FedSignal,
   LineCallbackMissedResult,
@@ -16,6 +16,7 @@ import {
   type ServerToDevice,
   toBase64Url,
 } from "@openloungephone/protocol";
+import { ADDONS_OFF } from "./addons.ts";
 import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
   type AppCloseFilter,
@@ -103,7 +104,7 @@ export interface ConnectionHandler {
 export interface Coordinator {
   isOnline(householdId: string, deviceId: string): Promise<boolean>;
   refreshDevice(householdId: string, deviceId: string): Promise<void>;
-  notifyPaired(code: string, device: Device): Promise<void>;
+  notifyPaired(code: string, device: Pick<Device, "id" | "householdId">): Promise<void>;
   /** Sends a message to the household's connected guardians. */
   announce(householdId: string, msg: ServerToApp): Promise<void>;
   /** Disconnects a removed phone so it goes back to pairing. */
@@ -162,6 +163,8 @@ type DevicePhase =
       /** What it runs, from its hello (shown on the phone's page in the app). */
       runs: { fw: string; model: string };
     }
+  /** An add-on (docs/add-ons.md) answers the same challenge with its own key. */
+  | { kind: "addonChallenge"; addon: Addon; nonce: Uint8Array<ArrayBuffer>; fw: string }
   /** A removed phone came back: once it proves it holds the removed key, it's told to wipe. */
   | {
       kind: "removed";
@@ -311,7 +314,7 @@ export class Gateway implements Coordinator {
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */
-  async notifyPaired(code: string, device: Device): Promise<void> {
+  async notifyPaired(code: string, device: Pick<Device, "id" | "householdId">): Promise<void> {
     const conn = this.waitingToPair.get(code);
     if (!conn) return;
     this.waitingToPair.delete(code);
@@ -382,7 +385,12 @@ export class Gateway implements Coordinator {
     const cancelHello =
       initial.kind === "hello"
         ? this.env.setTimer(() => {
-            if (phase.kind === "hello" || phase.kind === "challenge" || phase.kind === "removed") {
+            if (
+              phase.kind === "hello" ||
+              phase.kind === "challenge" ||
+              phase.kind === "addonChallenge" ||
+              phase.kind === "removed"
+            ) {
               fail(CloseCode.timeout, "timeout");
             }
           }, HELLO_TIMEOUT_MS)
@@ -424,7 +432,20 @@ export class Gateway implements Coordinator {
             return;
           }
           const device = await this.env.store.getDevice(msg.deviceId);
-          const removed = device ? undefined : await this.env.store.removedDevice(msg.deviceId);
+          const addon = device ? undefined : await this.env.store.addons.get(msg.deviceId);
+          if (addon) {
+            // Off on this server: a linked add-on can't connect (it keeps its link for later).
+            if (!this.env.addons || !this.allowed(addon.householdId)) {
+              conn.send({ t: "error", code: "unauthorized", message: ADDONS_OFF });
+              return fail(CloseCode.unauthorized, "add-ons are off");
+            }
+            const nonce = crypto.getRandomValues(new Uint8Array(32));
+            phase = { kind: "addonChallenge", addon, nonce, fw: msg.fw };
+            conn.send({ t: "auth.challenge", nonce: toBase64Url(nonce) });
+            return;
+          }
+          const removed =
+            device || addon ? undefined : await this.env.store.removedDevice(msg.deviceId);
           if (removed) {
             const nonce = crypto.getRandomValues(new Uint8Array(32));
             phase = { kind: "removed", id: msg.deviceId, key: removed, nonce };
@@ -443,6 +464,10 @@ export class Gateway implements Coordinator {
         case "unpaired": {
           if (msg.t === "ping") return conn.send({ t: "pong" });
           if (msg.t !== "pair.begin") return reject(msg, "pair first");
+          if (msg.kind === "addon" && !this.env.addons) {
+            conn.send({ t: "error", code: "unauthorized", message: ADDONS_OFF });
+            return fail(CloseCode.unauthorized, "add-ons are off");
+          }
           if (phase.code) this.waitingToPair.delete(phase.code);
           const { code, expiresAt } = await this.env.store.createPairing(
             msg.publicKey,
@@ -468,6 +493,24 @@ export class Gateway implements Coordinator {
           conn.send({ t: "wipe", reason: "removed" });
           await this.env.store.forgetRemovedDevice(id);
           return fail(CloseCode.unauthorized, "removed");
+        }
+        case "addonChallenge": {
+          if (msg.t !== "auth.proof") return fail(CloseCode.badHandshake, "expected auth.proof");
+          const { addon, nonce, fw } = phase;
+          if (!(await verifyDeviceSignature(addon.keyAlg, addon.publicKey, msg.sig, nonce))) {
+            conn.send({ t: "error", code: "unauthorized", message: "bad signature" });
+            return fail(CloseCode.unauthorized, "bad signature");
+          }
+          cancelHello();
+          await this.env.store.addons.touch(addon.id, this.env.now(), fw);
+          const hub = this.hub(addon.householdId);
+          const peer = await hub.connectAddon(addon, conn);
+          if (closed()) {
+            await hub.disconnect(peer);
+            return;
+          }
+          phase = { kind: "ready", hub, peer };
+          return;
         }
         case "challenge": {
           if (msg.t !== "auth.proof") return fail(CloseCode.badHandshake, "expected auth.proof");

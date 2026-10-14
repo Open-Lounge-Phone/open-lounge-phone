@@ -21,10 +21,16 @@ import {
   type PublicLine,
   type RingGroup,
 } from "@openloungephone/db";
-import { parseAddress } from "@openloungephone/federation";
+import {
+  type AddonAddress,
+  formatAddonAddress,
+  parseAddonAddress,
+  parseAddress,
+} from "@openloungephone/federation";
 import { Id, type LineInfo } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { ADDONS_OFF } from "./addons.ts";
 import { auditFrom, auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
@@ -468,14 +474,18 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if ("error" in p) return c.json({ error: p.error }, p.status);
     const b = await body(c.req.raw, PhoneLine);
     if (b instanceof Response) return b;
+    // A public line, or an add-on (`handle+name@host`): who may talk to it is checked on
+    // every call, and only a person's own phone has such keys (never a kids' phone).
     const addr = parseAddress(b.address);
-    if (!addr) return c.json({ error: "use an address like support@example.org" }, 400);
-    const id = await store.lines.addToPhone(p.device.id, `${addr.handle}@${addr.host}`, b.label);
+    const addon = addr ? undefined : parseAddonAddress(b.address);
+    if (!addr && !addon) return c.json({ error: "use an address like support@example.org" }, 400);
+    if (addon && !env.addons) return c.json({ error: ADDONS_OFF }, 403);
+    const address = addr
+      ? `${addr.handle}@${addr.host}`
+      : formatAddonAddress(addon as AddonAddress);
+    const id = await store.lines.addToPhone(p.device.id, address, b.label);
     await live.refreshDevice(user.householdId, p.device.id);
-    await auditPhone(env, c, p.device, "phone.line", {
-      contactId: id,
-      address: `${addr.handle}@${addr.host}`,
-    });
+    await auditPhone(env, c, p.device, "phone.line", { contactId: id, address });
     return c.json({ id });
   });
 
