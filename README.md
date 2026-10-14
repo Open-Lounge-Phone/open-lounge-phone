@@ -30,7 +30,7 @@ doorbell and an elder's daily check-in.
   It is tested on a computer but hasn't run on a board yet.
 
 <p align="center">
-  <img src="docs/images/emulator-ringing.png" alt="The browser phone emulator ringing, with its developer panel" width="640">
+  <img src="docs/images/phone-ready.png" alt="The browser phone, ready: a handset on top, twelve keys in two rows with the e-paper status display between them showing READY and the household, and the red status light" width="480">
 </p>
 
 Run it on **your own Cloudflare account** or **self-host it with Docker**; to just try it, use the

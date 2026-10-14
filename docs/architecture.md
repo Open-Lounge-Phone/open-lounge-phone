@@ -276,8 +276,7 @@ here" (`config.houseLine`, `config.here`).
 
 The phone has **no main screen**: keycapped keys, a small e-paper status display, handset audio,
 a piezo ringer, one status LED and Wi-Fi/BLE. Hardware details and part choices live in
-[hardware/DESIGN.md](../hardware/DESIGN.md). (The browser phone also shows per-key lights; the
-minimal board does not have them.)
+[hardware/DESIGN.md](../hardware/DESIGN.md).
 
 1. **Firmware** — ESP32-S3 (ESP-IDF, FreeRTOS, `esp_peer` WebRTC) implementing the same
    protocol and the `deviceStep` state machine from `packages/core`

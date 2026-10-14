@@ -177,9 +177,11 @@ const autopairTried = new Set<string>();
 let autopairStatus = autopair ? "waiting for a code" : "off";
 let pairingTimer: ReturnType<typeof setTimeout> | undefined;
 let hookUp = false;
-let activeKey: number | undefined;
 let activeLabel: string | undefined;
-const battery = { pct: 100, charging: true };
+/** The device's real battery when the browser shares it (or the developer panel's), else none:
+ * the phone never reports a battery it doesn't know. */
+let battery: { pct: number; charging: boolean } | undefined;
+let batteryFromPanel = false;
 const iceByCall = new Map<string, IceServer[]>();
 /** The call being talked in, and one on hold (MENU → Add caller). Each has its own mic copy. */
 type CallAudio = { callId: string; media?: CallMedia; pending: Signal[]; mic?: MediaStream };
@@ -569,7 +571,6 @@ async function wipe(): Promise<void> {
 function forgetPerson(): void {
   lounge = lounge.nonce ? { nonce: lounge.nonce } : {};
   config = config ? { buttons: [], quiet: false } : undefined;
-  activeKey = undefined;
   activeLabel = undefined;
   if (menu) applyMenu({ type: "exit" });
   lastStatusText = "";
@@ -592,7 +593,7 @@ function sendStatus(): void {
   if (!authed) return;
   send({
     t: "status",
-    battery: { pct: battery.pct, charging: battery.charging },
+    ...(battery ? { battery } : {}),
     uptimeS: Math.floor((Date.now() - startedAt) / 1000),
     power: powerStatus(variant, powerSource),
   });
@@ -650,13 +651,10 @@ function step(input: DeviceInput): void {
   // Transferred (attended): the call goes on under a new id; the old audio goes.
   if (s.kind === "incall" && call && call.callId !== s.callId) endCall();
   if (s.kind === "dialing") {
-    activeKey = s.button;
     activeLabel = labelFor(s.button);
   } else if (s.kind === "incoming") {
-    activeKey = config?.buttons.find((b) => b.label === s.from)?.index;
     activeLabel = s.from;
   } else if (s.kind === "idle") {
-    activeKey = undefined;
     activeLabel = undefined;
   }
 
@@ -1180,9 +1178,14 @@ document.addEventListener("keydown", (e) => {
 const pctEl = $<HTMLInputElement>('[data-battery="pct"]');
 const pctOut = $<HTMLOutputElement>('[data-battery="out"]');
 const chargingEl = $<HTMLInputElement>('[data-battery="charging"]');
-pctEl.addEventListener("input", () => {
-  battery.pct = Number(pctEl.value);
+/** The panel's values replace the real battery from the first touch on. */
+function panelBattery(): void {
+  batteryFromPanel = true;
+  battery = { pct: Number(pctEl.value), charging: chargingEl.checked };
   pctOut.value = `${battery.pct}%`;
+}
+pctEl.addEventListener("input", () => {
+  panelBattery();
   render();
 });
 pctEl.addEventListener("change", sendStatus);
@@ -1194,10 +1197,35 @@ sourceEl.addEventListener("change", () => {
 });
 $<HTMLElement>('[data-power="variant"]').textContent = VARIANT_NAME[variant];
 chargingEl.addEventListener("change", () => {
-  battery.charging = chargingEl.checked;
+  panelBattery();
   sendStatus();
   render();
 });
+
+/** The device's own battery (Chrome and Android share it; Safari and Firefox don't). */
+async function watchBattery(): Promise<void> {
+  type BatteryLike = EventTarget & { level: number; charging: boolean };
+  const nav = navigator as Navigator & { getBattery?(): Promise<BatteryLike> };
+  if (!nav.getBattery) return;
+  try {
+    const b = await nav.getBattery();
+    const update = () => {
+      if (batteryFromPanel) return;
+      battery = { pct: Math.round(b.level * 100), charging: b.charging };
+      pctEl.value = String(battery.pct);
+      pctOut.value = `${battery.pct}%`;
+      chargingEl.checked = battery.charging;
+      sendStatus();
+      render();
+    };
+    b.addEventListener("levelchange", update);
+    b.addEventListener("chargingchange", update);
+    update();
+  } catch {
+    // Not shared here: report no battery.
+  }
+}
+void watchBattery();
 $<HTMLButtonElement>(".devpanel__forget").addEventListener("click", async () => {
   socket.close();
   await forgetIdentity(profile);
@@ -1305,7 +1333,6 @@ function render(): void {
       ? "Answer"
       : "Lift handset";
 
-  const view = menu ? menuView(menu, settings, menuContext()) : undefined;
   // Keys have no lights on the minimal board: just their names (Kids Lite prints them on the caps).
   for (let slot = 0; slot < SLOT_COUNT; slot++) {
     const digit = digitOf(slot);
@@ -1390,7 +1417,9 @@ function renderDisplay(): void {
           ? menuLines(view, Date.now())
           : [view.title, ...(view.detail ?? [])]
         : statusLines({
-            connection,
+            // Connected but not yet signed in (or given a pairing code): still connecting.
+            connection:
+              connection === "online" && !authed && !pairingCode ? "connecting" : connection,
             ...(pairingCode ? { pairingCode } : {}),
             deviceState,
             ...(config ? { config } : {}),
@@ -1399,7 +1428,7 @@ function renderDisplay(): void {
             ...(leaveView() ? { leave: leaveView() } : {}),
             ...(room ? { room } : {}),
             ...(recordedNow() ? { recording: true } : {}),
-            battery,
+            ...(battery ? { battery } : {}),
             power: powerStatus(variant, powerSource),
             clock: new Date().toTimeString().slice(0, 5),
             ...(notice && deviceState.kind === "idle" ? { notice } : {}),
