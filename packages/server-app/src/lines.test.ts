@@ -695,6 +695,28 @@ describe("public lines across servers", () => {
     expect(inbox).toMatchObject([{ box: "Support", fromLabel: "Bob" }]);
   });
 
+  it("two people from the same household wait in the line at once", async () => {
+    await publish(a, t, groupId);
+    const sue = await b.store.createUser(
+      { householdId: bob.household.id, name: "Sue", role: "contact" },
+      b.timers.now,
+    );
+    const bobApp = await b.connectApp(bob.token);
+    const sueApp = await b.connectApp(await b.store.createSession(sue.id, b.timers.now));
+    bobApp.write({ t: "call.line", address: "acme-support@a.test" });
+    expect((await nextQueue(bobApp)).queue).toMatchObject({ position: 1, size: 1 });
+    sueApp.write({ t: "call.line", address: "acme-support@a.test" });
+    const sueQ = await nextQueue(sueApp);
+    expect(sueQ.queue).toMatchObject({ position: 2, size: 2 });
+    // Sue leaves a voicemail instead; Bob keeps his place.
+    sueApp.write({ t: "call.voicemail", callId: sueQ.callId });
+    expect(await sueApp.nextState("ended")).toMatchObject({ reason: "voicemail" });
+    await settle();
+    expect(bobApp.all("call.state").at(-1)).toMatchObject({ state: "ringing" });
+    const cy = await a.connectApp(t.cy.token);
+    expect((await cy.next("call.ringing")).from.address).toBe("bob@b.test");
+  });
+
   it("an idle Lounge phone elsewhere calls the line as its space: the phone's name", async () => {
     await publish(a, t, groupId);
     const lobby = await b.pairDevice(bob.token, "Cafe phone", { kind: "lounge" });

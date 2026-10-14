@@ -3780,7 +3780,8 @@ export class HouseholdHub {
     return this.dialRemote(peer, {
       as,
       host,
-      key: `fed:${host}:line:${handle}`,
+      // A line takes many callers at once: the far side is busy only for this caller.
+      key: `fed:${host}:line:${handle}:${peer.key}`,
       label: handle.slice(0, 24),
       peerHousehold,
       body: { from, to: { kind: "line", handle } },

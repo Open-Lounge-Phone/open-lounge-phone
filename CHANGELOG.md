@@ -18,6 +18,10 @@ On `main`, not tagged yet.
   line (here or on another server) as the space: the line sees the phone's name and the space
   owner's verified address. A member signed in at a Lounge phone gets the lines on their own
   phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Fix:** two people from the same household (or a phone and an app there) can wait in a public
+  line on another server or in another household at the same time; the second used to get "busy".
+- Companion: a public line's recent callers show who is already blocked, and "Block server" isn't
+  offered for the line's own server.
 
 ## 0.3.0 (2026-10-13, `server-v0.3.0`)
 

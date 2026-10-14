@@ -126,6 +126,13 @@ export function PublicLineEditor({
           ? { kind: "end" }
           : { kind: "voicemail" };
   const perHour = (v: string) => (v.trim() === "" ? null : Math.max(1, Number(v) || 1));
+  const ownServer = line.address.slice(line.address.lastIndexOf("@") + 1);
+  const blockedBy = (c: LineCaller) =>
+    blocks.some((b) => b.kind === "server" && b.value === c.server)
+      ? "Server blocked"
+      : blocks.some((b) => b.kind === "address" && b.value === c.address.toLowerCase())
+        ? "Blocked"
+        : undefined;
 
   return (
     <div className="stack">
@@ -382,20 +389,29 @@ export function PublicLineEditor({
                 {c.address} · {c.outcome}
               </span>
             </span>
-            <button
-              type="button"
-              className="link"
-              onClick={() => void act(() => api.blockForLines(c.address))}
-            >
-              Block person
-            </button>
-            <button
-              type="button"
-              className="link"
-              onClick={() => void act(() => api.blockForLines(c.server))}
-            >
-              Block server
-            </button>
+            {blockedBy(c) ? (
+              <span className="muted small">{blockedBy(c)}</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => void act(() => api.blockForLines(c.address))}
+                >
+                  Block person
+                </button>
+                {/* Blocking this server would shut out everyone here, the line's own people too. */}
+                {c.server !== ownServer && (
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => void act(() => api.blockForLines(c.server))}
+                  >
+                    Block server
+                  </button>
+                )}
+              </>
+            )}
           </li>
         ))}
         {callers.length === 0 && <li className="muted small">No calls yet.</li>}
