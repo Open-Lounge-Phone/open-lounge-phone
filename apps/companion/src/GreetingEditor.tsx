@@ -8,6 +8,13 @@ import { formatDuration } from "./text.ts";
 const MAX_MS = { name: 3_000, custom: 30_000 } as const;
 const RING_CHOICES = [10, 15, 20, 25, 30, 40, 50, 60];
 
+/** The list, plus the saved value when it isn't one of them, so the select shows what's real. */
+export function ringChoices(saved: number): number[] {
+  return RING_CHOICES.includes(saved)
+    ? RING_CHOICES
+    : [...RING_CHOICES, saved].sort((x, y) => x - y);
+}
+
 type Draft =
   | { stage: "recording"; kind: "name" | "custom"; elapsed: number }
   | { stage: "review"; kind: "name" | "custom"; recording: Recording; url: string }
@@ -230,7 +237,7 @@ export function GreetingEditor({ api, deviceId }: { api: Api; deviceId?: string 
             )
           }
         >
-          {RING_CHOICES.map((s) => (
+          {ringChoices(settings.ringSeconds).map((s) => (
             <option key={s} value={s}>
               {s} seconds
             </option>
