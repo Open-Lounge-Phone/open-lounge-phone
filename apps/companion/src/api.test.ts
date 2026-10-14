@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, createApi } from "./api.ts";
+import { ApiError, createApi, readableError } from "./api.ts";
 
 function fakeFetch(status: number, body?: unknown) {
   return vi.fn(
@@ -64,7 +64,35 @@ describe("createApi", () => {
     });
     const err = await api.pair("000000", "x", "personal").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 404, message: "unknown or expired code" });
+    expect(err).toMatchObject({ status: 404, message: "Unknown or expired code." });
+  });
+
+  it("says plainly when the server can't be reached or says nothing", async () => {
+    const offline = createApi({
+      token: null,
+      fetch: vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    });
+    await expect(offline.me()).rejects.toMatchObject({
+      status: 0,
+      message: "Couldn't reach the server. Check your connection and try again.",
+    });
+    const proxy = createApi({
+      token: null,
+      fetch: vi.fn(async () => new Response("<html>Bad gateway</html>", { status: 502 })),
+    });
+    await expect(proxy.me()).rejects.toMatchObject({
+      status: 502,
+      message: "Something went wrong on the server. Try again in a moment.",
+    });
+  });
+
+  it("turns server words into sentences", () => {
+    expect(readableError(409, "that handle is taken")).toBe("That handle is taken.");
+    expect(readableError(400, "Name can't be empty.")).toBe("Name can't be empty.");
+    expect(readableError(429)).toMatch(/Wait a little/);
+    expect(readableError(418)).toBe("That didn't work (error 418). Try again.");
   });
 
   it("reports 401s so the session can be dropped", async () => {
@@ -74,7 +102,7 @@ describe("createApi", () => {
       fetch: fakeFetch(401, { error: "unauthorized" }),
       onUnauthorized,
     });
-    await expect(api.me()).rejects.toThrow("unauthorized");
+    await expect(api.me()).rejects.toThrow("Unauthorized.");
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 });
@@ -104,7 +132,7 @@ describe("M4 endpoints", () => {
       .setGreeting("name", new Blob(["x"], { type: "audio/ogg" }), 1)
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 403, message: "not allowed" });
+    expect(err).toMatchObject({ status: 403, message: "Not allowed." });
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 

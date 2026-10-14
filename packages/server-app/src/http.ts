@@ -89,7 +89,7 @@ const PrivacyBody = z
 const spaceDays = (r: z.infer<typeof SpaceRetention>) =>
   r === "forever" ? null : RETENTION_DAYS[r];
 
-const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use a time like 09:30");
 const HouseLineKeyBody = z.object({
   index: z.number().int().min(0).max(9),
   label: Name,

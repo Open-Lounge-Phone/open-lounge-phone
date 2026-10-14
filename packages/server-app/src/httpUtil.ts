@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
 import type { ServerEnv } from "./env.ts";
+import { validationText } from "./validation.ts";
 
 /**
  * Per-request auth state. `account` and `token` are set for every signed-in request; `member` is
@@ -16,7 +17,7 @@ export type Vars = {
 /** Header a client sends to act in one of its households (else the session's active one). */
 export const HOUSEHOLD_HEADER = "x-household";
 
-/** Parses and validates a JSON body; returns a 400 Response on failure. */
+/** Parses and validates a JSON body; returns a 400 Response with a readable `error` on failure. */
 export async function body<S extends z.ZodType>(
   req: Request,
   schema: S,
@@ -25,15 +26,12 @@ export async function body<S extends z.ZodType>(
   try {
     json = await req.json();
   } catch {
-    return Response.json({ error: "invalid JSON" }, { status: 400 });
+    return Response.json({ error: "That request couldn't be read." }, { status: 400 });
   }
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return Response.json(
-      { error: `${issue?.path.join(".") || "body"}: ${issue?.message}` },
-      { status: 400 },
-    );
+    // Plain words for the apps (they show this text): "Name can be at most 24 characters."
+    return Response.json({ error: validationText(parsed.error, json) }, { status: 400 });
   }
   return parsed.data;
 }

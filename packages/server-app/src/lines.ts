@@ -46,7 +46,7 @@ const Entry = z
   .transform((v, ctx) => {
     const e = lineEntry(v);
     if (!e) {
-      ctx.addIssue({ code: "custom", message: `not a server or an address: ${v}` });
+      ctx.addIssue({ code: "custom", message: `${v} isn't a server or an address` });
       return z.NEVER;
     }
     return e.value;

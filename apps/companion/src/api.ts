@@ -587,12 +587,14 @@ export function createApi(opts: ApiOptions) {
     if (init.body) headers["content-type"] = init.contentType ?? init.body.type;
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     if (opts.household) headers["x-household"] = opts.household;
-    const res = await doFetch(`${base}${path}`, {
-      method,
-      headers,
-      ...(init.json !== undefined ? { body: JSON.stringify(init.json) } : {}),
-      ...(init.body ? { body: init.body } : {}),
-    });
+    const res = await reach(() =>
+      doFetch(`${base}${path}`, {
+        method,
+        headers,
+        ...(init.json !== undefined ? { body: JSON.stringify(init.json) } : {}),
+        ...(init.body ? { body: init.body } : {}),
+      }),
+    );
     if (res.status === 401) opts.onUnauthorized?.();
     if (!res.ok) throw await errorFrom(res);
     return res;
@@ -603,22 +605,17 @@ export function createApi(opts: ApiOptions) {
     if (body !== undefined) headers["content-type"] = "application/json";
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     if (opts.household) headers["x-household"] = opts.household;
-    const res = await doFetch(`${base}${path}`, {
-      method,
-      headers,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+    const res = await reach(() =>
+      doFetch(`${base}${path}`, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      }),
+    );
     if (res.status === 401) opts.onUnauthorized?.();
+    if (!res.ok) throw await errorFrom(res);
     const text = await res.text();
-    const json = text ? (JSON.parse(text) as unknown) : undefined;
-    if (!res.ok) {
-      const message =
-        json && typeof json === "object" && "error" in json
-          ? String((json as { error: unknown }).error)
-          : `request failed (${res.status})`;
-      throw new ApiError(res.status, message);
-    }
-    return json as T;
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   const enc = encodeURIComponent;
@@ -964,12 +961,43 @@ export function createApi(opts: ApiOptions) {
 export type Api = ReturnType<typeof createApi>;
 
 async function errorFrom(res: Response): Promise<ApiError> {
-  let message = `request failed (${res.status})`;
+  let said: string | undefined;
   try {
     const json = (await res.json()) as { error?: unknown };
-    if (json && typeof json === "object" && "error" in json) message = String(json.error);
+    if (json && typeof json === "object" && typeof json.error === "string") said = json.error;
   } catch {
-    // not JSON
+    // not JSON (a proxy's error page, say)
   }
-  return new ApiError(res.status, message);
+  return new ApiError(res.status, readableError(res.status, said));
+}
+
+/** Network failures (offline, server down) as an ApiError with status 0 and plain words. */
+async function reach(go: () => Promise<Response>): Promise<Response> {
+  try {
+    return await go();
+  } catch {
+    throw new ApiError(0, OFFLINE);
+  }
+}
+
+const OFFLINE = "Couldn't reach the server. Check your connection and try again.";
+
+/**
+ * What people see when a request fails: the server's own words as a sentence ("that handle is
+ * taken" → "That handle is taken."), or plain words for the status when it said nothing.
+ */
+export function readableError(status: number, said?: string): string {
+  const text = said?.trim();
+  if (text) {
+    const s = (text[0]?.toUpperCase() ?? "") + text.slice(1);
+    return /[.!?]$/.test(s) ? s : `${s}.`;
+  }
+  if (status === 0) return OFFLINE;
+  if (status === 401) return "You're signed out. Sign in again.";
+  if (status === 403) return "You can't do that here.";
+  if (status === 404) return "That isn't there any more.";
+  if (status === 413) return "That's too big to send.";
+  if (status === 429) return "That's too many tries for now. Wait a little and try again.";
+  if (status >= 500) return "Something went wrong on the server. Try again in a moment.";
+  return `That didn't work (error ${status}). Try again.`;
 }

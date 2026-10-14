@@ -37,8 +37,8 @@ export const GROUPS_PER_SPACE = 30;
 /** Most members in one ring group. */
 export const GROUP_MAX_MEMBERS = 20;
 
-const Number_ = z.string().regex(/^[0-9]{2,6}$/, "an extension is 2–6 digits");
-const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+const Number_ = z.string().regex(/^[0-9]{2,6}$/, "use 2 to 6 digits");
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use a time like 09:30");
 /** Weekly windows (business hours, a party line's hours): days 0-6, HH:MM to HH:MM. */
 export const Rules = z
   .array(
@@ -305,7 +305,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
   api.put("/extensions/:number", admins, async (c) => {
     const hh = c.get("user").householdId;
     const number = c.req.param("number");
-    if (!isExtension(number)) return c.json({ error: "an extension is 2–6 digits" }, 400);
+    if (!isExtension(number)) return c.json({ error: "an extension is 2 to 6 digits" }, 400);
     const b = await body(c.req.raw, ExtensionBody);
     if (b instanceof Response) return b;
     const problem = await targetProblem(hh, b.kind, b.targetId);
