@@ -277,7 +277,12 @@ static void render(void) {
 
   char lines[4][25] = {{0}};
   int n_status = 0;  // lines from the status strip (0 = a menu or another screen has them)
-  s_menu.voicemail = s_cfg.missed_count;
+  s_menu.voicemail = 0;
+  s_menu.callbacks = 0;
+  for (int i = 0; i < s_cfg.missed_count && i < MAX_MISSED; i++) {
+    if (s_cfg.missed_callback[i]) s_menu.callbacks++;
+    else s_menu.voicemail++;
+  }
   s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
   s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
   s_menu.lounge = s_lounge.on;
@@ -750,8 +755,11 @@ static void on_config(const cJSON *m) {
   copy(s_cfg.quiet_until, sizeof s_cfg.quiet_until, jstr(m, "quietUntil"));
   const cJSON *x;
   cJSON_ArrayForEach(x, cJSON_GetObjectItemCaseSensitive(m, "missed")) {
-    if (s_cfg.missed_count < MAX_MISSED)
+    if (s_cfg.missed_count < MAX_MISSED) {
       copy(s_cfg.missed[s_cfg.missed_count], sizeof s_cfg.missed[0], jstr(x, "from"));
+      s_cfg.missed_callback[s_cfg.missed_count] =
+          cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(x, "callback"));
+    }
     s_cfg.missed_count++;
   }
   const cJSON *owner = cJSON_GetObjectItemCaseSensitive(m, "owner");
@@ -1197,7 +1205,13 @@ void app_main(void) {
             snprintf(s_ota_msg[1], 25, "THEN MENU 2 1");
             s_ota_msg_until = now_ms() + 4000;
           } else if (s_authed) {
-            vmplay_start(ev.a == 1, now_ms());
+            // 3 Clear: missed call backs go too (on all the owner's phones).
+            if (ev.a == 1 && s_menu.callbacks > 0) {
+              cJSON *clear = cJSON_CreateObject();
+              cJSON_AddStringToObject(clear, "t", "missed.clear");
+              proto_send(clear);  // sends and frees it
+            }
+            if (ev.a == 0 || s_menu.voicemail > 0) vmplay_start(ev.a == 1, now_ms());
           }
           break;
         case EV_VM_LOADED:

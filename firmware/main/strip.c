@@ -112,6 +112,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     case PH_OFFHOOK: {
       if (s->held[0]) return *name ? set2(out, "ON HOLD", name) : set2(out, "CALL ON HOLD", "MENU 1 RESUMES");
       if (s->callback) return set2(out, "PLACE KEPT", "WE'LL CALL BACK");
+      // A free Lounge phone tried a public line: only someone signed in can call one.
+      if (s->sign_in) return set2(out, "SIGN IN TO CALL", "PRESS A KEY");
       const char *t = end_text(s->last_end);
       return t ? set2(out, t, "PRESS A KEY") : set1(out, "PRESS A KEY");
     }
@@ -151,6 +153,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     else
       snprintf(summary, sizeof summary, "%d MISSED CALLS", c->missed_count);
     if (quiet[0]) return set2(out, quiet, summary);
+    // A public line's call back nobody took: there's no message to play, just its name.
+    if (c->missed_count == 1 && c->missed_callback[0]) return set2(out, "MISSED CALL BACK", newest);
     if (c->missed_count == 1) {
       const char *next = !c->owner_mode[0] || !strcmp(c->owner_mode, "kids") ? "ASK A GROWN-UP"
                                                                                : "PLAY IN APP";

@@ -102,7 +102,7 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     }
   } else if (m->screen == MENU_VOICEMAIL && m->can_play) {
     int d = digit_of(key);
-    if (d == 1 || (d == 3 && m->voicemail > 0)) {
+    if (d == 1 || (d == 3 && (m->voicemail > 0 || m->callbacks > 0))) {
       app_post(EV_VM_PLAY, d == 3, NULL);
       m->screen = MENU_CLOSED;
     }
@@ -203,8 +203,13 @@ int menu_lines(const menu_t *m, char out[4][25]) {
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
       else snprintf(out[0], 25, "NO NEW VOICEMAIL");
       if (m->can_play) {
-        snprintf(out[1], 25, "%s", m->voicemail > 0 ? "1 PLAY 3 CLEAR" : "1 PLAY");
-        return 2;
+        int n = 1;
+        if (m->callbacks > 0)  // at most MAX_MISSED (8): one digit
+          snprintf(out[n++], 25, "%c MISSED CALL BACK%s", '0' + (m->callbacks > 9 ? 9 : m->callbacks),
+                   m->callbacks > 1 ? "S" : "");
+        snprintf(out[n++], 25, "%s",
+                 m->voicemail > 0 || m->callbacks > 0 ? "1 PLAY 3 CLEAR" : "1 PLAY");
+        return n;
       }
       snprintf(out[1], 25, "%s", m->voicemail > 0 ? (m->kids ? "ASK A GROWN-UP" : "PLAY IN APP") : "");
       return m->voicemail > 0 ? 2 : 1;

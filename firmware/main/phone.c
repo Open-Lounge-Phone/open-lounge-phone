@@ -251,8 +251,10 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         to_offhook(s, "hangup");  // the line calls back later: the place in line is kept
         s->callback = true;
       } else if (ended) {
+        const char *note = str(m, "note");
         to_offhook(s, reason ? reason : "hangup");
         CPY(s->held, held);
+        s->sign_in = note && !strcmp(note, PHONE_SIGN_IN_NOTE);
       } else if (!strcmp(state, "active") || !strcmp(state, "connecting")) {
         phone_init(s);
         s->kind = PH_INCALL;

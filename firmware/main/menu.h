@@ -22,7 +22,8 @@ typedef enum { SETUP_OPEN, SETUP_CONFIRM, SETUP_HIDDEN } setup_guard_t;
 typedef struct {
   menu_screen_t screen;
   int64_t last_input_ms;
-  int voicemail;  // new messages (the phone's missed count), shown under 2
+  int voicemail;  // new messages (senders with unheard voicemail), shown under 2
+  int callbacks;  // public lines' call backs that weren't taken; 3 clears them too
   bool can_play;  // a person's own phone: 1 plays the messages, 3 clears them (vmplay.c)
   bool kids;      // a kids' phone: a grown-up listens in the app
   setup_guard_t setup;

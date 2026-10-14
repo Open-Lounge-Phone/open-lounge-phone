@@ -1,3 +1,7 @@
+// The server's note when a Lounge phone with nobody signed in calls a public line (core
+// `SIGN_IN_FOR_LINES_NOTE`): the phone shows SIGN IN TO CALL.
+#define PHONE_SIGN_IN_NOTE "Sign in at this phone to call a public line"
+
 // A C mirror of `deviceStep` (packages/core/src/device.ts): the handset state machine every
 // Open Lounge Phone runs: hook, keys, incoming/outgoing calls, rooms, the voicemail offer, and the
 // call actions MENU offers in a call (hold / add caller, resume, merge, transfer, mute).
@@ -41,6 +45,8 @@ typedef struct {
   // offhook: you just asked a line to call you back (your place is kept); incoming: a line
   // calling you back, as you asked (lift to answer: the call to the line goes on).
   bool callback;
+  // offhook: a Lounge phone with nobody signed in tried a public line (SIGN IN TO CALL).
+  bool sign_in;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */

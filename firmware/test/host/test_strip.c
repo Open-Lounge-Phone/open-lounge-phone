@@ -109,3 +109,42 @@ TEST(strip_call_me_back) {
   CHECK_STR(out[0], "SUPPORT");
   CHECK_STR(out[1], "CALLS YOU BACK");
 }
+
+TEST(strip_names_a_missed_call_back) {
+  phone_state_t ph;
+  phone_init(&ph);
+  phone_config_t cfg = {.present = true, .missed_count = 1};
+  snprintf(cfg.missed[0], sizeof cfg.missed[0], "Acme Support");
+  cfg.missed_callback[0] = true;
+  snprintf(cfg.owner_mode, sizeof cfg.owner_mode, "personal");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "MISSED CALL BACK");
+  CHECK_STR(out[1], "ACME SUPPORT");
+  // With a voicemail too: counted and cycled like any missed call.
+  cfg.missed_count = 2;
+  snprintf(cfg.missed[1], sizeof cfg.missed[1], "Mom");
+  in.now_ms = 0;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "2 MISSED CALLS");
+  CHECK_STR(out[1], "ACME SUPPORT");
+}
+
+TEST(strip_free_lounge_phone_says_sign_in) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_OFFHOOK;
+  snprintf(ph.last_end, sizeof ph.last_end, "denied");
+  ph.sign_in = true;
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "SIGN IN TO CALL");
+  CHECK_STR(out[1], "PRESS A KEY");
+  ph.sign_in = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "NOT ALLOWED");
+}

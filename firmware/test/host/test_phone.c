@@ -221,3 +221,19 @@ TEST(phone_asks_a_line_to_call_back) {
   phone_button(&s, 1, emit);
   CHECK(s_n == 0);
 }
+
+TEST(phone_free_lounge_phone_told_to_sign_in_for_a_line) {
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_button(&s, 0, emit);
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":\"denied\","
+         "\"note\":\"" PHONE_SIGN_IN_NOTE "\"}");
+  CHECK(s.kind == PH_OFFHOOK && s.sign_in);
+  CHECK_STR(s.last_end, "denied");
+  // Any other refusal is just "not allowed".
+  phone_button(&s, 0, emit);
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"ended\",\"reason\":\"denied\"}");
+  CHECK(s.kind == PH_OFFHOOK && !s.sign_in);
+}

@@ -1,7 +1,15 @@
 # Firmware changelog
 
-## Unreleased
+## 0.9.2 — 2026-10-14: public lines, notices, call backs
 
+- **Missed call backs**: when a public line calls you back and nobody takes it, your own phone
+  shows it like a missed call: `MISSED CALL BACK` / the line's name (or among `3 MISSED CALLS`),
+  with the slow-breathing light. MENU 2 shows `1 MISSED CALL BACK` and `3 CLEAR` clears it
+  (`missed.clear`, on all your phones); calling the line, or taking its next call back, clears it
+  too. Missed call backs aren't counted as voicemail. Older firmware shows them as a missed
+  caller named after the line and counts them as voicemail.
+- **Lounge phones**: a free phone (nobody signed in) that tries a public line shows
+  `SIGN IN TO CALL` / `PRESS A KEY`; only someone signed in can call a line.
 - **Setup page**: a network name, password or server address too long for what the phone stores
   is refused with a message (a typed name that didn't fit used to fall back silently to the
   network picked in the list). Typing a server address picks "My own server" by itself. The

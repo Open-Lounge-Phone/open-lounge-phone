@@ -20,6 +20,7 @@ typedef struct {
   char quiet_until[6];        // "HH:MM" or ""
   int missed_count;
   char missed[MAX_MISSED][25];  // newest first
+  bool missed_callback[MAX_MISSED];  // …a public line's call back that wasn't taken
   char owner_mode[10];        // "kids" | "personal" | "lounge" | ""
   char owner_space[65];
   char owner_person[25];
