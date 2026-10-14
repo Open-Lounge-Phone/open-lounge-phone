@@ -78,3 +78,16 @@ TEST(ic_doorbell_rings_on_hook_and_times_out) {
   icom_msg(&hall, 9, "OLP1|RING|x", 1, &o);
   CHECK(hall.st == IC_IDLE && o.n == 0);
 }
+
+TEST(ic_renamed_room_replaces_its_old_name) {
+  ic_t hall;
+  icom_init(&hall, "Hall");
+  ic_out_t o = {0};
+  icom_msg(&hall, 7, "OLP1|HELLO|PHONE", 0, &o);
+  icom_msg(&hall, 8, "OLP1|HELLO|GARAGE", 0, &o);
+  icom_msg(&hall, 7, "OLP1|HELLO|KITCHEN", 10, &o);  // the same phone (address), renamed
+  CHECK(icom_peer_count(&hall, 20) == 2);
+  int named = 0;
+  for (int i = 0; i < IC_PEERS; i++) named += !strcmp(hall.peers[i].name, "PHONE");
+  CHECK(named == 0);
+}

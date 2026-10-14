@@ -14,8 +14,12 @@ checkin_state_t checkin_state(const labs_cfg_t *cfg, const checkin_t *c, int day
   return minute >= cfg->checkin_by - 180 ? CI_DUE : CI_WAITING;   // due from 3 hours before
 }
 
+bool checkin_alert_pending(const labs_cfg_t *cfg, const checkin_t *c, int day, int minute) {
+  return checkin_state(cfg, c, day, minute) == CI_MISSED && c->missed_day != day;
+}
+
 bool checkin_due_alert(const labs_cfg_t *cfg, checkin_t *c, int day, int minute) {
-  if (checkin_state(cfg, c, day, minute) != CI_MISSED || c->missed_day == day) return false;
+  if (!checkin_alert_pending(cfg, c, day, minute)) return false;
   c->missed_day = day;
   return true;
 }
@@ -52,8 +56,8 @@ int checkin_lines(const labs_cfg_t *cfg, const checkin_t *c, int day, int minute
       snprintf(out[0], 41, "GOOD MORNING");
       snprintf(out[1], 41, "PRESS 1: I'M OK");
       return 2;
-    case CI_MISSED:
-      snprintf(out[0], 41, "FAMILY WAS TOLD");
+    case CI_MISSED:  // "told" only once the alert went to the server
+      snprintf(out[0], 41, "%s", c->missed_day == day ? "FAMILY WAS TOLD" : "NOT CHECKED IN");
       snprintf(out[1], 41, "PRESS 1: I'M OK");
       return 2;
     case CI_OK:

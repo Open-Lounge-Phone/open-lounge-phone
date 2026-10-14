@@ -11,10 +11,22 @@
 # the newer 20260417 "x86_64" archive actually holds an arm64 binary.
 # QEMU_HOSTFWD="tcp::8080-:80" forwards host ports to the phone (e.g. the setup page).
 # QEMU_PCAP=file.pcap records the phone's network traffic.
+# Opt-in extras (the labs tests, tests/e2e/live/labs.test.ts):
+#   OLP_QEMU_LABS=1             build/run the labs firmware (firmware/labs), into build-qemu-labs
+#   QEMU_LAN=47600:47601        put the phone on a shared Ethernet segment: its frames go to a UDP
+#                               hub on 127.0.0.1:47600 (one that floods each frame to the other
+#                               phones; the labs test runs one) from 127.0.0.1:47601, its own port.
+#                               (QEMU's multicast socket can't send on macOS.)
+#   QEMU_LAN_ONLY=1             only that segment, no user network of its own: the phone gets its
+#                               address from (and reaches 10.0.2.2 through) a phone that has one
+#   QEMU_MAC=02:00:00:00:00:0b  this phone's MAC (`fresh` writes it to the eFuse file too); phones
+#                               on one segment need different ones
+#   QEMU_HOSTFWD may hold several forwards separated by spaces ("tcp::8081-10.0.2.16:80").
 set -euo pipefail
 FW="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$FW"
-B="${OLP_QEMU_BUILD:-build-qemu}"
+LABS="${OLP_QEMU_LABS:-}"
+B="${OLP_QEMU_BUILD:-$([ -n "$LABS" ] && echo build-qemu-labs || echo build-qemu)}"
 if ! command -v idf.py >/dev/null; then
   idf="${IDF_PATH:-}"
   [ -n "$idf" ] || { [ -d "$HOME/esp/esp-idf-v5.5.5" ] && idf="$HOME/esp/esp-idf-v5.5.5"; }
@@ -27,6 +39,10 @@ QEMU="${QEMU:-qemu-system-xtensa}"
 
 build() {
   mkdir -p "$B"
+  if [ -n "$LABS" ]; then
+    build_labs
+    return
+  fi
   local defaults="sdkconfig.defaults;sdkconfig.qemu${OLP_QEMU_EXTRA_DEFAULTS:+;$OLP_QEMU_EXTRA_DEFAULTS}"
   local want
   local extra
@@ -46,15 +62,31 @@ build() {
   idf.py -B "$B" -D SDKCONFIG="$B/sdkconfig" -D "SDKCONFIG_DEFAULTS=$defaults" build \
     >"$B/build.log" 2>&1 || { tail -40 "$B/build.log"; exit 1; }
 }
+# The labs project (firmware/labs): the phone's defaults, the labs ones, then the simulator's.
+build_labs() {
+  local b want
+  b="$(cd "$B" && pwd)"
+  want="labs|$(cat sdkconfig.defaults labs/sdkconfig.labs sdkconfig.qemu main/Kconfig.projbuild \
+    labs/main/Kconfig.projbuild | shasum | cut -c1-12)"
+  if [ "$(cat "$B/.inputs" 2>/dev/null)" != "$want" ]; then
+    rm -f "$B/sdkconfig" "$B/CMakeCache.txt"
+    echo "$want" >"$B/.inputs"
+  fi
+  idf.py -C labs -B "$b" -D SDKCONFIG="$b/sdkconfig" \
+    -D "SDKCONFIG_DEFAULTS=$FW/sdkconfig.defaults;$FW/labs/sdkconfig.labs;$FW/sdkconfig.qemu" build \
+    >"$B/build.log" 2>&1 || { tail -40 "$B/build.log"; exit 1; }
+}
 image() {
   [ -f "$B/flash_args" ] || { echo "no build in $B: run \`$0 build\` first" >&2; exit 1; }
   (cd "$B" && python -m esptool --chip esp32s3 merge_bin --output qemu_flash.bin \
     --fill-flash-size 4MB @flash_args >/dev/null)
   # A blank eFuse block with the chip revision (what `idf.py qemu` writes).
-  python - "$B/qemu_efuse.bin" <<'EOF'
+  python - "$B/qemu_efuse.bin" "${QEMU_MAC:-}" <<'EOF'
 import sys
 b = bytearray(1024)
 b[38] = 0x0C
+if len(sys.argv) > 2 and sys.argv[2]:  # QEMU_MAC: BLOCK1's factory MAC, last byte first
+    b[24:30] = bytes(reversed(bytes.fromhex(sys.argv[2].replace(":", ""))))
 open(sys.argv[1], "wb").write(bytes(b))
 EOF
   # QEMU hangs when the bootloader writes flash: write the first boot's otadata ourselves
@@ -69,6 +101,19 @@ run() {
     # Every frame on the phone's network into a pcap file (the smoke test reads it).
     fwd=(-netdev "user,id=n0${QEMU_HOSTFWD:+,hostfwd=${QEMU_HOSTFWD}}" -net nic,model=open_eth,netdev=n0
       -object "filter-dump,id=dump0,netdev=n0,file=${QEMU_PCAP}")
+  fi
+  if [ -n "${QEMU_LAN:-}" ]; then
+    # QEMU's own hub joins the phone's NIC, the shared segment and (unless LAN only) a user network.
+    local hub="${QEMU_LAN%%:*}" mine="${QEMU_LAN##*:}"
+    fwd=(-netdev "dgram,id=lan,remote.type=inet,remote.host=127.0.0.1,remote.port=$hub,local.type=inet,local.host=127.0.0.1,local.port=$mine"
+      -netdev hubport,id=hp0,hubid=0,netdev=lan
+      -netdev hubport,id=hp1,hubid=0
+      -net "nic,model=open_eth,netdev=hp1${QEMU_MAC:+,macaddr=$QEMU_MAC}")
+    if [ -z "${QEMU_LAN_ONLY:-}" ]; then
+      local user="user,id=u0" f
+      for f in ${QEMU_HOSTFWD:-}; do user="$user,hostfwd=$f"; done
+      fwd+=(-netdev "$user" -netdev hubport,id=hp2,hubid=0,netdev=u0)
+    fi
   fi
   exec "$QEMU" -M esp32s3 -m 8M \
     -drive "file=$B/qemu_flash.bin,if=mtd,format=raw" \
