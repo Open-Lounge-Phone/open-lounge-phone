@@ -4,6 +4,8 @@
 // and the admission check every call to a line passes (`admitLineCall`). The queue lives in the
 // hub. Every refusal answers like an unavailable line, so nobody can probe for lines or blocks.
 import {
+  CALLBACK_MISSED,
+  type CallbackMissed,
   effectiveLimit,
   LINE_ALLOW_MAX,
   LINE_QUEUE_MAX,
@@ -80,6 +82,10 @@ const LineBody = z
     voicemail: z.boolean().optional(),
     callerPerHour: PerHour.optional(),
     serverPerHour: PerHour.optional(),
+    /** Waiting callers may ask to be called back (on by default). */
+    callback: z.boolean().optional(),
+    /** A missed call back: one more try later (`retry`), or the voicemail offer at once. */
+    callbackMissed: z.enum(CALLBACK_MISSED as [CallbackMissed, ...CallbackMissed[]]).optional(),
   })
   .strict();
 const BlockBody = z.object({ entry: Entry });
@@ -128,6 +134,8 @@ export async function admitLineCall(
   env: ServerEnv,
   line: PublicLine,
   caller: LineCallerInfo,
+  /** `counted: false`: calling back in after the line's call back (not another call). */
+  opts: { counted?: boolean } = {},
 ): Promise<boolean> {
   const { store } = env;
   const host = caller.host === LOCAL_HOST ? ownHost(env) : caller.host;
@@ -149,7 +157,7 @@ export async function admitLineCall(
   );
   if (!verdict.ok && verdict.why === "disabled") return false;
   let ok = verdict.ok;
-  if (ok && !member) {
+  if (ok && !member && opts.counted !== false) {
     const limits = limitsOf(env);
     const now = env.now();
     const perCaller = effectiveLimit(limits.lineCallsPerCallerPerHour, line.callerPerHour);
@@ -248,6 +256,8 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
           voicemail: line.voicemail,
           callerPerHour: line.callerPerHour,
           serverPerHour: line.serverPerHour,
+          callback: line.callback,
+          callbackMissed: line.callbackMissed,
           greeting: line.greeting ? line.greeting.kind : "default",
           limits: {
             callerPerHour: limitsOf(env).lineCallsPerCallerPerHour,

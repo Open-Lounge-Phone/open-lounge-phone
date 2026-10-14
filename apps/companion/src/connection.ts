@@ -247,6 +247,13 @@ export class Connection {
     this.socket.send({ t: "call.voicemail", callId: call.callId });
   }
 
+  /** Waiting in a public line's queue: hang up but keep the place; the line calls back. */
+  callMeBack(): void {
+    const call = this.snap.call;
+    if (call.phase !== "outgoing" || !call.callId || !call.queue?.callback) return;
+    this.socket.send({ t: "call.callback", callId: call.callId });
+  }
+
   private async dialWith(
     event: Extract<CallEvent, { type: "dial" }>,
     msg: Extract<

@@ -48,7 +48,9 @@ Highest priority first: the first row that applies is shown.
 | Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `WRONG PASSWORD?`, `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
 | Connecting | `CONNECTING` |
 | Calling | `CALLING MOM` (or `CALLING` / long name) |
-| Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (or the line's name when it offers no voicemail; `WAITING IN LINE` when it shows no places) |
+| Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (with a call back too: `1 VM 2 CALL BACK`; only a call back: `2 CALL ME BACK`; neither: the line's name; `WAITING IN LINE` when it shows no places) |
+| Asked a public line to call back | `PLACE KEPT` / `WE'LL CALL BACK` (with the handset up, as the key map's footer) |
+| A public line calling you back | the line's name / `CALLS YOU BACK` (lift to answer: the call to the line goes on, `CALLING` or `IN LINE 1`) |
 | You put the call on hold | `ON HOLD` / name (`MENU 1 RESUMES`) |
 | Choosing who to transfer to | `TRANSFER TO?` / `PRESS A KEY` |
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
@@ -74,7 +76,7 @@ leave the phone.
 | Ready (handset down) | nothing (a click) | open the menu | nothing | lift: dial tone |
 | Handset up | call that key's person | open the menu | nothing | down: back to ready |
 | Calling | nothing | open the menu | nothing | down: cancel |
-| Waiting in a public line's queue | 1: leave a voicemail instead (when offered) | open the menu | nothing | down: cancel |
+| Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
 | Ringing | nothing | open the menu | nothing | lift: answer |
 | In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen | nothing | down: hang up |
 | Call on hold | nothing (one call has audio at a time) | the call screen (1 Resume) | nothing | down: hang up both |

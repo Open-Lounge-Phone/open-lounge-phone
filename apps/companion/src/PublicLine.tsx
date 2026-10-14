@@ -316,6 +316,28 @@ export function PublicLineEditor({
               />
               <span>Offer "Leave a voicemail instead" while they wait</span>
             </label>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={line.callback}
+                onChange={(e) => void save({ callback: e.target.checked })}
+              />
+              <span>Offer "Call me back": they hang up and keep their place</span>
+            </label>
+            {line.callback && (
+              <label className="row">
+                <span>If they miss the call back</span>
+                <select
+                  value={line.callbackMissed}
+                  onChange={(e) =>
+                    void save({ callbackMissed: e.target.value as LineSettings["callbackMissed"] })
+                  }
+                >
+                  <option value="retry">try once more later, then offer voicemail</option>
+                  <option value="voicemail">offer voicemail</option>
+                </select>
+              </label>
+            )}
           </>
         )}
       </fieldset>

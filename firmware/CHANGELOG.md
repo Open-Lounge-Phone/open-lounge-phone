@@ -6,6 +6,10 @@
   from a personal phone. While waiting in the line's queue the screen shows `IN LINE 2` /
   `1 VOICEMAIL` with the soft waiting tone, and key 1 leaves a voicemail instead
   (`call.voicemail`). Older firmware ignores the queue and just shows `CALLING`.
+- **Call me back** from a public line's queue: `1 VM 2 CALL BACK` while waiting, key 2 hangs up
+  and keeps the place (`PLACE KEPT` / `WE'LL CALL BACK`); when it's your turn the phone rings
+  with the line's name and `CALLS YOU BACK`, and lifting the handset calls the line again in
+  your place. Older firmware never shows the choice.
 - **Labs intercom**: when two rooms answer an all-rooms ring at the same instant, the caller
   keeps the first and tells the other (`TAKEN`), which shows `ANSWERED ELSEWHERE` and goes back
   to idle instead of staying connected to nobody. A late room's hang-up no longer ends the call.

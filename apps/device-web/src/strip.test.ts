@@ -322,8 +322,12 @@ describe("recording", () => {
 });
 
 describe("public lines on the strip", () => {
-  const dialing = (queue: { position?: number; size?: number; voicemail?: boolean }) =>
-    ({ kind: "dialing", button: 1, callId: "c1", queue }) as const;
+  const dialing = (queue: {
+    position?: number;
+    size?: number;
+    voicemail?: boolean;
+    callback?: boolean;
+  }) => ({ kind: "dialing", button: 1, callId: "c1", queue }) as const;
 
   it("shows the place in line and how to leave a voicemail instead", () => {
     expect(
@@ -337,8 +341,27 @@ describe("public lines on the strip", () => {
       "HELP",
     ]);
     expect(lines({ deviceState: dialing({}) })).toEqual(["WAITING IN LINE", "PLEASE WAIT"]);
+    expect(
+      lines({ deviceState: dialing({ position: 3, voicemail: true, callback: true }) }),
+    ).toEqual(["IN LINE 3", "1 VM 2 CALL BACK"]);
+    expect(lines({ deviceState: dialing({ position: 3, callback: true }) })).toEqual([
+      "IN LINE 3",
+      "2 CALL ME BACK",
+    ]);
     for (const l of lines({ deviceState: dialing({ position: 12, voicemail: true }) })) {
       expect(l.length).toBeLessThanOrEqual(STATUS_WIDTH);
     }
+  });
+
+  it("a call back: the place kept, then the line calling", () => {
+    expect(lines({ deviceState: { kind: "offhook", lastEnd: "hangup", callback: true } })).toEqual([
+      "PLACE KEPT",
+      "WE'LL CALL BACK",
+    ]);
+    expect(
+      lines({
+        deviceState: { kind: "incoming", callId: "c1", from: "Support", callback: true },
+      }),
+    ).toEqual(["SUPPORT", "CALLS YOU BACK"]);
   });
 });

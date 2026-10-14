@@ -1,10 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
 import { type Device, Store } from "@openloungephone/db";
 import { d1Sql } from "@openloungephone/db/d1";
-import { type FedSignal, HOST_RE, type RoomJoinResult } from "@openloungephone/federation";
+import {
+  type FedSignal,
+  HOST_RE,
+  type LineCallbackMissedResult,
+  type RoomJoinResult,
+} from "@openloungephone/federation";
 import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
 import {
   type BlobStore,
+  type CallbackMissed,
+  type CallbackRing,
   type ConferenceSnapshot,
   type Conn,
   type ConnectionHandler,
@@ -418,6 +425,14 @@ export class HouseholdObject extends GatewayObject {
     return this.gateway.roomPeople(this.householdId);
   }
 
+  callbackRing(req: CallbackRing): Promise<void> {
+    return this.gateway.callbackRing(this.householdId, req);
+  }
+
+  lineCallbackMissed(req: CallbackMissed): Promise<LineCallbackMissedResult> {
+    return this.gateway.lineCallbackMissed(this.householdId, req);
+  }
+
   closeRoom(roomId: string): Promise<void> {
     return this.gateway.closeRoom(this.householdId, roomId);
   }
@@ -567,6 +582,8 @@ function coordinator(env: Env): Coordinator {
     roomJoin: (hh, req) => env.HOUSEHOLD.getByName(hh).roomJoin(req),
     roomPeople: (hh) => env.HOUSEHOLD.getByName(hh).roomPeople(),
     closeRoom: (hh, roomId) => env.HOUSEHOLD.getByName(hh).closeRoom(roomId),
+    callbackRing: (hh, req) => env.HOUSEHOLD.getByName(hh).callbackRing(req),
+    lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));
       for (const m of await store.listMemberships(accountId)) {

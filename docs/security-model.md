@@ -110,7 +110,10 @@ What the firmware does today (firmware/README.md has the details) and what is st
   connected to it or to an allow-list; the operator's blocklist and per-caller and per-server
   limits apply; a line that doesn't take you looks exactly like one that doesn't exist; and kids'
   phones can never call one (their own server refuses, and the line's server refuses calls
-  flagged as from a kids' phone).
+  flagged as from a kids' phone). A line may ring someone only when they asked it to call them
+  back: their own server keeps that request (for that line and that waiting call, for at most
+  about two hours) and rings them only for a call back that matches it; anything else is
+  ignored.
 - **Federation:** signed server-to-server requests (RFC 9421), server-key pinning, blocklists and
   rate limits.
 - **Lounge:** signing in needs a physical key press (proximity proof). Nothing stays on the phone,

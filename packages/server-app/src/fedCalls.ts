@@ -8,6 +8,9 @@ import {
   CallResult,
   type Feature,
   type FedSignal,
+  type LineCallbackBody,
+  type LineCallbackMissedBody,
+  LineCallbackMissedResult,
   type LoungeDialBody,
   type LoungeProgressBody,
   type Party,
@@ -34,8 +37,11 @@ export interface RemoteRing {
     | { kind: "phone"; deviceId: string; contactId: string }
     /** A Lounge phone here where the caller's server's account is a guest. */
     | { kind: "guest"; deviceId: string; guestId: string }
-    /** A public line (a published ring group), already admitted by `admitLineCall`. */
-    | { kind: "line"; groupId: string };
+    /**
+     * A public line (a published ring group), already admitted by `admitLineCall`.
+     * `callbackSince`: the caller answered the line's call back; their place in line.
+     */
+    | { kind: "line"; groupId: string; callbackSince?: number };
   /** Ring only here: a branch of a call another household here owns (no further fan-out). */
   noBranches?: boolean;
   /** The caller, for the call log: `handle@host`. */
@@ -44,6 +50,29 @@ export interface RemoteRing {
   peerHousehold?: string;
   /** A kids' phone is calling (through its guardian's connection): never recorded. */
   fromKidsPhone?: boolean;
+  /** The caller's account on their server (for a public line's call back). */
+  from?: { id: string; handle: string };
+}
+
+/** A public line calls one of our people back: ring them (see `HouseholdHub.callbackRing`). */
+export interface CallbackRing {
+  /** The call they waited under (their place in line). */
+  id: string;
+  /** The line's server; '' = this one. */
+  lineHost: string;
+  line: { handle: string; name: string; description?: string };
+  userId: string;
+  accountId: string;
+  /** Their handle (as the line knows it). */
+  handle: string;
+}
+
+/** A line's call back nobody took (see `HouseholdHub.lineCallbackMissed`). */
+export interface CallbackMissed {
+  id: string;
+  /** The person's server; '' = this one. */
+  host: string;
+  accountId: string;
 }
 
 /** Someone elsewhere joins one of this household's phone rooms (see `remoteRoomJoin`). */
@@ -139,13 +168,27 @@ export class FedCalls implements CallLinks {
       const line = await store.lines.byHandle(body.to.handle);
       if (!line?.enabled) return unavailable;
       const address = `${from.handle}@${host || ownHost(this.env)}`;
-      const admitted = await admitLineCall(this.env, line, {
-        address,
-        host,
-        accountId: from.id,
-        name: from.name,
-        kidsPhone: !!body.viaPhone,
-      });
+      // Calling back in after the line's call back: their place in line (once).
+      let callbackSince: number | undefined;
+      if (body.to.callback) {
+        const row = await store.lines.callback(body.to.callback);
+        const theirs =
+          row?.groupId === line.groupId && row.host === host && row.accountId === from.id;
+        if (!row || !theirs || !(await store.lines.takeCallback(row.id))) return unavailable;
+        callbackSince = row.since;
+      }
+      const admitted = await admitLineCall(
+        this.env,
+        line,
+        {
+          address,
+          host,
+          accountId: from.id,
+          name: from.name,
+          kidsPhone: !!body.viaPhone,
+        },
+        { counted: callbackSince === undefined },
+      );
       if (!admitted) return unavailable;
       await this.register(host, body.callId, line.householdId);
       return this.live.ringRemote(line.householdId, {
@@ -154,7 +197,12 @@ export class FedCalls implements CallLinks {
         key,
         address,
         label: from.name.slice(0, 24),
-        target: { kind: "line", groupId: line.groupId },
+        target: {
+          kind: "line",
+          groupId: line.groupId,
+          ...(callbackSince !== undefined ? { callbackSince } : {}),
+        },
+        from: { id: from.id, handle: from.handle },
         ...(peerHousehold ? { peerHousehold } : {}),
       });
     }
@@ -204,6 +252,7 @@ export class FedCalls implements CallLinks {
       ...(body.recording ? (["recording-flag"] as const) : []),
       ...(body.to.kind === "guest" ? (["lounge-guests"] as const) : []),
       ...(body.to.kind === "line" ? (["public-lines"] as const) : []),
+      ...(body.to.kind === "line" && body.to.callback ? (["line-callback"] as const) : []),
     ];
     for (const feature of needs) {
       if (!(await peerSupports(this.env, host, feature))) {
@@ -276,6 +325,64 @@ export class FedCalls implements CallLinks {
         ...(note ? { note } : {}),
       };
     }
+  }
+
+  // --- call me back (feature `line-callback`) ----------------------------------------------
+
+  /** A line here calls someone back: their hub here, or their server. */
+  async callbackDue(host: string, body: LineCallbackBody): Promise<void> {
+    if (host === LOCAL_HOST) return this.receiveCallback(LOCAL_HOST, body);
+    if (!(await peerSupports(this.env, host, "line-callback"))) return;
+    try {
+      await fedFetch(this.env, host, "/lines/callback", { json: body });
+    } catch (e) {
+      this.env.log("warn", "line call back not delivered", { host, error: String(e) });
+    }
+  }
+
+  /**
+   * A line (at `host`, '' = here) calls one of our people back. Only if they asked that very
+   * line under this call id, and not too long ago (default deny for everything else).
+   */
+  async receiveCallback(host: string, body: LineCallbackBody): Promise<void> {
+    const grant = await this.env.store.lines.grant(body.id, host, body.to, this.env.now());
+    if (!grant || grant.lineHandle !== body.line.handle.toLowerCase()) return;
+    await this.live.callbackRing(grant.householdId, {
+      id: body.id,
+      lineHost: host,
+      line: body.line,
+      userId: grant.userId,
+      accountId: grant.accountId,
+      handle: body.to,
+    });
+  }
+
+  async callbackMissed(
+    host: string,
+    body: LineCallbackMissedBody,
+  ): Promise<LineCallbackMissedResult> {
+    if (host === LOCAL_HOST) return this.receiveCallbackMissed(LOCAL_HOST, body);
+    try {
+      const res = await fedFetch(this.env, host, "/lines/callback/missed", { json: body });
+      const parsed = LineCallbackMissedResult.safeParse(await res.json());
+      return parsed.success ? parsed.data : { retry: false };
+    } catch (e) {
+      this.env.log("warn", "missed call back not delivered", { host, error: String(e) });
+      return { retry: false };
+    }
+  }
+
+  async receiveCallbackMissed(
+    host: string,
+    body: LineCallbackMissedBody,
+  ): Promise<LineCallbackMissedResult> {
+    const line = await this.env.store.lines.byHandle(body.line);
+    if (!line) return { retry: false };
+    return this.live.lineCallbackMissed(line.householdId, {
+      id: body.id,
+      host,
+      accountId: body.from.id,
+    });
   }
 
   async register(host: string, callId: string, householdId: string): Promise<void> {

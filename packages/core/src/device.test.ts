@@ -357,7 +357,12 @@ describe("dialing an extension (team/org spaces)", () => {
 });
 
 describe("public lines (waiting in a queue)", () => {
-  const queued = (q: { position?: number; size?: number; voicemail?: boolean }): DeviceInput => ({
+  const queued = (q: {
+    position?: number;
+    size?: number;
+    voicemail?: boolean;
+    callback?: boolean;
+  }): DeviceInput => ({
     type: "server",
     msg: { t: "call.state", callId: "c1", state: "ringing", queue: q },
   });
@@ -377,6 +382,69 @@ describe("public lines (waiting in a queue)", () => {
     const again = run([callState("c1", "ringing")], waiting.state).state;
     expect(again).toEqual({ kind: "dialing", button: 3, callId: "c1" });
     expect(soundFor(again)).toBe("ringback");
+  });
+
+  it("key 2 asks for a call back: the place is kept, and the line rings back later", () => {
+    const waiting = run([hook("up"), button(3), queued({ position: 2, callback: true })]).state;
+    const pressed = run([button(1)], waiting);
+    expect(pressed.sent).toEqual([{ t: "call.callback", callId: "c1" }]);
+    const kept = run(
+      [
+        {
+          type: "server",
+          msg: {
+            t: "call.state",
+            callId: "c1",
+            state: "ended",
+            reason: "hangup",
+            callback: { until: 1 },
+          },
+        },
+      ],
+      waiting,
+    ).state;
+    expect(kept).toEqual({ kind: "offhook", lastEnd: "hangup", callback: true });
+    expect(soundFor(kept)).toBe("dialtone");
+    // Later, on the hook: the line calls back; lifting answers and follows into the new call.
+    const back = run(
+      [
+        hook("down"),
+        {
+          type: "server",
+          msg: {
+            t: "call.ringing",
+            callId: "c1",
+            from: { label: "Support" },
+            callback: { name: "Support" },
+          },
+        },
+      ],
+      kept,
+    ).state;
+    expect(back).toEqual({ kind: "incoming", callId: "c1", from: "Support", callback: true });
+    const answered = run([hook("up")], back);
+    expect(answered.sent).toContainEqual({ t: "call.answer", callId: "c1" });
+    const follow = run(
+      [
+        {
+          type: "server",
+          msg: {
+            t: "call.state",
+            callId: "c1",
+            state: "ended",
+            reason: "hangup",
+            transfer: { callId: "c2", ringing: true, offerer: true },
+          },
+        },
+      ],
+      answered.state,
+    ).state;
+    expect(follow).toEqual({ kind: "dialing", button: -1, callId: "c2" });
+  });
+
+  it("key 2 does nothing when the line doesn't offer a call back", () => {
+    const waiting = run([hook("up"), button(3), queued({ position: 1, voicemail: true })]).state;
+    expect(run([button(1)], waiting).sent).toEqual([]);
   });
 
   it("key 1 does nothing when the line doesn't offer voicemail, or nobody waits", () => {

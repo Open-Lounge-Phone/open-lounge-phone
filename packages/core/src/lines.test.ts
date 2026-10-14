@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  afterMissedCallback,
   effectiveLimit,
   LINE_DEFAULTS,
   type LineBlocks,
@@ -9,6 +10,7 @@ import {
   lineEntry,
   maxWaitOutcome,
   mayLeaveVoicemailInstead,
+  mayOfferCallback,
   noQueueOutcome,
   ordinal,
   queueAdmit,
@@ -124,6 +126,25 @@ describe("the queue", () => {
     expect(mayLeaveVoicemailInstead(on)).toBe(true);
     expect(mayLeaveVoicemailInstead({ ...on, offerVoicemail: false })).toBe(false);
     expect(mayLeaveVoicemailInstead({ ...on, voicemail: false })).toBe(false);
+  });
+});
+
+describe("call me back", () => {
+  it("is offered only on a line with a queue and the option on", () => {
+    expect(mayOfferCallback({ queue: true, callback: true })).toBe(true);
+    expect(mayOfferCallback({ queue: true, callback: false })).toBe(false);
+    expect(mayOfferCallback({ queue: false, callback: true })).toBe(false);
+    expect(LINE_DEFAULTS).toMatchObject({ callback: true, callbackMissed: "retry" });
+  });
+
+  it("a missed call back: one retry, then voicemail (or nothing without voicemail)", () => {
+    const retry = { callbackMissed: "retry" as const, voicemail: true };
+    expect(afterMissedCallback(retry, 1)).toBe("retry");
+    expect(afterMissedCallback(retry, 2)).toBe("voicemail");
+    expect(afterMissedCallback({ ...retry, voicemail: false }, 2)).toBe("drop");
+    const vm = { callbackMissed: "voicemail" as const, voicemail: true };
+    expect(afterMissedCallback(vm, 1)).toBe("voicemail");
+    expect(afterMissedCallback({ ...vm, voicemail: false }, 1)).toBe("drop");
   });
 });
 

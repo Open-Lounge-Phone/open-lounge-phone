@@ -8,6 +8,9 @@ import {
   CallResult,
   GreetingBody,
   KnockBody,
+  LineCallbackBody,
+  LineCallbackMissedBody,
+  LineCallbackMissedResult,
   LoungeClaimBody,
   LoungeClaimResult,
   LoungeDialBody,
@@ -239,6 +242,37 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
     body: LoungeLeaveBody,
     responses: [accepted("Always.")],
     rules: [],
+  },
+  {
+    method: "POST",
+    path: "/fed/v1/lines/callback",
+    signed: true,
+    summary:
+      "Feature `line-callback`: the sender's public line calls `to` back now (they asked while waiting in its queue).",
+    body: LineCallbackBody,
+    responses: [accepted("Always, whether or not anyone rings.")],
+    rules: [
+      "Rings `to` only if they asked that line (on the signing server) to call them back under `id` and that hasn't expired; anything else is ignored (default deny).",
+      "Rings their apps and their own phones for 30 s. Answered: the receiver calls the line again through `/fed/v1/calls` with the `line` target's `callback` = `id`. Declined or not answered: it sends `/fed/v1/lines/callback/missed`.",
+    ],
+  },
+  {
+    method: "POST",
+    path: "/fed/v1/lines/callback/missed",
+    signed: true,
+    summary: "Feature `line-callback`: `from` didn't take the line's call back `id`.",
+    body: LineCallbackMissedBody,
+    responses: [
+      {
+        status: 200,
+        schema: LineCallbackMissedResult,
+        note: "Whether the line tries again, or its voicemail offer.",
+      },
+    ],
+    rules: [
+      "Only for a call back that is ringing `from` (the same server and account that asked).",
+      "The line's own setting decides: one more try at the end of the line, or its voicemail offer (relayed by the caller's server like a transfer's). A line that doesn't hear back within 45 s treats the call back as missed.",
+    ],
   },
   {
     method: "POST",

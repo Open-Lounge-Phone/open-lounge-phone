@@ -611,6 +611,28 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "call.callback"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "callId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "room.leave"
           },
           "id": {
@@ -1421,6 +1443,21 @@
               }
             },
             "required": ["name"]
+          },
+          "callback": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "from"]
@@ -1580,8 +1617,22 @@
               },
               "voicemail": {
                 "type": "boolean"
+              },
+              "callback": {
+                "type": "boolean"
               }
             }
+          },
+          "callback": {
+            "type": "object",
+            "properties": {
+              "until": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["until"]
           },
           "line": {
             "type": "object",
@@ -2541,6 +2592,28 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "call.callback"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "callId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "room.join"
           },
           "id": {
@@ -3209,6 +3282,21 @@
               }
             },
             "required": ["name"]
+          },
+          "callback": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "address": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["t", "callId", "from"]
@@ -3368,8 +3456,22 @@
               },
               "voicemail": {
                 "type": "boolean"
+              },
+              "callback": {
+                "type": "boolean"
               }
             }
+          },
+          "callback": {
+            "type": "object",
+            "properties": {
+              "until": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["until"]
           },
           "line": {
             "type": "object",

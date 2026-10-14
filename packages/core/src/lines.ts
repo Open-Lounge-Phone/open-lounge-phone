@@ -46,7 +46,17 @@ export interface LineSettings {
   /** This line's own caps (calls per hour); null = the server's. Never above the server's. */
   callerPerHour: number | null;
   serverPerHour: number | null;
+  /** Waiting callers may hang up and keep their place: the line calls them back. */
+  callback: boolean;
+  /**
+   * A call back nobody answered: `retry` = one more try later (at the end of the line), then a
+   * voicemail offer; `voicemail` = a voicemail offer at once. Without voicemail it just ends.
+   */
+  callbackMissed: CallbackMissed;
 }
+
+export type CallbackMissed = "retry" | "voicemail";
+export const CALLBACK_MISSED: readonly CallbackMissed[] = ["retry", "voicemail"];
 
 export const LINE_DEFAULTS: LineSettings = {
   enabled: false,
@@ -61,6 +71,8 @@ export const LINE_DEFAULTS: LineSettings = {
   voicemail: true,
   callerPerHour: null,
   serverPerHour: null,
+  callback: true,
+  callbackMissed: "retry",
 };
 
 export const LINE_QUEUE_MAX = 50;
@@ -177,6 +189,30 @@ export function mayLeaveVoicemailInstead(
   line: Pick<LineSettings, "voicemail" | "offerVoicemail">,
 ): boolean {
   return line.voicemail && line.offerVoicemail;
+}
+
+/** How long a caller who asked to be called back keeps their place in line. */
+export const CALLBACK_KEEP_MS = 2 * 60 * 60 * 1000;
+/** How long the line rings someone it calls back. */
+export const CALLBACK_RING_MS = 30_000;
+/** How long the line waits for the caller's server to call in after it rang them. */
+export const CALLBACK_ANSWER_GRACE_MS = 15_000;
+
+/** Whether a waiting caller may ask to be called back (a line with a queue, and the option on). */
+export function mayOfferCallback(line: Pick<LineSettings, "queue" | "callback">): boolean {
+  return line.queue && line.callback;
+}
+
+/**
+ * A call back nobody answered (`attempts` = how many were missed, this one included): try once
+ * more at the end of the line, offer voicemail, or let it go.
+ */
+export function afterMissedCallback(
+  line: Pick<LineSettings, "callbackMissed" | "voicemail">,
+  attempts: number,
+): "retry" | "voicemail" | "drop" {
+  if (line.callbackMissed === "retry" && attempts < 2) return "retry";
+  return line.voicemail ? "voicemail" : "drop";
 }
 
 /** The note a caller sees when the line ends their wait without voicemail. */

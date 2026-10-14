@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -255,6 +255,15 @@ Transfer a call: blind (`to`) or attended (`toCall`).
 ### `call.voicemail`
 
 Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+
+### `call.callback`
+
+Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -505,6 +514,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`
 
@@ -522,7 +532,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
-| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean, callback?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `callback` | { until: integer } |  | With `ended` (reason `hangup`): you asked to be called back and keep your place in line. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`
@@ -789,6 +800,15 @@ Public lines: stop waiting in line (`call.state.queue` says whether it's offered
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 
+### `call.callback`
+
+Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `callId` | string (len ≤64) | yes |  |
+
 ### `room.join`
 
 Companion app: join a room. Answered with `room.state` (you're in) or `room.ended` (refused). Phones join with a speed-dial key a guardian set up.
@@ -993,6 +1013,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300) } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`
 
@@ -1010,7 +1031,8 @@ Call progress update.
 | `merged` | { roomId: string (len ≤64) } |  | With `ended` (reason `hangup`): the call became part of a room (3-way). Keep its audio until the room's is connected; `room.state` follows. |
 | `transfer` | { callId: string (len ≤64), ringing: boolean, offerer: boolean } |  | With `ended` (reason `hangup`): you were transferred; your call continues as `callId` (you're its caller when `ringing`). |
 | `recording` | { by: string (len ≤64), ticket?: string (len ≥16, len ≤128), maxMs?: integer } |  | With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it. |
-| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `queue` | { position?: integer (≥1), size?: integer (≥1), voicemail?: boolean, callback?: boolean } |  | With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again. |
+| `callback` | { until: integer } |  | With `ended` (reason `hangup`): you asked to be called back and keep your place in line. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | Calling a public line: its name (and description), with the first `ringing`. |
 
 ### `rtc.config`

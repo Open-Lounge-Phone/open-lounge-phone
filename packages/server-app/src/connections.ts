@@ -19,6 +19,8 @@ import {
   GreetingBody,
   HOST_RE,
   KnockBody,
+  LineCallbackBody,
+  LineCallbackMissedBody,
   LoungeClaimBody,
   LoungeDialBody,
   LoungeLeaveBody,
@@ -689,6 +691,22 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (!env.calls) return c.json({ state: "ended", reason: "unreachable" });
     const result = await env.calls.receive(r.host, r.body);
     return c.json(result.state === "ringing" ? { state: "ringing" } : result);
+  });
+
+  /** A public line there calls one of our people back (they asked it to). */
+  app.post("/fed/v1/lines/callback", async (c) => {
+    const r = await signed(c.req.raw, LineCallbackBody);
+    if (r instanceof Response) return r;
+    if (env.calls) await env.calls.receiveCallback(r.host, r.body);
+    return accepted();
+  });
+
+  /** Someone there didn't take one of our lines' call backs. */
+  app.post("/fed/v1/lines/callback/missed", async (c) => {
+    const r = await signed(c.req.raw, LineCallbackMissedBody);
+    if (r instanceof Response) return r;
+    if (!env.calls) return c.json({ retry: false });
+    return c.json(await env.calls.receiveCallbackMissed(r.host, r.body));
   });
 
   /** Someone there asks into one of our phone rooms. Decided here (see `remoteRoomJoin`). */

@@ -24,6 +24,7 @@ export const DEVICE_FEATURES = [
   "recording",
   "voicemail-play",
   "public-lines",
+  "line-callback",
 ] as const;
 export type DeviceFeature = (typeof DEVICE_FEATURES)[number];
 

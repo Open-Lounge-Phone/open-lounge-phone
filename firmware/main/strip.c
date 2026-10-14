@@ -76,14 +76,21 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
 
   switch (s->kind) {
     case PH_DIALING:
-      // Waiting in a public line's queue (key 1 leaves a voicemail instead, when offered).
+      // Waiting in a public line's queue: key 1 leaves a voicemail instead, key 2 asks for a
+      // call back (when the line offers them).
       if (s->queued) {
         if (s->queue_pos > 0) snprintf(buf, sizeof buf, "IN LINE %d", s->queue_pos);
         else snprintf(buf, sizeof buf, "WAITING IN LINE");
-        return set2(out, buf, s->queue_vm ? "1 VOICEMAIL" : (*name ? name : "PLEASE WAIT"));
+        const char *keys = s->queue_vm && s->queue_cb ? "1 VM 2 CALL BACK"
+                           : s->queue_vm              ? "1 VOICEMAIL"
+                           : s->queue_cb              ? "2 CALL ME BACK"
+                           : *name                    ? name
+                                                      : "PLEASE WAIT";
+        return set2(out, buf, keys);
       }
       return with_name(out, "CALLING", name, "");
     case PH_INCOMING: {
+      if (s->callback) return set2(out, s->from, "CALLS YOU BACK");
       int n = with_name(out, "", s->from, "CALLING");
       if (n == 1) clip(out[1], "LIFT TO ANSWER");
       return 2;
@@ -104,6 +111,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       return set2(out, s->recorded ? "REC IN ROOM" : "IN ROOM", s->muted ? "MUTED" : "");
     case PH_OFFHOOK: {
       if (s->held[0]) return *name ? set2(out, "ON HOLD", name) : set2(out, "CALL ON HOLD", "MENU 1 RESUMES");
+      if (s->callback) return set2(out, "PLACE KEPT", "WE'LL CALL BACK");
       const char *t = end_text(s->last_end);
       return t ? set2(out, t, "PRESS A KEY") : set1(out, "PRESS A KEY");
     }

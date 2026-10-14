@@ -1,7 +1,11 @@
 import {
   afterHoursAction,
+  afterMissedCallback,
   authorizeInbound,
   authorizeOutbound,
+  CALLBACK_ANSWER_GRACE_MS,
+  CALLBACK_KEEP_MS,
+  CALLBACK_RING_MS,
   CLOSED_NOTE,
   type Contact,
   controlCheck,
@@ -18,6 +22,7 @@ import {
   maxWaitOutcome,
   mayConnect,
   mayLeaveVoicemailInstead,
+  mayOfferCallback,
   NO_EXTENSION_NOTE,
   newRoom,
   nextQuietChange,
@@ -46,6 +51,7 @@ import {
   isLineContactId,
   isRemoteContactId,
   isRoomContactId,
+  type LineCallback,
   LOCAL_HOST,
   newId,
   type PublicLine,
@@ -57,6 +63,7 @@ import {
 import {
   type CallBody,
   type FedSignal,
+  type LineCallbackMissedResult,
   type Party,
   parseAddress,
   type RoomJoinResult,
@@ -93,6 +100,8 @@ import {
 } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import {
+  type CallbackMissed,
+  type CallbackRing,
   placeGuestDial,
   primaryHousehold,
   REFUSES_RECORDING,
@@ -163,6 +172,16 @@ class FedConn implements Conn {
     const calls = this.env.calls;
     if (!calls) return;
     const signal: FedSignal = { t: "call.voicemail", callId: this.leg ?? callId };
+    this.line.chain = this.line.chain
+      .then(() => calls.signal(this.to, signal))
+      .catch((e) => this.env.log("warn", "federated signal failed", { error: String(e) }));
+  }
+
+  /** Our caller would rather be called back than wait in the far line's queue. */
+  callback(callId: string): void {
+    const calls = this.env.calls;
+    if (!calls) return;
+    const signal: FedSignal = { t: "call.callback", callId: this.leg ?? callId };
     this.line.chain = this.line.chain
       .then(() => calls.signal(this.to, signal))
       .catch((e) => this.env.log("warn", "federated signal failed", { error: String(e) }));
@@ -302,7 +321,23 @@ interface Room {
   cancelWait?: () => void;
   /** A call to a public line elsewhere: queue updates and its voicemail offer pass through. */
   farLine?: boolean;
+  /** The caller asked a public line to call them back: their place is kept until then. */
+  callbackUntil?: number;
 }
+
+/** A public line calling one of our people back, ringing their apps and phones. */
+interface CallbackRinging {
+  req: CallbackRing;
+  targets: Peer[];
+  cancel?: () => void;
+  /** Answered or missed: waiting for the line's server, ignore more replies. */
+  done?: boolean;
+}
+
+/** One place in a public line's queue: a caller on the line, or one waiting for a call back. */
+type QueueSlot =
+  | { kind: "room"; callId: string; since: number; room: Room }
+  | { kind: "callback"; callId: string; since: number; row: LineCallback };
 
 /** Someone signed in at another Lounge phone and open to chat ("who's here"). */
 type Here = { name: string; where: string };
@@ -341,6 +376,10 @@ export class HouseholdHub {
    * here): if their server ends the old call instead of following, the new one ends too.
    */
   private readonly handoffs = new Map<string, string>();
+  /** Lines calling our people back right now, by the call id they waited under. */
+  private readonly callbackRings = new Map<string, CallbackRinging>();
+  /** Some line of ours may have callers waiting for a call back (checked in the store). */
+  private callbacksPending = true;
 
   readonly householdId: string;
   private readonly env: ServerEnv;
@@ -751,6 +790,8 @@ export class HouseholdHub {
           return this.transfer(peer, msg);
         case "call.voicemail":
           return this.lineVoicemail(peer, msg.callId);
+        case "call.callback":
+          return this.lineCallback(peer, msg.callId);
         case "room.leave":
         case "room.mute":
         case "room.remove":
@@ -821,6 +862,8 @@ export class HouseholdHub {
           return this.transfer(peer, msg);
         case "call.voicemail":
           return this.lineVoicemail(peer, msg.callId);
+        case "call.callback":
+          return this.lineCallback(peer, msg.callId);
         case "room.join":
           if (msg.roomId) return this.joinById(peer, msg.roomId);
           return this.joinByAddress(peer, msg.address ?? "");
@@ -913,6 +956,9 @@ export class HouseholdHub {
       await this.endDayEndSessions();
       await this.env.flushPresence?.(this.householdId);
       await this.conf.sweepIdle(this.env.now());
+      // Call backs: a ring that ran out, a place that expired, someone free to call back.
+      this.callbacksPending = true;
+      await this.pumpLines();
       await this.scheduleWake();
     });
   }
@@ -1435,6 +1481,10 @@ export class HouseholdHub {
     peer: Peer,
     msg: Extract<AppToServer, { t: "call.answer" | "call.hangup" | "rtc.sdp" | "rtc.ice" }>,
   ): Promise<void> {
+    if (msg.t === "call.answer" || msg.t === "call.hangup") {
+      const ringing = this.callbackRings.get(msg.callId);
+      if (ringing) return this.callbackReply(peer, msg.callId, ringing, msg.t === "call.answer");
+    }
     const room = this.rooms.get(msg.callId);
     const party = room && this.partyOf(room, peer);
     if (!room || !party) {
@@ -1545,6 +1595,9 @@ export class HouseholdHub {
             reason,
             ...(room.endNote ? { note: room.endNote } : {}),
             ...(voicemail && p === room.caller ? { voicemail } : {}),
+            ...(room.callbackUntil !== undefined && p === room.caller
+              ? { callback: { until: room.callbackUntil } }
+              : {}),
           });
         }
         for (const p of both) {
@@ -1556,9 +1609,11 @@ export class HouseholdHub {
             ? "answered"
             : voicemail
               ? "voicemail"
-              : reason === "hangup"
-                ? "hung up"
-                : "missed";
+              : room.callbackUntil !== undefined
+                ? "call back"
+                : reason === "hangup"
+                  ? "hung up"
+                  : "missed";
           await logLineCaller(this.env, {
             groupId: room.line.groupId,
             householdId: this.householdId,
@@ -1858,6 +1913,11 @@ export class HouseholdHub {
     // Rooms: the next idle warning or drop.
     const roomDue = this.conf.nextDeadline(now);
     if (roomDue !== undefined) at = at === undefined ? roomDue : Math.min(at, roomDue);
+    // Public lines' call backs: a ring running out, a place expiring.
+    const callbackDue = this.callbacksPending
+      ? await store.lines.nextCallbackDeadline(this.householdId)
+      : undefined;
+    if (callbackDue !== undefined) at = at === undefined ? callbackDue : Math.min(at, callbackDue);
     this.cancelWakeTimer?.();
     this.cancelWakeTimer = undefined;
     if (at === undefined) {
@@ -2624,6 +2684,8 @@ export class HouseholdHub {
       kidsPhone?: boolean;
       /** Calling a public line: its queue updates and voicemail offer come through. */
       line?: boolean;
+      /** This call's id (chosen ahead, e.g. a call back's transfer notice names it). */
+      callId?: string;
     },
   ): Promise<void> {
     const calls = this.env.calls;
@@ -2644,7 +2706,7 @@ export class HouseholdHub {
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
     const to = target.body.to;
     const host = target.host || ownHost(this.env);
-    const { line: _line, ...peerInfo } = target;
+    const { line: _line, callId: _id, ...peerInfo } = target;
     const remote = this.remotePeer({
       ...peerInfo,
       address:
@@ -2653,7 +2715,12 @@ export class HouseholdHub {
           : `device:${to.deviceId}@${host}`,
     });
     // The far end decides when it stops ringing (its own ring time); this is only a backstop.
-    const room = this.openRoom(caller, remote.key, undefined, MAX_RING_SECONDS * 1000 + 5_000);
+    const room = this.openRoom(
+      caller,
+      remote.key,
+      target.callId ?? newId("call"),
+      MAX_RING_SECONDS * 1000 + 5_000,
+    );
     room.payer = allowance.payer;
     room.calleePeer = remote;
     if (vm) room.vm = vm;
@@ -2734,6 +2801,10 @@ export class HouseholdHub {
           peerHousehold: req.peerHousehold,
           callId: req.callId,
           address: req.address ?? "",
+          ...(req.from ? { from: req.from } : {}),
+          ...(req.target.callbackSince !== undefined
+            ? { callbackSince: req.target.callbackSince }
+            : {}),
         });
       }
       if (req.target.kind === "guest") {
@@ -2816,6 +2887,10 @@ export class HouseholdHub {
         // Their caller would rather leave a message than wait in our line.
         return remote === room.caller ? this.lineVoicemail(remote, room.id) : undefined;
       }
+      if (msg.t === "call.callback") {
+        // Their caller would rather be called back than wait in our line.
+        return remote === room.caller ? this.lineCallback(remote, room.id) : undefined;
+      }
       if (room.branches?.includes(remote)) {
         // One of the places ringing for the callee elsewhere.
         if (msg.t !== "call.state") return;
@@ -2864,6 +2939,9 @@ export class HouseholdHub {
         }
         if (msg.state === "ended") {
           if (msg.note) room.endNote = msg.note;
+          if (msg.callback && party === "callee" && room.farLine) {
+            room.callbackUntil = msg.callback.until;
+          }
           if (msg.voicemail && party === "callee") await this.relayOffer(room, host, msg.voicemail);
           return this.apply(room, { type: "end", reason: msg.reason ?? "hangup" });
         }
@@ -3333,8 +3411,17 @@ export class HouseholdHub {
       except?: string;
       forwarded?: boolean;
       id?: string;
-      /** A call to the group's public line: it may wait in the line's queue. */
-      line?: { line: PublicLine; address: string; name: string };
+      /**
+       * A call to the group's public line: it may wait in the line's queue. `since`: calling
+       * back in after a call back (their place); `callback`: who to call back if they ask.
+       */
+      line?: {
+        line: PublicLine;
+        address: string;
+        name: string;
+        since?: number;
+        callback?: LineCallState["callback"];
+      };
     },
   ): Promise<Room | Refusal> {
     const { store } = this.env;
@@ -3365,15 +3452,17 @@ export class HouseholdHub {
       return { reason: "voicemail", note: CLOSED_NOTE, vm: box };
     }
     const line = opts.line;
-    // Callers already waiting in the line go first: a new one joins at the end.
-    const waiting = line ? this.waitingFor(group.id) : [];
-    const steps = waiting.length ? [] : await this.huntFor(group, caller, opts.except);
+    // Callers already waiting in the line (or for a call back) go first: a new one joins at the
+    // end; someone calling back in after a call back has their place.
+    const waiting = line ? await this.queueOf(group.id) : [];
+    const ahead =
+      line?.since !== undefined ? waiting.filter((e) => e.since < (line.since ?? 0)) : waiting;
+    const steps = ahead.length ? [] : await this.huntFor(group, caller, opts.except);
     const first = steps[0];
     const stepMs = group.ringSeconds * 1000;
     const now = this.env.now();
     // Places in line are strictly ordered, even for callers in the same millisecond.
-    let since = now;
-    for (const r of this.rooms.values()) if (r.line) since = Math.max(since, r.line.since + 1);
+    const since = line?.since ?? (await this.nextPlace());
     const lineState = (w: boolean): LineCallState | undefined =>
       line && {
         groupId: group.id,
@@ -3383,10 +3472,12 @@ export class HouseholdHub {
         since,
         waiting: w,
         waitUntil: now + line.line.queueWaitSeconds * 1000,
+        ...(line.callback ? { callback: line.callback } : {}),
       };
     if (!first) {
       if (!line) return { reason: "unavailable", vm: box };
-      const admit = queueAdmit(line.line, waiting.length);
+      // Someone calling back in keeps their place even in a full line.
+      const admit = line.since !== undefined ? "queue" : queueAdmit(line.line, waiting.length);
       if (admit === "full") return { reason: "busy", vm: box };
       if (admit === "off") return { reason: "unavailable", vm: box };
       // Nobody free: wait in line (see `pumpLines`), no ringing until someone is.
@@ -3479,7 +3570,7 @@ export class HouseholdHub {
   /** The steps a ring group would ring now (members who are free and reachable). */
   private async huntFor(
     group: Pick<RingGroup, "id" | "strategy" | "members" | "nextIndex">,
-    caller: Peer,
+    caller: Peer | undefined,
     except?: string,
   ): Promise<string[][]> {
     const availability = await this.env.store.availability(this.householdId);
@@ -3504,25 +3595,66 @@ export class HouseholdHub {
     return queueOrder(waiting).map((e) => e.room);
   }
 
+  /** A line's whole queue in order: callers on the line and those waiting for a call back. */
+  private async queueOf(groupId: string, rows?: LineCallback[]): Promise<QueueSlot[]> {
+    const slots: QueueSlot[] = this.waitingFor(groupId).map((room) => ({
+      kind: "room",
+      callId: room.id,
+      since: room.line?.since ?? 0,
+      room,
+    }));
+    const callbacks = rows ?? (this.callbacksPending ? await this.callbackRows() : []);
+    for (const row of callbacks) {
+      if (row.groupId === groupId)
+        slots.push({ kind: "callback", callId: row.id, since: row.since, row });
+    }
+    return queueOrder(slots);
+  }
+
+  /** This space's callers waiting for a call back (none known: no query next time). */
+  private async callbackRows(): Promise<LineCallback[]> {
+    const rows = await this.env.store.lines.callbacks(this.householdId);
+    this.callbacksPending = rows.length > 0;
+    return rows;
+  }
+
+  /** The next place in line: after everyone already in any line here. */
+  private async nextPlace(): Promise<number> {
+    let since = this.env.now();
+    for (const r of this.rooms.values()) if (r.line) since = Math.max(since, r.line.since + 1);
+    if (this.callbacksPending) {
+      for (const row of await this.callbackRows()) since = Math.max(since, row.since + 1);
+    }
+    return since;
+  }
+
   /** Someone may have come free, or a caller left a line: let the queues move (soon). */
   private kickLines(): void {
-    if (![...this.rooms.values()].some((r) => r.line?.waiting)) return;
+    if (!this.callbacksPending && ![...this.rooms.values()].some((r) => r.line?.waiting)) return;
     void this.run(() => this.pumpLines());
   }
 
   /**
    * Rings the line's members for the callers at the front of each queue, as long as there is
-   * someone free to ring, then tells everyone still waiting their place.
+   * someone free to ring, then tells everyone still waiting their place. A caller waiting for a
+   * call back is called back instead, and holds the front until they call in (or miss it).
    */
   private async pumpLines(): Promise<void> {
+    const rows = this.callbacksPending ? await this.expireCallbacks(await this.callbackRows()) : [];
     const groups = new Set<string>();
     for (const r of this.rooms.values()) if (r.line?.waiting) groups.add(r.line.groupId);
+    for (const row of rows) groups.add(row.groupId);
     for (const groupId of groups) {
-      for (const room of this.waitingFor(groupId)) {
-        if (!(await this.ringFromLine(room))) break;
+      for (const slot of await this.queueOf(groupId, rows)) {
+        if (slot.kind === "callback") {
+          if (slot.row.ringingUntil === null) await this.callBack(slot.row);
+          break;
+        }
+        if (!(await this.ringFromLine(slot.room))) break;
       }
-      await this.sendQueue(groupId);
+      await this.sendQueue(groupId, rows);
     }
+    if (rows.length) await this.scheduleWake();
   }
 
   /** The caller at the front of the line: ring the members who are free now, if any. */
@@ -3560,20 +3692,21 @@ export class HouseholdHub {
   }
 
   /** Tells each caller waiting in a line their place (only when it changed). */
-  private async sendQueue(groupId: string): Promise<void> {
+  private async sendQueue(groupId: string, rows?: LineCallback[]): Promise<void> {
     const waiting = this.waitingFor(groupId);
     if (!waiting.length) return;
     const line = await this.env.store.lines.get(groupId);
-    const positions = queuePositions(
-      waiting.map((r) => ({ callId: r.id, since: r.line?.since ?? 0 })),
-    );
+    // Callers waiting for a call back hold their places too.
+    const positions = queuePositions(await this.queueOf(groupId, rows));
     const instead = !!line && mayLeaveVoicemailInstead(line);
+    const callBack = !!line && mayOfferCallback(line);
     for (const r of waiting) {
       const state = r.line as LineCallState;
       const place = positions.get(r.id);
       const queue = {
         ...(line?.showPosition !== false && place ? place : {}),
         ...(instead && r.vm ? { voicemail: true } : {}),
+        ...(callBack && state.callback ? { callback: true } : {}),
       };
       const key = JSON.stringify(queue);
       if (state.sent === key) continue;
@@ -3708,12 +3841,346 @@ export class HouseholdHub {
     await this.apply(room, { type: "end", reason: "voicemail" });
   }
 
+  // --- call me back (feature `line-callback`) ------------------------------------------------
+
+  /**
+   * A waiting caller would rather be called back: for a line here, keep their place (in the
+   * store, so it survives the host sleeping) and end the call; for a line elsewhere, note that
+   * we may let it ring them, and ask its server.
+   */
+  private async lineCallback(peer: Peer, callId: string): Promise<void> {
+    const { store } = this.env;
+    const room = this.rooms.get(callId);
+    if (!room || room.caller !== peer || room.state.phase !== "ringing") return;
+    const now = this.env.now();
+    if (room.farLine) {
+      const far = room.calleePeer;
+      if (far?.kind !== "remote" || this.isKidsPhone(peer)) return;
+      if (!(await peerSupports(this.env, far.host, "line-callback"))) return;
+      const as = await this.callingAs(peer);
+      const user = as && (await store.getUser(as.id));
+      const addr = parseAddress(far.address ?? "");
+      if (!as || !user || !addr) return;
+      await store.lines.addGrant(
+        {
+          id: room.id,
+          accountId: user.accountId,
+          userId: user.id,
+          householdId: this.householdId,
+          lineHost: far.host ?? LOCAL_HOST,
+          lineHandle: addr.handle,
+          lineName: far.label,
+          expiresAt: now + CALLBACK_KEEP_MS + CALLBACK_RING_MS * 4,
+        },
+        now,
+      );
+      (far.conn as FedConn).callback(room.id);
+      return;
+    }
+    const state = room.line;
+    if (!state?.waiting || state.done || !state.callback) return;
+    const line = await store.lines.get(state.groupId);
+    if (!line?.enabled || !mayOfferCallback(line)) return;
+    const who = state.callback;
+    const expiresAt = now + CALLBACK_KEEP_MS;
+    await store.lines.addCallback(
+      {
+        id: room.id,
+        groupId: state.groupId,
+        householdId: this.householdId,
+        since: state.since,
+        host: who.host,
+        accountId: who.accountId,
+        handle: who.handle,
+        name: state.name,
+        address: state.address,
+        expiresAt,
+      },
+      now,
+    );
+    if (peer.kind !== "remote") {
+      // Someone here: their own grant, so the call back may ring them (same rules as elsewhere).
+      const as = await this.callingAs(peer);
+      if (as) {
+        await store.lines.addGrant(
+          {
+            id: room.id,
+            accountId: who.accountId,
+            userId: as.id,
+            householdId: this.householdId,
+            lineHost: LOCAL_HOST,
+            lineHandle: line.handle,
+            lineName: state.info.name,
+            expiresAt: expiresAt + CALLBACK_RING_MS * 4,
+          },
+          now,
+        );
+      }
+    }
+    this.callbacksPending = true;
+    state.waiting = false;
+    state.done = true;
+    room.callbackUntil = expiresAt;
+    room.vm = undefined;
+    this.roomsDirty = true;
+    await this.apply(room, { type: "end", reason: "hangup" });
+    await this.scheduleWake();
+  }
+
+  /** Call backs whose place expired go; a call back nobody answered in time counts as missed. */
+  private async expireCallbacks(rows: LineCallback[]): Promise<LineCallback[]> {
+    const { store } = this.env;
+    const now = this.env.now();
+    const out: LineCallback[] = [];
+    for (const row of rows) {
+      if (row.expiresAt <= now) {
+        if (await store.lines.takeCallback(row.id)) {
+          await logLineCaller(this.env, {
+            ...row,
+            householdId: this.householdId,
+            outcome: "call back expired",
+          });
+        }
+        continue;
+      }
+      if (row.ringingUntil !== null && row.ringingUntil <= now) {
+        const r = await this.missedCallback(row);
+        if (r.retry) out.push((await store.lines.callback(row.id)) ?? row);
+        continue;
+      }
+      out.push(row);
+    }
+    this.callbacksPending = out.length > 0;
+    return out;
+  }
+
+  /**
+   * It's the turn of someone waiting for a call back, and someone in the line's group is free:
+   * ring them (here, or through their server). They call in again to take their place.
+   */
+  private async callBack(row: LineCallback): Promise<void> {
+    const { store } = this.env;
+    const line = await store.lines.get(row.groupId);
+    const group = await store.workplace.group(row.groupId);
+    if (!line?.enabled || !group) {
+      await store.lines.takeCallback(row.id);
+      return;
+    }
+    const space = await store.getHousehold(this.householdId);
+    const spaceHours = await store.workplace.spaceHours(this.householdId);
+    if (!space) return;
+    const hours = effectiveHours(space.timeZone, group.hours, spaceHours.hours);
+    if (!isOpen(hours, new Date(this.env.now()))) return; // closed: they keep waiting
+    if (!(await this.huntFor(group, undefined)).length) return; // nobody free yet
+    const until = this.env.now() + CALLBACK_RING_MS + CALLBACK_ANSWER_GRACE_MS;
+    await store.lines.ringCallback(row.id, until);
+    row.ringingUntil = until;
+    const info = lineInfo(this.env, line, group);
+    const calls = this.env.calls;
+    // Over the network (or another hub's queue): never awaited inside this hub's queue.
+    if (calls) {
+      void calls
+        .callbackDue(row.host, {
+          id: row.id,
+          to: row.handle,
+          line: {
+            handle: line.handle,
+            name: info.name,
+            ...(info.description ? { description: info.description } : {}),
+          },
+        })
+        .catch((e) => this.env.log("warn", "call back failed", { error: String(e) }));
+    }
+  }
+
+  /**
+   * Someone didn't take a call back from one of our lines (declined, not answered, or no word
+   * from their server in time): one more try at the end of the line, or the line's voicemail.
+   */
+  lineCallbackMissed(req: CallbackMissed): Promise<LineCallbackMissedResult> {
+    return this.run(async () => {
+      const row = await this.env.store.lines.callback(req.id);
+      if (!row || row.host !== req.host || row.accountId !== req.accountId) return { retry: false };
+      if (row.ringingUntil === null) return { retry: false };
+      const result = await this.missedCallback(row);
+      this.kickLines();
+      return result;
+    });
+  }
+
+  private async missedCallback(row: LineCallback): Promise<LineCallbackMissedResult> {
+    const { store } = this.env;
+    const line = await store.lines.get(row.groupId);
+    const group = await store.workplace.group(row.groupId);
+    const outcome = line ? afterMissedCallback(line, row.attempts + 1) : "drop";
+    if (outcome === "retry") {
+      // Back in line, at the end.
+      await store.lines.ringCallback(row.id, null, await this.nextPlace());
+      this.callbacksPending = true;
+      return { retry: true };
+    }
+    if (!(await store.lines.takeCallback(row.id))) return { retry: false };
+    const voicemail =
+      outcome === "voicemail" && group
+        ? await this.offer(
+            {
+              target: { kind: "group", groupId: group.id, name: group.name },
+              from: { label: row.name.slice(0, 24), address: row.address },
+            },
+            "timeout",
+            this.env.now(),
+          )
+        : undefined;
+    await logLineCaller(this.env, {
+      groupId: row.groupId,
+      householdId: this.householdId,
+      address: row.address,
+      name: row.name,
+      outcome: "missed call back",
+    });
+    return { retry: false, ...(voicemail ? { voicemail } : {}) };
+  }
+
+  /**
+   * A public line (here or elsewhere) calls one of our people back: ring their apps and phones.
+   * Answering calls the line again in their place; declining or no answer tells the line.
+   */
+  callbackRing(req: CallbackRing): Promise<void> {
+    return this.run(async () => {
+      if (this.callbackRings.has(req.id)) return;
+      const targets = this.busy(userKey(req.userId)) ? [] : this.reachable(req.userId);
+      const ringing: CallbackRinging = { req, targets };
+      this.callbackRings.set(req.id, ringing);
+      if (!targets.length) return this.callbackMissedHere(ringing, "unreachable");
+      const address = `${req.line.handle}@${req.lineHost || ownHost(this.env)}`;
+      const info = {
+        name: req.line.name.slice(0, 64),
+        ...(req.line.description ? { description: req.line.description } : {}),
+        address,
+      };
+      for (const p of targets) {
+        p.conn.send({
+          t: "call.ringing",
+          callId: req.id,
+          from: { label: req.line.name.slice(0, 24), address },
+          callback: info,
+        });
+      }
+      ringing.cancel = this.env.setTimer(
+        () => void this.run(() => this.callbackMissedHere(ringing, "timeout")),
+        CALLBACK_RING_MS,
+      );
+    });
+  }
+
+  /** Answer or decline a line's call back (from one of the apps or phones it rings). */
+  private async callbackReply(
+    peer: Peer,
+    id: string,
+    ringing: CallbackRinging,
+    answer: boolean,
+  ): Promise<void> {
+    if (ringing.done || !ringing.targets.includes(peer)) return;
+    if (!answer) return this.callbackMissedHere(ringing, "declined");
+    ringing.done = true;
+    ringing.cancel?.();
+    this.callbackRings.delete(id);
+    for (const other of ringing.targets) {
+      if (other !== peer) {
+        other.conn.send({ t: "call.state", callId: id, state: "ended", reason: "hangup" });
+      }
+    }
+    await this.env.store.lines.dropGrant(id);
+    // Their call to the line goes on as a new call: they are its caller (like a transfer).
+    const callId = newId("call");
+    peer.conn.send({
+      t: "call.state",
+      callId: id,
+      state: "ended",
+      reason: "hangup",
+      transfer: { callId, ringing: true, offerer: true },
+    });
+    const req = ringing.req;
+    const address = `${req.line.handle}@${req.lineHost || ownHost(this.env)}`;
+    await this.lineDial(peer, address, false, { callId, id });
+  }
+
+  /** Nobody took the call back: tell the line; it may try again later or offer voicemail. */
+  private async callbackMissedHere(
+    ringing: CallbackRinging,
+    reason: "timeout" | "declined" | "unreachable",
+  ): Promise<void> {
+    if (ringing.done) return;
+    ringing.done = true;
+    ringing.cancel?.();
+    const { req } = ringing;
+    const calls = this.env.calls;
+    const account = await this.env.store.getAccount(req.accountId);
+    const finish = (result: LineCallbackMissedResult) =>
+      this.run(async () => {
+        this.callbackRings.delete(req.id);
+        if (!result.retry) await this.env.store.lines.dropGrant(req.id);
+        let voicemail: VoicemailOffer | undefined;
+        if (result.voicemail) {
+          // A line here: its own offer. Elsewhere: ours, which forwards to its server.
+          voicemail =
+            req.lineHost === LOCAL_HOST
+              ? result.voicemail
+              : await this.offer(
+                  {
+                    target: {
+                      kind: "relay",
+                      host: req.lineHost,
+                      ticket: result.voicemail.ticket,
+                      name: result.voicemail.name,
+                    },
+                    from: {
+                      userId: req.userId,
+                      payer: req.accountId,
+                      label: (account?.name ?? req.handle).slice(0, 24),
+                      address: `user:${req.userId}`,
+                    },
+                  },
+                  "timeout",
+                  this.env.now(),
+                );
+        }
+        for (const p of ringing.targets) {
+          p.conn.send({
+            t: "call.state",
+            callId: req.id,
+            state: "ended",
+            reason: reason === "declined" ? "declined" : "timeout",
+            ...(voicemail && p.kind === "user" ? { voicemail } : {}),
+          });
+        }
+      });
+    if (!calls || !account) return void finish({ retry: false });
+    // Over the network (or another hub's queue): never awaited inside this hub's queue.
+    void calls
+      .callbackMissed(req.lineHost, {
+        id: req.id,
+        from: { handle: account.handle, id: account.id, name: account.name.slice(0, 64) },
+        line: req.line.handle,
+      })
+      .then(finish, (e) => {
+        this.env.log("warn", "missed call back not delivered", { error: String(e) });
+        return finish({ retry: false });
+      });
+  }
+
   /**
    * Someone here calls a public line by its address (`call.line`, or a line on a phone's key):
    * a line of this space directly, any other through `/fed/v1/calls` (another household here is
    * reached the same way, without the network). Never from a kids' phone.
    */
-  private async lineDial(peer: Peer, address: string, houseLine = false): Promise<void> {
+  private async lineDial(
+    peer: Peer,
+    address: string,
+    houseLine = false,
+    /** Calling back in after the line's call back: the new call's id, and their place. */
+    callback?: { callId: string; id: string },
+  ): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_LINES);
     const as = houseLine ? await this.houseLineCaller(peer) : await this.callingAs(peer);
@@ -3725,28 +4192,54 @@ export class HouseholdHub {
     // A house-line key calls as the space: the phone's name, its owner's verified address.
     const party = houseLine ? { ...partyOf(account), name: as.label } : partyOf(account);
     if (addr.host !== ownHost(this.env)) {
-      return this.lineRemote(peer, as, party, addr.host, addr.handle, undefined);
+      return this.lineRemote(peer, as, party, addr.host, addr.handle, undefined, callback);
     }
     const line = await store.lines.byHandle(addr.handle);
     if (!line?.enabled) return this.refuse(peer, "unavailable");
     if (line.householdId !== this.householdId) {
-      return this.lineRemote(peer, as, party, LOCAL_HOST, addr.handle, line.householdId);
+      return this.lineRemote(peer, as, party, LOCAL_HOST, addr.handle, line.householdId, callback);
     }
     const callerAddress = `${account.handle}@${ownHost(this.env)}`;
-    const admitted = await admitLineCall(this.env, line, {
-      address: callerAddress,
-      host: LOCAL_HOST,
-      accountId: account.id,
-      name: as.label,
-      kidsPhone: false,
-    });
+    // Calling back in after the line's call back: their place in line (once).
+    let since: number | undefined;
+    if (callback) {
+      const row = await store.lines.callback(callback.id);
+      const theirs =
+        row?.groupId === line.groupId && row.host === LOCAL_HOST && row.accountId === account.id;
+      if (!row || !theirs || !(await store.lines.takeCallback(row.id))) {
+        return this.refuse(peer, "unavailable");
+      }
+      since = row.since;
+    }
+    const admitted = await admitLineCall(
+      this.env,
+      line,
+      {
+        address: callerAddress,
+        host: LOCAL_HOST,
+        accountId: account.id,
+        name: as.label,
+        kidsPhone: false,
+      },
+      { counted: since === undefined },
+    );
     if (!admitted) return this.refuse(peer, "unavailable");
     if (!this.canDial(peer)) return this.refuse(peer, "busy");
     const allowance = await this.allowance(peer, as);
     if (allowance.note) return this.refuse(peer, "denied", allowance.note);
     const opened = await this.openToGroup(peer, line.groupId, as.label, {
       except: as.id,
-      line: { line, address: callerAddress, name: as.label },
+      ...(callback ? { id: callback.callId } : {}),
+      line: {
+        line,
+        address: callerAddress,
+        name: as.label,
+        ...(since !== undefined ? { since } : {}),
+        // An idle Lounge phone has nobody to call back.
+        ...(houseLine
+          ? {}
+          : { callback: { host: LOCAL_HOST, accountId: account.id, handle: account.handle } }),
+      },
     });
     const from = await this.vmCaller(peer, as.label, as);
     const vmOk = noQueueOutcome(line) === "voicemail";
@@ -3776,6 +4269,7 @@ export class HouseholdHub {
     host: string,
     handle: string,
     peerHousehold: string | undefined,
+    callback?: { callId: string; id: string },
   ): Promise<void> {
     return this.dialRemote(peer, {
       as,
@@ -3784,8 +4278,12 @@ export class HouseholdHub {
       key: `fed:${host}:line:${handle}:${peer.key}`,
       label: handle.slice(0, 24),
       peerHousehold,
-      body: { from, to: { kind: "line", handle } },
+      body: {
+        from,
+        to: { kind: "line", handle, ...(callback ? { callback: callback.id } : {}) },
+      },
       line: true,
+      ...(callback ? { callId: callback.callId } : {}),
     });
   }
 
@@ -3803,6 +4301,10 @@ export class HouseholdHub {
       peerHousehold: string | undefined;
       callId: string;
       address: string;
+      /** Their account on their server (offered "call me back" if their server can do it). */
+      from?: { id: string; handle: string };
+      /** Calling back in after the line's call back: their place in line. */
+      callbackSince?: number;
     },
   ): Promise<RingResult> {
     const line = await this.env.store.lines.get(groupId);
@@ -3817,9 +4319,19 @@ export class HouseholdHub {
       address: req.address,
       line: true,
     });
+    const canCallBack =
+      req.from !== undefined && (await peerSupports(this.env, req.host, "line-callback"));
     const opened = await this.openToGroup(remote, groupId, req.label, {
       id: req.callId,
-      line: { line, address: req.address, name: req.label },
+      line: {
+        line,
+        address: req.address,
+        name: req.label,
+        ...(req.callbackSince !== undefined ? { since: req.callbackSince } : {}),
+        ...(canCallBack && req.from
+          ? { callback: { host: req.host, accountId: req.from.id, handle: req.from.handle } }
+          : {}),
+      },
     });
     const from: VmCaller = { label: req.label, address: req.address };
     const vmOk = noQueueOutcome(line) === "voicemail";

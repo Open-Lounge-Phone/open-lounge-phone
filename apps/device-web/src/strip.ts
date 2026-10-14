@@ -75,13 +75,24 @@ export function statusLines(input: StatusInput): StatusLines {
 
   switch (s.kind) {
     case "dialing":
-      // Waiting in a public line's queue (key 1 leaves a voicemail instead, when offered).
+      // Waiting in a public line's queue: key 1 leaves a voicemail instead, key 2 asks for a
+      // call back (when the line offers them).
       if (s.queue) {
         const place = s.queue.position ? `IN LINE ${s.queue.position}` : "WAITING IN LINE";
-        return [clip(place), clip(s.queue.voicemail ? "1 VOICEMAIL" : name || "PLEASE WAIT")];
+        const { voicemail, callback } = s.queue;
+        const keys =
+          voicemail && callback
+            ? "1 VM 2 CALL BACK"
+            : voicemail
+              ? "1 VOICEMAIL"
+              : callback
+                ? "2 CALL ME BACK"
+                : name || "PLEASE WAIT";
+        return [clip(place), clip(keys)];
       }
       return withName("CALLING", name);
     case "incoming": {
+      if (s.callback) return [clip(s.from.trim()), "CALLS YOU BACK"];
       const who = withName("", s.from.trim(), "CALLING");
       return who.length === 1 ? [who[0], "LIFT TO ANSWER"] : who;
     }
@@ -110,6 +121,8 @@ export function statusLines(input: StatusInput): StatusLines {
         const text = s.lastEnd && s.lastEnd !== "hangup" ? END_TEXT[s.lastEnd] : undefined;
         return [text ?? "CALLER ON HOLD", "PRESS A KEY"];
       }
+      // Asked a public line to call back: the place in line is kept.
+      if (s.callback) return ["PLACE KEPT", "WE'LL CALL BACK"];
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
     }

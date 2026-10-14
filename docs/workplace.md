@@ -124,6 +124,22 @@ next caller to voicemail at once (`busy` with the offer). Outside business hours
 after-hours action applies and nobody queues. The queue survives the server sleeping: each
 waiting call keeps its place and its longest wait.
 
+**Call me back.** Instead of waiting on, a caller may hang up and keep their place
+(`call.callback {callId}`, offered when `queue.callback` is set; the companion's "Call me back",
+key 2 on a phone). Their call ends with `call.state ended` carrying `callback {until}`: the place
+is kept for up to two hours. When it's their turn and someone in the group is free, the line
+calls them back: their apps and their own phones ring (`call.ringing` with `callback`, the line's
+name and address) for 30 seconds, while the line holds the front of the queue for them.
+Answering calls the line again in their place: the ringing call ends with `transfer` (they are
+the caller of the new call, which rings the members). If they decline or don't answer, the line
+does what it says (`callbackMissed`): `retry` tries once more when their turn comes again (they
+go to the end of the line), then offers voicemail; `voicemail` offers it at once. The offer comes
+with the ended ring (apps show "Leave a message"; phones just stop ringing). Without voicemail a
+missed call back simply ends. Kids' phones never call lines, and an idle Lounge phone has nobody
+to call back, so neither is offered it. Recent callers show `call back`, `missed call back` and
+`call back expired`. The line only rings someone who asked: their server keeps the request
+(the line, the waiting call) and ignores any other call back.
+
 ### Settings
 
 `GET /api/groups/:id/line` and `PUT /api/groups/:id/line` (owner and admins; the companion: Admin
@@ -140,6 +156,8 @@ waiting call keeps its place and its longest wait.
 | `atMaxWait` | voicemail | `voicemail`; `group` (ring another ring group of the space, once); `user` (ring a member); `end` (with an optional `message`) |
 | `showPosition` | on | off: callers see "Waiting in line" without a number |
 | `offerVoicemail` | on | "Leave a voicemail instead" while waiting |
+| `callback` | on | "Call me back" while waiting (needs the queue) |
+| `callbackMissed` | `retry` | a missed call back: `retry` (once more later, then voicemail) or `voicemail` (at once) |
 | `voicemail` | on | off: no voicemail at all (no offer when the call isn't answered, the longest wait ends the call) |
 | greeting | the spoken default | `PUT /api/groups/:id/line/greeting?kind=custom&durationMs=` (raw audio, 30 s), `DELETE` for the default |
 | `callerPerHour`, `serverPerHour` | the server's: 10 and 300 | calls per hour from one address, and from one other server's people; a line can only be stricter |
@@ -161,7 +179,13 @@ handle}` (federation feature `public-lines`; a server that doesn't list it is ne
 caller hears "That server doesn't take calls to public lines yet"). Queue updates travel as
 `call.state` on the server-pair stream, the caller's server sends `call.voicemail` to stop
 waiting, and the line's server offers its own box with `ended`; the caller's own server relays the
-greeting and the message, as for a transfer. See [federation-spec.md](federation-spec.md).
+greeting and the message, as for a transfer. A call back (federation feature `line-callback`; a
+caller's server that doesn't list it isn't offered one): the caller's server sends `call.callback`
+on the stream and keeps the request; at their turn the line's server sends `POST
+/fed/v1/lines/callback`, their server rings them, and answering places the call again with the
+`line` target's `callback` (no new rate limit is counted); a miss goes back as `POST
+/fed/v1/lines/callback/missed`, whose answer is a retry or the line's voicemail offer, relayed by
+the caller's server. See [federation-spec.md](federation-spec.md).
 
 ## Call log and audit trail (admins)
 

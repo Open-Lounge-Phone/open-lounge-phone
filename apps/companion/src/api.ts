@@ -355,6 +355,10 @@ export interface LineSettings {
   voicemail: boolean;
   callerPerHour: number | null;
   serverPerHour: number | null;
+  /** Waiting callers may hang up and keep their place: the line calls them back. */
+  callback: boolean;
+  /** A missed call back: one more try later, or the voicemail offer at once. */
+  callbackMissed: "retry" | "voicemail";
   greeting: "default" | "name" | "custom";
   /** The server's caps (a line can only be stricter). */
   limits: { callerPerHour: number; serverPerHour: number };

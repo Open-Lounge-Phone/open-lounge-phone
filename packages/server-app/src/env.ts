@@ -4,6 +4,9 @@ import type {
   CallBody,
   CallResult,
   FedSignal,
+  LineCallbackBody,
+  LineCallbackMissedBody,
+  LineCallbackMissedResult,
   RoomJoinBody,
   RoomJoinResult,
 } from "@openloungephone/federation";
@@ -50,6 +53,17 @@ export interface CallLinks {
   ): Promise<RoomJoinResult>;
   /** Asks a phone room's server (or household, host '') to let one of our people in. */
   roomJoin(host: string, body: RoomJoinBody, callerHousehold: string): Promise<RoomJoinResult>;
+  /** A public line here calls someone back (at `host`, '' = this server): ring them now. */
+  callbackDue(host: string, body: LineCallbackBody): Promise<void>;
+  /** Someone at `host` asks to be rung for a line's call back (`/fed/v1/lines/callback`). */
+  receiveCallback(host: string, body: LineCallbackBody): Promise<void>;
+  /** Our person didn't take a line's call back: tell the line's server (`host`, '' = here). */
+  callbackMissed(host: string, body: LineCallbackMissedBody): Promise<LineCallbackMissedResult>;
+  /** Someone at `host` didn't take our line's call back. */
+  receiveCallbackMissed(
+    host: string,
+    body: LineCallbackMissedBody,
+  ): Promise<LineCallbackMissedResult>;
 }
 
 /** This server's own federation key(s), as stored. */
@@ -300,6 +314,11 @@ export interface LineCallState {
   done?: boolean;
   /** The queue update last sent to the caller (only changes are sent). */
   sent?: string;
+  /**
+   * Who to call back if they ask (feature `line-callback`): a person here or on a server that
+   * can take the call back. Absent = "call me back" isn't offered (e.g. an idle Lounge phone).
+   */
+  callback?: { host: string; accountId: string; handle: string };
 }
 
 /** A call ringing a ring group, step by step (see `huntSteps` in `packages/core`). */

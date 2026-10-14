@@ -18,6 +18,16 @@ On `main`, not tagged yet.
   line (here or on another server) as the space: the line sees the phone's name and the space
   owner's verified address. A member signed in at a Lounge phone gets the lines on their own
   phone's keys. Companion: Lounge → house-line keys → "A public line…".
+- **Call me back** (public lines): a caller waiting in a line's queue can hang up and keep their
+  place; when it's their turn the line rings their apps and phones, and answering calls the line
+  again in their place. A missed call back gets one more try later or the line's voicemail offer
+  (a per-line setting); the place is kept for up to two hours. On by default per line; works
+  across servers (federation feature `line-callback`: `call.callback` on the stream,
+  `/fed/v1/lines/callback` and `/fed/v1/lines/callback/missed`, the `line` target's `callback`).
+  Never for kids' phones or idle Lounge phones. Additive protocol: `call.callback`,
+  `call.state.queue.callback`, `call.state.callback`, `call.ringing.callback`, device feature
+  `line-callback`. Companion: "Call me back" in the call screen, the line's settings; browser
+  phone: key 2 while waiting. Migration 0023.
 - **Fix:** two people from the same household (or a phone and an app there) can wait in a public
   line on another server or in another household at the same time; the second used to get "busy".
 - Companion: a public line's recent callers show who is already blocked, and "Block server" isn't

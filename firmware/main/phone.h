@@ -31,11 +31,16 @@ typedef struct {
   char held[65];       // offhook / dialing / incall: a call this phone put on hold ("" = none)
   bool transfer_pending;  // incall: the next key transfers the call to that key's person
   // dialing: waiting in a public line's queue (call.state.queue): the place in line (0 = not
-  // shown), how many wait, and whether key 1 leaves a voicemail instead.
+  // shown), how many wait, whether key 1 leaves a voicemail instead, and whether key 2 asks
+  // the line to call back.
   bool queued;
   int queue_pos;
   int queue_size;
   bool queue_vm;
+  bool queue_cb;
+  // offhook: you just asked a line to call you back (your place is kept); incoming: a line
+  // calling you back, as you asked (lift to answer: the call to the line goes on).
+  bool callback;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */

@@ -340,7 +340,7 @@ Call and room signaling between two servers travels over one WebSocket per serve
 | `nonce` | string (`^[A-Za-z0-9_-]{16,64}$`) | yes | The dialer's random nonce; `hello.ok` echoes it. |
 | `sig` | string (len ≤128) | yes | base64url Ed25519 signature over `streamStatement(from, to, created, nonce)`. |
 
-**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal`, `call.voicemail` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
+**Signal frames** — `{"t": "signal", "msg": …}`, where `msg` is one of `call.state`, `rtc.sdp`, `rtc.ice`, `room.signal`, `call.voicemail`, `call.callback` (the shapes in [protocol.md](protocol.md), with `callId` naming the call or room leg on the receiving side).
 
 **Room signals** — `msg` of a `room.signal` is one of `room.state`, `room.media`, `room.idle`, `room.ended`, `room.leave`, `room.mute`, `room.remove`, `room.lock`, `room.talk`, `room.here`, `rtc.sdp`, `rtc.ice`.
 
@@ -387,6 +387,8 @@ Federation version 1, base path `/fed/v1`. JSON bodies are at most 16384 bytes; 
 | `POST /fed/v1/lounge/progress` | yes | The receiver's account's takeover of the sender's Lounge phone moved on. |
 | `POST /fed/v1/lounge/dial` | yes | A guest (the receiver's account `for`) pressed a key on the sender's Lounge phone; the receiver places the call as them. |
 | `POST /fed/v1/lounge/leave` | yes | `from` leaves the receiver's Lounge phone (from their own app). |
+| `POST /fed/v1/lines/callback` | yes | Feature `line-callback`: the sender's public line calls `to` back now (they asked while waiting in its queue). |
+| `POST /fed/v1/lines/callback/missed` | yes | Feature `line-callback`: `from` didn't take the line's call back `id`. |
 | `POST /fed/v1/rooms/join` | yes | `from` asks into the phone room `room@<receiver>`; `leg` names their side. |
 
 ### `GET /.well-known/openloungephone`
@@ -736,6 +738,56 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 |---|---|---|
 | 202 | { ok: `true` } | Always. |
 
+### `POST /fed/v1/lines/callback`
+
+Feature `line-callback`: the sender's public line calls `to` back now (they asked while waiting in its queue).
+
+Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) | yes | The call `to` waited under (their place in line). |
+| `to` | string (`^[a-z0-9._-]{2,30}$`) | yes | The person to call back, on the receiving server. |
+| `line` | { handle: string (`^[a-z0-9._-]{2,30}$`), name: string (len ≥1, len ≤64), description?: string (len ≤140) } | yes |  |
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 202 | { ok: `true` } | Always, whether or not anyone rings. |
+
+**Receiver rules**
+
+- Rings `to` only if they asked that line (on the signing server) to call them back under `id` and that hasn't expired; anything else is ignored (default deny).
+- Rings their apps and their own phones for 30 s. Answered: the receiver calls the line again through `/fed/v1/calls` with the `line` target's `callback` = `id`. Declined or not answered: it sends `/fed/v1/lines/callback/missed`.
+
+### `POST /fed/v1/lines/callback/missed`
+
+Feature `line-callback`: `from` didn't take the line's call back `id`.
+
+Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) | yes |  |
+| `from` | `Party` | yes | One of the sending server's accounts. |
+| `line` | string (`^[a-z0-9._-]{2,30}$`) | yes | The line's handle on the receiving server. |
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | { retry: boolean, voicemail?: { ticket: string (len ≥16, len ≤128), name: string (len ≥1, len ≤24), maxMs: integer, prompts: (`"name"` \| `"greeting"` \| `"vm.person"` \| `"vm.cant_take"` \| `"vm.leave_message"` \| `"vm.tone"` \| `"vm.sent"` \| `"vm.not_sent"` \| `"greet.say_name"` \| `"greet.say_greeting"` \| `"greet.saved"` \| `"greet.not_saved"` \| `"greet.default"` \| `"greet.not_allowed"`)[] (0–8) } } | Whether the line tries again, or its voicemail offer. |
+
+**Receiver rules**
+
+- Only for a call back that is ringing `from` (the same server and account that asked).
+- The line's own setting decides: one more try at the end of the line, or its voicemail offer (relayed by the caller's server like a transfer's). A line that doesn't hear back within 45 s treats the call back as missed.
+
 ### `POST /fed/v1/rooms/join`
 
 `from` asks into the phone room `room@<receiver>`; `leg` names their side.
@@ -784,7 +836,7 @@ One of:
 - { kind: `"person"`, handle: string (`^[a-z0-9._-]{2,30}$`) }
 - { kind: `"phone"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"guest"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
-- { kind: `"line"`, handle: string (`^[a-z0-9._-]{2,30}$`) }
+- { kind: `"line"`, handle: string (`^[a-z0-9._-]{2,30}$`), callback?: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 
 #### `VoicemailOffer`
 
@@ -1023,6 +1075,7 @@ This implementation speaks federation version 1 (`/fed/v1`).
 | `presence-batch` | yes | `POST /fed/v1/presence` with `to` listing all of the sender's connections on the receiving server in one request. |
 | `transfer` | yes | Transfers across servers: `call.state ended` + `transfer` hands a call over to a new call id with the same server (team and organization spaces). |
 | `public-lines` | no | Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`. |
+| `line-callback` | no | Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`. |
 <!-- END GENERATED: features -->
 
 New features are added to this registry (and to `FEATURES` in `packages/federation`) in the

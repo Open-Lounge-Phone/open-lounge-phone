@@ -656,7 +656,9 @@ export async function rotateMidCall(jesse: Person, bob: Person) {
  * "Orders" ring group as `shop-orders@<A>` after confirming the warning. Bob on server B calls
  * it without any connection; nobody in the group is free, so he waits in line (his place shows),
  * then leaves a voicemail instead. His own server relays the line's offer; the message lands in
- * the group's shared box on A, and the line's recent callers show his verified address.
+ * the group's shared box on A, and the line's recent callers show his verified address. Then
+ * he waits again and asks to be called back: when Dora comes online the line rings him through
+ * his server, and answering calls the line again in his place.
  */
 export async function publicLineAcross(server: ServerTarget, bob: Person) {
   const doraHome = await signUp(server, "dora", "Dora");
@@ -693,7 +695,8 @@ export async function publicLineAcross(server: ServerTarget, bob: Person) {
     if (m.queue) queued = m;
     if (queued) expect(named).toBe(true);
   }
-  expect(queued.queue).toEqual({ position: 1, size: 1, voicemail: true });
+  // `callback`: offered by servers with `line-callback` (not by the previous release).
+  expect(queued.queue).toMatchObject({ position: 1, size: 1, voicemail: true });
   bApp.send({ t: "call.voicemail", callId: queued.callId as string });
   const ended = await endedState(bApp);
   expect(ended).toMatchObject({ reason: "voicemail", voicemail: { name: "Orders" } });
@@ -704,5 +707,31 @@ export async function publicLineAcross(server: ServerTarget, bob: Person) {
   expect(inbox.json).toMatchObject([{ box: "Orders", fromLabel: "Bob" }]);
   const callers = await api(dora, `${path}/callers`);
   expect(callers.json[0]).toMatchObject({ address: bob.address, outcome: "voicemail" });
+
+  // Call me back (both servers with `line-callback`): Bob hangs up but keeps his place; when
+  // Dora opens her app the line calls him back through his server, and answering calls in.
+  bApp.send({ t: "call.line", address });
+  let again: Record<string, unknown> | undefined;
+  while (!again) {
+    const m = await bApp.next("call.state");
+    if (m.queue) again = m;
+  }
+  if ((again.queue as { callback?: boolean }).callback) {
+    bApp.send({ t: "call.callback", callId: again.callId as string });
+    const kept = await endedState(bApp);
+    expect(kept).toMatchObject({ reason: "hangup", callback: { until: expect.any(Number) } });
+    const doraApp = await appSocket(dora);
+    const back = await bApp.next("call.ringing");
+    expect(back).toMatchObject({ callId: again.callId, callback: { name: "Shop orders" } });
+    bApp.send({ t: "call.answer", callId: back.callId as string });
+    const handover = await endedState(bApp);
+    expect(handover.transfer).toMatchObject({ ringing: true, offerer: true });
+    const ring = await doraApp.next("call.ringing");
+    expect(ring.from).toMatchObject({ address: bob.address });
+    doraApp.send({ t: "call.hangup", callId: ring.callId as string });
+    doraApp.ws.close();
+  } else {
+    bApp.send({ t: "call.hangup", callId: again.callId as string });
+  }
   bApp.ws.close();
 }

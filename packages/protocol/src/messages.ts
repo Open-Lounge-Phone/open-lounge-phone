@@ -125,6 +125,12 @@ export const CallVoicemail = z
     "Public lines: stop waiting in line (`call.state.queue` says whether it's offered) and leave a voicemail instead. The call ends with `call.state ended` carrying a `voicemail` offer; ignored when the line doesn't offer it.",
   );
 
+export const CallCallback = z
+  .object({ t: z.literal("call.callback"), ...Ref, callId: Id })
+  .describe(
+    "Public lines (feature `line-callback`): stop waiting but keep your place; the line calls you back when it's your turn (`call.ringing` with `callback`). Offered when `call.state.queue.callback` is set; the call ends with `call.state ended` carrying `callback`. Ignored otherwise.",
+  );
+
 export const LineQueue = z
   .object({
     position: z
@@ -138,6 +144,10 @@ export const LineQueue = z
       .boolean()
       .optional()
       .describe("`call.voicemail` leaves a message instead of waiting on."),
+    callback: z
+      .boolean()
+      .optional()
+      .describe("`call.callback` hangs up but keeps your place: the line calls you back."),
   })
   .describe(
     "With `ringing`: nobody on the public line is free, and you wait in line. Updated as the line moves; a `ringing` without `queue` means the line is ringing for you again.",
@@ -602,6 +612,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   CallMerge,
   CallTransfer,
   CallVoicemail,
+  CallCallback,
   RoomLeave,
   RoomMute,
   RoomLock,
@@ -757,6 +768,9 @@ export const CallRinging = z
         ),
     }),
     line: LineInfo.optional().describe("The call is for a public line you answer for."),
+    callback: LineInfo.optional().describe(
+      "A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go.",
+    ),
   })
   .describe("Incoming call; device rings until answered, hung up, or ended.");
 
@@ -805,6 +819,17 @@ export const CallStateMsg = z
       "With `active`: the call is recorded (sent once, when it starts; it stays on until the call ends). Firmware drives the recording light (the status LED on the minimal board) from it.",
     ),
     queue: LineQueue.optional(),
+    callback: z
+      .object({
+        until: z
+          .number()
+          .int()
+          .describe("Epoch ms: your place is kept until then (unless the line calls sooner)."),
+      })
+      .optional()
+      .describe(
+        "With `ended` (reason `hangup`): you asked to be called back and keep your place in line.",
+      ),
     line: LineInfo.optional().describe(
       "Calling a public line: its name (and description), with the first `ringing`.",
     ),
@@ -1053,6 +1078,7 @@ export const AppToServer = z.discriminatedUnion("t", [
   CallMerge,
   CallTransfer,
   CallVoicemail,
+  CallCallback,
   RoomJoin,
   RoomLeave,
   RoomMute,

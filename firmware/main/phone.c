@@ -106,6 +106,11 @@ void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
     emit_call(emit, "call.voicemail", s->call_id);
     return;
   }
+  // …and key 2 asks the line to call back instead (the place in line is kept).
+  if (s->kind == PH_DIALING && s->queued && s->queue_cb && s->call_id[0] && index == 1) {
+    emit_call(emit, "call.callback", s->call_id);
+    return;
+  }
   if (s->kind == PH_INCALL && s->transfer_pending) {
     s->transfer_pending = false;
     cJSON *m = msg("call.transfer");
@@ -207,6 +212,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       s->kind = PH_INCOMING;
       CPY(s->call_id, id);
       CPY(s->from, from);
+      s->callback = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "callback"));
     } else if (!(s->call_id[0] && !strcmp(s->call_id, id))) {
       // Busy: decline so the caller hears it at once instead of waiting for a timeout.
       emit_call(emit, "call.hangup", id);
@@ -240,6 +246,10 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         CPY(s->vm_ticket, str(vm, "ticket"));
         const cJSON *max = cJSON_GetObjectItemCaseSensitive(vm, "maxMs");
         s->vm_max_ms = cJSON_IsNumber(max) ? max->valueint : 120000;
+      } else if (ended && cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "callback")) &&
+                 !held[0]) {
+        to_offhook(s, "hangup");  // the line calls back later: the place in line is kept
+        s->callback = true;
       } else if (ended) {
         to_offhook(s, reason ? reason : "hangup");
         CPY(s->held, held);
@@ -260,6 +270,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         s->queue_pos = cJSON_IsNumber(pos) ? pos->valueint : 0;
         s->queue_size = cJSON_IsNumber(size) ? size->valueint : 0;
         s->queue_vm = s->queued && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(q, "voicemail"));
+        s->queue_cb = s->queued && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(q, "callback"));
       }
       break;
     }

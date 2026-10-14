@@ -947,3 +947,91 @@ describe("0022_public_lines", () => {
     old.db.close();
   });
 });
+
+describe("0023_line_callbacks", () => {
+  it("keeps lines (call me back on, one retry); call backs and grants come and go", async () => {
+    const old = openBefore("0023");
+    const s = new Store(old.sql);
+    const owner = await s.createAccount({ name: "Olga", handle: "olga" }, T0);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Acme", timeZone: "UTC", guardianName: "Olga", accountId: owner?.id, type: "team" },
+      T0,
+    );
+    const group = await s.workplace.createGroup(
+      {
+        householdId: hh.id,
+        name: "Support",
+        strategy: "simultaneous",
+        ringSeconds: 20,
+        members: [guardian.id],
+      },
+      T0,
+    );
+    expect(await s.lines.setHandle(group.id, hh.id, "acme-help", T0)).toBe(true);
+    old.db.exec(
+      `UPDATE public_lines SET enabled = 1, queue_max = 5 WHERE group_id = '${group.id}'`,
+    );
+    expect(migrate(old.db)).toContain("0023_line_callbacks.sql");
+    expect(await s.lines.get(group.id)).toMatchObject({
+      handle: "acme-help",
+      enabled: true,
+      queueMax: 5,
+      callback: true,
+      callbackMissed: "retry",
+    });
+    await s.lines.update(group.id, { callback: false, callbackMissed: "voicemail" }, T0);
+    expect(await s.lines.get(group.id)).toMatchObject({
+      callback: false,
+      callbackMissed: "voicemail",
+    });
+    // The line's side: a place in line, rung, missed (to the end of the line), taken once.
+    const row = {
+      id: "call_1",
+      groupId: group.id,
+      householdId: hh.id,
+      since: T0,
+      host: "far.example",
+      accountId: "acc_far",
+      handle: "ann",
+      name: "Ann",
+      address: "Ann@Far.Example",
+      expiresAt: T0 + 1000,
+    };
+    await s.lines.addCallback(row, T0);
+    expect(await s.lines.callbacks(hh.id)).toMatchObject([
+      { id: "call_1", address: "ann@far.example", attempts: 0, ringingUntil: null },
+    ]);
+    await s.lines.ringCallback("call_1", T0 + 300);
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBe(T0 + 300);
+    await s.lines.ringCallback("call_1", null, T0 + 500);
+    expect(await s.lines.callback("call_1")).toMatchObject({ since: T0 + 500, attempts: 1 });
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBe(T0 + 1000);
+    expect(await s.lines.takeCallback("call_1")).toBe(true);
+    expect(await s.lines.takeCallback("call_1")).toBe(false);
+    expect(await s.lines.nextCallbackDeadline(hh.id)).toBeUndefined();
+    // The caller's side: only the line they asked, only for them, only until it expires.
+    await s.lines.addGrant(
+      {
+        id: "call_2",
+        accountId: owner?.id as string,
+        userId: guardian.id,
+        householdId: hh.id,
+        lineHost: "shop.example",
+        lineHandle: "Orders",
+        lineName: "Orders",
+        expiresAt: T0 + 1000,
+      },
+      T0,
+    );
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0)).toMatchObject({
+      userId: guardian.id,
+      lineHandle: "orders",
+    });
+    expect(await s.lines.grant("call_2", "other.example", "olga", T0)).toBeUndefined();
+    expect(await s.lines.grant("call_2", "shop.example", "eve", T0)).toBeUndefined();
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0 + 1000)).toBeUndefined();
+    await s.lines.sweepCallbacks(T0 + 1000);
+    expect(await s.lines.grant("call_2", "shop.example", "olga", T0)).toBeUndefined();
+    old.db.close();
+  });
+});
