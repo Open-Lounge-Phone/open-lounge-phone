@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addressProblem,
+  allowList,
   extensionDigits,
   extensionProblem,
   requiredProblem,
@@ -65,5 +66,19 @@ describe("form field checks", () => {
     expect(timeProblem("")).toBe("Pick a time.");
     expect(timeProblem("", "the start time")).toBe("Pick the start time.");
     expect(timeProblem("24:00")).toBe("Pick a time.");
+  });
+
+  it("reads an allow list one per line, naming the bad entries", () => {
+    expect(allowList(" Example.org\nann@far.example \n\n")).toEqual({
+      entries: ["Example.org", "ann@far.example"],
+    });
+    expect(allowList("ok.example\nhttps://x.example\nann@")).toEqual({
+      problem:
+        "https://x.example, ann@ aren't a server or an address. Use example.org or name@example.org.",
+    });
+    expect(allowList("bad@")).toMatchObject({ problem: expect.stringMatching(/^bad@ isn't/) });
+    expect(allowList(Array.from({ length: 101 }, (_, i) => `s${i}.example`).join("\n"))).toEqual({
+      problem: "At most 100 entries.",
+    });
   });
 });

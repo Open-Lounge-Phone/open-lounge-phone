@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Api, ConnectionView, User } from "./api.ts";
 import { canLeaveVoicemail } from "./calls.ts";
 import type { Connection, Snapshot } from "./connection.ts";
+import { extensionDigits, extensionProblem } from "./fields.ts";
 import { LeaveVoicemail } from "./LeaveVoicemail.tsx";
 import { endReasonText, formatDuration } from "./text.ts";
 import { queueText } from "./workplaceText.ts";
@@ -46,29 +47,38 @@ function Picker({
     );
   }, [api]);
   const [ext, setExt] = useState("");
+  const [extProblem, setExtProblem] = useState<string>();
   return (
     <div className="picker stack">
       <div className="what">{title}</div>
       {extensions && (
         <form
-          className="row"
+          className="stack"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            if (/^[0-9]{2,6}$/.test(ext))
-              onPick({ kind: "extension", id: ext, label: `Ext. ${ext}` });
+            const problem = extensionProblem(ext);
+            setExtProblem(problem);
+            if (!problem) onPick({ kind: "extension", id: ext, label: `Ext. ${ext}` });
           }}
         >
-          <input
-            inputMode="numeric"
-            pattern="[0-9]{2,6}"
-            aria-label="Extension"
-            placeholder="Extension"
-            value={ext}
-            onChange={(e) => setExt(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          />
-          <button type="submit" disabled={!/^[0-9]{2,6}$/.test(ext)}>
-            Go
-          </button>
+          <div className="row">
+            <label className="row">
+              <span>Extension</span>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={ext}
+                onChange={(e) => {
+                  setExt(extensionDigits(e.target.value));
+                  setExtProblem(undefined);
+                }}
+                aria-invalid={extProblem ? true : undefined}
+              />
+            </label>
+            <button type="submit">Go</button>
+          </div>
+          {extProblem && <span className="hint error">{extProblem}</span>}
         </form>
       )}
       <ul className="devices">

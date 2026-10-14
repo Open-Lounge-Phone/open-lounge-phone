@@ -1,12 +1,18 @@
 // A ring group's public line (team and org admins): its address, the warning before it goes
 // public, who may call, the queue, voicemail and its greeting, limits, recent callers and the
 // space's blocklist. See docs/workplace.md "Public lines".
+import { LINE_ENDED_NOTE, LINE_QUEUE_MAX, LINE_WAIT_MAX_SECONDS } from "@openloungephone/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api, Directory, LineCaller, LinePatch, LineSettings, RingGroupInfo } from "./api.ts";
+import { allowList, wholeNumber } from "./fields.ts";
+import { handleHint, normalizeHandle } from "./handles.ts";
 import { VoicemailRecorder } from "./recording.ts";
 import { maxWaitText, WHO_TEXT } from "./workplaceText.ts";
 
 type Blocks = Awaited<ReturnType<Api["lineBlocks"]>>;
+
+/** The server's top for a line's own per-hour limits. */
+const PER_HOUR_MAX = 10_000;
 
 export function PublicLineEditor({
   api,
@@ -23,7 +29,12 @@ export function PublicLineEditor({
   const [callers, setCallers] = useState<LineCaller[]>([]);
   const [blocks, setBlocks] = useState<Blocks>([]);
   const [handle, setHandle] = useState("");
+  const [handleTried, setHandleTried] = useState(false);
   const [error, setError] = useState<string>();
+  /** What's wrong with a field (by name) after leaving it; it isn't saved until fixed. */
+  const [problems, setProblems] = useState<Record<string, string | undefined>>({});
+  const problem = (field: string, text: string | undefined) =>
+    setProblems((p) => ({ ...p, [field]: text }));
   const [recording, setRecording] = useState(false);
   const recorder = useRef<VoicemailRecorder>(undefined);
 
@@ -80,12 +91,16 @@ export function PublicLineEditor({
   if (line === undefined) return error ? <p className="error">{error}</p> : null;
 
   if (line === null) {
+    const hint = handleHint(handle);
+    const showHint = handleTried && hint;
     return (
       <form
         className="stack"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void save({ handle: handle.trim().toLowerCase() });
+          setHandleTried(true);
+          if (!hint) void save({ handle });
         }}
       >
         <h4>Public line</h4>
@@ -93,18 +108,26 @@ export function PublicLineEditor({
           Give this group its own address, like help-desk@this-server, so people on any server can
           call it without connecting first. It stays off until you turn it on.
         </p>
-        <div className="row">
-          <input
-            aria-label="Line address"
-            placeholder="help-desk"
-            value={handle}
-            autoCapitalize="none"
-            onChange={(e) => setHandle(e.target.value)}
-          />
-          <button type="submit" disabled={handle.trim().length < 2}>
-            Choose address
-          </button>
-        </div>
+        <label className="stack">
+          <span className="muted small">Line address (the part before @)</span>
+          <div className="row">
+            <input
+              value={handle}
+              maxLength={30}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-invalid={showHint ? true : undefined}
+              onChange={(e) => setHandle(normalizeHandle(e.target.value))}
+            />
+            <button type="submit">Choose address</button>
+          </div>
+          <span className={showHint ? "hint error" : "hint"}>
+            {showHint
+              ? hint
+              : "Lower-case letters, digits, dots, dashes or underscores, for example help-desk."}
+          </span>
+        </label>
         {error && <p className="error">{error}</p>}
       </form>
     );
@@ -125,7 +148,25 @@ export function PublicLineEditor({
         : v === "end"
           ? { kind: "end" }
           : { kind: "voicemail" };
-  const perHour = (v: string) => (v.trim() === "" ? null : Math.max(1, Number(v) || 1));
+  /** A per-hour limit: empty = the server's; else 1 up to the server's (it caps them anyway). */
+  const perHour = (field: string, v: string, serverMax: number) => {
+    if (v.trim() === "") {
+      problem(field, undefined);
+      return null;
+    }
+    const n = wholeNumber(v, 1, Math.min(serverMax, PER_HOUR_MAX));
+    if ("problem" in n) {
+      problem(field, `${n.problem.replace(/\.$/, "")}, or leave it empty.`);
+      return undefined;
+    }
+    problem(field, undefined);
+    return n.value;
+  };
+  const fieldHint = (field: string, hint: string) => (
+    <span className={problems[field] ? "hint error" : "muted small"}>
+      {problems[field] ?? hint}
+    </span>
+  );
   const ownServer = line.address.slice(line.address.lastIndexOf("@") + 1);
   const blockedBy = (c: LineCaller) =>
     blocks.some((b) => b.kind === "server" && b.value === c.server)
@@ -173,28 +214,28 @@ export function PublicLineEditor({
       )}
 
       <label className="stack">
-        <span className="muted small">Name callers see</span>
+        <span className="muted small">Name callers see (optional)</span>
         <input
           defaultValue={line.displayName ?? ""}
-          placeholder={group.name}
           maxLength={64}
           onBlur={(e) =>
             e.target.value.trim() !== (line.displayName ?? "") &&
             void save({ displayName: e.target.value.trim() || null })
           }
         />
+        <span className="muted small">Empty: they see {group.name}.</span>
       </label>
       <label className="stack">
         <span className="muted small">One line about it (optional)</span>
         <input
           defaultValue={line.description ?? ""}
-          placeholder="Questions about your order"
           maxLength={140}
           onBlur={(e) =>
             e.target.value.trim() !== (line.description ?? "") &&
             void save({ description: e.target.value.trim() || null })
           }
         />
+        <span className="muted small">For example, Questions about your order.</span>
       </label>
 
       <label className="stack">
@@ -217,16 +258,17 @@ export function PublicLineEditor({
           <textarea
             defaultValue={line.allow.join("\n")}
             rows={3}
-            placeholder={"partner.example\nann@far.example"}
-            onBlur={(e) =>
-              void save({
-                allow: e.target.value
-                  .split(/\s+/)
-                  .map((x) => x.trim())
-                  .filter(Boolean),
-              })
-            }
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={problems.allow ? true : undefined}
+            onBlur={(e) => {
+              const list = allowList(e.target.value);
+              problem("allow", "problem" in list ? list.problem : undefined);
+              if ("entries" in list) void save({ allow: list.entries });
+            }}
           />
+          {fieldHint("allow", "A whole server (example.org) or one address (name@example.org).")}
         </label>
       )}
 
@@ -246,21 +288,36 @@ export function PublicLineEditor({
               <span>At most</span>
               <input
                 type="number"
+                inputMode="numeric"
                 min={1}
-                max={50}
+                max={LINE_QUEUE_MAX}
                 defaultValue={line.queueMax}
-                onBlur={(e) => void save({ queueMax: Number(e.target.value) })}
+                aria-invalid={problems.queueMax ? true : undefined}
+                onBlur={(e) => {
+                  const n = wholeNumber(e.target.value, 1, LINE_QUEUE_MAX);
+                  problem("queueMax", "problem" in n ? n.problem : undefined);
+                  if ("value" in n && n.value !== line.queueMax) void save({ queueMax: n.value });
+                }}
               />
               <span>callers waiting</span>
             </label>
+            {problems.queueMax && <span className="hint error">{problems.queueMax}</span>}
             <label className="row">
               <span>For at most</span>
               <input
                 type="number"
+                inputMode="numeric"
                 min={1}
-                max={60}
+                max={LINE_WAIT_MAX_SECONDS / 60}
                 defaultValue={Math.round(line.queueWaitSeconds / 60)}
-                onBlur={(e) => void save({ queueWaitSeconds: Number(e.target.value) * 60 })}
+                aria-invalid={problems.queueWait ? true : undefined}
+                onBlur={(e) => {
+                  const n = wholeNumber(e.target.value, 1, LINE_WAIT_MAX_SECONDS / 60);
+                  problem("queueWait", "problem" in n ? n.problem : undefined);
+                  if ("value" in n && n.value * 60 !== line.queueWaitSeconds) {
+                    void save({ queueWaitSeconds: n.value * 60 });
+                  }
+                }}
               />
               <span>minutes, then</span>
               <select
@@ -284,20 +341,24 @@ export function PublicLineEditor({
                 <option value="end">{maxWaitText({ kind: "end" }, dir)}</option>
               </select>
             </label>
+            {problems.queueWait && <span className="hint error">{problems.queueWait}</span>}
             {wait.kind === "end" && (
-              <input
-                aria-label="What callers hear when the call ends"
-                placeholder="Nobody could take your call. Please try again later."
-                maxLength={140}
-                defaultValue={wait.message ?? ""}
-                onBlur={(e) =>
-                  void save({
-                    atMaxWait: e.target.value.trim()
-                      ? { kind: "end", message: e.target.value.trim() }
-                      : { kind: "end" },
-                  })
-                }
-              />
+              <label className="stack">
+                <span className="muted small">What callers see when it ends (optional)</span>
+                <input
+                  maxLength={140}
+                  defaultValue={wait.message ?? ""}
+                  onBlur={(e) =>
+                    e.target.value.trim() !== (wait.message ?? "") &&
+                    void save({
+                      atMaxWait: e.target.value.trim()
+                        ? { kind: "end", message: e.target.value.trim() }
+                        : { kind: "end" },
+                    })
+                  }
+                />
+                <span className="muted small">Empty: “{LINE_ENDED_NOTE}”</span>
+              </label>
             )}
             <label className="row">
               <input
@@ -381,24 +442,36 @@ export function PublicLineEditor({
           <span>Each caller</span>
           <input
             type="number"
+            inputMode="numeric"
             min={1}
             max={line.limits.callerPerHour}
-            placeholder={String(line.limits.callerPerHour)}
             defaultValue={line.callerPerHour ?? ""}
-            onBlur={(e) => void save({ callerPerHour: perHour(e.target.value) })}
+            aria-invalid={problems.callerPerHour ? true : undefined}
+            onBlur={(e) => {
+              const n = perHour("callerPerHour", e.target.value, line.limits.callerPerHour);
+              if (n !== undefined && n !== line.callerPerHour) void save({ callerPerHour: n });
+            }}
           />
         </label>
         <label className="row">
           <span>Each other server</span>
           <input
             type="number"
+            inputMode="numeric"
             min={1}
             max={line.limits.serverPerHour}
-            placeholder={String(line.limits.serverPerHour)}
             defaultValue={line.serverPerHour ?? ""}
-            onBlur={(e) => void save({ serverPerHour: perHour(e.target.value) })}
+            aria-invalid={problems.serverPerHour ? true : undefined}
+            onBlur={(e) => {
+              const n = perHour("serverPerHour", e.target.value, line.limits.serverPerHour);
+              if (n !== undefined && n !== line.serverPerHour) void save({ serverPerHour: n });
+            }}
           />
         </label>
+        {fieldHint(
+          problems.callerPerHour ? "callerPerHour" : "serverPerHour",
+          `Empty: this server's limits, ${line.limits.callerPerHour} per caller and ${line.limits.serverPerHour} per server.`,
+        )}
       </fieldset>
 
       <h4>Recent callers</h4>

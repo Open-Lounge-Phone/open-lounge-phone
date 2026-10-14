@@ -2,7 +2,7 @@
  * Checks for form fields, in plain words, matching what the server accepts: each returns what
  * to fix, or undefined when the value is fine. Forms show the text next to the field on submit.
  */
-import { lineEntry } from "@openloungephone/core";
+import { LINE_ALLOW_MAX, lineEntry } from "@openloungephone/core";
 
 /** "write a notice" → "Write a notice." (core and server messages are lower case). */
 export function sentence(text: string): string {
@@ -75,4 +75,20 @@ export function wholeNumber(
 /** A time from a time field ("HH:MM"); empty when someone cleared it. */
 export function timeProblem(value: string, what = "a time"): string | undefined {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? undefined : `Pick ${what}.`;
+}
+
+/** An allow list typed one per line: the entries, or what's wrong with it. */
+export function allowList(text: string): { entries: string[] } | { problem: string } {
+  const raw = text
+    .split(/[\s,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const bad = raw.filter((x) => !lineEntry(x));
+  if (bad.length) {
+    return {
+      problem: `${bad.slice(0, 3).join(", ")} ${bad.length === 1 ? "isn't" : "aren't"} a server or an address. Use example.org or name@example.org.`,
+    };
+  }
+  if (raw.length > LINE_ALLOW_MAX) return { problem: `At most ${LINE_ALLOW_MAX} entries.` };
+  return { entries: raw };
 }

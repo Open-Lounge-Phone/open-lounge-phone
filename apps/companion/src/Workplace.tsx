@@ -1,6 +1,6 @@
 // Team and org spaces as a workplace phone system: the directory with extensions for everyone,
 // and for admins the extensions, ring groups, business hours, roles, call log and audit trail.
-import { useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type {
   AfterHours,
   Api,
@@ -12,13 +12,22 @@ import type {
   SpaceCall,
 } from "./api.ts";
 import type { Connection } from "./connection.ts";
+import {
+  extensionDigits,
+  extensionProblem,
+  requiredProblem,
+  timeProblem,
+  wholeNumber,
+} from "./fields.ts";
 import { PublicLineEditor } from "./PublicLine.tsx";
 import { formatDuration } from "./text.ts";
 import { Player } from "./Voicemail.tsx";
 import { afterHoursText, auditText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const EXT_RE = /^[0-9]{2,6}$/;
+/** The server's range for a ring group's ring time. */
+const RING_MIN = 5;
+const RING_MAX = 120;
 
 interface Props {
   api: Api;
@@ -30,6 +39,7 @@ export function Workplace({ api, conn, onBack }: Props) {
   const [dir, setDir] = useState<Directory>();
   const [q, setQ] = useState("");
   const [dial, setDial] = useState("");
+  const [dialProblem, setDialProblem] = useState<string>();
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
@@ -60,22 +70,32 @@ export function Workplace({ api, conn, onBack }: Props) {
       )}
       <form
         className="card row"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          if (EXT_RE.test(dial)) call(dial, `Ext. ${dial}`);
+          const problem = conn
+            ? extensionProblem(dial)
+            : "Not connected yet. Try again in a moment.";
+          setDialProblem(problem);
+          if (!problem) call(dial, `Ext. ${dial}`);
         }}
       >
         <label className="grow">
           <span className="muted small">Dial an extension</span>
           <input
             inputMode="numeric"
+            pattern="[0-9]*"
             aria-label="Extension to dial"
-            placeholder="e.g. 201"
             value={dial}
-            onChange={(e) => setDial(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(e) => {
+              setDial(extensionDigits(e.target.value));
+              setDialProblem(undefined);
+            }}
+            aria-invalid={dialProblem ? true : undefined}
           />
+          {dialProblem && <span className="hint error">{dialProblem}</span>}
         </label>
-        <button type="submit" className="primary" disabled={!EXT_RE.test(dial)}>
+        <button type="submit" className="primary">
           Call
         </button>
       </form>
@@ -221,6 +241,16 @@ export function HoursEditor({
   const [days, setDays] = useState<number[]>(first?.days ?? [1, 2, 3, 4, 5]);
   const [start, setStart] = useState(first?.start ?? "09:00");
   const [end, setEnd] = useState(first?.end ?? "17:00");
+  const [problem, setProblem] = useState<string>();
+  const save = () => {
+    const p = !on
+      ? undefined
+      : days.length === 0
+        ? "Pick at least one day."
+        : (timeProblem(start, "when it opens") ?? timeProblem(end, "when it closes"));
+    setProblem(p);
+    if (!p) onSave(on ? [{ days, start, end }] : null);
+  };
   return (
     <div className="stack">
       <label className="row">
@@ -236,7 +266,11 @@ export function HoursEditor({
                   type="checkbox"
                   checked={days.includes(i)}
                   onChange={(e) =>
-                    setDays(e.target.checked ? [...days, i].sort() : days.filter((x) => x !== i))
+                    setDays(
+                      e.target.checked
+                        ? [...days, i].sort((a, b) => a - b)
+                        : days.filter((x) => x !== i),
+                    )
                   }
                 />
                 {d}
@@ -260,11 +294,12 @@ export function HoursEditor({
           </div>
         </>
       )}
-      <button
-        type="button"
-        disabled={on && days.length === 0}
-        onClick={() => onSave(on ? [{ days, start, end }] : null)}
-      >
+      {problem && (
+        <span className="hint error" role="alert">
+          {problem}
+        </span>
+      )}
+      <button type="button" onClick={save}>
         Save hours
       </button>
     </div>
@@ -363,14 +398,18 @@ function Admin({
     void reload();
   }, [reload]);
 
-  const act = (p: Promise<unknown>) =>
-    void p.then(
+  /** Runs a change; resolves with what went wrong (a form shows it next to itself). */
+  const attempt = (p: Promise<unknown>): Promise<string | undefined> =>
+    p.then(
       () => {
         onChanged();
         void reload();
+        return undefined;
       },
-      (e: Error) => onError(e.message),
+      (e: Error) => e.message,
     );
+  const act = (p: Promise<unknown>) =>
+    void attempt(p).then((problem) => problem && onError(problem));
 
   const nameOf = (id: string) => dir.members.find((m) => m.id === id)?.name ?? "someone";
 
@@ -398,8 +437,10 @@ function Admin({
           </button>
         ))}
       </nav>
-      {tab === "numbers" && <Extensions api={api} dir={dir} act={act} />}
-      {tab === "groups" && <Groups api={api} dir={dir} groups={groups} act={act} nameOf={nameOf} />}
+      {tab === "numbers" && <Extensions api={api} dir={dir} act={act} attempt={attempt} />}
+      {tab === "groups" && (
+        <Groups api={api} dir={dir} groups={groups} act={act} attempt={attempt} nameOf={nameOf} />
+      )}
       {tab === "hours" && space && (
         <div className="stack">
           <p className="muted small">
@@ -487,13 +528,16 @@ function Extensions({
   api,
   dir,
   act,
+  attempt,
 }: {
   api: Api;
   dir: Directory;
   act(p: Promise<unknown>): void;
+  attempt(p: Promise<unknown>): Promise<string | undefined>;
 }) {
   const [number, setNumber] = useState("");
   const [target, setTarget] = useState("");
+  const [problems, setProblems] = useState<{ number?: string; target?: string; form?: string }>({});
   const targets = [
     ...dir.members.map((m) => ({ key: `user:${m.id}`, label: m.name, ext: m.extension })),
     ...dir.phones.map((p) => ({ key: `device:${p.id}`, label: p.name, ext: p.extension })),
@@ -502,33 +546,63 @@ function Extensions({
   return (
     <div className="stack">
       <form
-        className="row wrap"
+        className="stack"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
+          const next = {
+            number: extensionProblem(number),
+            target: target ? undefined : "Pick who or what it rings.",
+          };
+          setProblems(next);
+          if (next.number || next.target) return;
           const [kind, id] = target.split(":") as ["user" | "device" | "room", string];
-          act(api.setExtension(number, kind, id));
-          setNumber("");
+          void attempt(api.setExtension(number, kind, id)).then((form) => {
+            setProblems({ form });
+            if (!form) setNumber("");
+          });
         }}
       >
-        <input
-          inputMode="numeric"
-          aria-label="Extension number"
-          placeholder="201"
-          value={number}
-          onChange={(e) => setNumber(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        />
-        <select aria-label="For" value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="">For…</option>
-          {targets.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.label}
-              {t.ext ? ` (now ${t.ext})` : ""}
-            </option>
-          ))}
-        </select>
-        <button type="submit" disabled={!EXT_RE.test(number) || !target}>
-          Set
-        </button>
+        <div className="row wrap">
+          <label>
+            <span className="muted small">Extension</span>
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={number}
+              onChange={(e) => {
+                setNumber(extensionDigits(e.target.value));
+                setProblems((p) => ({ ...p, number: undefined }));
+              }}
+              aria-invalid={problems.number ? true : undefined}
+            />
+          </label>
+          <label>
+            <span className="muted small">Rings</span>
+            <select
+              value={target}
+              onChange={(e) => {
+                setTarget(e.target.value);
+                setProblems((p) => ({ ...p, target: undefined }));
+              }}
+              aria-invalid={problems.target ? true : undefined}
+            >
+              <option value="">Choose…</option>
+              {targets.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                  {t.ext ? ` (now ${t.ext})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit">Set</button>
+        </div>
+        <span
+          className={problems.number || problems.target || problems.form ? "hint error" : "hint"}
+        >
+          {problems.number ?? problems.target ?? problems.form ?? "2 to 6 digits, for example 201."}
+        </span>
       </form>
       <ul className="stack">
         {targets
@@ -558,19 +632,55 @@ function Groups({
   dir,
   groups,
   act,
+  attempt,
   nameOf,
 }: {
   api: Api;
   dir: Directory;
   groups: RingGroupInfo[];
   act(p: Promise<unknown>): void;
+  attempt(p: Promise<unknown>): Promise<string | undefined>;
   nameOf(id: string): string;
 }) {
   const [name, setName] = useState("");
   const [ext, setExt] = useState("");
   const [strategy, setStrategy] = useState<HuntStrategy>("simultaneous");
-  const [ring, setRing] = useState(20);
+  const [ring, setRing] = useState("20");
   const [members, setMembers] = useState<string[]>([]);
+  const [problems, setProblems] = useState<{
+    name?: string;
+    ext?: string;
+    ring?: string;
+    form?: string;
+  }>({});
+  /** Ring time edits on existing groups: what's wrong, per group. */
+  const [ringProblem, setRingProblem] = useState<Record<string, string | undefined>>({});
+  const create = (e: FormEvent) => {
+    e.preventDefault();
+    const seconds = wholeNumber(ring, RING_MIN, RING_MAX);
+    const next = {
+      name: requiredProblem(name, "a name for the group"),
+      ext: extensionProblem(ext),
+      ring: "problem" in seconds ? seconds.problem : undefined,
+    };
+    setProblems(next);
+    if (next.name || next.ext || !("value" in seconds)) return;
+    void attempt(
+      api.createGroup({
+        name: name.trim(),
+        extension: ext,
+        strategy,
+        ringSeconds: seconds.value,
+        members,
+      }),
+    ).then((form) => {
+      setProblems({ form });
+      if (form) return;
+      setName("");
+      setExt("");
+      setMembers([]);
+    });
+  };
   return (
     <div className="stack">
       {groups.map((g) => (
@@ -600,13 +710,25 @@ function Groups({
               <span>Ring each step for</span>
               <input
                 type="number"
-                min={5}
-                max={120}
+                inputMode="numeric"
+                min={RING_MIN}
+                max={RING_MAX}
                 defaultValue={g.ringSeconds}
-                onBlur={(e) => act(api.updateGroup(g.id, { ringSeconds: Number(e.target.value) }))}
+                aria-invalid={ringProblem[g.id] ? true : undefined}
+                onBlur={(e) => {
+                  const seconds = wholeNumber(e.target.value, RING_MIN, RING_MAX);
+                  setRingProblem((p) => ({
+                    ...p,
+                    [g.id]: "problem" in seconds ? seconds.problem : undefined,
+                  }));
+                  if ("value" in seconds && seconds.value !== g.ringSeconds) {
+                    act(api.updateGroup(g.id, { ringSeconds: seconds.value }));
+                  }
+                }}
               />
               <span>seconds</span>
             </label>
+            {ringProblem[g.id] && <span className="hint error">{ringProblem[g.id]}</span>}
             <MemberPicker
               dir={dir}
               value={g.members}
@@ -636,30 +758,39 @@ function Groups({
           </div>
         </details>
       ))}
-      <form
-        className="card stack"
-        onSubmit={(e) => {
-          e.preventDefault();
-          act(api.createGroup({ name, extension: ext, strategy, ringSeconds: ring, members }));
-          setName("");
-          setExt("");
-          setMembers([]);
-        }}
-      >
+      <form className="card stack" noValidate onSubmit={create}>
         <h4>New ring group</h4>
-        <input
-          aria-label="Group name"
-          placeholder="Front desk"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          inputMode="numeric"
-          aria-label="Group extension"
-          placeholder="Extension, e.g. 100"
-          value={ext}
-          onChange={(e) => setExt(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        />
+        <label>
+          <span className="muted small">Name</span>
+          <input
+            value={name}
+            maxLength={40}
+            onChange={(e) => {
+              setName(e.target.value);
+              setProblems((p) => ({ ...p, name: undefined }));
+            }}
+            aria-invalid={problems.name ? true : undefined}
+          />
+          <span className={problems.name ? "hint error" : "hint"}>
+            {problems.name ?? "For example, Front desk."}
+          </span>
+        </label>
+        <label>
+          <span className="muted small">Extension</span>
+          <input
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={ext}
+            onChange={(e) => {
+              setExt(extensionDigits(e.target.value));
+              setProblems((p) => ({ ...p, ext: undefined }));
+            }}
+            aria-invalid={problems.ext ? true : undefined}
+          />
+          <span className={problems.ext ? "hint error" : "hint"}>
+            {problems.ext ?? "2 to 6 digits, for example 100."}
+          </span>
+        </label>
         <select
           aria-label="How it rings"
           value={strategy}
@@ -675,15 +806,26 @@ function Groups({
           <span>Ring each step for</span>
           <input
             type="number"
-            min={5}
-            max={120}
+            inputMode="numeric"
+            min={RING_MIN}
+            max={RING_MAX}
             value={ring}
-            onChange={(e) => setRing(Number(e.target.value))}
+            onChange={(e) => {
+              setRing(e.target.value);
+              setProblems((p) => ({ ...p, ring: undefined }));
+            }}
+            aria-invalid={problems.ring ? true : undefined}
           />
           <span>seconds</span>
         </label>
+        {problems.ring && <span className="hint error">{problems.ring}</span>}
         <MemberPicker dir={dir} value={members} onChange={setMembers} />
-        <button type="submit" className="primary" disabled={!name.trim() || !EXT_RE.test(ext)}>
+        {problems.form && (
+          <p className="error" role="alert">
+            {problems.form}
+          </p>
+        )}
+        <button type="submit" className="primary">
           Make group
         </button>
       </form>
