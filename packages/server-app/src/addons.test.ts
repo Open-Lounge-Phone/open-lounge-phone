@@ -127,7 +127,7 @@ describe("add-ons on one server", () => {
     const list = await a.http("/addons", { token: jesse.token });
     expect(list.json).toMatchObject({ enabled: true, addons: [{ name: "seat", online: true }] });
     // Not a phone: it's never among the space's phones.
-    expect((await a.http("/devices", { token: jesse.token })).json.devices ?? []).toEqual([]);
+    expect((await a.http("/devices", { token: jesse.token })).json).toEqual([]);
   });
 
   it("a phone's code isn't an add-on's; names are unique per owner", async () => {
@@ -415,11 +415,17 @@ describe("add-ons across servers", () => {
     await seat.conn.nextState("ended");
 
     seat.conn.write({ t: "call.address", address: "bob@b.test" });
-    expect((await bobApp.next("call.ringing")).from).toEqual({
-      label: "seat",
-      address: "jesse+seat@a.test",
-      kind: "addon",
-    });
+    const back = await bobApp.next("call.ringing");
+    expect(back.from).toEqual({ label: "seat", address: "jesse+seat@a.test", kind: "addon" });
+    bobApp.write({ t: "call.hangup", callId: back.callId });
+    await seat.conn.nextState("ended");
+    // Bob's history names the add-on, not Jesse (it isn't her calling).
+    await vi.waitFor(async () =>
+      expect((await b.store.callLog(bob.account.id)).map((r) => r.peer)).toEqual([
+        "jesse+seat@a.test",
+        "jesse+seat@a.test",
+      ]),
+    );
   });
 
   it("refuses a connection that isn't allowed, and calls through a kids' phone", async () => {

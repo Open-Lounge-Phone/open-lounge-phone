@@ -9,6 +9,7 @@ import { migrate, openSqlite } from "@openloungephone/db/node";
 import { afterAll, beforeAll, it, onTestFailed } from "vitest";
 import { freePort, ProcLog, reportLogs, retryOnce, saveLogs } from "./procs.ts";
 import {
+  addonsAcross,
   block,
   callAcross,
   connectLocally,
@@ -57,6 +58,7 @@ async function start(name: string, attempt: number): Promise<ServerTarget> {
       DATA_DIR: dir,
       OPEN_SIGNUP: "1",
       STUN_URLS: "",
+      ADDONS: "on",
       // The key rotation step runs as this server's operator.
       OPERATORS: op.id,
     },
@@ -103,7 +105,7 @@ afterAll(() => {
   for (const entry of running) stop(entry);
 });
 
-it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer, public line", async () => {
+it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer, public line", async () => {
   onTestFailed(() =>
     reportLogs(
       running.map((r) => r.log),
@@ -114,6 +116,8 @@ it("two servers: sign up on each, knock, accept, call, voicemail, timeline, key 
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
   await callAcross(jesse, bob);
+  // Jesse's add-on on A: Bob (allowed) calls it from B, and it calls him.
+  await addonsAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);
   await rotateMidCall(jesse, bob, {

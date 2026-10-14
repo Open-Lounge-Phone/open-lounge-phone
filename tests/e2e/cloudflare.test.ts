@@ -12,6 +12,7 @@ import { generateServerKey } from "@openloungephone/federation";
 import { afterAll, beforeAll, expect, it, onTestFailed, vi } from "vitest";
 import { freePort, ProcLog, reportLogs, retryOnce, saveLogs } from "./procs.ts";
 import {
+  addonsAcross,
   block,
   callAcross,
   knockAndAccept,
@@ -56,6 +57,7 @@ async function start(name: string, attempt: number): Promise<Instance> {
     [
       `PUBLIC_URL=${origin}`,
       "OPEN_SIGNUP=1",
+      "ADDONS=on",
       "DEV_LOOPBACK=1",
       "STUN_URLS=",
       `OPERATORS=${op.id}`,
@@ -158,6 +160,8 @@ it.skipIf(!enabled)(
     const bob = await signUp(b, "bob", "Bob");
     await knockAndAccept(jesse, bob);
     await callAcross(jesse, bob);
+    // An add-on links to Jesse's account in a Durable Object on A; Bob calls it from B.
+    await addonsAcross(jesse, bob);
     // The rotated key is sealed in local D1 by FED_PRIVATE_KEY and read by every Durable Object.
     await rotateMidCall(jesse, bob, {
       a: operators.get("a")?.token as string,

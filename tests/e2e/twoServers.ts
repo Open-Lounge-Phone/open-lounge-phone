@@ -761,3 +761,90 @@ export async function publicLineAcross(server: ServerTarget, bob: Person) {
   }
   bApp.ws.close();
 }
+
+/** Reads call states until `state`. */
+async function untilState(app: Sock, state: string) {
+  for (;;) {
+    const m = await app.next("call.state");
+    if (m.state === state) return m;
+  }
+}
+
+/**
+ * Add-ons across servers (both servers run with ADDONS=on): Jesse links an add-on on A (a pairing
+ * code, then the signed challenge) and lets Bob talk to it. Bob, on B, calls it by its address;
+ * it is told who is calling, the call connects and a key reaches it. It calls Bob back, labelled
+ * as an add-on. Off Jesse's list, Bob is refused; removed, it is told to forget its link.
+ */
+export async function addonsAcross(jesse: Person, bob: Person) {
+  const ws = jesse.server.base.replace(/^http/, "ws");
+  const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const publicKey = toBase64Url(
+    new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey)),
+  );
+  const hello = { t: "hello", proto: 1, model: "addon", fw: "e2e", buttons: 1, display: "none" };
+  const pairing = await socket(`${ws}/ws/device`);
+  pairing.send(hello);
+  pairing.send({ t: "pair.begin", kind: "addon", publicKey });
+  const { code } = await pairing.next("pair.code");
+  const toBob = (await connections(jesse)).find((c) => c.address === bob.address);
+  const linked = await api(jesse, "/addons/link", {
+    body: { code, name: "seat", allow: [toBob?.id] },
+  });
+  expect(linked.status, JSON.stringify(linked.json)).toBe(201);
+  const host = new URL(jesse.server.origin).host;
+  expect(linked.json).toMatchObject({ address: `jesse+seat@${host}`, allow: [toBob?.id] });
+  const { deviceId } = await pairing.next("pair.done");
+  pairing.ws.close();
+  const addon = await socket(`${ws}/ws/device?device=${deviceId}`);
+  addon.send({ ...hello, deviceId: deviceId as string });
+  const { nonce } = await addon.next("auth.challenge");
+  const sig = await crypto.subtle.sign("Ed25519", keys.privateKey, fromBase64Url(nonce as string));
+  addon.send({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
+  const config = await addon.next("config");
+  expect(config.addon).toMatchObject({
+    address: linked.json.address,
+    owner: { address: jesse.address },
+  });
+
+  const bApp = await appSocket(bob);
+  bApp.send({ t: "call.address", address: linked.json.address });
+  const ring = await addon.next("call.ringing");
+  expect(ring.from).toEqual({ label: bob.name ?? "Bob", address: bob.address });
+  const callId = ring.callId as string;
+  const bobsCall = (await untilState(bApp, "ringing")).callId as string;
+  addon.send({ t: "call.answer", callId });
+  await untilState(bApp, "connecting");
+  bApp.send({ t: "rtc.sdp", callId: bobsCall, type: "offer", sdp: "v=0 offer" });
+  expect(await addon.next("rtc.sdp")).toMatchObject({ type: "offer" });
+  addon.send({ t: "rtc.sdp", callId, type: "answer", sdp: "v=0 answer" });
+  expect(await bApp.next("rtc.sdp")).toMatchObject({ type: "answer" });
+  await untilState(bApp, "active");
+  await untilState(addon as Sock, "active");
+  bApp.send({ t: "call.key", callId: bobsCall, key: "5" });
+  expect(await addon.next("call.key")).toMatchObject({ callId, key: "5" });
+  bApp.send({ t: "call.hangup", callId: bobsCall });
+  await untilState(addon as Sock, "ended");
+
+  addon.send({ t: "call.address", address: bob.address });
+  const back = await bApp.next("call.ringing");
+  expect(back.from).toEqual({ label: "seat", address: linked.json.address, kind: "addon" });
+  bApp.send({ t: "call.hangup", callId: back.callId as string });
+  await untilState(addon as Sock, "ended");
+  await untilState(bApp, "ended");
+
+  const off = await api(jesse, `/addons/${deviceId}/allow`, {
+    method: "PUT",
+    body: { connections: [] },
+  });
+  expect(off.status).toBe(200);
+  bApp.send({ t: "call.address", address: linked.json.address });
+  expect(await untilState(bApp, "ended")).toMatchObject({ reason: "unavailable" });
+
+  expect((await api(jesse, `/addons/${deviceId}`, { method: "DELETE" })).status).toBe(204);
+  expect(await addon.next("wipe")).toMatchObject({ reason: "removed" });
+  bApp.ws.close();
+}

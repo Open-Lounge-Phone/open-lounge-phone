@@ -2603,7 +2603,9 @@ export class HouseholdHub {
     key: string,
   ): Promise<{ peer: string; label: string }> {
     if (peer?.kind === "remote") {
-      return { peer: peer.address ?? (peer.host || ownHost(this.env)), label: peer.label };
+      // An add-on elsewhere is logged as itself, not as its owner.
+      const address = peer.addon?.address ?? peer.address;
+      return { peer: address ?? (peer.host || ownHost(this.env)), label: peer.label };
     }
     if (peer?.kind === "addon" && peer.addon) {
       return { peer: peer.addon.address, label: peer.label };
