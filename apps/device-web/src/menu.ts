@@ -14,6 +14,8 @@ export type MenuScreen =
   | "root"
   | "volume"
   | "voicemail"
+  /** MENU 2 → 4: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
+  | "greetings"
   /** Recording the greeting: BACK (or any key) finishes. */
   | "greeting"
   | "about"
@@ -55,8 +57,11 @@ export type MenuEvent =
 export interface MenuContext {
   /** Callers with unheard voicemail. */
   missedCount: number;
-  /** Public lines whose call back was missed (a person's own phone): 4 clears them. */
+  /** Public lines whose call back was missed (a person's own phone): 3 clears them. */
   missedCallbacks?: number;
+  /** Who plays voicemail here: a person's own phone plays it ("play"); a kids' phone asks a
+   * grown-up; others play it in the app. */
+  play?: "play" | "kids" | "app";
   fw: string;
   /** A Lounge phone someone is using: adds "Open to chat" and "Log out". */
   lounge?: { openToChat: boolean };
@@ -81,8 +86,10 @@ export type MenuAction =
   /** Interrupted (a call, the handset): discard it. */
   | { type: "greeting-cancel" }
   | { type: "greeting-reset" }
-  /** Forget the missed call backs (`missed.clear`). */
-  | { type: "missed-clear" }
+  /** MENU 2 → 1: play the unheard messages. */
+  | { type: "vm-play" }
+  /** MENU 2 → 3: mark every message heard and forget the missed call backs. */
+  | { type: "vm-clear"; voicemail: boolean; callbacks: boolean }
   /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
   | { type: "call"; action: CallAction }
   /** Dial this extension (the phone lifts the handset if it's down). */
@@ -176,11 +183,24 @@ export function callActionPrompt(action: CallAction, attended: boolean): string 
   }
 }
 
-/** Voicemail screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
+/** Voicemail screen (as on hardware, docs/phone-ux.md): 1 plays, 3 clears, 4 the greeting. */
+export const PLAY_DIGIT = 1;
+export const CLEAR_DIGIT = 3;
+export const GREETING_DIGIT = 4;
+/** Greeting screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
 const GREETING_LABELS = { 1: "Name", 2: "Greeting", 3: "Default" } as const;
-/** Voicemail screen: the key that clears missed call backs (1-3 are the greeting's). */
-export const CLEAR_MISSED_DIGIT = 4;
+
+/** The voicemail screen's lines under the title: missed call backs, where to listen. */
+function voicemailDetail(ctx: MenuContext): string[] {
+  const cb = ctx.missedCallbacks ?? 0;
+  const lines = cb ? [`${Math.min(cb, 9)} MISSED CALL BACK${cb > 1 ? "S" : ""}`] : [];
+  if (ctx.missedCount && ctx.play !== "play") {
+    lines.push(ctx.play === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP");
+  }
+  return lines;
+}
 const GREETING_TEXT = { default: "standard", name: "your name", custom: "your own" } as const;
+const GREETING_NAME = { default: "STANDARD", name: "YOUR NAME", custom: "YOUR OWN" } as const;
 
 export function menuView(state: MenuState, settings: Settings, ctx: MenuContext): MenuView {
   const base = { menuLabel: "Close", backLabel: "Back" };
@@ -198,14 +218,26 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         title: `VOLUME ${settings.volume}/10`,
         labels: { 1: "Quieter", 2: "Louder" },
       };
-    case "voicemail":
+    case "voicemail": {
+      const detail = voicemailDetail(ctx);
+      const play = ctx.play === "play";
       return {
         ...base,
-        title: ctx.missedCount ? `${ctx.missedCount} VOICEMAIL` : "NO VOICEMAIL",
+        title: ctx.missedCount ? `${ctx.missedCount} NEW VOICEMAIL` : "NO NEW VOICEMAIL",
         labels: {
-          ...(ctx.greeting?.canRecord ? GREETING_LABELS : {}),
-          ...(ctx.missedCallbacks ? { [CLEAR_MISSED_DIGIT]: "Clear missed" } : {}),
+          ...(play ? { [PLAY_DIGIT]: "Play" } : {}),
+          ...(play && (ctx.missedCount || ctx.missedCallbacks) ? { [CLEAR_DIGIT]: "Clear" } : {}),
+          ...(ctx.greeting?.canRecord ? { [GREETING_DIGIT]: "Greeting" } : {}),
         },
+        ...(detail.length ? { detail } : {}),
+      };
+    }
+    case "greetings":
+      return {
+        ...base,
+        title: "GREETING",
+        labels: GREETING_LABELS,
+        ...(ctx.greeting ? { detail: [`NOW: ${GREETING_NAME[ctx.greeting.kind]}`] } : {}),
       };
     case "greeting":
       return {
@@ -251,18 +283,30 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
     case "volume":
       return `Volume ${settings.volume}. Press 1 for quieter, 2 for louder.`;
     case "voicemail": {
-      const messages = ctx.missedCount
-        ? `You have voicemail from ${ctx.missedCount} ${ctx.missedCount === 1 ? "person" : "people"}. Playing messages on the phone is not available yet; a grown-up can play them in the app.`
+      const n = ctx.missedCount;
+      const play = ctx.play === "play";
+      const messages = n
+        ? `You have ${n} new voicemail ${n === 1 ? "message" : "messages"}.${
+            play
+              ? ` Press ${PLAY_DIGIT} to play ${n === 1 ? "it" : "them"}.`
+              : ctx.play === "kids"
+                ? " Ask a grown-up to play them in the app."
+                : " Play them in the app."
+          }`
         : "You have no new voicemail.";
       const callbacks = ctx.missedCallbacks
-        ? ` You missed ${ctx.missedCallbacks === 1 ? "a call back" : `${ctx.missedCallbacks} call backs`} from a public line. Press ${CLEAR_MISSED_DIGIT} to clear.`
+        ? ` You missed ${ctx.missedCallbacks === 1 ? "a call back" : `${ctx.missedCallbacks} call backs`} from a public line.`
         : "";
+      const clear = play && (n || ctx.missedCallbacks) ? ` Press ${CLEAR_DIGIT} to clear.` : "";
+      const greeting = ctx.greeting?.canRecord ? ` Press ${GREETING_DIGIT} for your greeting.` : "";
+      return `${messages}${callbacks}${clear}${greeting}`;
+    }
+    case "greetings": {
       const g = ctx.greeting;
-      if (!g) return `${messages}${callbacks}`;
-      const now = ` Callers hear the ${GREETING_TEXT[g.kind]} greeting.`;
-      return g.canRecord
-        ? `${messages}${callbacks}${now} Press 1 to record your name, 2 to record a greeting, 3 for the standard greeting.`
-        : `${messages}${callbacks}${now} ${PROMPT_TEXT["greet.not_allowed"]}`;
+      const now = g ? `Callers hear the ${GREETING_TEXT[g.kind]} greeting. ` : "";
+      return g?.canRecord === false
+        ? `${now}${PROMPT_TEXT["greet.not_allowed"]}`
+        : `${now}Press 1 to record your name, 2 to record a greeting, 3 for the standard greeting.`;
     }
     case "greeting":
       return state.recording === "name"
@@ -305,7 +349,7 @@ export function menuStep(
   }
   if (event.type === "greeting-done") {
     if (!state) return { state, settings };
-    const next: MenuState = { screen: "voicemail", lastInput: event.now };
+    const next: MenuState = { screen: "greetings", lastInput: event.now };
     return {
       state: next,
       settings,
@@ -360,6 +404,7 @@ export function menuStep(
   }
   if (event.type === "back") {
     if (state.screen === "call") return { state: undefined, settings };
+    if (state.screen === "greetings") return enter("voicemail");
     return state.screen === "root" ? { state: undefined, settings } : enter("root");
   }
 
@@ -392,14 +437,26 @@ export function menuStep(
       return { state: touched, settings: { ...settings, volume }, say: `Volume ${volume}` };
     }
     case "voicemail": {
-      if (d === CLEAR_MISSED_DIGIT && ctx.missedCallbacks) {
+      const play = ctx.play === "play";
+      if (d === PLAY_DIGIT && play) {
+        return { state: undefined, settings, action: { type: "vm-play" } };
+      }
+      if (d === CLEAR_DIGIT && play && (ctx.missedCount || ctx.missedCallbacks)) {
         return {
           state: touched,
           settings,
-          say: "Missed call backs cleared.",
-          action: { type: "missed-clear" },
+          say: "Cleared.",
+          action: {
+            type: "vm-clear",
+            voicemail: ctx.missedCount > 0,
+            callbacks: (ctx.missedCallbacks ?? 0) > 0,
+          },
         };
       }
+      if (d === GREETING_DIGIT && ctx.greeting?.canRecord) return enter("greetings");
+      return { state: touched, settings };
+    }
+    case "greetings": {
       if (!ctx.greeting?.canRecord || (d !== 1 && d !== 2 && d !== 3)) {
         return { state: touched, settings };
       }
@@ -444,11 +501,12 @@ export function menuStep(
  */
 export function menuLines(view: MenuView, now: number): [string] | [string, string] {
   const clip = (s: string) => s.toUpperCase().slice(0, STATUS_WIDTH);
-  const options = view.detail?.length
-    ? view.detail
-    : Object.entries(view.labels)
-        .sort(([a], [b]) => (a === "0" ? 10 : Number(a)) - (b === "0" ? 10 : Number(b)))
-        .map(([d, label]) => `${d} ${label}`);
+  const options = [
+    ...(view.detail ?? []),
+    ...Object.entries(view.labels)
+      .sort(([a], [b]) => (a === "0" ? 10 : Number(a)) - (b === "0" ? 10 : Number(b)))
+      .map(([d, label]) => `${d} ${label}`),
+  ];
   if (options.length === 0) return [clip(view.title), clip(`${view.backLabel} = BACK`)];
   const current = options[Math.floor(now / 2000) % options.length] as string;
   return [clip(view.title), clip(current)];

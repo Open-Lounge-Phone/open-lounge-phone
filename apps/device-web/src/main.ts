@@ -94,6 +94,7 @@ import { type PowerSource, powerStatus, type Variant } from "./power.ts";
 import { renderSegments } from "./segments.ts";
 import { forgetKind, loadKind, saveKind, startScreen } from "./setup.ts";
 import { MISSED_CYCLE_MS, ownerLine, STATUS_WIDTH, statusLines } from "./strip.ts";
+import { type VmEvent, type VmPlayer, vmLines, vmStart, vmStep } from "./vmplay.ts";
 import { ScreenAwake, type WakeLockLike } from "./wake.ts";
 
 type Signal = Extract<ServerToDevice, { t: "rtc.sdp" | "rtc.ice" }>;
@@ -211,6 +212,10 @@ let notice: Extract<ServerToDevice, { t: "notice" }> | undefined;
 /** Its recording, playing in the earpiece while the handset is up. */
 let noticeAudio: HTMLAudioElement | undefined;
 let menu: MenuState | undefined;
+/** Listening to voicemail (MENU 2 → 1), as the firmware's vmplay.c. */
+let vm: VmPlayer | undefined;
+let vmAudio: HTMLAudioElement | undefined;
+let vmTicker: ReturnType<typeof setInterval> | undefined;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let menuTicker: ReturnType<typeof setInterval> | undefined;
 const keyEls = new Map<KeyId, HTMLButtonElement>();
@@ -460,6 +465,18 @@ async function handle(msg: ServerToDevice): Promise<void> {
     case "greeting.ticket":
       void recordGreeting(msg.kind, msg.ticket, msg.maxMs);
       break;
+    case "voicemail.items":
+      vmApply({
+        type: "items",
+        items: msg.items.map((i) => ({
+          id: i.id,
+          from: i.from,
+          durationMs: i.durationMs,
+          ...(i.ticket ? { ticket: i.ticket } : {}),
+        })),
+        now: Date.now(),
+      });
+      break;
     case "greeting.done":
       if (msg.result === "not_allowed") {
         greetingRec = undefined;
@@ -595,6 +612,8 @@ function step(input: DeviceInput): void {
   if (authed) for (const m of r.send) send(m);
 
   const s = deviceState;
+  // A call (or the handset) comes first: stop listening to voicemail.
+  if (vm && prev.kind !== s.kind) vmApply({ type: "key", key: "back", now: Date.now() });
   // Lifting the handset or an incoming call leaves the menu (the call menu: any change of state).
   if (menu && (menu.screen === "call" ? prev.kind !== s.kind : s.kind !== "idle")) {
     applyMenu({ type: "exit" });
@@ -957,6 +976,12 @@ function pressKey(key: KeyId): void {
     return;
   }
   const now = Date.now();
+  // Listening to voicemail: 1 again, 2 next, BACK stop; other keys do nothing meanwhile.
+  if (vm && !menu) {
+    if (key === "back") vmApply({ type: "key", key: "back", now });
+    else if (key === "1" || key === "2") vmApply({ type: "key", key: Number(key) as 1 | 2, now });
+    return;
+  }
   if (key === "menu") {
     if (menu || canUseMenu()) applyMenu({ type: "menu", now });
     return;
@@ -994,6 +1019,12 @@ function menuContext() {
   return {
     missedCount: config?.missed?.filter((m) => !m.callback).length ?? 0,
     missedCallbacks: config?.missed?.filter((m) => m.callback).length ?? 0,
+    play:
+      variant === "personal"
+        ? ("play" as const)
+        : variant === "kids"
+          ? ("kids" as const)
+          : ("app" as const),
     fw: FW,
     fingerprint,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
@@ -1001,6 +1032,38 @@ function menuContext() {
     ...(callActions(deviceState).length ? { call: { actions: callActions(deviceState) } } : {}),
     ...(config?.extensions ? { extensions: true } : {}),
   };
+}
+
+function vmPlayedMs(): number {
+  return vmAudio ? Math.floor(vmAudio.currentTime * 1000) : 0;
+}
+
+function vmApply(event: VmEvent): void {
+  const r = vmStep(vm, event);
+  vm = r.player;
+  for (const id of r.heard) send({ t: "voicemail.heard", id });
+  if (r.stop || r.play) {
+    vmAudio?.pause();
+    vmAudio = undefined;
+  }
+  if (r.play?.ticket) {
+    const t = r.play.ticket;
+    const el = new Audio(
+      /^https?:\/\//.test(t) ? t : `/api/vm/play?ticket=${encodeURIComponent(t)}`,
+    );
+    el.volume = settings.volume / 10;
+    el.addEventListener("ended", () => vmApply({ type: "ended", now: Date.now() }));
+    el.addEventListener("error", () => vmApply({ type: "failed", now: Date.now() }));
+    void el.play().catch(() => vmApply({ type: "failed", now: Date.now() }));
+    vmAudio = el;
+  }
+  if (vm && !vmTicker) {
+    vmTicker = setInterval(() => vmApply({ type: "tick", now: Date.now() }), 500);
+  } else if (!vm && vmTicker) {
+    clearInterval(vmTicker);
+    vmTicker = undefined;
+  }
+  render();
 }
 
 function applyMenu(event: MenuEvent): void {
@@ -1025,7 +1088,18 @@ function applyMenu(event: MenuEvent): void {
     voice.stop();
   }
   if (r.action?.type === "greeting-reset") send({ t: "greeting.reset" });
-  if (r.action?.type === "missed-clear") send({ t: "missed.clear" });
+  if (r.action?.type === "vm-play") {
+    vm = vmStart(false, Date.now());
+    send({ t: "voicemail.fetch" });
+  }
+  if (r.action?.type === "vm-clear") {
+    // Clear: missed call backs go too (on all the owner's phones), and every message is heard.
+    if (r.action.callbacks) send({ t: "missed.clear" });
+    if (r.action.voicemail) {
+      vm = vmStart(true, Date.now());
+      send({ t: "voicemail.fetch" });
+    }
+  }
   if (r.action?.type === "extension") {
     // Dialing needs the handset up.
     if (!hookUp) toggleHook();
@@ -1307,26 +1381,30 @@ function renderDisplay(): void {
       : undefined;
   const lines = loungeText
     ? loungeText
-    : view
+    : vm && !view
       ? displayMode === "segments"
-        ? menuLines(view, Date.now())
-        : [view.title, ...(view.detail ?? [])]
-      : statusLines({
-          connection,
-          ...(pairingCode ? { pairingCode } : {}),
-          deviceState,
-          ...(config ? { config } : {}),
-          ...(activeLabel ? { activeLabel } : {}),
-          ...(callStartedAt !== undefined ? { callStartedAt } : {}),
-          ...(leaveView() ? { leave: leaveView() } : {}),
-          ...(room ? { room } : {}),
-          ...(recordedNow() ? { recording: true } : {}),
-          battery,
-          power: powerStatus(variant, powerSource),
-          clock: new Date().toTimeString().slice(0, 5),
-          ...(notice && deviceState.kind === "idle" ? { notice } : {}),
-          now: Date.now(),
-        });
+        ? vmLines(vm, vmPlayedMs()).slice(0, 2)
+        : vmLines(vm, vmPlayedMs())
+      : view
+        ? displayMode === "segments"
+          ? menuLines(view, Date.now())
+          : [view.title, ...(view.detail ?? [])]
+        : statusLines({
+            connection,
+            ...(pairingCode ? { pairingCode } : {}),
+            deviceState,
+            ...(config ? { config } : {}),
+            ...(activeLabel ? { activeLabel } : {}),
+            ...(callStartedAt !== undefined ? { callStartedAt } : {}),
+            ...(leaveView() ? { leave: leaveView() } : {}),
+            ...(room ? { room } : {}),
+            ...(recordedNow() ? { recording: true } : {}),
+            battery,
+            power: powerStatus(variant, powerSource),
+            clock: new Date().toTimeString().slice(0, 5),
+            ...(notice && deviceState.kind === "idle" ? { notice } : {}),
+            now: Date.now(),
+          });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.
   const grid =
     authed &&

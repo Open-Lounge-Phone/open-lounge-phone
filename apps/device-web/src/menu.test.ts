@@ -32,7 +32,7 @@ const menu = (now = 0): MenuEvent => ({ type: "menu", now });
 const back = (now = 0): MenuEvent => ({ type: "back", now });
 const digit = (d: number, now = 0): MenuEvent => ({ type: "digit", digit: d, now });
 
-describe("recording the greeting (MENU → Voicemail)", () => {
+describe("recording the greeting (MENU → Voicemail → 4)", () => {
   const g = (canRecord: boolean) => ({
     ...ctx,
     greeting: { kind: "default" as const, canRecord },
@@ -40,16 +40,20 @@ describe("recording the greeting (MENU → Voicemail)", () => {
   const step = (state: MenuState | undefined, e: MenuEvent, c = g(true)) =>
     menuStep(state, DEFAULT_SETTINGS, e, c);
 
-  it("offers name, greeting and default when allowed", () => {
+  it("offers name, greeting and default under 4 when allowed", () => {
     const vm = step(step(undefined, menu()).state, digit(2)).state as MenuState;
     expect(vm.screen).toBe("voicemail");
-    expect(menuView(vm, DEFAULT_SETTINGS, g(true)).labels).toEqual({
+    expect(menuView(vm, DEFAULT_SETTINGS, g(true)).labels).toMatchObject({ 4: "Greeting" });
+    const greetings = step(vm, digit(4)).state as MenuState;
+    expect(greetings.screen).toBe("greetings");
+    expect(menuView(greetings, DEFAULT_SETTINGS, g(true)).labels).toEqual({
       1: "Name",
       2: "Greeting",
       3: "Default",
     });
-    expect(menuPrompt(vm, DEFAULT_SETTINGS, g(true))).toMatch(/standard greeting\. Press 1/);
-    const name = step(vm, digit(1));
+    expect(menuView(greetings, DEFAULT_SETTINGS, g(true)).detail).toEqual(["NOW: STANDARD"]);
+    expect(menuPrompt(greetings, DEFAULT_SETTINGS, g(true))).toMatch(/standard greeting\. Press 1/);
+    const name = step(greetings, digit(1));
     expect(name.state).toMatchObject({ screen: "greeting", recording: "name" });
     expect(name.action).toEqual({ type: "greeting", kind: "name" });
     expect(name.say).toMatch(/Say your name after the tone/);
@@ -58,18 +62,67 @@ describe("recording the greeting (MENU → Voicemail)", () => {
     const done = step(name.state, back(5));
     expect(done.action).toEqual({ type: "greeting-stop" });
     const saved = step(done.state, { type: "greeting-done", ok: true, now: 6 });
-    expect(saved.state?.screen).toBe("voicemail");
+    expect(saved.state?.screen).toBe("greetings");
     expect(saved.say).toBe("Greeting saved.");
-    expect(step(vm, digit(3)).action).toEqual({ type: "greeting-reset" });
+    expect(step(greetings, digit(3)).action).toEqual({ type: "greeting-reset" });
+    // BACK steps out to the voicemail screen.
+    expect(step(greetings, back()).state?.screen).toBe("voicemail");
     // A call or the handset mid-recording discards it.
     expect(step(name.state, { type: "exit" }).action).toEqual({ type: "greeting-cancel" });
   });
 
-  it("tells a child to ask a grown-up when the guardians turned it off", () => {
+  it("offers no greeting when the guardians turned it off", () => {
     const vm = step(step(undefined, menu()).state, digit(2), g(false)).state as MenuState;
     expect(menuView(vm, DEFAULT_SETTINGS, g(false)).labels).toEqual({});
-    expect(menuPrompt(vm, DEFAULT_SETTINGS, g(false))).toMatch(/Ask a grown-up/);
-    expect(step(vm, digit(1), g(false)).action).toBeUndefined();
+    expect(step(vm, digit(4), g(false)).state?.screen).toBe("voicemail");
+  });
+});
+
+describe("voicemail screen (MENU → 2), as on hardware", () => {
+  const own = { ...ctx, play: "play" as const };
+  const step = (state: MenuState | undefined, e: MenuEvent, c: MenuContext = own) =>
+    menuStep(state, DEFAULT_SETTINGS, e, c);
+  const open = (c: MenuContext) =>
+    step(step(undefined, menu(), c).state, digit(2), c).state as MenuState;
+
+  it("a person's own phone: 1 plays, 3 clears messages and missed call backs", () => {
+    const c = { ...own, missedCallbacks: 1 };
+    const vm = open(c);
+    const view = menuView(vm, DEFAULT_SETTINGS, c);
+    expect(view.title).toBe("2 NEW VOICEMAIL");
+    expect(view.detail).toEqual(["1 MISSED CALL BACK"]);
+    expect(view.labels).toEqual({ 1: "Play", 3: "Clear" });
+    expect(menuPrompt(vm, DEFAULT_SETTINGS, c)).toMatch(
+      /2 new voicemail messages\. Press 1 to play them\. You missed a call back.*Press 3 to clear/,
+    );
+    expect(step(vm, digit(1), c)).toMatchObject({ state: undefined, action: { type: "vm-play" } });
+    expect(step(vm, digit(3), c).action).toEqual({
+      type: "vm-clear",
+      voicemail: true,
+      callbacks: true,
+    });
+  });
+
+  it("only call backs: 3 clears them; nothing at all: no Clear", () => {
+    const c = { ...own, missedCount: 0, missedCallbacks: 2 };
+    expect(menuView(open(c), DEFAULT_SETTINGS, c).detail).toEqual(["2 MISSED CALL BACKS"]);
+    expect(step(open(c), digit(3), c).action).toEqual({
+      type: "vm-clear",
+      voicemail: false,
+      callbacks: true,
+    });
+    const none = { ...own, missedCount: 0 };
+    expect(menuView(open(none), DEFAULT_SETTINGS, none).labels).toEqual({ 1: "Play" });
+    expect(step(open(none), digit(3), none).action).toBeUndefined();
+  });
+
+  it("a kids' phone asks a grown-up; other phones play in the app", () => {
+    const kids = { ...ctx, play: "kids" as const };
+    expect(menuView(open(kids), DEFAULT_SETTINGS, kids).detail).toEqual(["ASK A GROWN-UP"]);
+    expect(menuPrompt(open(kids), DEFAULT_SETTINGS, kids)).toMatch(/Ask a grown-up/);
+    expect(step(open(kids), digit(1), kids).action).toBeUndefined();
+    const lounge = { ...ctx, play: "app" as const };
+    expect(menuView(open(lounge), DEFAULT_SETTINGS, lounge).detail).toEqual(["PLAY IN APP"]);
   });
 });
 
@@ -128,26 +181,6 @@ describe("menuStep", () => {
   it("exits immediately on handset lift or an incoming call", () => {
     const open = run([menu(), digit(2)]).state;
     expect(menuStep(open, DEFAULT_SETTINGS, { type: "exit" }, ctx).state).toBeUndefined();
-  });
-
-  it("clears missed call backs with 4 (counted apart from voicemail)", () => {
-    const g = { ...ctx, greeting: { kind: "default" as const, canRecord: true } };
-    const c = { ...g, missedCount: 0, missedCallbacks: 1 };
-    const step = (state: MenuState | undefined, e: MenuEvent, x: MenuContext = c) =>
-      menuStep(state, DEFAULT_SETTINGS, e, x);
-    const vm = step(step(undefined, menu()).state, digit(2)).state as MenuState;
-    const view = menuView(vm, DEFAULT_SETTINGS, c);
-    expect(view.title).toBe("NO VOICEMAIL");
-    expect(view.labels).toEqual({ 1: "Name", 2: "Greeting", 3: "Default", 4: "Clear missed" });
-    expect(menuPrompt(vm, DEFAULT_SETTINGS, c)).toMatch(/missed a call back.*Press 4 to clear/);
-    expect(step(vm, digit(4)).action).toEqual({ type: "missed-clear" });
-    // Nothing to clear: 4 does nothing.
-    expect(step(vm, digit(4), g).action).toBeUndefined();
-  });
-
-  it("says voicemail playback isn't available yet", () => {
-    const r = run([menu(), digit(2)]);
-    expect(r.said.at(-1)).toMatch(/2 people.*not available yet/);
   });
 });
 
