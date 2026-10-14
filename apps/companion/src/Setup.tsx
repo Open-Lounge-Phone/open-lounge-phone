@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { createApi } from "./api.ts";
 import { defaultTimeZone } from "./session.ts";
+import { TimeZonePicker } from "./TimeZonePicker.tsx";
+import { zoneProblem } from "./timeZones.ts";
 
 export function Setup({ setupToken, onDone }: { setupToken: string; onDone(token: string): void }) {
   const [householdName, setHouseholdName] = useState("");
@@ -11,6 +13,7 @@ export function Setup({ setupToken, onDone }: { setupToken: string; onDone(token
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (zoneProblem(timeZone)) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -41,27 +44,22 @@ export function Setup({ setupToken, onDone }: { setupToken: string; onDone(token
           <input
             value={householdName}
             onChange={(e) => setHouseholdName(e.target.value)}
-            placeholder="The Garcia home"
             maxLength={64}
             required
           />
+          <span className="hint">For example, The Garcia home.</span>
         </label>
         <label>
           Your name
           <input
             value={guardianName}
             onChange={(e) => setGuardianName(e.target.value)}
-            placeholder="Mom"
             maxLength={24}
             required
           />
           <span className="hint">This is how you appear on the phone's keys.</span>
         </label>
-        <label>
-          Time zone
-          <input value={timeZone} onChange={(e) => setTimeZone(e.target.value)} required />
-          <span className="hint">Used for quiet hours.</span>
-        </label>
+        <TimeZonePicker value={timeZone} onChange={setTimeZone} />
         {error && (
           <p className="error" role="alert">
             {error}

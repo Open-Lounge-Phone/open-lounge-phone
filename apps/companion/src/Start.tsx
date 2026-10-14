@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { createApi } from "./api.ts";
 import { handleHint, inviteTokenFrom, normalizeHandle, suggestHandle } from "./handles.ts";
 import {
@@ -9,7 +9,9 @@ import {
   signUpWithPasskey,
 } from "./passkeys.ts";
 import { defaultTimeZone } from "./session.ts";
+import { TimeZonePicker } from "./TimeZonePicker.tsx";
 import { Turnstile } from "./Turnstile.tsx";
+import { zoneProblem } from "./timeZones.ts";
 
 type Choice = "menu" | "signup" | "invite";
 
@@ -25,7 +27,9 @@ export function Start({
   onInvite(inviteToken: string): void;
 }) {
   const [choice, setChoice] = useState<Choice>("menu");
-  const [signupOpen, setSignupOpen] = useState(false);
+  // undefined until the server says: never claim "invite-only" (or "open") before we know
+  const [signupOpen, setSignupOpen] = useState<boolean>();
+  const [setupNeeded, setSetupNeeded] = useState(false);
   const [turnstileKey, setTurnstileKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -38,9 +42,10 @@ export function Start({
       .then(
         (s) => {
           setSignupOpen(s.signup === true);
+          setSetupNeeded(s.needed === true);
           setTurnstileKey(s.turnstileSiteKey);
         },
-        () => {},
+        () => setSignupOpen(false),
       );
   }, []);
 
@@ -107,11 +112,13 @@ export function Start({
           </p>
         )}
         <p className="muted">
-          {signupOpen
-            ? "Anyone can create an account on this server. "
-            : "This server is invite-only: ask a guardian for an invite link. "}
-          Lost your passkey? Ask a guardian for a new sign-in link. Setting up a new server? Open
-          the setup link it printed when it first started.
+          {signupOpen === true && "Anyone can create an account on this server. "}
+          {signupOpen === false &&
+            "This server is invite-only: ask someone who uses it to invite you. "}
+          Lost your passkey? Someone who manages your household or team can send you a new sign-in
+          link.
+          {setupNeeded &&
+            " Setting up this server? Open the setup link it printed when it first started."}
         </p>
         <details>
           <summary>Developer sign-in</summary>
@@ -187,6 +194,19 @@ function SignUp({
   onBack(): void;
 }) {
   const [check, setCheck] = useState<string>();
+  const [checkFailed, setCheckFailed] = useState(false);
+  const [checkTry, setCheckTry] = useState(0);
+  const onCheckToken = useCallback((t: string | undefined) => {
+    setCheck(t);
+    if (t) setCheckFailed(false);
+  }, []);
+  const onCheckFail = useCallback(() => setCheckFailed(true), []);
+  // a check that never answers (blocked silently) counts as failed after a while
+  useEffect(() => {
+    if (!turnstileKey || check || checkFailed) return;
+    const t = setTimeout(() => setCheckFailed(true), 20_000);
+    return () => clearTimeout(t);
+  }, [turnstileKey, check, checkFailed]);
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [handleTouched, setHandleTouched] = useState(false);
@@ -201,6 +221,15 @@ function SignUp({
     e.preventDefault();
     if (!shown || hint) {
       setHandleTouched(true);
+      return;
+    }
+    if (zoneProblem(timeZone)) return;
+    if (turnstileKey && !check) {
+      setError(
+        checkFailed
+          ? "The person check didn't load. Tap Try again below."
+          : "One moment: still checking you're a person.",
+      );
       return;
     }
     setBusy(true);
@@ -233,7 +262,6 @@ function SignUp({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Jesse"
             maxLength={24}
             autoComplete="given-name"
             required
@@ -248,7 +276,6 @@ function SignUp({
               setHandleTouched(true);
               setHandle(normalizeHandle(e.target.value));
             }}
-            placeholder="jesse"
             maxLength={30}
             autoCapitalize="none"
             autoCorrect="off"
@@ -266,18 +293,40 @@ function SignUp({
             )}
           </span>
         </label>
-        <label>
-          Time zone
-          <input value={timeZone} onChange={(e) => setTimeZone(e.target.value)} required />
-          <span className="hint">Used for quiet hours.</span>
-        </label>
-        {turnstileKey && <Turnstile siteKey={turnstileKey} onToken={setCheck} />}
+        <TimeZonePicker value={timeZone} onChange={setTimeZone} />
+        {turnstileKey && (
+          <div className="stack">
+            <Turnstile
+              key={checkTry}
+              siteKey={turnstileKey}
+              onToken={onCheckToken}
+              onFail={onCheckFail}
+            />
+            {checkFailed ? (
+              <p className="hint error">
+                The "are you a person?" check didn't load. A content blocker can stop it.{" "}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    setCheckFailed(false);
+                    setCheckTry((n) => n + 1);
+                  }}
+                >
+                  Try again
+                </button>
+              </p>
+            ) : (
+              !check && <p className="hint">Checking you're a person…</p>
+            )}
+          </div>
+        )}
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
-        <button type="submit" className="primary" disabled={busy || (!!turnstileKey && !check)}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Waiting for your device…" : "Create account with a passkey"}
         </button>
         <button type="button" className="link" onClick={onBack}>

@@ -33,9 +33,12 @@ function loadScript(): Promise<void> {
 export function Turnstile({
   siteKey,
   onToken,
+  onFail,
 }: {
   siteKey: string;
   onToken(token: string | undefined): void;
+  /** The check couldn't load or run (blocked script, network, misconfigured key). */
+  onFail?(): void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -48,15 +51,21 @@ export function Turnstile({
           sitekey: siteKey,
           callback: (t: string) => onToken(t),
           "expired-callback": () => onToken(undefined),
-          "error-callback": () => onToken(undefined),
+          "error-callback": () => {
+            onToken(undefined);
+            onFail?.();
+          },
         });
       },
-      () => onToken(undefined),
+      () => {
+        onToken(undefined);
+        onFail?.();
+      },
     );
     return () => {
       gone = true;
       if (id) window.turnstile?.remove(id);
     };
-  }, [siteKey, onToken]);
+  }, [siteKey, onToken, onFail]);
   return <div ref={box} className="turnstile" />;
 }

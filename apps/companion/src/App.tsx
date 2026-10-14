@@ -487,7 +487,9 @@ function SignedIn({
         {meInfo && !me && route.name !== "add-household" && route.name !== "account" && (
           <section className="card stack">
             <h2>You're not in a household yet</h2>
-            <p className="muted">Ask a guardian for an invite link, or start your own household.</p>
+            <p className="muted">
+              Ask someone in a household or team here to invite you, or start your own.
+            </p>
             <button type="button" onClick={() => setRoute({ name: "add-household" })}>
               Add a household
             </button>
