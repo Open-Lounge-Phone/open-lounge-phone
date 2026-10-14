@@ -32,3 +32,10 @@ apps/server-cloudflare/instances/
 
 # Wokwi CI token (owner secret)
 firmware/.wokwi-token
+
+# the Python add-on bridge (sdk/python)
+sdk/python/.venv/
+__pycache__/
+*.egg-info/
+*.addon-key
+*.addon-key.json

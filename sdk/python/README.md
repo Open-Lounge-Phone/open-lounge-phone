@@ -1,0 +1,122 @@
+# The add-on bridge (Python)
+
+`openloungephone-addon` (import `olp_addon`) lets a service take part in Open Lounge Phone calls
+as an **add-on**: something a person links to their own account, like an AI companion or a notes
+taker. The bridge does the linking, the key and the signed challenge, and the WebRTC call; your
+code gets events and plain PCM audio.
+
+Licensed **Apache-2.0** (see `LICENSE`), so any service can use it. The rest of Open Lounge Phone
+is AGPL-3.0-or-later; this directory is the exception.
+
+What an add-on is, who may reach it and how it's labelled: [docs/add-ons.md](../../docs/add-ons.md).
+The server must have add-ons turned on (`ADDONS=on` when self-hosting, `--addons` on Cloudflare).
+
+## Install
+
+Python 3.10 or newer.
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -e .          # from this directory (aiortc, websockets, cryptography)
+```
+
+aiortc and PyAV usually install from prebuilt wheels. If pip has to build PyAV from source on
+your platform, it needs FFmpeg's development libraries first.
+
+## Use
+
+```python
+import asyncio
+from olp_addon import Addon
+
+addon = Addon("https://hub.example", "seat.addon-key")   # makes the key on first use (mode 600)
+
+@addon.on_call
+async def talk(call):
+    print("call from", call.caller.name, call.caller.address)   # verified by the server
+    await call.answer()
+    async for frame in call.frames():   # 20 ms of 16-bit mono PCM at 48 kHz
+        await call.send(frame)           # say something back (here: an echo)
+
+asyncio.run(addon.run())   # links first (prints a 6-digit code), then takes calls
+```
+
+The first run prints a code. Its owner types it into the companion app under **Settings →
+Add-ons → Link an add-on**, picks its name (the part after `+`) and who besides them may talk to
+it. From then on the add-on answers a signed challenge on every connection; no one's password or
+session is ever stored in it.
+
+## API
+
+`Addon(server_url, key_path, *, rate=48000)`
+: One add-on on one server. `key_path` is its Ed25519 key (PEM; made if missing, mode 600). The
+  link is kept in `<key_path>.json` (mode 600). `rate` is the PCM sample rate both ways (8000,
+  16000, 24000 or 48000 are typical).
+
+`await addon.link(on_code=print) -> str`
+: Asks for a code, gives it to `on_code`, waits until the owner enters it, saves the link and
+  answers the add-on's id. `addon.linked` says whether it's linked.
+
+`@addon.on_call` / `addon.on_call(handler)`
+: `handler(call)` runs for every incoming call (ringing). Without one, calls are declined.
+
+`await addon.run()`
+: Links if needed, then stays connected (reconnects with backoff) until `stop()`. Raises
+  `AddonRemoved` when the owner removes it (the link file is deleted), `AddonError` when the
+  server refuses it (for example: add-ons are off on that server).
+
+`await addon.start()` / `await addon.stop()`
+: The same in the background (returns once connected).
+
+`addon.identity`
+: Once connected: `.name`, `.address` (`handle+name@host`) and `.owner` (`.name`, `.address`).
+
+`await addon.call(address) -> Call`
+: Calls its owner (`handle@host`) or a connection its owner allowed. Returns once the server
+  answers: `call.state` is `ringing`, or `ended` with `call.reason` (`unavailable` when it isn't
+  allowed). The add-on sends the WebRTC offer when the call connects.
+
+`Call`
+: - `call.caller`: who is calling (`.address`, `.name`), checked by their server.
+  - `call.callee`: the address it dialled (outgoing calls).
+  - `call.direction` (`"in"`/`"out"`), `call.state` (`ringing`, `connecting`, `active`, `ended`),
+    `call.reason` once ended.
+  - `await call.answer()`, `await call.hangup()`.
+  - `async for frame in call.frames()`: what the other person says, 20 ms frames of 16-bit mono
+    PCM at `rate`, until the call ends.
+  - `await call.send(pcm)`: play 16-bit mono PCM at `rate` (any length; it waits when more than
+    about a second is queued). `call.clear()` drops what hasn't played.
+  - `call.on_key = fn`: a key the other person pressed (`0`–`9`, `*`, `#`, from the app's keypad).
+  - `call.on_hangup = fn`: called with the reason when the call ends; or `await call.wait_ended()`.
+  - `await call.wait_active()`: until audio flows.
+
+Audio is converted for you: apps send Opus, hardware phones PCMU (8 kHz); the bridge resamples
+to and from `rate`.
+
+## Demo
+
+`examples/echo.py` plays back what it hears, half a second later. `#` on the app's keypad makes
+it hang up.
+
+```sh
+.venv/bin/python examples/echo.py --server http://localhost:8787 --key echo.addon-key
+.venv/bin/python examples/echo.py --server http://localhost:8787 --key echo.addon-key --call you@localhost:8787
+```
+
+## Tests
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+The end-to-end test (a local server, this echo add-on, and the companion app in headless
+Chromium) lives with the repository's other live tests:
+`OLP_ADDON_E2E=1 PLAYWRIGHT_CORE=… npx vitest run tests/e2e/live/addon.test.ts`.
+
+## The protocol underneath
+
+An add-on speaks the same device protocol as a phone ([docs/protocol.md](../../docs/protocol.md)):
+`hello` (`model: "addon"`), `pair.begin` (`kind: "addon"`), `auth.challenge`/`auth.proof`,
+`config` (with `addon`), `call.ringing` (with the verified caller), `call.answer`,
+`call.hangup`, `call.address`, `call.key`, `rtc.config`, `rtc.sdp`, `rtc.ice`. Anyone may write
+an add-on in another language from that description.

@@ -23,6 +23,22 @@ jobs:
       - name: Federation spec is up to date
         run: npm run docs:federation && git diff --exit-code docs/federation-spec.md
 
+  addon-bridge:
+    name: Add-on bridge (Python unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+
   firmware:
     name: Firmware (ESP-IDF build)
     runs-on: ubuntu-latest

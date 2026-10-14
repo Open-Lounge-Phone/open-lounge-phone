@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openloungephone-addon"
+version = "0.1.0"
+description = "The add-on bridge for Open Lounge Phone: link a service to someone's account and take calls as PCM audio."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "The Open Lounge Phone contributors" }]
+keywords = ["telephony", "webrtc", "voice", "open lounge phone"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Communications :: Telephony",
+  "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+  "aiortc>=1.9",
+  "websockets>=12",
+  "cryptography>=42",
+]
+
+[project.urls]
+Homepage = "https://openloungephone.app"
+Source = "https://github.com/Open-Lounge-Phone/open-lounge-phone/tree/main/sdk/python"
+
+[tool.setuptools]
+packages = ["olp_addon"]
