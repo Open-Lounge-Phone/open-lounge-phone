@@ -10,9 +10,7 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.6.0 (unreleased)
-
-On `main`, not tagged yet.
+## 0.6.0 (2026-10-14, `server-v0.6.0`)
 
 - **Add-ons** ([docs/add-ons.md](docs/add-ons.md)): a service you link to your own account (an AI
   companion, a notes taker) gets an address on it, `you+name@host`, and takes part in calls like a
