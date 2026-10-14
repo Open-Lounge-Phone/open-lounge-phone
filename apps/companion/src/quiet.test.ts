@@ -4,9 +4,9 @@ import { describeDays, describeRule, spansMidnight, toggleDay, validateRule } fr
 describe("quiet hours helpers", () => {
   it("validates rules", () => {
     expect(validateRule({ days: [1], start: "21:00", end: "07:00" })).toBeUndefined();
-    expect(validateRule({ days: [], start: "21:00", end: "07:00" })).toMatch(/day/);
-    expect(validateRule({ days: [1], start: "9:00", end: "07:00" })).toMatch(/Start/);
-    expect(validateRule({ days: [1], start: "21:00", end: "24:00" })).toMatch(/End/);
+    expect(validateRule({ days: [], start: "21:00", end: "07:00" })).toBe("Pick at least one day.");
+    expect(validateRule({ days: [1], start: "9:00", end: "07:00" })).toBe("Pick a start time.");
+    expect(validateRule({ days: [1], start: "21:00", end: "24:00" })).toBe("Pick an end time.");
     expect(validateRule({ days: [7], start: "21:00", end: "07:00" })).toMatch(/day/);
   });
 

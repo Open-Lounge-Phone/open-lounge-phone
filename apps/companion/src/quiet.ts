@@ -12,10 +12,10 @@ export function minutes(hhmm: string): number {
 
 /** Returns an error message, or undefined if the rule is valid. */
 export function validateRule(rule: QuietRule): string | undefined {
-  if (rule.days.length === 0) return "Pick at least one day";
-  if (rule.days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) return "Invalid day";
-  if (!HHMM.test(rule.start)) return "Start time must be HH:MM";
-  if (!HHMM.test(rule.end)) return "End time must be HH:MM";
+  if (rule.days.length === 0) return "Pick at least one day.";
+  if (rule.days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) return "Pick the days again.";
+  if (!HHMM.test(rule.start)) return "Pick a start time.";
+  if (!HHMM.test(rule.end)) return "Pick an end time.";
   return undefined;
 }
 

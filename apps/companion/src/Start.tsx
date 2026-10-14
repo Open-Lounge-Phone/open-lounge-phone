@@ -34,6 +34,7 @@ export function Start({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [devToken, setDevToken] = useState("");
+  const [devProblem, setDevProblem] = useState<string>();
   const supported = passkeysSupported();
 
   useEffect(() => {
@@ -124,14 +125,28 @@ export function Start({
           <summary>Developer sign-in</summary>
           <form
             className="stack"
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
-              if (devToken.trim().length >= 16) onToken(devToken.trim());
+              const ok = devToken.trim().length >= 16;
+              setDevProblem(ok ? undefined : "Paste the whole session token.");
+              if (ok) onToken(devToken.trim());
             }}
           >
             <label>
               Session token
-              <input value={devToken} onChange={(e) => setDevToken(e.target.value)} />
+              <input
+                value={devToken}
+                onChange={(e) => {
+                  setDevToken(e.target.value);
+                  setDevProblem(undefined);
+                }}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={devProblem ? true : undefined}
+              />
+              {devProblem && <span className="hint error">{devProblem}</span>}
             </label>
             <button type="submit">Sign in</button>
           </form>

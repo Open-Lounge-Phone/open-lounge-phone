@@ -1,6 +1,10 @@
 import { type FormEvent, useState } from "react";
 import type { Api, Membership } from "./api.ts";
+import { requiredProblem } from "./fields.ts";
+import { defaultTimeZone } from "./session.ts";
 import { type SpaceType, spaceNoun } from "./spaces.ts";
+import { TimeZonePicker } from "./TimeZonePicker.tsx";
+import { zoneProblem } from "./timeZones.ts";
 
 /** Top-bar picker between the households you belong to (shown when there's more than one). */
 export function HouseholdSwitcher({
@@ -82,15 +86,20 @@ export function AddHousehold({
   const [name, setName] = useState("");
   const [type, setType] = useState<SpaceType>("home");
   const [busy, setBusy] = useState(false);
+  const [timeZone, setTimeZone] = useState(defaultTimeZone);
   const [error, setError] = useState<string>();
+  const [nameProblem, setNameProblem] = useState<string>();
   const noun = spaceNoun(type);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const problem = requiredProblem(name, "a name");
+    setNameProblem(problem);
+    if (problem || zoneProblem(timeZone)) return;
     setBusy(true);
     setError(undefined);
     try {
-      const { household } = await api.createHousehold({ name: name.trim(), type });
+      const { household } = await api.createHousehold({ name: name.trim(), type, timeZone });
       onCreated(household.id);
     } catch (err) {
       setError((err as Error).message);
@@ -99,7 +108,7 @@ export function AddHousehold({
   };
 
   return (
-    <form className="stack" onSubmit={(e) => void submit(e)}>
+    <form className="stack" noValidate onSubmit={(e) => void submit(e)}>
       <button type="button" className="link back" onClick={onCancel}>
         ← Back
       </button>
@@ -107,21 +116,36 @@ export function AddHousehold({
       <fieldset className="stack">
         <legend>What kind?</legend>
         <label className="check">
-          <input type="radio" checked={type === "home"} onChange={() => setType("home")} />
+          <input
+            type="radio"
+            name="space-type"
+            checked={type === "home"}
+            onChange={() => setType("home")}
+          />
           <span>
             <strong>A household</strong>
             <span className="muted small"> — a home with kids' phones, people and quiet hours</span>
           </span>
         </label>
         <label className="check">
-          <input type="radio" checked={type === "team"} onChange={() => setType("team")} />
+          <input
+            type="radio"
+            name="space-type"
+            checked={type === "team"}
+            onChange={() => setType("team")}
+          />
           <span>
             <strong>A team</strong>
             <span className="muted small"> — grown-ups working together; no kids' phones</span>
           </span>
         </label>
         <label className="check">
-          <input type="radio" checked={type === "org"} onChange={() => setType("org")} />
+          <input
+            type="radio"
+            name="space-type"
+            checked={type === "org"}
+            onChange={() => setType("org")}
+          />
           <span>
             <strong>An organization</strong>
             <span className="muted small"> — a club, office or venue with Lounge phones</span>
@@ -138,12 +162,23 @@ export function AddHousehold({
         Name
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={type === "home" ? "Grandma's place" : type === "team" ? "Studio" : "Club"}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameProblem(undefined);
+          }}
           maxLength={64}
-          required
+          aria-invalid={nameProblem ? true : undefined}
         />
+        <span className={nameProblem ? "hint error" : "hint"}>
+          {nameProblem ??
+            `For example, ${type === "home" ? "Grandma's place" : type === "team" ? "Studio" : "The club"}.`}
+        </span>
       </label>
+      <TimeZonePicker
+        value={timeZone}
+        onChange={setTimeZone}
+        hint={type === "home" ? "Used for quiet hours." : "Used for opening hours."}
+      />
       {error && (
         <p className="error" role="alert">
           {error}

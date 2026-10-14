@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, Role, User } from "./api.ts";
 import type { MemberLive } from "./connection.ts";
+import { requiredProblem } from "./fields.ts";
 import { presenceOf } from "./presence.ts";
 import { inviteLink } from "./session.ts";
 import { kidSafe, roleNoun, type SpaceType } from "./spaces.ts";
@@ -40,6 +41,7 @@ export function People({
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>(initialRole);
   const [busy, setBusy] = useState(false);
+  const [nameProblem, setNameProblem] = useState<string>();
   const [shared, setShared] = useState<Shared>();
   const [confirmRemove, setConfirmRemove] = useState<string>();
 
@@ -57,6 +59,9 @@ export function People({
 
   const invite = async (e: FormEvent) => {
     e.preventDefault();
+    const problem = requiredProblem(name, "their name");
+    setNameProblem(problem);
+    if (problem) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -163,7 +168,7 @@ export function People({
         })}
       </ul>
 
-      <form className="card stack" onSubmit={(e) => void invite(e)}>
+      <form className="card stack" noValidate onSubmit={(e) => void invite(e)}>
         <h3>Invite someone</h3>
         <p className="muted small">
           They'll get a link. Opening it adds them to {householdName} in this app, where they can
@@ -174,11 +179,16 @@ export function People({
           Name (as it appears on the phone)
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Grandma"
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameProblem(undefined);
+            }}
             maxLength={24}
-            required
+            aria-invalid={nameProblem ? true : undefined}
           />
+          <span className={nameProblem ? "hint error" : "hint"}>
+            {nameProblem ?? "Up to 24 characters, for example Grandma."}
+          </span>
         </label>
         <fieldset className="choice">
           <legend>They are a…</legend>
@@ -205,7 +215,7 @@ export function People({
               : "Admin — can also manage people, extensions, ring groups and hours (only the owner makes admins)"}
           </label>
         </fieldset>
-        <button type="submit" className="primary" disabled={busy || !name.trim()}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Creating link…" : "Create invite link"}
         </button>
       </form>

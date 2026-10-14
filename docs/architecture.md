@@ -51,8 +51,9 @@ and asking for a household the account isn't in is refused (403). Ways in:
   plus a personal household (`POST /api/signup/options`, `POST /api/signup`);
 - an **invite link**: signed out it creates a new person; signed in it adds a membership to your
   account;
-- **Add a household** (`POST /api/households`): any account on an open server, or a guardian on
-  an invite-only one.
+- **Add a household** (`POST /api/households {name, type?, timeZone?}`): any account on an open
+  server, or a guardian on an invite-only one. The companion asks for the time zone (starting on
+  the device's); without one the server uses the current space's.
 
 A household is one kind of **space** (`type`: `home`, `team` or `org`; `POST /api/spaces`).
 Kids' phones and quiet hours exist only in homes; team and org spaces hold grown-ups' own phones

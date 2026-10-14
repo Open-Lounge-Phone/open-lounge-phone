@@ -126,7 +126,7 @@ export function QuietHours({ api, onBack, onPhones }: Props) {
         <button type="button" className="link inline" onClick={onPhones}>
           set that per phone
         </button>
-        . Times are in {timeZone.replace(/_/g, " ")} time.
+        .{loaded && ` Times are in ${timeZone.replace(/_/g, " ")} time.`}
       </p>
 
       {loaded && rules.length === 0 && !adding && (
@@ -147,7 +147,7 @@ export function QuietHours({ api, onBack, onPhones }: Props) {
             ) : (
               <div className="rule-summary">
                 <span className="rule-text">
-                  {validateRule(r) ? `${validateRule(r)} — tap Edit` : friendlyRule(r)}
+                  {validateRule(r) ? `${validateRule(r)} Tap Edit.` : friendlyRule(r)}
                 </span>
                 <span className="rule-actions">
                   <button type="button" onClick={() => setEditing(i)}>

@@ -186,6 +186,8 @@ function AddressCard({
   const [handle, setHandle] = useState(account.handle);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  /** Show what's wrong in red once they tried to save (before that, it's guidance). */
+  const [showHint, setShowHint] = useState(false);
   const host = account.address.slice(account.address.indexOf("@") + 1);
   const hint = handleHint(handle);
 
@@ -212,8 +214,10 @@ function AddressCard({
       {editing ? (
         <form
           className="stack"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
+            setShowHint(true);
             if (!hint) void save();
           }}
         >
@@ -224,9 +228,11 @@ function AddressCard({
               onChange={(e) => setHandle(normalizeHandle(e.target.value))}
               maxLength={30}
               autoCapitalize="none"
+              autoCorrect="off"
               spellCheck={false}
+              aria-invalid={hint && showHint ? true : undefined}
             />
-            <span className="hint">
+            <span className={hint && showHint ? "hint error" : "hint"}>
               {hint ?? `${handle}@${host} · you can change it once a day`}
             </span>
           </label>
@@ -235,7 +241,7 @@ function AddressCard({
               {error}
             </p>
           )}
-          <button type="submit" className="primary" disabled={busy || !!hint}>
+          <button type="submit" className="primary" disabled={busy}>
             Save handle
           </button>
           <button type="button" className="link" onClick={() => setEditing(false)}>

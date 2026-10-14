@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import type { Api } from "./api.ts";
+import { requiredProblem } from "./fields.ts";
 import { allowedModes, initialMode, MODE_TEXT, type PhoneMode } from "./pairMode.ts";
 
 export function Pair({
@@ -28,6 +29,7 @@ export function Pair({
   const [words, setWords] = useState<string[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [problems, setProblems] = useState<{ code?: string; name?: string }>({});
 
   // Once the code is complete: preselect what the phone was set up as.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when the code changes
@@ -51,6 +53,15 @@ export function Pair({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const next = {
+      code:
+        code.length === 6
+          ? undefined
+          : "Enter the 6-digit code the phone reads out when you lift its handset.",
+      name: requiredProblem(name, "a name for the phone"),
+    };
+    setProblems(next);
+    if (next.code || next.name) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -77,7 +88,7 @@ export function Pair({
         <li>Enter the code below within 10 minutes.</li>
       </ol>
       <UseOldDeviceHint />
-      <form className="card stack" onSubmit={(e) => void submit(e)}>
+      <form className="card stack" noValidate onSubmit={(e) => void submit(e)}>
         <label>
           Pairing code
           <input
@@ -87,10 +98,13 @@ export function Pair({
             pattern="\d{6}"
             maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="123456"
-            required
+            onChange={(e) => {
+              setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+              setProblems((p) => ({ ...p, code: undefined }));
+            }}
+            aria-invalid={problems.code ? true : undefined}
           />
+          {problems.code && <span className="hint error">{problems.code}</span>}
         </label>
         {words && (
           <div className="fingerprint" role="status">
@@ -103,19 +117,20 @@ export function Pair({
           Phone name
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={
-              mode === "lounge" ? "Lobby" : mode === "personal" ? "My desk" : "Maya's phone"
-            }
+            onChange={(e) => {
+              setName(e.target.value);
+              setProblems((p) => ({ ...p, name: undefined }));
+            }}
             maxLength={24}
-            required
+            aria-invalid={problems.name ? true : undefined}
           />
+          {problems.name && <span className="hint error">{problems.name}</span>}
           <span className="hint">
             {mode === "personal"
-              ? "The other grown-ups go on its keys; calls to you ring it."
+              ? "For example, Desk. The other grown-ups go on its keys; calls to you ring it."
               : mode === "kids"
-                ? "You'll be added to its first key automatically."
-                : "Nothing on its keys until someone signs in."}
+                ? "For example, Kitchen phone. You'll be added to its first key automatically."
+                : "For example, Lobby. Nothing on its keys until someone signs in."}
           </span>
         </label>
         <fieldset className="choice">
@@ -144,7 +159,7 @@ export function Pair({
             {error}
           </p>
         )}
-        <button type="submit" className="primary" disabled={busy || code.length !== 6}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? "Pairing…" : "Pair phone"}
         </button>
       </form>
