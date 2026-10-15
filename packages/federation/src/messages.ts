@@ -243,6 +243,18 @@ export const AddonSharesBody = z.object({
 export type AddonSharesBody = z.infer<typeof AddonSharesBody>;
 
 /**
+ * `POST /fed/v1/addon-shares/leave` (feature `addon-leave`): `from` gives back the share `share`
+ * of `to`'s add-on `addon` (`to+addon+share@receiver`). The receiver deletes `from`'s grant for it.
+ */
+export const AddonLeaveBody = z.object({
+  from: Party,
+  to: Handle.describe("The add-on's owner on the receiving server."),
+  addon: Handle.describe("The add-on's name."),
+  share: ShareId,
+});
+export type AddonLeaveBody = z.infer<typeof AddonLeaveBody>;
+
+/**
  * `POST /fed/v1/lounge/claim`: the sending server vouches that `from` (its account) scanned this
  * server's Lounge phone; `directory` is their speed-dial there (their connections).
  */

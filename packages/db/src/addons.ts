@@ -15,6 +15,20 @@ export interface Addon {
   createdAt: number;
   lastSeen: number | null;
   fw: string | null;
+  /** What it said about itself (`addon.about`); null: it never said. */
+  about: AddonSelf | null;
+}
+
+/** An add-on's own description (`addon.about`), with its defaults filled in. */
+export interface AddonSelf {
+  summary?: string;
+  hears: "nothing" | "live" | "keeps";
+  transcribes: boolean;
+  answers: boolean;
+  calls: boolean;
+  shares: boolean;
+  keys: boolean;
+  lines: number;
 }
 
 type Row = {
@@ -28,7 +42,17 @@ type Row = {
   created_at: number;
   last_seen: number | null;
   fw: string | null;
+  about: string | null;
 };
+
+function parseAbout(raw: string | null): AddonSelf | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AddonSelf;
+  } catch {
+    return null;
+  }
+}
 
 const toAddon = (r: Row): Addon => ({
   id: r.id,
@@ -41,6 +65,7 @@ const toAddon = (r: Row): Addon => ({
   createdAt: r.created_at,
   lastSeen: r.last_seen,
   fw: r.fw,
+  about: parseAbout(r.about ?? null),
 });
 
 /** Why linking an add-on didn't happen. */
@@ -67,6 +92,15 @@ export class AddonStore {
       name.toLowerCase(),
     );
     return r && toAddon(r);
+  }
+
+  /** The add-ons linked in one space. */
+  async inHousehold(householdId: string): Promise<Addon[]> {
+    const rows = await this.sql.all<Row>(
+      "SELECT * FROM addons WHERE household_id = ? ORDER BY name",
+      householdId,
+    );
+    return rows.map(toAddon);
   }
 
   /** An account's add-ons, by name. */
@@ -113,6 +147,7 @@ export class AddonStore {
       createdAt: now,
       lastSeen: null,
       fw: null,
+      about: null,
     };
     // A key linked again replaces its earlier link (and is never also a phone).
     await this.sql.batch([
@@ -149,6 +184,11 @@ export class AddonStore {
       fw ?? null,
       id,
     );
+  }
+
+  /** It said what it does (`addon.about`), replacing what it said before. */
+  async setAbout(id: string, about: AddonSelf): Promise<void> {
+    await this.sql.run("UPDATE addons SET about = ? WHERE id = ?", JSON.stringify(about), id);
   }
 
   /** Its owner saw (and dismissed) the note that the old allow-list was removed (0031). */
@@ -343,6 +383,96 @@ export class AddonStore {
       ownerAccountId,
       host,
       accountId,
+    );
+  }
+
+  /** A holder here gives a share back (their grant goes); answers whether it existed. */
+  async leave(grantId: string, accountId: string): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      "DELETE FROM addon_grants WHERE id = ? AND host = '' AND account_id = ?",
+      grantId,
+      accountId,
+    );
+    return changes === 1;
+  }
+
+  /**
+   * A holder on another server gave a share back (their server said so): their grant for it
+   * goes. Answers the grant that went, if any.
+   */
+  async leaveFrom(
+    addonId: string,
+    shareId: string,
+    host: string,
+    accountId: string,
+  ): Promise<AddonGrant | undefined> {
+    const grant = await this.grantFor(addonId, shareId, host, accountId);
+    if (!grant) return undefined;
+    return (await this.revoke(grant.id)) ? grant : undefined;
+  }
+
+  // --- "Stop its calls" (a holder's own choice, kept by their server) ----------------------
+
+  /** Whether `accountId` stopped calls from this add-on (its server, owner account and name). */
+  async muted(
+    accountId: string,
+    addon: { host: string; ownerAccount: string; name: string },
+  ): Promise<boolean> {
+    const r = await this.sql.first<{ n: number }>(
+      `SELECT 1 AS n FROM addon_mutes WHERE account_id = ? AND host = ? AND owner_account = ?
+       AND addon = ?`,
+      accountId,
+      addon.host,
+      addon.ownerAccount,
+      addon.name.toLowerCase(),
+    );
+    return !!r;
+  }
+
+  async setMuted(
+    accountId: string,
+    addon: { host: string; ownerAccount: string; name: string },
+    muted: boolean,
+    now: number,
+  ): Promise<void> {
+    if (muted) {
+      await this.sql.run(
+        `INSERT INTO addon_mutes (account_id, host, owner_account, addon, created_at)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+        accountId,
+        addon.host,
+        addon.ownerAccount,
+        addon.name.toLowerCase(),
+        now,
+      );
+    } else {
+      await this.sql.run(
+        `DELETE FROM addon_mutes WHERE account_id = ? AND host = ? AND owner_account = ?
+         AND addon = ?`,
+        accountId,
+        addon.host,
+        addon.ownerAccount,
+        addon.name.toLowerCase(),
+      );
+    }
+  }
+
+  /** Every add-on an account stopped calls from. */
+  async mutes(accountId: string): Promise<{ host: string; ownerAccount: string; name: string }[]> {
+    return this.sql.all(
+      `SELECT host, owner_account AS ownerAccount, addon AS name FROM addon_mutes
+       WHERE account_id = ?`,
+      accountId,
+    );
+  }
+
+  /** Drops one share another server told us we hold (we gave it back). */
+  async dropReceived(connectionId: string, addon: string, share: string): Promise<void> {
+    await this.sql.run(
+      "DELETE FROM connection_addon_shares WHERE connection_id = ? AND addon = ? AND share_id = ?",
+      connectionId,
+      addon,
+      share,
     );
   }
 

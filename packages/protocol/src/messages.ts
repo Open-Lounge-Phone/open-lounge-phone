@@ -187,6 +187,68 @@ export const AddonShareRefused = z
   })
   .describe("Server feature `addon-shares`, from an add-on: it won't make that share.");
 
+/** What an add-on does with what people say to it (`addon.about.hears`). */
+export const AddonHears = z
+  .enum(["nothing", "live", "keeps"])
+  .describe(
+    "`nothing`: it only plays sound and doesn't use what you say (one-way, e.g. a radio). `live`: it listens during the call and keeps nothing afterwards. `keeps`: it keeps what it hears (recordings, transcripts or notes).",
+  );
+
+export const AddonAbout = z
+  .object({
+    t: z.literal("addon.about"),
+    ...Ref,
+    summary: z
+      .string()
+      .trim()
+      .min(1)
+      .max(140)
+      .optional()
+      .describe("One plain sentence: what it is, as its page in the app shows it."),
+    hears: AddonHears,
+    transcribes: z
+      .boolean()
+      .optional()
+      .describe("It turns what it hears into text (default false)."),
+    answers: z
+      .boolean()
+      .optional()
+      .describe(
+        "People can call it (default true). False: the server refuses every call to it (`unavailable`).",
+      ),
+    calls: z
+      .boolean()
+      .optional()
+      .describe(
+        "It may call people (its owner, or holders within a share; default false). False: the server refuses its `call.address`.",
+      ),
+    shares: z
+      .boolean()
+      .optional()
+      .describe(
+        "It offers parts of itself to share (default false). False: the server refuses `addon.shares` that lists any share, and drops shares it offered before.",
+      ),
+    keys: z
+      .boolean()
+      .optional()
+      .describe(
+        "It responds to keys pressed during a call (default false). False: apps hide the keypad and the server doesn't pass `call.key` to it.",
+      ),
+    lines: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe(
+        "How many calls it takes at once (default 1). The server allows at most its own limit (10 by default); a call beyond that is `busy`. It places one call at a time either way.",
+      ),
+  })
+  .describe(
+    "Server feature `addons`, from an add-on: what it does, in its own words, for its page in the app. Send it after connecting, before `addon.shares`; it replaces the earlier one. The server enforces `answers`, `calls`, `shares`, `keys` and `lines`; `summary`, `hears` and `transcribes` are shown as the add-on's own statement. An add-on that never sends it is shown as not having said what it does, and keeps the rules of server 0.7.0 (it can be called, may call, may offer shares, gets keys, one call at a time).",
+  );
+export type AddonAbout = z.infer<typeof AddonAbout>;
+
 export const CallKey = z
   .object({
     t: z.literal("call.key"),
@@ -731,6 +793,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   AddonSharesMsg,
   AddonShareCreated,
   AddonShareRefused,
+  AddonAbout,
   PairBegin,
   AuthProof,
   Hook,

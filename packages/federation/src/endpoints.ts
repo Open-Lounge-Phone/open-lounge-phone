@@ -4,6 +4,7 @@ import type { z } from "zod";
 import {
   AcceptBody,
   Accepted,
+  AddonLeaveBody,
   AddonSharesBody,
   CallBody,
   CallResult,
@@ -196,6 +197,19 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
       "Replaces the previous list for that connection; an empty list clears it.",
       "Informational: the add-on's server decides every call into a share (`addon` target with `share`) by its own grants.",
       "Sent only to servers that list `addon-shares`.",
+    ],
+  },
+  {
+    method: "POST",
+    path: "/fed/v1/addon-shares/leave",
+    signed: true,
+    summary:
+      "Feature `addon-leave`: `from` gives back a share of `to`'s add-on (their grant goes; their calls within it end).",
+    body: AddonLeaveBody,
+    responses: [accepted("Always; ignored unless `from` holds that share.")],
+    rules: [
+      "Only the grant held by `from` (the signing server's account) for that share goes.",
+      "Sent only to servers that list `addon-leave`; the holder's server forgets the share either way.",
     ],
   },
   {

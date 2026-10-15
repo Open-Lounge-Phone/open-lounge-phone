@@ -212,6 +212,51 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "addon.about"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 140
+          },
+          "hears": {
+            "type": "string",
+            "enum": ["nothing", "live", "keeps"]
+          },
+          "transcribes": {
+            "type": "boolean"
+          },
+          "answers": {
+            "type": "boolean"
+          },
+          "calls": {
+            "type": "boolean"
+          },
+          "shares": {
+            "type": "boolean"
+          },
+          "keys": {
+            "type": "boolean"
+          },
+          "lines": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["t", "hears"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "pair.begin"
           },
           "id": {

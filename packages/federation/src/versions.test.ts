@@ -25,7 +25,11 @@ describe("reading a peer's offer", () => {
     expect([...o.features].sort()).toEqual(
       FEATURE_NAMES.filter(
         (f) =>
-          f !== "public-lines" && f !== "line-callback" && f !== "addons" && f !== "addon-shares",
+          f !== "public-lines" &&
+          f !== "line-callback" &&
+          f !== "addons" &&
+          f !== "addon-shares" &&
+          f !== "addon-leave",
       ).sort(),
     );
   });

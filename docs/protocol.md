@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `addon-shares`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `addon-shares`, `addon-about`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -117,6 +117,22 @@ Server feature `addon-shares`, from an add-on: it won't make that share.
 | `id` | string (len ≤64) |  |  |
 | `requestId` | string (len ≤64) | yes |  |
 | `reason` | string (len ≤200) | yes | Shown to its owner as it is. |
+
+### `addon.about`
+
+Server feature `addons`, from an add-on: what it does, in its own words, for its page in the app. Send it after connecting, before `addon.shares`; it replaces the earlier one. The server enforces `answers`, `calls`, `shares`, `keys` and `lines`; `summary`, `hears` and `transcribes` are shown as the add-on's own statement. An add-on that never sends it is shown as not having said what it does, and keeps the rules of server 0.7.0 (it can be called, may call, may offer shares, gets keys, one call at a time).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `summary` | string (len ≤140) |  | One plain sentence: what it is, as its page in the app shows it. |
+| `hears` | `"nothing"` \| `"live"` \| `"keeps"` | yes | `nothing`: it only plays sound and doesn't use what you say (one-way, e.g. a radio). `live`: it listens during the call and keeps nothing afterwards. `keeps`: it keeps what it hears (recordings, transcripts or notes). |
+| `transcribes` | boolean |  | It turns what it hears into text (default false). |
+| `answers` | boolean |  | People can call it (default true). False: the server refuses every call to it (`unavailable`). |
+| `calls` | boolean |  | It may call people (its owner, or holders within a share; default false). False: the server refuses its `call.address`. |
+| `shares` | boolean |  | It offers parts of itself to share (default false). False: the server refuses `addon.shares` that lists any share, and drops shares it offered before. |
+| `keys` | boolean |  | It responds to keys pressed during a call (default false). False: apps hide the keypad and the server doesn't pass `call.key` to it. |
+| `lines` | integer (≥1, ≤100) |  | How many calls it takes at once (default 1). The server allows at most its own limit (10 by default); a call beyond that is `busy`. It places one call at a time either way. |
 
 ### `pair.begin`
 

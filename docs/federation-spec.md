@@ -383,6 +383,7 @@ Federation version 1, base path `/fed/v1`. JSON bodies are at most 16384 bytes; 
 | `POST /fed/v1/greeting` | yes | The greeting to play before `from` leaves a message for `to`. |
 | `POST /fed/v1/phones` | yes | The household phones `to` may call through their connection with `from`. |
 | `POST /fed/v1/addon-shares` | yes | Feature `addon-shares`: the shares of `from`'s add-ons that `to` holds (for listing and keys). |
+| `POST /fed/v1/addon-shares/leave` | yes | Feature `addon-leave`: `from` gives back a share of `to`'s add-on (their grant goes; their calls within it end). |
 | `POST /fed/v1/presence` | yes | `from`'s availability, for their connections on the receiving server (opt-in). |
 | `POST /fed/v1/lounge/claim` | yes | The sender vouches that its account `from` scanned the receiver's Lounge phone. |
 | `POST /fed/v1/lounge/progress` | yes | The receiver's account's takeover of the sender's Lounge phone moved on. |
@@ -647,6 +648,32 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 - Replaces the previous list for that connection; an empty list clears it.
 - Informational: the add-on's server decides every call into a share (`addon` target with `share`) by its own grants.
 - Sent only to servers that list `addon-shares`.
+
+### `POST /fed/v1/addon-shares/leave`
+
+Feature `addon-leave`: `from` gives back a share of `to`'s add-on (their grant goes; their calls within it end).
+
+Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `from` | `Party` | yes | One of the sending server's accounts. |
+| `to` | string (`^[a-z0-9._-]{2,30}$`) | yes | The add-on's owner on the receiving server. |
+| `addon` | string (`^[a-z0-9._-]{2,30}$`) | yes | The add-on's name. |
+| `share` | string (`^[a-z0-9-]{1,30}$`) | yes |  |
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 202 | { ok: `true` } | Always; ignored unless `from` holds that share. |
+
+**Receiver rules**
+
+- Only the grant held by `from` (the signing server's account) for that share goes.
+- Sent only to servers that list `addon-leave`; the holder's server forgets the share either way.
 
 ### `POST /fed/v1/presence`
 
@@ -1108,6 +1135,7 @@ This implementation speaks federation version 1 (`/fed/v1`).
 | `line-callback` | no | Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`. |
 | `addons` | no | Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it. |
 | `addon-shares` | no | Shares of add-ons (`handle+name+share@host`, docs/add-ons.md): the `addon` call target's `share`, `CallBody.addonShare` for an add-on's call within a share, and `POST /fed/v1/addon-shares` (the shares a person there holds). Needs `addons`. Grants to people on a server that doesn't list it, and calls into shares with it, are refused. |
+| `addon-leave` | no | `POST /fed/v1/addon-shares/leave`: someone there gives back a share of one of our add-ons (their grant goes, and their calls within it end). Needs `addon-shares`. Without it, the holder's server still forgets the share and refuses the add-on's calls to them; the add-on's owner keeps seeing them as a holder. |
 <!-- END GENERATED: features -->
 
 New features are added to this registry (and to `FEATURES` in `packages/federation`) in the

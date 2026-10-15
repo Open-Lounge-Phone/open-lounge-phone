@@ -38,6 +38,8 @@ export const FEATURES = {
     "Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it.",
   "addon-shares":
     "Shares of add-ons (`handle+name+share@host`, docs/add-ons.md): the `addon` call target's `share`, `CallBody.addonShare` for an add-on's call within a share, and `POST /fed/v1/addon-shares` (the shares a person there holds). Needs `addons`. Grants to people on a server that doesn't list it, and calls into shares with it, are refused.",
+  "addon-leave":
+    "`POST /fed/v1/addon-shares/leave`: someone there gives back a share of one of our add-ons (their grant goes, and their calls within it end). Needs `addon-shares`. Without it, the holder's server still forgets the share and refuses the add-on's calls to them; the add-on's owner keeps seeing them as a holder.",
 } as const satisfies Record<string, string>;
 
 export type Feature = keyof typeof FEATURES;

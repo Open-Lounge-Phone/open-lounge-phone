@@ -28,6 +28,7 @@ export const DEVICE_FEATURES = [
   "notices",
   "addons",
   "addon-shares",
+  "addon-about",
   "missed-calls",
   "call-waiting",
   "checkin",

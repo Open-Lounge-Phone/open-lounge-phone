@@ -1533,7 +1533,7 @@ describe("0031 add-on shares", () => {
     const seat = await link("a", "seat");
     const notes = await link("b", "notes");
     old.db.exec(`INSERT INTO addon_allow (addon_id, connection_id) VALUES ('${seat.id}', 'con_1')`);
-    expect(migrate(old.db)).toEqual(["0031_addon_shares.sql"]);
+    expect(migrate(old.db)).toContain("0031_addon_shares.sql");
     // The allow-list is gone; the add-on that had one carries the note, the other doesn't.
     expect(old.db.prepare("SELECT COUNT(*) AS n FROM addon_allow").get()).toEqual({ n: 0 });
     expect(await s.addons.allowNote(seat.id)).toBe(true);
@@ -1623,6 +1623,66 @@ describe("0031 add-on shares", () => {
     expect(await s.addons.heldBy(bob.id)).toEqual([]);
     expect(await s.addons.shares(seat.id)).toEqual([]);
     expect(await s.addons.getRequest(req.id)).toBeUndefined();
+    old.db.close();
+  });
+});
+
+describe("0032 add-on about and mutes", () => {
+  it("keeps linked add-ons, shares and grants; adds what they say and holders' mutes", async () => {
+    const old = openBefore("0032");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const bob = await s.createAccount({ name: "Bob", handle: "bob" }, T0);
+    if (!bob) throw new Error("no bob");
+    const { code } = await s.createPairing("a".repeat(43), T0, "ed25519", "addon");
+    const seat = await s.addons.link(
+      {
+        accountId: guardian.accountId,
+        householdId: hh.id,
+        userId: guardian.id,
+        code,
+        name: "seat",
+      },
+      T0,
+    );
+    if (typeof seat === "string") throw new Error(seat);
+    await s.addons.setShares(seat.id, [{ id: "bookclub", label: "Book club" }]);
+    const local = { host: "", accountId: bob.id, handle: "bob", name: "Bob", connectionId: null };
+    const g = await s.addons.grant(seat.id, "bookclub", local, T0);
+    expect(migrate(old.db)).toEqual(["0032_addon_about.sql"]);
+    // As it was, and it hasn't said anything yet.
+    expect(await s.addons.get(seat.id)).toMatchObject({ name: "seat", about: null });
+    expect(await s.addons.getGrant(g?.id ?? "")).toMatchObject({ shareId: "bookclub" });
+    const about = {
+      hears: "nothing" as const,
+      transcribes: false,
+      answers: true,
+      calls: false,
+      shares: true,
+      keys: false,
+      lines: 5,
+      summary: "Plays the station.",
+    };
+    await s.addons.setAbout(seat.id, about);
+    expect((await s.addons.get(seat.id))?.about).toEqual(about);
+    // A holder stops its calls, and starts them again.
+    const who = { host: "", ownerAccount: guardian.accountId, name: "Seat" };
+    expect(await s.addons.muted(bob.id, who)).toBe(false);
+    await s.addons.setMuted(bob.id, who, true, T0);
+    await s.addons.setMuted(bob.id, who, true, T0);
+    expect(await s.addons.muted(bob.id, who)).toBe(true);
+    expect(await s.addons.mutes(bob.id)).toEqual([
+      { host: "", ownerAccount: guardian.accountId, name: "seat" },
+    ]);
+    await s.addons.setMuted(bob.id, who, false, T0);
+    expect(await s.addons.muted(bob.id, who)).toBe(false);
+    // A holder gives a share back: only their own grant.
+    expect(await s.addons.leave(g?.id ?? "", guardian.accountId)).toBe(false);
+    expect(await s.addons.leave(g?.id ?? "", bob.id)).toBe(true);
+    expect(await s.addons.grants(seat.id)).toEqual([]);
     old.db.close();
   });
 });
