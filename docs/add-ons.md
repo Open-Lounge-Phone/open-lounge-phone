@@ -193,10 +193,78 @@ The Seat will use the bridge in a voice worker next to its own servers:
 - Lift your desk phone's handset, press the Seat's key, and talk. The Seat hears you through the
   bridge, answers with its own voice, and files the conversation where it always does.
 - The Seat can call you too, for a check-in at the time you planned.
-- Someone you allow (a co-founder, a coach) can call your Seat as well; it knows it's them.
+- Someone you share a project with (a co-founder, a coach) calls that project's address, and the
+  Seat works only inside that shared project; it knows it's them.
 
 The same pattern fits a dedicated "thinking room" phone whose only key is the Seat, or a
 conversation with yourself that feels more natural than typing.
+
+## Sharing (planned)
+
+> **Status: planned** (server 0.7.x). Today an add-on can be reached by its owner and by the
+> connections on its allow-list. The design below replaces that allow-list.
+
+An add-on is personal by default: only its owner can call it at its address. Sharing is
+something the **add-on defines**: it says which parts of itself can be shared. Open Lounge Phone
+decides **who** gets each part and enforces it. A private assistant can't be opened up to
+several people as a whole. Only the pieces it offers can be shared, such as one shared project.
+
+**Shares.**
+- After connecting, the add-on sends the list of what it offers: `addon.shares {shares: [{id,
+  label}]}`, e.g. `{id: "bookclub", label: "Book club"}`. It replaces the previous list. The
+  `id` is 1–30 of `[a-z0-9-]`.
+- A share's only power today is **calls into that scope**; later shares may carry actions too
+  (see Phases).
+
+**Each share has its own address:** `handle+addon+share@host`, e.g.
+`jesse+seat+bookclub@hub.openloungephone.app`.
+- A key on Ana's phone dials straight into the Book club project, with no mix-ups.
+- The plain add-on address (`jesse+seat@…`) stays the owner's alone.
+
+**Granting.**
+- On the add-on's card (Settings → Add-ons, and People), the owner gives a share to people: their
+  connections, or people in their spaces, here or on other servers.
+- The server stores the grants and refuses any call to a share address from someone without
+  one (`unavailable`, as for every refusal).
+- Revoking a grant, or the add-on dropping a share, takes effect at once and ends that person's
+  calls into it.
+
+**What the add-on is told.**
+- A call that came in through a share carries it: `call.ringing {from: {label, address},
+  share: {id, label}}`.
+- A call without `share` is from the owner.
+- The add-on must keep the conversation inside that scope (in the Seat: read and write only that
+  shared project). The server can't see inside the add-on, so this part is the add-on's job.
+  The server's job is that nobody without a grant gets in.
+
+**New shared projects from the hub.**
+- The owner can ask from the card: **New shared project with…** (name, people). The server sends
+  `addon.share.request {requestId, label, with: [addresses]}`.
+- The add-on creates the scope, sends its updated `addon.shares`, and answers
+  `addon.share.created {requestId, id}`.
+- The server then grants it to those people. The owner started it, so no second confirmation is
+  needed.
+- An add-on may also refuse with `addon.share.refused {requestId, reason}`.
+
+**Calling out within a share.** `call.address {address, share?}`: the add-on may call its owner,
+or a person who holds that share, with the share named. The callee sees e.g.
+`SEAT · BOOK CLUB`.
+
+**Who sees what (People tab).**
+- The owner sees their add-ons with their shares and who holds each.
+- A person who holds a share sees it as an entry, e.g. "Jesse's Seat · Book club", with Call.
+- Nobody else in the household sees a private add-on.
+- Holders on another server see it on that connection (like a connection's shared phones).
+
+**Protocol and federation:**
+- additive messages `addon.shares`, `addon.share.request`, `addon.share.created`,
+  `addon.share.refused`;
+- `call.ringing.share`, `call.address.share`;
+- the federation call target gains `share`, behind the `addon-shares` feature flag;
+- servers without it can't receive share grants or calls.
+
+**Migration:** existing allow-list entries are dropped. They granted the whole add-on, which this
+design rules out, and the owner is told on the card. Shares start empty.
 
 ## Phases
 
@@ -205,5 +273,7 @@ conversation with yourself that feels more natural than typing.
    **Settings → Add-ons**. **Done** (server 0.6.0, unreleased; firmware 0.9.3 shows the label).
 2. The bridge (Python) with the echo demo and an end-to-end test. **Done.**
 3. Thinking Room's Seat on the bridge (in its own repository).
-4. Later, if wanted: add-ons that receive voicemail or send notices; keys from hardware phones
-   during a call (today only the apps' keypad sends them).
+4. **Sharing** (above): add-on-defined shares, one address per share, grants and the People tab.
+5. Later: shares that carry actions too (the add-on declares them, e.g. "add a task", and the hub
+   shows them as buttons; the add-on does the work); add-ons that receive voicemail or send
+   notices; keys from hardware phones during a call (today only the apps' keypad sends them).
