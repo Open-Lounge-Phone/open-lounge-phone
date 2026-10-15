@@ -26,7 +26,39 @@ export const isAddonAddress = (address: string): boolean => /^[^@+\s]+\+[^@\s]+@
 export function addonAddressProblem(text: string): string | undefined {
   const t = text.trim().toLowerCase();
   if (!t) return "Type the add-on's address.";
-  const m = /^([a-z0-9._-]{2,30})\+([a-z0-9._-]{2,30})@([a-z0-9.-]+(:\d{1,5})?)$/.exec(t);
+  const m =
+    /^([a-z0-9._-]{2,30})\+([a-z0-9._-]{2,30})(\+[a-z0-9-]{1,30})?@([a-z0-9.-]+(:\d{1,5})?)$/.exec(
+      t,
+    );
   if (!m) return "That isn't an add-on's address. It looks like name+seat@example.org.";
   return undefined;
+}
+
+/** The name an add-on's call goes by in the app: `seat`, or `seat · Book club` within a share. */
+export const addonCallLabel = (name: string, share?: string): string =>
+  share ? `${name} · ${share}` : name;
+
+/** A share someone gave you, as you see it: "Jesse's seat · Book club". */
+export const heldShareLabel = (owner: string, addon: string, share: string): string =>
+  `${owner}'s ${addon} · ${share}`;
+
+/** Where "New shared project with…" stands, in words. */
+export function shareRequestText(
+  addon: string,
+  r: { state: string; label: string; reason?: string; people: string[] },
+): string {
+  switch (r.state) {
+    case "waiting":
+      return `Asking ${addon} to make ${r.label}…`;
+    case "created":
+      return r.people.length
+        ? `Done. ${r.label} is shared with ${r.people.join(", ")}.`
+        : `Done. ${addon} made ${r.label}.`;
+    case "refused":
+      return `${addon} didn't make it: ${r.reason ?? "no reason given"}`;
+    case "offline":
+      return `${addon} is offline, so it wasn't asked. Try again when it's connected.`;
+    default:
+      return `${addon} didn't answer. Try again later.`;
+  }
 }

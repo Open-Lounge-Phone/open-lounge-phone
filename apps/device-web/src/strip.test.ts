@@ -55,6 +55,11 @@ describe("statusLines", () => {
     expect(incoming("Notes taker")).toEqual(["NOTES TAKER", "ADD-ON CALLING"]);
     expect(addonLabel("seat")).toBe("SEAT · ADD-ON");
     expect(addonLabel("thinking-room")).toBe("THINKING-ROOM");
+    // Within a share: the share instead of ADD-ON.
+    const share = (from: string, label: string) =>
+      lines({ deviceState: { kind: "incoming", callId: "c", from, addon: true, share: label } });
+    expect(share("Seat", "Book club")).toEqual(["SEAT · BOOK CLUB", "LIFT TO ANSWER"]);
+    expect(share("Seat", "Garden project")).toEqual(["SEAT", "GARDEN PROJECT"]);
     expect(lines({ deviceState: { kind: "incoming", callId: "c", from: "Seat" } })).toEqual([
       "SEAT CALLING",
       "LIFT TO ANSWER",

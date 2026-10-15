@@ -71,11 +71,12 @@ function withName(prefix: string, name: string, suffix = ""): StatusLines {
 }
 
 /**
- * An add-on's name with its label, `SEAT · ADD-ON`, when that fits on one line; else just the
- * name (the other line then says it's an add-on).
+ * An add-on's name with its label, `SEAT · ADD-ON` (or, calling within one of its shares, the
+ * share: `SEAT · BOOK CLUB`), when that fits on one line; else just the name (the other line
+ * then says it's an add-on, or which share).
  */
-export function addonLabel(name: string): string {
-  const labelled = `${name.trim()} · ADD-ON`;
+export function addonLabel(name: string, share?: string): string {
+  const labelled = `${name.trim()} · ${share?.trim() || "ADD-ON"}`;
   return labelled.length <= STATUS_WIDTH ? clip(labelled) : clip(name.trim());
 }
 
@@ -118,10 +119,9 @@ export function statusLines(input: StatusInput): StatusLines {
     case "incoming": {
       if (s.callback) return [clip(s.from.trim()), "CALLS YOU BACK"];
       if (s.addon) {
-        const labelled = addonLabel(s.from);
-        return labelled === clip(s.from.trim())
-          ? [labelled, "ADD-ON CALLING"]
-          : [labelled, "LIFT TO ANSWER"];
+        const labelled = addonLabel(s.from, s.share);
+        if (labelled !== clip(s.from.trim())) return [labelled, "LIFT TO ANSWER"];
+        return [labelled, s.share ? clip(s.share.trim()) : "ADD-ON CALLING"];
       }
       const who = withName("", s.from.trim(), "CALLING");
       // In turn on the second line: BACK silences the ringer here (until it's silenced).
@@ -132,7 +132,9 @@ export function statusLines(input: StatusInput): StatusLines {
       if (s.transferPending) return ["TRANSFER TO?", "PRESS A KEY"];
       // Call waiting: who, and the keys (a long name takes turns with them).
       if (s.waiting) {
-        const who = s.waiting.addon ? addonLabel(s.waiting.from) : clip(s.waiting.from.trim());
+        const who = s.waiting.addon
+          ? addonLabel(s.waiting.from, s.waiting.share)
+          : clip(s.waiting.from.trim());
         const top = `WAITING: ${who}`;
         if (top.length <= STATUS_WIDTH) return [top, WAITING_KEYS];
         return ["CALL WAITING", hintNow(input.now) ? WAITING_KEYS : who];

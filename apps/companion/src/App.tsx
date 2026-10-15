@@ -787,12 +787,7 @@ function SignedIn({
             onCall={(c) => void conn?.callConnection(c.id, c.name)}
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
             onCallLine={(address) => void conn?.callLine(address)}
-            onCallAddon={(address) =>
-              void conn?.callAddon(
-                address,
-                address.slice(address.indexOf("+") + 1).split("@")[0] ?? address,
-              )
-            }
+            onCallAddon={(address, label) => void conn?.callAddon(address, label)}
           />
         )}
         {me && route.name === "rooms" && (

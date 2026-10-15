@@ -265,6 +265,8 @@ export interface ConnectionView {
   presence?: { online: boolean; available: boolean; at: number } | null;
   /** Household phones on their side that you may call. */
   phones?: { deviceId: string; label: string }[];
+  /** Shares of their add-ons they gave you (another server). */
+  addonShares?: { addon: string; share: string; label: string; address: string }[];
 }
 
 export interface ConnectionsInfo {
@@ -291,8 +293,47 @@ export interface AddonView {
   createdAt: number;
   /** The space it was linked in. */
   space: string;
-  /** Connection ids that may talk to it besides you. */
-  allow: string[];
+  /** What it offers for sharing (it says), and who holds each. */
+  shares: AddonShareView[];
+  /** Earlier "who may talk to it" entries were removed (sharing is per share now): say so once. */
+  allowNote: boolean;
+}
+
+/** One share of your add-on: its own address, and the people you gave it to. */
+export interface AddonShareView {
+  id: string;
+  label: string;
+  /** `handle+name+share@host`. */
+  address: string;
+  holders: { grantId: string; name: string; address: string }[];
+}
+
+/** Someone you can give a share to: a connection (`conn:…`) or someone in your spaces (`user:…`). */
+export interface AddonPerson {
+  ref: string;
+  name: string;
+  address: string;
+  /** `connection`, or the space's name. */
+  where: string;
+}
+
+/** A share of someone else's add-on (on this server) that they gave you. */
+export interface HeldShare {
+  grantId: string;
+  owner: { name: string; address: string };
+  addon: string;
+  share: { id: string; label: string };
+  address: string;
+}
+
+/** "New shared project with…": where the add-on's answer is. */
+export interface ShareRequestView {
+  id: string;
+  label: string;
+  state: "waiting" | "created" | "refused" | "offline" | "timeout";
+  shareId?: string;
+  reason?: string;
+  people: string[];
 }
 
 /** A connection on a phone's allow-list (its `rc_…` id is also in `contacts`). */
@@ -892,10 +933,27 @@ export function createApi(opts: ApiOptions) {
 
     // Add-ons (Settings → Add-ons)
     addons: () => request<{ enabled: boolean; addons: AddonView[] }>("GET", "/addons"),
-    linkAddon: (input: { code: string; name: string; allow: string[] }) =>
+    linkAddon: (input: { code: string; name: string }) =>
       request<AddonView>("POST", "/addons/link", input),
-    setAddonAllow: (id: string, connections: string[]) =>
-      request<{ allow: string[] }>("PUT", `/addons/${enc(id)}/allow`, { connections }),
+    addonPeople: () => request<AddonPerson[]>("GET", "/addons/people"),
+    addonsShared: () => request<{ held: HeldShare[] }>("GET", "/addons/shared"),
+    giveShare: (addonId: string, shareId: string, to: string) =>
+      request<{ grantId: string; name: string; address: string }>(
+        "POST",
+        `/addons/${enc(addonId)}/shares/${enc(shareId)}/grants`,
+        { to },
+      ),
+    revokeShare: (addonId: string, grantId: string) =>
+      request<void>("DELETE", `/addons/${enc(addonId)}/grants/${enc(grantId)}`),
+    askForShare: (addonId: string, label: string, people: string[]) =>
+      request<ShareRequestView>("POST", `/addons/${enc(addonId)}/share-requests`, {
+        label,
+        with: people,
+      }),
+    shareRequest: (addonId: string, id: string) =>
+      request<ShareRequestView>("GET", `/addons/${enc(addonId)}/share-requests/${enc(id)}`),
+    dismissAddonNote: (addonId: string) =>
+      request<void>("POST", `/addons/${enc(addonId)}/note/dismiss`),
     removeAddon: (id: string) => request<void>("DELETE", `/addons/${enc(id)}`),
     knock: (to: string, note?: string) =>
       request<{ status: "sent" | "connected"; connection: ConnectionView }>(

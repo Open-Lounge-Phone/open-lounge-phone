@@ -44,8 +44,9 @@ export type DeviceState =
     }
   /**
    * Ringing, handset down. `callback`: a public line calling you back, as you asked. `addon`: the
-   * caller is an add-on (shown as `SEAT · ADD-ON`). `silenced`: BACK stopped the ringer on this
-   * phone (it still rings elsewhere; lifting still answers).
+   * caller is an add-on (shown as `SEAT · ADD-ON`); `share`: it calls within one of its shares
+   * you hold (shown as `SEAT · BOOK CLUB`). `silenced`: BACK stopped the ringer on this phone (it
+   * still rings elsewhere; lifting still answers).
    */
   | {
       kind: "incoming";
@@ -53,6 +54,7 @@ export type DeviceState =
       from: string;
       callback?: true;
       addon?: true;
+      share?: string;
       silenced?: true;
     }
   | {
@@ -68,7 +70,7 @@ export type DeviceState =
       /** MENU → Mute: the mic stops sending in this call (local: the server isn't told). */
       muted?: boolean;
       /** Call waiting: another call rings softly (1 takes it and holds this one, 2 ignores it). */
-      waiting?: { callId: string; from: string; addon?: true };
+      waiting?: { callId: string; from: string; addon?: true; share?: string };
     }
   /**
    * In a room (a party line, a phone room, or a 3-way call after Merge). `roomId` is unknown
@@ -192,9 +194,15 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     if (s.kind === "incoming") return stay(s); // already down
     // A call was waiting: now it rings like any call.
     if (s.kind === "incall" && s.waiting) {
-      const { callId, from, addon } = s.waiting;
+      const { callId, from, addon, share } = s.waiting;
       return stay(
-        { kind: "incoming", callId, from, ...(addon ? { addon } : {}) },
+        {
+          kind: "incoming",
+          callId,
+          from,
+          ...(addon ? { addon } : {}),
+          ...(share ? { share } : {}),
+        },
         ...hangups,
         hook,
       );
@@ -294,6 +302,7 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
         from: msg.from.label,
         ...(msg.callback ? { callback: true as const } : {}),
         ...(msg.from.kind === "addon" ? { addon: true as const } : {}),
+        ...(msg.from.kind === "addon" && msg.from.share ? { share: msg.from.share } : {}),
       });
     }
     if ("callId" in s && s.callId === msg.callId) return stay(s);
@@ -305,6 +314,7 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
           callId: msg.callId,
           from: msg.from.label,
           ...(msg.from.kind === "addon" ? { addon: true as const } : {}),
+          ...(msg.from.kind === "addon" && msg.from.share ? { share: msg.from.share } : {}),
         },
       });
     }

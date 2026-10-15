@@ -49,6 +49,18 @@ describe("audit trail words", () => {
       "made add-on seat theirs alone",
     );
     expect(auditText("addon.remove", { name: "seat" })).toBe("removed add-on seat");
+    expect(auditText("addon.grant", { name: "seat", label: "Book club", to: "ana@a.test" })).toBe(
+      "gave Book club of add-on seat to ana@a.test",
+    );
+    expect(auditText("addon.revoke", { name: "seat", share: "bookclub", from: "ana@a.test" })).toBe(
+      "took bookclub of add-on seat back from ana@a.test",
+    );
+    expect(auditText("addon.share.request", { name: "seat", label: "Garden" })).toBe(
+      "asked add-on seat for a new share, Garden",
+    );
+    expect(auditText("addon.share.timeout", { name: "seat", label: "Garden" })).toBe(
+      "add-on seat didn't answer about Garden",
+    );
     expect(auditText("phone.line", { phone: "Desk", address: "jo+seat@x.example" })).toBe(
       "put add-on jo+seat@x.example on Desk",
     );

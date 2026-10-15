@@ -68,6 +68,20 @@ export function auditText(action: string, d: Record<string, unknown> | null): st
     }
     case "addon.remove":
       return `removed add-on ${s("name")}`;
+    case "addon.grant":
+      return `gave ${s("label")} of add-on ${s("name")} to ${s("to")}`;
+    case "addon.revoke":
+      return `took ${s("share")} of add-on ${s("name")} back from ${s("from")}`;
+    case "addon.share.request":
+      return `asked add-on ${s("name")} for a new share, ${s("label")}`;
+    case "addon.share.created":
+      return `add-on ${s("name")} made ${s("label")}`;
+    case "addon.share.refused":
+      return `add-on ${s("name")} didn't make ${s("label")}`;
+    case "addon.share.timeout":
+      return `add-on ${s("name")} didn't answer about ${s("label")}`;
+    case "addon.share.offline":
+      return `add-on ${s("name")} was offline when asked for ${s("label")}`;
     case "phone.voicemail":
       return `changed ${phone}'s voicemail settings`;
     case "phone.greeting":

@@ -524,6 +524,29 @@ describe("an add-on calling", () => {
       },
     ]);
     expect(state).toEqual({ kind: "incoming", callId: "c1", from: "seat", addon: true });
+    const share = deviceStep(
+      { kind: "idle" },
+      {
+        type: "server",
+        msg: {
+          t: "call.ringing",
+          callId: "c2",
+          from: {
+            label: "seat",
+            address: "jo+seat+bookclub@x.example",
+            kind: "addon",
+            share: "Book club",
+          },
+        },
+      },
+    ).state;
+    expect(share).toEqual({
+      kind: "incoming",
+      callId: "c2",
+      from: "seat",
+      addon: true,
+      share: "Book club",
+    });
     expect(run([ringing("c2")]).state).toEqual({ kind: "incoming", callId: "c2", from: "Mom" });
   });
 });

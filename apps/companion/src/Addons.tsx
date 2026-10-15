@@ -1,9 +1,10 @@
 // Settings → Add-ons (docs/add-ons.md): services linked to your own account, such as an AI
-// companion or a notes taker. Each has an address on your account (`you+name@host`); only you,
-// and the connections you choose, can talk to it. Online/offline is what the server reports.
+// companion or a notes taker. Each has an address on your account (`you+name@host`) that only you
+// can call. What it offers for sharing (its shares) you can give to people; each share has its
+// own address, for them. Online/offline is what the server reports.
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { addonNameProblem, addonPreview } from "./addonText.ts";
-import type { AddonView, Api, ConnectionView } from "./api.ts";
+import { addonNameProblem, addonPreview, shareRequestText } from "./addonText.ts";
+import type { AddonPerson, AddonShareView, AddonView, Api, ShareRequestView } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { formatWhen } from "./text.ts";
 
@@ -21,7 +22,7 @@ export function Addons({
   address: string | undefined;
 }) {
   const [info, setInfo] = useState<{ enabled: boolean; addons: AddonView[] }>();
-  const [people, setPeople] = useState<ConnectionView[]>([]);
+  const [people, setPeople] = useState<AddonPerson[]>([]);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [linking, setLinking] = useState(false);
@@ -37,10 +38,7 @@ export function Addons({
   }, [api]);
   useEffect(() => {
     load();
-    api.connections().then(
-      (c) => setPeople(c.connections.filter((x) => x.state === "active")),
-      () => {},
-    );
+    api.addonPeople().then(setPeople, () => {});
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [api, load]);
@@ -50,9 +48,10 @@ export function Addons({
       <h3>Add-ons</h3>
       <p className="hint">
         Services you link to your account, like an AI companion or a notes taker. Each gets its own
-        address on your account, and you call it like a person. Only you, and the connections you
-        choose on its card, can talk to it. Nobody else can call it or knock on it, and kids' phones
-        never reach one.
+        address on your account, and you call it like a person. Only you can call it there. If it
+        offers parts of itself for sharing, like one shared project, you can give a part to people:
+        they call that part at its own address, and nothing else. Nobody can knock on an add-on, and
+        kids' phones never reach one.
       </p>
       <ol className="addon-steps">
         <li>
@@ -147,20 +146,36 @@ function AddonRow({
   addon: AddonView;
   api: Api;
   conn: Connection | undefined;
-  people: ConnectionView[];
+  people: AddonPerson[];
   enabled: boolean;
   onChanged(): void;
   onNotice(text: string): void;
   onError(text: string): void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const allowedNames = people.filter((p) => addon.allow.includes(p.id)).map((p) => p.name);
+  const [asking, setAsking] = useState(false);
   const status = addon.online
     ? "Online"
     : addon.lastSeen
       ? `Offline · last seen ${formatWhen(addon.lastSeen, Date.now())}`
       : "Offline · hasn't connected yet";
+  const copy = (text: string) =>
+    void navigator.clipboard?.writeText(text).then(
+      () => onNotice("Address copied."),
+      () => onError("Couldn't copy; select it instead."),
+    );
+  const act = async (work: () => Promise<unknown>, done?: string) => {
+    setBusy(true);
+    try {
+      await work();
+      if (done) onNotice(done);
+      onChanged();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const remove = async () => {
     if (
       !window.confirm(
@@ -169,16 +184,7 @@ function AddonRow({
     ) {
       return;
     }
-    setBusy(true);
-    try {
-      await api.removeAddon(addon.id);
-      onNotice(`${addon.name} was removed.`);
-      onChanged();
-    } catch (e) {
-      onError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    await act(() => api.removeAddon(addon.id), `${addon.name} was removed.`);
   };
   return (
     <li className="stack addon">
@@ -188,42 +194,74 @@ function AddonRow({
       </div>
       <div className="row wrap">
         <code className="small">{addon.address}</code>
-        <button
-          type="button"
-          className="link"
-          onClick={() =>
-            void navigator.clipboard?.writeText(addon.address).then(
-              () => onNotice("Address copied."),
-              () => onError("Couldn't copy; select it instead."),
-            )
-          }
-        >
+        <button type="button" className="link" onClick={() => copy(addon.address)}>
           Copy
         </button>
       </div>
       <div className="muted small">
-        {status} · in {addon.space}
+        {status} · in {addon.space} · only you can call it at this address
       </div>
-      <div className="muted small">
-        {allowedNames.length
-          ? `You and ${allowedNames.join(", ")} can talk to it.`
-          : "Only you can talk to it."}
-      </div>
-      {editing ? (
-        <AllowEditor
+      {addon.allowNote && (
+        <div className="notice row wrap" role="status">
+          <span>
+            The people you had let talk to {addon.name} were removed. Sharing now works per share:
+            give someone one of its shares below.
+          </span>
+          <button
+            type="button"
+            className="link"
+            onClick={() => void act(() => api.dismissAddonNote(addon.id))}
+          >
+            OK
+          </button>
+        </div>
+      )}
+      <h4>Shares</h4>
+      {addon.shares.length === 0 ? (
+        <p className="muted small">
+          {addon.name} doesn't offer anything for sharing yet. When it does, its shares show up here
+          and you can give them to people.
+        </p>
+      ) : (
+        <ul className="stack addon-shares">
+          {addon.shares.map((s) => (
+            <ShareRow
+              key={s.id}
+              share={s}
+              people={people}
+              busy={busy}
+              enabled={enabled}
+              onCopy={copy}
+              onGive={(ref, name) =>
+                act(() => api.giveShare(addon.id, s.id, ref), `${s.label} is shared with ${name}.`)
+              }
+              onRevoke={(h) => {
+                if (
+                  !window.confirm(
+                    `Take ${s.label} back from ${h.name}? A call of theirs into it ends now.`,
+                  )
+                ) {
+                  return;
+                }
+                void act(
+                  () => api.revokeShare(addon.id, h.grantId),
+                  `${h.name} no longer has ${s.label}.`,
+                );
+              }}
+            />
+          ))}
+        </ul>
+      )}
+      {asking ? (
+        <NewShareForm
+          addon={addon}
+          api={api}
           people={people}
-          initial={addon.allow}
-          onSave={async (ids) => {
-            try {
-              await api.setAddonAllow(addon.id, ids);
-              setEditing(false);
-              onNotice("Saved.");
-              onChanged();
-            } catch (e) {
-              onError((e as Error).message);
-            }
+          onClose={() => {
+            setAsking(false);
+            onChanged();
           }}
-          onCancel={() => setEditing(false)}
+          onChanged={onChanged}
         />
       ) : (
         <div className="row wrap">
@@ -234,8 +272,8 @@ function AddonRow({
           >
             Call
           </button>
-          <button type="button" onClick={() => setEditing(true)}>
-            Who may talk to it
+          <button type="button" disabled={!enabled} onClick={() => setAsking(true)}>
+            New shared project with…
           </button>
           <button type="button" className="danger" disabled={busy} onClick={() => void remove()}>
             Remove
@@ -246,70 +284,219 @@ function AddonRow({
   );
 }
 
-/** Checkboxes: which of your connections may talk to it (and it to them). */
-function AllowChoices({
+/** One share: its address, who holds it (Revoke), and Give to…. */
+function ShareRow({
+  share,
   people,
-  value,
-  onChange,
+  busy,
+  enabled,
+  onCopy,
+  onGive,
+  onRevoke,
 }: {
-  people: ConnectionView[];
-  value: string[];
-  onChange(ids: string[]): void;
+  share: AddonShareView;
+  people: AddonPerson[];
+  busy: boolean;
+  enabled: boolean;
+  onCopy(text: string): void;
+  onGive(ref: string, name: string): Promise<void>;
+  onRevoke(h: AddonShareView["holders"][number]): void;
 }) {
+  const [giving, setGiving] = useState(false);
+  const [choice, setChoice] = useState("");
+  const holding = new Set(share.holders.map((h) => h.address));
+  const free = people.filter((p) => !holding.has(p.address));
   return (
-    <fieldset className="stack">
-      <legend>Who may talk to it, besides you</legend>
-      {people.length === 0 && (
-        <p className="muted small">
-          You have no connections yet. Connect with someone first (Connections), then come back.
-        </p>
+    <li className="stack">
+      <div className="row wrap">
+        <strong>{share.label}</strong>
+        <code className="small">{share.address}</code>
+        <button type="button" className="link" onClick={() => onCopy(share.address)}>
+          Copy
+        </button>
+      </div>
+      {share.holders.length === 0 ? (
+        <span className="muted small">Nobody has it yet.</span>
+      ) : (
+        <ul className="stack">
+          {share.holders.map((h) => (
+            <li key={h.grantId} className="row wrap">
+              <span>
+                {h.name} <span className="muted small">{h.address}</span>
+              </span>
+              <button type="button" className="link danger" onClick={() => onRevoke(h)}>
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-      {people.map((p) => (
-        <label key={p.id} className="row">
-          <input
-            type="checkbox"
-            checked={value.includes(p.id)}
-            onChange={(e) =>
-              onChange(e.target.checked ? [...value, p.id] : value.filter((id) => id !== p.id))
-            }
-          />
-          <span>
-            {p.name || p.address} <span className="muted small">{p.address}</span>
-          </span>
-        </label>
-      ))}
+      {giving ? (
+        <div className="row wrap">
+          <label>
+            <span className="sr-only">Give {share.label} to</span>
+            <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+              <option value="">Choose someone…</option>
+              {free.map((p) => (
+                <option key={p.ref} value={p.ref}>
+                  {p.name} ({p.address})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="primary"
+            disabled={!choice || busy}
+            onClick={() => {
+              const who = free.find((p) => p.ref === choice);
+              void onGive(choice, who?.name ?? "them").then(() => {
+                setGiving(false);
+                setChoice("");
+              });
+            }}
+          >
+            Give
+          </button>
+          <button type="button" className="link" onClick={() => setGiving(false)}>
+            Cancel
+          </button>
+          {free.length === 0 && (
+            <span className="hint">
+              Nobody else to give it to: connect with someone first, or invite them to one of your
+              spaces.
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="row">
+          <button type="button" disabled={!enabled} onClick={() => setGiving(true)}>
+            Give to…
+          </button>
+        </div>
+      )}
       <span className="hint">
-        They can call it, and it can call them. It's told who is calling every time.
+        Whoever has it can call this address, and {share.label} only. It can call them within it.
       </span>
-    </fieldset>
+    </li>
   );
 }
 
-/** Changing who may talk to a linked add-on. */
-function AllowEditor({
+/** How often a share request is read again while the add-on hasn't answered. */
+const REQUEST_POLL_MS = 1_000;
+
+/** "New shared project with…": a name and people; the add-on makes it, then they get it. */
+function NewShareForm({
+  addon,
+  api,
   people,
-  initial,
-  onSave,
-  onCancel,
+  onClose,
+  onChanged,
 }: {
-  people: ConnectionView[];
-  initial: string[];
-  onSave(ids: string[]): Promise<void>;
-  onCancel(): void;
+  addon: AddonView;
+  api: Api;
+  people: AddonPerson[];
+  onClose(): void;
+  onChanged(): void;
 }) {
-  const [chosen, setChosen] = useState(initial);
+  const [label, setLabel] = useState("");
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [problem, setProblem] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [request, setRequest] = useState<ShareRequestView>();
+  const waiting = request?.state === "waiting";
+
+  useEffect(() => {
+    if (!request || request.state !== "waiting") {
+      if (request?.state === "created") onChanged();
+      return;
+    }
+    const t = setTimeout(() => {
+      api.shareRequest(addon.id, request.id).then(setRequest, (e: Error) => setError(e.message));
+    }, REQUEST_POLL_MS);
+    return () => clearTimeout(t);
+  }, [api, addon.id, request, onChanged]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!label.trim()) {
+      setProblem("Give it a name, like Book club.");
+      return;
+    }
+    setError(undefined);
+    try {
+      setRequest(await api.askForShare(addon.id, label.trim(), chosen));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
-    <div className="stack">
-      <AllowChoices people={people} value={chosen} onChange={setChosen} />
+    <form className="stack" noValidate onSubmit={(e) => void submit(e)}>
+      <h4>New shared project with…</h4>
+      <p className="hint">
+        {addon.name} makes a new shared part of itself for these people. Then they can call it at
+        its own address, and only that part.
+      </p>
+      <label>
+        Name
+        <input
+          value={label}
+          maxLength={40}
+          disabled={waiting}
+          aria-invalid={problem ? true : undefined}
+          onChange={(e) => {
+            setLabel(e.target.value);
+            setProblem(undefined);
+          }}
+        />
+        {problem && <span className="hint error">{problem}</span>}
+      </label>
+      <fieldset className="stack">
+        <legend>With</legend>
+        {people.length === 0 && (
+          <p className="muted small">
+            You have no connections or people in your spaces yet. You can still ask, and give it to
+            people later.
+          </p>
+        )}
+        {people.map((p) => (
+          <label key={p.ref} className="row">
+            <input
+              type="checkbox"
+              disabled={waiting}
+              checked={chosen.includes(p.ref)}
+              onChange={(e) =>
+                setChosen(e.target.checked ? [...chosen, p.ref] : chosen.filter((r) => r !== p.ref))
+              }
+            />
+            <span>
+              {p.name} <span className="muted small">{p.address}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {request && (
+        <p className={request.state === "created" ? "notice" : "muted"} role="status">
+          {shareRequestText(addon.name, request)}
+        </p>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="row">
-        <button type="button" className="primary" onClick={() => void onSave(chosen)}>
-          Save
-        </button>
-        <button type="button" className="link" onClick={onCancel}>
-          Cancel
+        {(!request || (request.state !== "waiting" && request.state !== "created")) && (
+          <button type="submit" className="primary">
+            {request ? "Ask again" : "Ask"}
+          </button>
+        )}
+        <button type="button" className="link" onClick={onClose}>
+          {request?.state === "created" ? "Done" : "Cancel"}
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -340,7 +527,7 @@ function LinkForm({
     setBusy(true);
     setError(undefined);
     try {
-      onDone(await api.linkAddon({ code, name: name.trim().toLowerCase(), allow: [] }));
+      onDone(await api.linkAddon({ code, name: name.trim().toLowerCase() }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -388,8 +575,7 @@ function LinkForm({
         </span>
       </label>
       <p className="muted small">
-        Only you can talk to it at first. To let others, use Who may talk to it on its card after
-        linking.
+        Only you can talk to it. If it offers shares, you can give them to people on its card.
       </p>
       {error && (
         <p className="error" role="alert">

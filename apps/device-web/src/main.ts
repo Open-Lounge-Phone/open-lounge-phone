@@ -709,7 +709,7 @@ function step(input: DeviceInput): void {
     activeLabel = labelFor(s.button);
   } else if (s.kind === "incoming") {
     // An add-on keeps its label in the call too ("IN CALL 00:12" / "SEAT · ADD-ON").
-    activeLabel = s.addon ? addonLabel(s.from) : s.from;
+    activeLabel = s.addon ? addonLabel(s.from, s.share) : s.from;
   } else if (s.kind === "idle") {
     activeLabel = undefined;
   }

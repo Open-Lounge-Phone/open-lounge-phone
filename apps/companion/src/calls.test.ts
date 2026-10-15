@@ -429,6 +429,26 @@ describe("add-ons", () => {
     expect(run([ringing("c2")]).view).not.toHaveProperty("addon");
   });
 
+  it("an add-on calling within a share shows the share with its name", () => {
+    const { view } = run([
+      {
+        type: "server",
+        now: 1000,
+        msg: {
+          t: "call.ringing",
+          callId: "c1",
+          from: {
+            label: "seat",
+            address: "jo+seat+bookclub@x.example",
+            kind: "addon",
+            share: "Book club",
+          },
+        },
+      },
+    ]);
+    expect(view).toMatchObject({ phase: "incoming", label: "seat · Book club", addon: true });
+  });
+
   it("calling one marks the call as with an add-on until it ends", () => {
     const { view } = run([
       { type: "dial", label: "seat", person: true, addon: true },

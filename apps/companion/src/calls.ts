@@ -1,6 +1,7 @@
 import type { Tone } from "@openloungephone/client";
 import { CONNECTION_LOST_NOTE } from "@openloungephone/core";
 import type { EndReason, LineInfo, ServerToApp, VoicemailOffer } from "@openloungephone/protocol";
+import { addonCallLabel } from "./addonText.ts";
 
 /** Waiting in a public line's queue (`call.state.queue`). */
 export interface QueueView {
@@ -167,7 +168,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
         view: {
           phase: "incoming",
           callId: msg.callId,
-          label: msg.from.label,
+          label: addonCallLabel(msg.from.label, msg.from.share),
           ...(msg.from.address ? { address: msg.from.address } : {}),
           ...(msg.line ? { line: msg.line.name } : {}),
           ...(msg.callback ? { callback: true } : {}),
@@ -182,7 +183,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
         view,
         waiting: {
           callId: msg.callId,
-          label: msg.from.label,
+          label: addonCallLabel(msg.from.label, msg.from.share),
           ...(msg.from.kind === "addon" ? { addon: true } : {}),
         },
       };
