@@ -319,7 +319,7 @@ export class Phone {
     this.profile = profile;
   }
 
-  async open(browser: Browser, kind: "kids" | "lounge"): Promise<void> {
+  async open(browser: Browser, kind: "kids" | "lounge" | "personal"): Promise<void> {
     this.context = await newContext(browser, this.origin);
     this.page = await this.context.newPage();
     type WsLike = { on(e: "framereceived", f: (x: { payload: string | Buffer }) => void): void };
