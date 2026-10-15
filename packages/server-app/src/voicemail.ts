@@ -96,6 +96,7 @@ export async function depositVoicemail(
     transcriptStatus: transcribes ? "pending" : "unavailable",
   });
   if (transcribes) env.defer(transcribe(env, vm, input.audio));
+  let missedMoved = false;
   if (input.fromAddress && input.since !== undefined) {
     await store.linkVoicemail(
       {
@@ -106,7 +107,22 @@ export async function depositVoicemail(
       },
       input.since,
     );
+    // The missed call it follows is now this message (it leaves the missed calls).
+    const owner = user
+      ? { accountId: user.accountId }
+      : device
+        ? { deviceId: device.id }
+        : undefined;
+    if (owner) {
+      missedMoved = await store.missed.becameVoicemail(
+        owner,
+        input.fromAddress,
+        input.since,
+        env.now(),
+      );
+    }
   }
+  if (missedMoved && user) await live.notifyAccount(user.accountId, { t: "missed.changed" });
   if (device) {
     await live.refreshDevice(householdId, device.id);
     await live.announce(householdId, {

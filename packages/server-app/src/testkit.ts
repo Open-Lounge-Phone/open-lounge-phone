@@ -243,9 +243,9 @@ export class TestServer {
     return { status: 201, deviceId: done.deviceId, key };
   }
 
-  async connectDevice(deviceId: string, key: CryptoKeyPair) {
+  async connectDevice(deviceId: string, key: CryptoKeyPair, features?: string[]) {
     const conn = this.openDevice();
-    conn.write(hello(deviceId));
+    conn.write({ ...hello(deviceId), ...(features ? { features } : {}) });
     const { nonce } = await conn.next("auth.challenge");
     const sig = await crypto.subtle.sign("Ed25519", key.privateKey, fromBase64Url(nonce));
     conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });

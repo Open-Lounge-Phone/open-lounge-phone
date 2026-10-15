@@ -18,6 +18,7 @@ import {
   type RoomJoinBody,
   RoomJoinResult,
 } from "@openloungephone/federation";
+import type { ServerToApp } from "@openloungephone/protocol";
 import { mayTalk } from "./addons.ts";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
@@ -313,6 +314,10 @@ export class FedCalls implements CallLinks {
 
   refreshDevice(householdId: string, deviceId: string): Promise<void> {
     return this.live.refreshDevice(householdId, deviceId);
+  }
+
+  notifyAccount(accountId: string, msg: ServerToApp): Promise<void> {
+    return this.live.notifyAccount(accountId, msg);
   }
 
   ringLocal(householdId: string, req: RemoteRing): Promise<RingResult> {

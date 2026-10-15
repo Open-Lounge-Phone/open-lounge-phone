@@ -43,6 +43,11 @@ export interface CallLinks {
   signal(to: { host: string; householdId?: string }, msg: FedSignal): Promise<void>;
   /** Sends a phone in any household here a fresh config (e.g. its owner heard a message). */
   refreshDevice(householdId: string, deviceId: string): Promise<void>;
+  /** Sends a message to every open companion session of an account, in all its households. */
+  notifyAccount(
+    accountId: string,
+    msg: import("@openloungephone/protocol").ServerToApp,
+  ): Promise<void>;
   /** Rings a person in another household on this server, for a call owned here. */
   ringLocal(householdId: string, req: import("./fedCalls.ts").RemoteRing): Promise<RingResult>;
   /** Someone at `host` asks into one of our phone rooms (`/fed/v1/rooms/join`). */
@@ -265,6 +270,8 @@ export interface PeerInfo {
   addon?: { name: string; address: string; accountId?: string; ownerUserId?: string };
   /** A phone whose client can record calls (the browser phone; not yet firmware). */
   canRecord?: boolean;
+  /** What a phone said it handles beyond the base protocol (`hello.features`). */
+  features?: string[];
   /**
    * Remote peers: someone calling one of our public lines. They get the line's queue updates
    * (`call.state ringing` + `queue`) and its voicemail offer, through their server.
@@ -322,6 +329,8 @@ export interface RoomSnapshot {
   line?: LineCallState;
   /** A call to a public line elsewhere: its queue updates and voicemail offer pass through. */
   farLine?: boolean;
+  /** Rings a person here for a call another household here owns: its missed call is theirs. */
+  branchLeg?: boolean;
 }
 
 /** A call to a public line, waiting in its queue or ringing its members (see the hub). */

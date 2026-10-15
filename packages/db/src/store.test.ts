@@ -1182,8 +1182,18 @@ describe("missed call backs (migration 0026)", () => {
     await add("orders@shop.example", "Orders", T0 + 1);
     await add("help@acme.example", "Help desk", T0 + 2);
     expect(await store.lines.missedCallbacks(accountId)).toEqual([
-      { lineAddress: "help@acme.example", lineName: "Help desk", at: T0 + 2 },
-      { lineAddress: "orders@shop.example", lineName: "Orders", at: T0 + 1 },
+      {
+        id: expect.any(String),
+        lineAddress: "help@acme.example",
+        lineName: "Help desk",
+        at: T0 + 2,
+      },
+      {
+        id: expect.any(String),
+        lineAddress: "orders@shop.example",
+        lineName: "Orders",
+        at: T0 + 1,
+      },
     ]);
     expect(await store.lines.clearMissedCallbacks(accountId, "ORDERS@shop.example")).toBe(1);
     expect((await store.lines.missedCallbacks(accountId)).map((m) => m.lineName)).toEqual([
@@ -1359,7 +1369,7 @@ describe("0028 add-ons", () => {
         'bob', '${bob?.id}', 'Bob', 'active', 'none', 1, 1);
     `);
     const pending = await s.createPairing("p".repeat(43), T0);
-    expect(migrate(old.db)).toEqual(["0028_addons.sql"]);
+    expect(migrate(old.db)).toContain("0028_addons.sql");
     expect(await s.getDevice(phone?.id ?? "")).toMatchObject({ name: "Kid", kind: "kids" });
     expect((await s.connections.get("con_1"))?.state).toBe("active");
     // A phone's code stays a phone's: it can't be linked as an add-on.
@@ -1388,6 +1398,77 @@ describe("0028 add-ons", () => {
     // The owner leaving the space it was linked in removes it.
     old.db.exec(`DELETE FROM users WHERE id = '${guardian.id}'`);
     expect(await s.addons.get(addon.id)).toBeUndefined();
+    old.db.close();
+  });
+});
+
+describe("0029 missed calls and call waiting", () => {
+  it("keeps everything as it was; call waiting is on; missed calls group, clear and expire", async () => {
+    const old = openBefore("0029");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const kid = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    if (!kid) throw new Error("no phone");
+    await s.logCall({
+      householdId: hh.id,
+      accountId: guardian.accountId,
+      deviceId: null,
+      peer: `device:${kid.id}`,
+      peerLabel: "Kid",
+      direction: "in",
+      startedAt: T0,
+      answered: false,
+      durationMs: 0,
+      endReason: "timeout",
+      callId: "call_old",
+    });
+    expect(migrate(old.db)).toEqual(["0029_missed_calls.sql"]);
+    expect(await s.getDevice(kid.id)).toMatchObject({ name: "Kid", kind: "kids" });
+    // Call waiting is on for everyone until they turn it off.
+    expect(await s.callWaiting({ accountId: guardian.accountId })).toBe(true);
+    expect(await s.callWaiting({ deviceId: kid.id })).toBe(true);
+    await s.setCallWaiting({ deviceId: kid.id }, false);
+    expect(await s.callWaiting({ deviceId: kid.id })).toBe(false);
+    expect(await s.callWaiting({ accountId: guardian.accountId })).toBe(true);
+
+    const me = { accountId: guardian.accountId };
+    const add = (from: string, label: string, at: number, callId = `c${at}`) =>
+      s.missed.add({ householdId: hh.id, owner: me, callId, fromLabel: label, fromPeer: from, at });
+    await add("user:u1", "Ana", T0 + 1);
+    const newestAna = await add("user:u1", "Ana", T0 + 3);
+    await add("bob@b.test", "Bob", T0 + 2);
+    await s.missed.add({
+      householdId: hh.id,
+      owner: { deviceId: kid.id },
+      callId: "c9",
+      fromLabel: "Mom",
+      fromPeer: `user:${guardian.id}`,
+      at: T0 + 4,
+    });
+    expect(await s.missed.list(me)).toEqual([
+      expect.objectContaining({ id: newestAna, fromLabel: "Ana", count: 2, at: T0 + 3 }),
+      expect.objectContaining({ fromPeer: "bob@b.test", count: 1 }),
+    ]);
+    expect(await s.missed.list({ deviceId: kid.id })).toEqual([
+      expect.objectContaining({ fromLabel: "Mom", count: 1 }),
+    ]);
+    // A message left after Bob's call moves that call to voicemail.
+    expect(await s.missed.becameVoicemail(me, "bob@b.test", T0, T0 + 10)).toBe(true);
+    expect((await s.missed.list(me)).map((g) => g.fromLabel)).toEqual(["Ana"]);
+    // Clearing marks them seen everywhere; the rows stay (call back proof) until they expire.
+    expect(await s.missed.clear(me, T0 + 20)).toBe(2);
+    expect(await s.missed.list(me)).toEqual([]);
+    expect((await s.missed.get(newestAna))?.seenAt).toBe(T0 + 20);
+    expect(await s.missed.list({ deviceId: kid.id })).toHaveLength(1);
+    expect(await s.missed.ofAccount(guardian.accountId)).toHaveLength(3);
+    await s.setSpacePrivacy(hh.id, { historyDays: 30 });
+    await s.sweepExpired(hh.id, "home.test", T0 + 31 * 24 * 60 * 60 * 1000);
+    expect(await s.missed.ofAccount(guardian.accountId)).toEqual([]);
+    expect(await s.missed.list({ deviceId: kid.id })).toEqual([]);
     old.db.close();
   });
 });

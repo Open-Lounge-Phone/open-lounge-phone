@@ -3,6 +3,7 @@ export * from "./auth.ts";
 export * from "./connections.ts";
 export * from "./crypto.ts";
 export * from "./lines.ts";
+export * from "./missed.ts";
 export * from "./notices.ts";
 export * from "./recordings.ts";
 export * from "./rooms.ts";

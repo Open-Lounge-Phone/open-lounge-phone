@@ -788,7 +788,7 @@ describe("voicemail", () => {
     expect(await app.next("voicemail.new")).toMatchObject({ id, deviceId, from: "Grandma" });
     let config = await device.next("config");
     while (!config.missed) config = await device.next("config");
-    expect(config.missed).toEqual([{ from: "Grandma" }]);
+    expect(config.missed).toEqual([{ from: "Grandma", kind: "voicemail", at: expect.any(Number) }]);
 
     await Promise.all(background);
     const list = await http("/voicemails", { token });

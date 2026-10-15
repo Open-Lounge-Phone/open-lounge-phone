@@ -63,6 +63,7 @@ import {
   isRoomContactId,
   type LineCallback,
   LOCAL_HOST,
+  type MissedOwner,
   newId,
   type PublicLine,
   type RingGroup,
@@ -346,6 +347,8 @@ interface Room {
   farLine?: boolean;
   /** The caller asked a public line to call them back: their place is kept until then. */
   callbackUntil?: number;
+  /** Rings a person here for a call another household here owns: its missed call is theirs. */
+  branchLeg?: boolean;
 }
 
 /** A public line calling one of our people back, ringing their apps and phones. */
@@ -520,6 +523,7 @@ export class HouseholdHub {
         ...(r.noRecording ? { noRecording: true } : {}),
         ...(r.line ? { line: r.line } : {}),
         ...(r.farLine ? { farLine: true } : {}),
+        ...(r.branchLeg ? { branchLeg: true } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -586,6 +590,7 @@ export class HouseholdHub {
         ...(snap.noRecording ? { noRecording: true } : {}),
         ...(snap.line ? { line: snap.line } : {}),
         ...(snap.farLine ? { farLine: true } : {}),
+        ...(snap.branchLeg ? { branchLeg: true } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -617,7 +622,7 @@ export class HouseholdHub {
 
   // --- connections ----------------------------------------------------------
 
-  connectDevice(device: Device, conn: Conn): Promise<Peer> {
+  connectDevice(device: Device, conn: Conn, features?: readonly string[]): Promise<Peer> {
     return this.run(async () => {
       const old = this.devices.get(device.id);
       if (old) {
@@ -637,6 +642,7 @@ export class HouseholdHub {
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
         ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
         ...(device.model && RECORDING_MODELS.has(device.model) ? { canRecord: true } : {}),
+        ...(features?.length ? { features: [...features] } : {}),
       };
       // Back within the grace period: the session carries on (a replaced socket hands it over).
       const resumed = peer.lounge ? await this.resumeLounge(peer, old) : undefined;
@@ -818,6 +824,8 @@ export class HouseholdHub {
           return this.voicemailHeard(device, msg.id);
         case "missed.clear":
           return this.missedClear(device);
+        case "call.back":
+          return this.callBackMissed(device, msg.id);
         case "status":
           device.status = msg;
           this.remember(device);
@@ -1695,6 +1703,9 @@ export class HouseholdHub {
           this.env.log("warn", "call log failed", { error: String(e) }),
         );
         this.maybeSweep();
+        await this.recordMissed(room, r.state.reason ?? "hangup").catch((e) =>
+          this.env.log("warn", "missed call not recorded", { error: String(e) }),
+        );
         if (room.payer && room.activeAt !== undefined) {
           // Metered at the end, rounded up to whole minutes; enforced only when calls start.
           const minutes = Math.ceil((this.env.now() - room.activeAt) / 60_000);
@@ -1895,29 +1906,99 @@ export class HouseholdHub {
    * What a phone shows as missed, newest first: unheard voicemail by sender, and on a person's own
    * phone the public lines whose call back they didn't take (`callback`).
    */
-  private async missedFor(peer: DevicePeer): Promise<{ from: string; callback?: true }[]> {
+  private async missedFor(peer: DevicePeer): Promise<MissedItem[]> {
     const { store } = this.env;
-    const voicemail = (await store.unheardSenders(peer.id, 8, peer.owner)).map((v) => ({
+    type Entry = MissedItem & { at: number };
+    const voicemail: Entry[] = (await store.unheardSenders(peer.id, 8, peer.owner)).map((v) => ({
       from: v.from,
       at: v.at,
-      callback: false,
+      kind: "voicemail" as const,
     }));
     const owner = peer.owner ? await store.getUser(peer.owner) : undefined;
-    const lines = owner
+    const lines: Entry[] = owner
       ? (await store.lines.missedCallbacks(owner.accountId, 8)).map((m) => ({
           from: m.lineName,
           at: m.at,
-          callback: true,
+          callback: true as const,
+          id: m.id,
         }))
       : [];
-    return [...voicemail, ...lines]
+    // Missed calls (rang, nobody answered, no message): only to phones that show them truthfully.
+    const calls: Entry[] = peer.features?.includes("missed-calls")
+      ? (
+          await store.missed.list(owner ? { accountId: owner.accountId } : { deviceId: peer.id })
+        ).map((m) => ({
+          from: m.fromLabel,
+          at: m.at,
+          kind: "call" as const,
+          count: m.count,
+          id: m.id,
+        }))
+      : [];
+    return [...voicemail, ...lines, ...calls]
       .filter((m) => m.from.trim())
       .sort((a, b) => b.at - a.at)
       .slice(0, 8)
-      .map((m) => ({
-        from: m.from.slice(0, 24),
-        ...(m.callback ? { callback: true as const } : {}),
-      }));
+      .map((m) => ({ ...m, from: m.from.slice(0, 24) }));
+  }
+
+  /**
+   * A call that rang a person or a household phone here and nobody answered (no answer in time,
+   * or the caller gave up): a missed call. It moves to voicemail if the caller then leaves a
+   * message (`depositVoicemail`). Not for a branch of a call another household here owns (that
+   * one records it), public lines, ring groups or house-line groups, nor Lounge phones.
+   */
+  private async recordMissed(room: Room, reason: EndReason): Promise<void> {
+    if (room.answered || room.branchLeg || room.line || room.hunt || room.group) return;
+    if (reason !== "timeout" && reason !== "hangup") return;
+    const owner = await this.missedOwner(room.state.callee);
+    if (!owner) return;
+    const from = await this.describe(room.caller, room.state.caller);
+    await this.env.store.missed.add({
+      householdId: this.householdId,
+      owner,
+      callId: room.id,
+      fromLabel: from.label || room.caller.label,
+      fromPeer: from.peer,
+      at: room.startedAt ?? this.env.now(),
+    });
+    await this.missedChanged(owner);
+  }
+
+  /** Whose missed call a call to `calleeKey` is: a person's (all their phones and apps) or a
+   * household phone's own; a Lounge phone keeps none. */
+  private async missedOwner(calleeKey: string): Promise<MissedOwner | undefined> {
+    const { store } = this.env;
+    if (calleeKey.startsWith("usr:")) {
+      const user = await store.getUser(idOf(calleeKey));
+      return user ? { accountId: user.accountId } : undefined;
+    }
+    if (!calleeKey.startsWith("dev:")) return undefined;
+    const device = await store.getDevice(idOf(calleeKey));
+    if (!device || device.kind === "lounge") return undefined;
+    if (!device.ownerUserId) return { deviceId: device.id };
+    const owner = await store.getUser(device.ownerUserId);
+    return owner ? { accountId: owner.accountId } : undefined;
+  }
+
+  /** Missed calls changed: the phones that show them get fresh config, the apps are told. */
+  private async missedChanged(owner: MissedOwner): Promise<void> {
+    if ("deviceId" in owner) {
+      const peer = this.devices.get(owner.deviceId);
+      if (peer) await this.sendConfig(peer, true);
+      return;
+    }
+    await this.refreshAccountPhones(owner.accountId);
+    const calls = this.env.calls;
+    if (calls) {
+      // The apps in every space of the account; not awaited: this hub's own turn comes after.
+      void calls.notifyAccount(owner.accountId, { t: "missed.changed" }).catch(() => {});
+      return;
+    }
+    for (const m of await this.env.store.listMemberships(owner.accountId)) {
+      if (m.household.id !== this.householdId) continue;
+      for (const app of this.apps.get(m.user.id) ?? []) app.conn.send({ t: "missed.changed" });
+    }
   }
 
   /** Fresh config for an account's own phones, here and in its other spaces (`except` one). */
@@ -1936,13 +2017,69 @@ export class HouseholdHub {
     }
   }
 
-  /** MENU → Voicemail → Clear: the owner's missed call backs go, on all their phones. */
+  /**
+   * MENU → Missed → Clear (and, on older phones, MENU → Voicemail → Clear): missed calls are
+   * marked seen and missed call backs forgotten, everywhere they show: a person's own phone
+   * clears its owner's (all their phones and apps), a household phone its own.
+   */
   private async missedClear(device: DevicePeer): Promise<void> {
-    const owner =
-      device.owner && !device.lounge ? await this.env.store.getUser(device.owner) : undefined;
-    if (!owner) return;
-    await this.env.store.lines.clearMissedCallbacks(owner.accountId);
-    await this.refreshAccountPhones(owner.accountId);
+    if (device.lounge) return;
+    const { store } = this.env;
+    const owner = device.owner ? await store.getUser(device.owner) : undefined;
+    if (device.owner && !owner) return;
+    if (owner) await store.lines.clearMissedCallbacks(owner.accountId);
+    const whose: MissedOwner = owner ? { accountId: owner.accountId } : { deviceId: device.id };
+    await store.missed.clear(whose, this.env.now());
+    await this.missedChanged(whose);
+  }
+
+  /**
+   * MENU → Missed → 1: call a missed caller back. Like dialing: a household phone may call only
+   * someone on its allow-list (with its quiet hours); a person's own phone calls as its owner
+   * would from their app. A caller who can't be reached from this phone's space is
+   * `unreachable`; anything not this phone's own is `denied`.
+   */
+  private async callBackMissed(device: DevicePeer, id: string): Promise<void> {
+    if (!this.canDial(device)) return;
+    if (device.lounge) return this.refuse(device, "denied");
+    const { store } = this.env;
+    const owner = device.owner ? await store.getUser(device.owner) : undefined;
+    if (id.startsWith("mcb")) {
+      // A public line's call back nobody took: call the line again.
+      const cb = owner ? await store.lines.missedCallback(id) : undefined;
+      if (!owner || cb?.accountId !== owner.accountId) return this.refuse(device, "denied");
+      return this.addressDial(device, cb.lineAddress);
+    }
+    const row = await store.missed.get(id);
+    const mine = row && (owner ? row.accountId === owner.accountId : row.deviceId === device.id);
+    if (!row || !mine) return this.refuse(device, "denied");
+    const peer = row.fromPeer;
+    const allowance = await this.allowance(device);
+    if (allowance.note) return this.refuse(device, "denied", allowance.note);
+    if (!owner) {
+      // A household phone: only someone on its allow-list it may call.
+      const contact = peer.startsWith("user:")
+        ? (await store.listContacts(device.id)).find((c) => c.id === peer.slice("user:".length))
+        : (await store.listRemoteContacts(device.id)).find(
+            (r) => addressOf(this.env, r.connection) === peer,
+          );
+      return this.dialContact(device, contact, await this.scheduleFor(device), allowance);
+    }
+    // A person's own phone: as its owner would from their app.
+    const as = { id: owner.id, label: owner.name };
+    if (peer.startsWith("user:")) {
+      const user = await store.getUser(peer.slice("user:".length));
+      if (user?.householdId === this.householdId) return this.userDial(device, user.id, as);
+    } else if (peer.startsWith("device:")) {
+      const d = await store.getDevice(peer.slice("device:".length));
+      if (d?.householdId === this.householdId) return this.appDial(device, d.id, as);
+    } else if (peer.includes("@")) {
+      const conn = (await store.connections.list(owner.accountId)).find(
+        (c) => c.state === "active" && addressOf(this.env, c) === peer.toLowerCase(),
+      );
+      if (conn) return this.connectionDial(device, conn.id, as);
+    }
+    return this.refuse(device, "unreachable");
   }
 
   // --- config & status ----------------------------------------------------------
@@ -3230,6 +3367,7 @@ export class HouseholdHub {
           req.callId,
           await this.personRingMs(userId),
         );
+        if (req.noBranches) room.branchLeg = true;
         this.ringAll(room, targets, plans, req.label);
         return { state: "ringing" };
       }
@@ -5974,6 +6112,21 @@ export class HouseholdHub {
 }
 
 const idOf = (key: string) => key.slice(4);
+
+/** A connection's peer as an address, `handle@host` (lower case; this server's own host for a
+ * connection here), as the call log and missed calls name remote callers. */
+const addressOf = (env: ServerEnv, c: { peerHandle: string; peerHost: string }) =>
+  `${c.peerHandle}@${c.peerHost || ownHost(env)}`.toLowerCase();
+
+/** One entry of `config.missed`. */
+type MissedItem = {
+  from: string;
+  callback?: true;
+  kind?: "voicemail" | "call";
+  at?: number;
+  count?: number;
+  id?: string;
+};
 
 /** Why a call in a space couldn't ring, and whose voicemail the caller may leave instead. */
 type Refusal = { reason: EndReason; note?: string; vm?: VmTarget };

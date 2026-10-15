@@ -42,6 +42,14 @@
           "display": {
             "type": "string",
             "enum": ["eink", "seg14", "oled", "none"]
+          },
+          "features": {
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 32
+            }
           }
         },
         "required": ["t", "proto", "model", "fw", "buttons", "display"]
@@ -412,6 +420,22 @@
           }
         },
         "required": ["t"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "call.back"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "id"]
       },
       {
         "type": "object",
@@ -1143,6 +1167,26 @@
                 "callback": {
                   "type": "boolean",
                   "const": true
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["voicemail", "call"]
+                },
+                "at": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "count": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9_-]+$"
                 }
               },
               "required": ["from"]
@@ -1636,6 +1680,10 @@
               }
             },
             "required": ["name"]
+          },
+          "waiting": {
+            "type": "boolean",
+            "const": true
           },
           "callback": {
             "type": "object",
@@ -3537,6 +3585,22 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "missed.changed"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "call.ringing"
           },
           "id": {
@@ -3584,6 +3648,10 @@
               }
             },
             "required": ["name"]
+          },
+          "waiting": {
+            "type": "boolean",
+            "const": true
           },
           "callback": {
             "type": "object",

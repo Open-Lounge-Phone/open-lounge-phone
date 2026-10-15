@@ -239,7 +239,9 @@ describe("kids' phones", () => {
     expect(await jApp.next("voicemail.new")).toMatchObject({ deviceId, from: "Uncle Bob" });
     let config = await phone.next("config");
     while (!config.missed) config = await phone.next("config");
-    expect(config.missed).toEqual([{ from: "Uncle Bob" }]);
+    expect(config.missed).toEqual([
+      { from: "Uncle Bob", kind: "voicemail", at: expect.any(Number) },
+    ]);
     // The guardians' inbox has it; Bob (not a guardian) can neither list nor open it.
     const list = (await s.http("/voicemails", { token: jesse.token })).json;
     expect(list).toMatchObject([{ deviceId, toUser: null, fromLabel: "Uncle Bob" }]);

@@ -27,11 +27,13 @@ export const DEVICE_FEATURES = [
   "line-callback",
   "notices",
   "addons",
+  "missed-calls",
+  "call-waiting",
 ] as const;
 export type DeviceFeature = (typeof DEVICE_FEATURES)[number];
 
 /** Lenient list of names: entries a client can't hold are skipped, never fatal. */
-const Names = (max: number) =>
+export const Names = (max: number) =>
   z.preprocess(
     (v) =>
       Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.length <= 32).slice(0, max) : v,
@@ -55,7 +57,7 @@ export const ServerInfo = z
       })
       .describe("The protocol versions the server accepts."),
     features: Names(32).describe(
-      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on). Unknown names are ignored.",
+      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on), `missed-calls` (missed calls in `config.missed` with `kind`, `call.back`, `missed.changed`), `call-waiting` (`call.ringing.waiting`). Unknown names are ignored.",
     ),
   })
   .describe("What the server speaks, so a client can adapt to an older or newer server.");

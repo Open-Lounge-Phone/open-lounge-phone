@@ -13,6 +13,7 @@ export type MaxWaitAction =
 
 /** A public line's call back that a person didn't take (their side; migration 0026). */
 export interface MissedCallback {
+  id: string;
   /** `handle@host`. */
   lineAddress: string;
   lineName: string;
@@ -604,16 +605,42 @@ export class LineStore {
   /** A person's missed call backs, newest first. */
   async missedCallbacks(accountId: string, limit = 8): Promise<MissedCallback[]> {
     const rows = await this.sql.all<{
+      id: string;
       line_address: string;
       line_name: string;
       at: number;
     }>(
-      `SELECT line_address, line_name, at FROM missed_callbacks WHERE account_id = ?
+      `SELECT id, line_address, line_name, at FROM missed_callbacks WHERE account_id = ?
        ORDER BY at DESC LIMIT ?`,
       accountId,
       limit,
     );
-    return rows.map((r) => ({ lineAddress: r.line_address, lineName: r.line_name, at: r.at }));
+    return rows.map((r) => ({
+      id: r.id,
+      lineAddress: r.line_address,
+      lineName: r.line_name,
+      at: r.at,
+    }));
+  }
+
+  /** One missed call back, by id, with whose it is (a phone calls the line back with it). */
+  async missedCallback(id: string): Promise<(MissedCallback & { accountId: string }) | undefined> {
+    const r = await this.sql.first<{
+      id: string;
+      account_id: string;
+      line_address: string;
+      line_name: string;
+      at: number;
+    }>("SELECT id, account_id, line_address, line_name, at FROM missed_callbacks WHERE id = ?", id);
+    return r
+      ? {
+          id: r.id,
+          accountId: r.account_id,
+          lineAddress: r.line_address,
+          lineName: r.line_name,
+          at: r.at,
+        }
+      : undefined;
   }
 
   /** Clears a person's missed call backs (from one line, or all); answers how many went. */

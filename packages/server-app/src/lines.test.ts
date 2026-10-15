@@ -1023,7 +1023,11 @@ describe("public lines: call me back", () => {
     // Nobody answers in 30 s: the phone stops ringing and shows the miss.
     s.timers.advance(31_000);
     expect(await phone.nextState("ended")).toMatchObject({ callId: waited, reason: "timeout" });
-    await vi.waitFor(() => expect(missedOf(phone)).toEqual([{ from: "Support", callback: true }]));
+    await vi.waitFor(() =>
+      expect(missedOf(phone)).toEqual([
+        { from: "Support", callback: true, at: expect.any(Number), id: expect.any(String) },
+      ]),
+    );
     // The line tries once more; taking it calls the line, which answers the missed call.
     const again = await app.next("call.ringing");
     app.write({ t: "call.answer", callId: again.callId });
@@ -1048,16 +1052,23 @@ describe("public lines: call me back", () => {
       transcriptStatus: "unavailable",
     });
     const { phone } = await annAtHerDesk({ callbackMissed: "voicemail" });
-    expect(missedOf(phone)).toEqual([{ from: "Gran" }]);
+    expect(missedOf(phone)).toEqual([{ from: "Gran", kind: "voicemail", at: expect.any(Number) }]);
     await s.connectApp(t.cy.token);
     await phone.next("call.ringing");
     s.timers.advance(31_000);
     // Newest first: the line, then Gran's message.
     await vi.waitFor(() =>
-      expect(missedOf(phone)).toEqual([{ from: "Support", callback: true }, { from: "Gran" }]),
+      expect(missedOf(phone)).toEqual([
+        expect.objectContaining({ from: "Support", callback: true }),
+        expect.objectContaining({ from: "Gran", kind: "voicemail" }),
+      ]),
     );
     phone.write({ t: "missed.clear" });
-    await vi.waitFor(() => expect(missedOf(phone)).toEqual([{ from: "Gran" }]));
+    await vi.waitFor(() =>
+      expect(missedOf(phone)).toEqual([
+        expect.objectContaining({ from: "Gran", kind: "voicemail" }),
+      ]),
+    );
     expect(await s.store.lines.missedCallbacks(ann.account.id)).toEqual([]);
   });
 
@@ -1148,7 +1159,9 @@ describe("public lines: call me back across servers", () => {
     await phone.next("call.ringing");
     b.timers.advance(31_000);
     await vi.waitFor(() =>
-      expect(phone.all("config").at(-1)?.missed).toEqual([{ from: "Support", callback: true }]),
+      expect(phone.all("config").at(-1)?.missed).toEqual([
+        { from: "Support", callback: true, at: expect.any(Number), id: expect.any(String) },
+      ]),
     );
     // Bob calls the line himself (from the app): the missed call back is answered.
     app.write({ t: "call.line", address: "Acme-Support@a.test" });

@@ -90,6 +90,14 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
           ? { recordingId: l.recordingId, recording: `/api/recordings/${l.recordingId}/audio` }
           : {}),
       })),
+      // Missed calls: rang you and nobody answered, with no message (seenAt: when you cleared
+      // them; kept until your history setting removes them).
+      missedCalls: (await store.missed.ofAccount(account.id)).map((m) => ({
+        peer: m.fromPeer,
+        peerLabel: m.fromLabel,
+        at: new Date(m.at).toISOString(),
+        ...(m.seenAt !== null ? { seenAt: new Date(m.seenAt).toISOString() } : {}),
+      })),
       // Public lines' call backs you didn't take (shown on your phones until cleared).
       missedCallbacks: (await store.lines.missedCallbacks(account.id, 100)).map((m) => ({
         line: m.lineAddress,

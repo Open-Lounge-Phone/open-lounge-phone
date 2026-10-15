@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `missed-calls`, `call-waiting`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -59,6 +59,7 @@ First message on every connection.
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
 | `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
+| `features` | string (len ≤32)[] |  | What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: "call"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy). Unknown names are ignored. |
 
 ### `call.extension`
 
@@ -207,11 +208,19 @@ The phone played this message to the end: mark it heard (as the app's Heard does
 
 ### `missed.clear`
 
-MENU → Voicemail → Clear on a person's own phone: forget their missed call backs (`config.missed` items with `callback`), on all their phones. Voicemail is cleared with `voicemail.heard`.
+MENU → Missed → Clear: mark the missed calls seen and forget the missed call backs (`config.missed` items with `kind: "call"` or `callback`): a person's own phone clears its owner's, on all their phones and apps; a household phone its own. Voicemail is cleared with `voicemail.heard`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
+
+### `call.back`
+
+MENU → Missed → 1 (handset up): call this missed caller back, like dialing: a household phone only someone on its allow-list it may call (and its quiet hours), a person's own phone as its owner. Answered like any dial (`call.state`); refused ones end `denied` or `unreachable`. Device feature `missed-calls`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) | yes | A `config.missed` item's `id` (a missed call or a missed call back). |
 
 ### `checkin.ok`
 
@@ -453,7 +462,7 @@ Sent after authentication and whenever guardians change settings.
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `utcOffsetMin` | integer (≥-720, ≤840) |  | The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock knows local time: hardware phones install updates overnight. |
 | `now` | integer |  | The server's time (ms since the Unix epoch) when it sent this, so a phone can show a clock without asking a time server: hardware phones set their clock from it. |
-| `missed` | { from: string (len ≤24), callback?: `true` }[] |  | Missed calls for the status display, newest first: unheard voicemails by sender, and (a person's own phone) missed call backs from public lines. |
+| `missed` | { from: string (len ≤24), callback?: `true`, kind?: `"voicemail"` \| `"call"`, at?: integer (≥0), count?: integer, id?: string (len ≤64) }[] |  | Missed calls for the status display, newest first: unheard voicemails by sender, missed calls (phones listing `missed-calls`), and (a person's own phone) missed call backs from public lines. |
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
 | `addon` | { name: string (len ≤30), address: string (len ≤300), owner: { name: string (len ≤64), address: string (len ≤300) } } |  | Sent to an add-on only (instead of `owner`): who it is and whose account it belongs to. |
@@ -572,6 +581,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `waiting` | `true` |  | Call waiting: you're in a call and this one rings softly (a beep in the earpiece, a banner). `call.answer` takes it and puts your current call on hold (`call.state active hold: you`); `call.hangup` declines it; left alone it goes to voicemail after the usual ring time. Only to apps, and to phones listing `call-waiting`. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`
@@ -1102,6 +1112,14 @@ A voicemail was left for you (your own inbox, or a shared box of a ring group yo
 | `from` | string (len ≤24) | yes |  |
 | `box` | string (len ≤40) |  | Left in a ring group's shared box you're in (its name). |
 
+### `missed.changed`
+
+Your missed calls changed (a new one, or they were cleared on a phone or another app): reload them with `GET /api/missed`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+
 ### `call.ringing`
 
 Incoming call; device rings until answered, hung up, or ended.
@@ -1112,6 +1130,7 @@ Incoming call; device rings until answered, hung up, or ended.
 | `callId` | string (len ≤64) | yes |  |
 | `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
+| `waiting` | `true` |  | Call waiting: you're in a call and this one rings softly (a beep in the earpiece, a banner). `call.answer` takes it and puts your current call on hold (`call.state active hold: you`); `call.hangup` declines it; left alone it goes to voicemail after the usual ring time. Only to apps, and to phones listing `call-waiting`. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
 
 ### `call.state`

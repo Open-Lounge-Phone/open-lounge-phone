@@ -162,6 +162,8 @@ type DevicePhase =
       nonce: Uint8Array<ArrayBuffer>;
       /** What it runs, from its hello (shown on the phone's page in the app). */
       runs: { fw: string; model: string };
+      /** What it handles beyond the base protocol (`hello.features`). */
+      features?: string[];
     }
   /** An add-on (docs/add-ons.md) answers the same challenge with its own key. */
   | { kind: "addonChallenge"; addon: Addon; nonce: Uint8Array<ArrayBuffer>; fw: string }
@@ -457,7 +459,13 @@ export class Gateway implements Coordinator {
             return fail(CloseCode.unauthorized, "unknown device");
           }
           const nonce = crypto.getRandomValues(new Uint8Array(32));
-          phase = { kind: "challenge", device, nonce, runs: { fw: msg.fw, model: msg.model } };
+          phase = {
+            kind: "challenge",
+            device,
+            nonce,
+            runs: { fw: msg.fw, model: msg.model },
+            ...(msg.features?.length ? { features: msg.features } : {}),
+          };
           conn.send({ t: "auth.challenge", nonce: toBase64Url(nonce) });
           return;
         }
@@ -523,7 +531,7 @@ export class Gateway implements Coordinator {
           await this.env.store.touchDevice(device.id, this.env.now(), phase.runs);
           const hub = this.hub(device.householdId);
           // What it runs now (whether its client can record, for instance).
-          const peer = await hub.connectDevice({ ...device, ...phase.runs }, conn);
+          const peer = await hub.connectDevice({ ...device, ...phase.runs }, conn, phase.features);
           if (closed()) {
             await hub.disconnect(peer);
             return;

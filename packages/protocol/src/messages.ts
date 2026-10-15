@@ -7,6 +7,7 @@ import {
   ErrorCode,
   IceServer,
   Id,
+  Names,
   ServerInfo,
 } from "./common.ts";
 
@@ -496,6 +497,12 @@ export const DeviceHello = z
       .describe(
         "Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
       ),
+    features: Names(16)
+      .optional()
+      .catch(undefined)
+      .describe(
+        "What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: \"call\"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy). Unknown names are ignored.",
+      ),
   })
   .describe("First message on every connection.");
 
@@ -631,7 +638,17 @@ export const VoicemailHeard = z
 export const MissedClear = z
   .object({ t: z.literal("missed.clear"), ...Ref })
   .describe(
-    "MENU → Voicemail → Clear on a person's own phone: forget their missed call backs (`config.missed` items with `callback`), on all their phones. Voicemail is cleared with `voicemail.heard`.",
+    "MENU → Missed → Clear: mark the missed calls seen and forget the missed call backs (`config.missed` items with `kind: \"call\"` or `callback`): a person's own phone clears its owner's, on all their phones and apps; a household phone its own. Voicemail is cleared with `voicemail.heard`.",
+  );
+
+export const CallBack = z
+  .object({
+    t: z.literal("call.back"),
+    ...Ref,
+    id: Id.describe("A `config.missed` item's `id` (a missed call or a missed call back)."),
+  })
+  .describe(
+    "MENU → Missed → 1 (handset up): call this missed caller back, like dialing: a household phone only someone on its allow-list it may call (and its quiet hours), a person's own phone as its owner. Answered like any dial (`call.state`); refused ones end `denied` or `unreachable`. Device feature `missed-calls`.",
   );
 
 export const CheckinOk = z
@@ -676,6 +693,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   VoicemailFetch,
   VoicemailHeard,
   MissedClear,
+  CallBack,
   CheckinOk,
   CheckinMissed,
   NoticeDismiss,
@@ -763,12 +781,24 @@ export const Config = z
             .describe(
               "A public line called you back as you asked and you didn't take it (`from` = the line's name). No message to play: it stays until `missed.clear`, or you call the line, or take its next call back.",
             ),
+          kind: z
+            .enum(["voicemail", "call"])
+            .optional()
+            .catch(undefined)
+            .describe(
+              "`voicemail`: unheard messages from `from`; `call`: calls from `from` that rang and nobody answered, with no message (only to phones listing `missed-calls`). Absent on older servers: voicemail, or a call back with `callback`.",
+            ),
+          at: EpochMs.optional().describe("When the newest of them was."),
+          count: z.number().int().positive().optional().describe("How many (calls, or messages)."),
+          id: Id.optional().describe(
+            "Missed calls and call backs: what `call.back` calls back (the newest one's).",
+          ),
         }),
       )
       .max(8)
       .optional()
       .describe(
-        "Missed calls for the status display, newest first: unheard voicemails by sender, and (a person's own phone) missed call backs from public lines.",
+        "Missed calls for the status display, newest first: unheard voicemails by sender, missed calls (phones listing `missed-calls`), and (a person's own phone) missed call backs from public lines.",
       ),
     greeting: z
       .object({
@@ -872,6 +902,12 @@ export const CallRinging = z
         ),
     }),
     line: LineInfo.optional().describe("The call is for a public line you answer for."),
+    waiting: z
+      .literal(true)
+      .optional()
+      .describe(
+        "Call waiting: you're in a call and this one rings softly (a beep in the earpiece, a banner). `call.answer` takes it and puts your current call on hold (`call.state active hold: you`); `call.hangup` declines it; left alone it goes to voicemail after the usual ring time. Only to apps, and to phones listing `call-waiting`.",
+      ),
     callback: LineInfo.optional().describe(
       "A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go.",
     ),
@@ -1369,6 +1405,12 @@ export const RoomOpened = z
     'A room of your space with opening hours just opened ("party line open"): join it like any room. Sent once per opening to the members\' apps; phones with the room on a key get a notice.',
   );
 
+export const MissedChanged = z
+  .object({ t: z.literal("missed.changed"), ...Ref })
+  .describe(
+    "Your missed calls changed (a new one, or they were cleared on a phone or another app): reload them with `GET /api/missed`.",
+  );
+
 export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
@@ -1378,6 +1420,7 @@ export const ServerToApp = z.discriminatedUnion("t", [
   DeviceStatus,
   VoicemailNew,
   VoicemailInbox,
+  MissedChanged,
   CallRinging,
   CallStateMsg,
   RtcConfig,

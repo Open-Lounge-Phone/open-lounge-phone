@@ -43,6 +43,7 @@ import { leavingRoutes } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { lineRoutes } from "./lines.ts";
 import { memberRoutes } from "./members.ts";
+import { missedRoutes } from "./missed.ts";
 import { noticeRoutes, publicNoticeRoutes } from "./notices.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
@@ -906,6 +907,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   recordingRoutes(api, env);
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
+  missedRoutes(api, env, live);
   roomRoutes(api, env, live);
 
   return api;

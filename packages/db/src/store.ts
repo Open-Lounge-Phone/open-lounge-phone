@@ -21,6 +21,7 @@ import {
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
 import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
+import { MissedCallStore } from "./missed.ts";
 import { NoticeStore } from "./notices.ts";
 import { RecordingStore } from "./recordings.ts";
 import { isRoomContactId, type RoomContact, RoomStore } from "./rooms.ts";
@@ -629,6 +630,8 @@ export class Store {
   readonly auth: AuthStore;
   /** Add-ons linked to people's accounts, and who may talk to them. */
   readonly addons: AddonStore;
+  /** Missed calls of people and household phones. */
+  readonly missed: MissedCallStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -640,6 +643,41 @@ export class Store {
     this.notices = new NoticeStore(sql);
     this.auth = new AuthStore(sql);
     this.addons = new AddonStore(sql);
+    this.missed = new MissedCallStore(sql);
+  }
+
+  /**
+   * Call waiting (a second call rings softly during a call): a person's own setting, or a
+   * household phone's (its guardians'). On unless turned off.
+   */
+  async callWaiting(owner: VoicemailOwner): Promise<boolean> {
+    const r =
+      "accountId" in owner
+        ? await this.sql.first<{ v: number }>(
+            "SELECT call_waiting AS v FROM accounts WHERE id = ?",
+            owner.accountId,
+          )
+        : await this.sql.first<{ v: number }>(
+            "SELECT call_waiting AS v FROM devices WHERE id = ?",
+            owner.deviceId,
+          );
+    return r ? r.v !== 0 : true;
+  }
+
+  async setCallWaiting(owner: VoicemailOwner, on: boolean): Promise<void> {
+    if ("accountId" in owner) {
+      await this.sql.run(
+        "UPDATE accounts SET call_waiting = ? WHERE id = ?",
+        on ? 1 : 0,
+        owner.accountId,
+      );
+    } else {
+      await this.sql.run(
+        "UPDATE devices SET call_waiting = ? WHERE id = ?",
+        on ? 1 : 0,
+        owner.deviceId,
+      );
+    }
   }
 
   // --- settings -----------------------------------------------------------
@@ -1061,6 +1099,16 @@ export class Store {
     // A line's recent callers follow the space's history setting too.
     await this.sql.run(
       `DELETE FROM line_callers WHERE household_id = ?
+         AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
+         AND (SELECT history_days FROM households WHERE id = ?) > 0`,
+      householdId,
+      now,
+      householdId,
+      householdId,
+    );
+    // Missed calls (seen or not) follow the space's history setting.
+    await this.sql.run(
+      `DELETE FROM missed_calls WHERE household_id = ?
          AND at < ? - COALESCE((SELECT history_days FROM households WHERE id = ?), 0) * ${DAY_MS}
          AND (SELECT history_days FROM households WHERE id = ?) > 0`,
       householdId,
