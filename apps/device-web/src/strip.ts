@@ -18,6 +18,10 @@ export interface StatusInput {
   power?: { reduced: boolean };
   /** When the current call connected (epoch ms), for the call timer. */
   callStartedAt?: number;
+  /** The call's audio connection dropped and is being restored. */
+  reconnecting?: boolean;
+  /** The call's incoming audio is poor (packet loss or jitter). */
+  poor?: boolean;
   /** In a room: its name, how many are in, whether you're muted, and an idle warning. */
   room?: {
     name: string;
@@ -127,6 +131,8 @@ export function statusLines(input: StatusInput): StatusLines {
       if (!s.connected || input.callStartedAt === undefined) {
         return name ? ["CONNECTING", clip(name)] : ["CONNECTING"];
       }
+      // Never a timer while there's no audio: say it's coming back.
+      if (input.reconnecting) return name ? ["RECONNECTING", clip(name)] : ["RECONNECTING"];
       {
         const what = s.muted
           ? input.recording
@@ -135,8 +141,9 @@ export function statusLines(input: StatusInput): StatusLines {
           : input.recording
             ? "REC"
             : "IN CALL";
-        return name
-          ? [`${what} ${clock(input.now - input.callStartedAt)}`, clip(name)]
+        const second = input.poor ? "POOR CONNECTION" : name ? clip(name) : undefined;
+        return second
+          ? [`${what} ${clock(input.now - input.callStartedAt)}`, second]
           : [`${what} ${clock(input.now - input.callStartedAt)}`];
       }
     case "inroom": {
@@ -148,6 +155,7 @@ export function statusLines(input: StatusInput): StatusLines {
       return [clip(room.name), clip(count)];
     }
     case "offhook": {
+      if (s.lost) return ["CONNECTION LOST", "PRESS A KEY"];
       if (s.held) {
         const text = s.lastEnd && s.lastEnd !== "hangup" ? END_TEXT[s.lastEnd] : undefined;
         return [text ?? "CALLER ON HOLD", "PRESS A KEY"];

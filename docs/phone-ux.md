@@ -54,10 +54,10 @@ Highest priority first: the first row that applies is shown.
 | You put the call on hold | `ON HOLD` / name (`MENU 1 RESUMES`) |
 | Choosing who to transfer to | `TRANSFER TO?` / `PRESS A KEY` |
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
-| In a call | `IN CALL 01:23` / name; muted: `MUTED 01:23` / name; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name |
+| In a call | `IN CALL 01:23` / name; muted: `MUTED 01:23` / name; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name. When the audio connection drops: `RECONNECTING` / name while it is restored (the call's timer and status come back only once audio flows again); if it can't be restored within 20 s the call ends (`CONNECTION LOST`, below). On the browser phone, when packet loss or jitter make the audio poor: the second line says `POOR CONNECTION` until it's better (not on the hardware phone: its WebRTC library doesn't report it) |
 | They put you on hold | `ON HOLD` / name |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
-| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
+| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED`, `CALL FAILED` or `CONNECTION LOST` (the call's audio connection dropped and couldn't be restored, on either side) `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
@@ -132,6 +132,15 @@ call is held): the screen says `MUTED` and the status LED blinks slowly in pairs
 room's server is told (everyone sees you muted). The hardware phone has audio for one call at a
 time, so holding doesn't add a second caller; adding a caller, merging and transferring to the
 held call are in the app and the browser phone.
+
+**Reconnecting.** When a call's audio connection drops (Wi-Fi blips, a network change), the
+phone says `RECONNECTING` instead of sitting in silence. The side that placed the call restarts
+the connection (an ICE restart: new routes, same call), every few seconds, for up to 20 s; then
+the call ends for both sides with `CONNECTION LOST` (the server tells the other side why). The
+hardware phone can't restart a connection (its WebRTC library, esp_peer 1.5.6, has no ICE
+restart): it shows `RECONNECTING` while the connection is down, waits up to 15 s for it to come
+back by itself, then hangs up the same way. A browser phone or app restarting a call with a
+hardware phone gets no answer to its restart, so such a call ends after the wait.
 
 **Self-test** (MENU 7 then 1): press every key, lift and hang up the handset, plug the handset
 in and out. The earpiece plays a 1 kHz tone meanwhile (lift the handset to hear it) and each key

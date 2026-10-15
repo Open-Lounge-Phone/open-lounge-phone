@@ -430,3 +430,28 @@ describe("a party line closing", () => {
     ).toEqual(["CLOSING SOON", "FAMILY LINE"]);
   });
 });
+
+describe("the call's connection", () => {
+  it("says RECONNECTING instead of a timer, POOR CONNECTION, and CONNECTION LOST", async () => {
+    const { statusLines } = await import("./strip.ts");
+    const base = {
+      connection: "online" as const,
+      now: 65_000,
+      callStartedAt: 0,
+      deviceState: { kind: "incall" as const, callId: "c", connected: true },
+      activeLabel: "Ben",
+    };
+    expect(statusLines({ ...base, reconnecting: true })).toEqual(["RECONNECTING", "BEN"]);
+    expect(statusLines({ ...base, poor: true })).toEqual(["IN CALL 01:05", "POOR CONNECTION"]);
+    expect(
+      statusLines({
+        ...base,
+        deviceState: { kind: "offhook", lastEnd: "error", lost: true },
+      }),
+    ).toEqual(["CONNECTION LOST", "PRESS A KEY"]);
+    expect(statusLines({ ...base, deviceState: { kind: "offhook", lastEnd: "error" } })).toEqual([
+      "CALL FAILED",
+      "PRESS A KEY",
+    ]);
+  });
+});

@@ -184,7 +184,16 @@ let battery: { pct: number; charging: boolean } | undefined;
 let batteryFromPanel = false;
 const iceByCall = new Map<string, IceServer[]>();
 /** The call being talked in, and one on hold (MENU → Add caller). Each has its own mic copy. */
-type CallAudio = { callId: string; media?: CallMedia; pending: Signal[]; mic?: MediaStream };
+type CallAudio = {
+  callId: string;
+  media?: CallMedia;
+  pending: Signal[];
+  mic?: MediaStream;
+  /** The audio connection dropped and is being restored. */
+  reconnecting?: boolean;
+  /** Packet loss or jitter make the incoming audio poor. */
+  poor?: boolean;
+};
 let call: CallAudio | undefined;
 let heldCall: CallAudio | undefined;
 /** Attended transfer: calls where this phone sends the offer though it didn't dial. */
@@ -711,6 +720,23 @@ async function startMedia(callId: string, offerer: boolean): Promise<void> {
       void audioEl.play().catch(() => {});
     },
     onState: (state) => log("•", `peer connection ${state}`),
+    onLink: (state) => {
+      log("•", `call connection ${state}`);
+      const mine = [call, heldCall].find((c) => c?.callId === callId);
+      if (!mine) return;
+      mine.reconnecting = state === "reconnecting";
+      if (state === "lost") {
+        // Reconnecting gave up: end the call, saying why (the other side hears it too).
+        if (mine === call) step({ type: "lost" });
+        else send({ t: "call.hangup", callId, lost: true });
+      }
+      render();
+    },
+    onQuality: (poor) => {
+      const mine = [call, heldCall].find((c) => c?.callId === callId);
+      if (mine) mine.poor = poor;
+      render();
+    },
   });
   call.media = media;
   try {
@@ -1430,6 +1456,8 @@ function renderDisplay(): void {
             ...(config ? { config } : {}),
             ...(activeLabel ? { activeLabel } : {}),
             ...(callStartedAt !== undefined ? { callStartedAt } : {}),
+            ...(call?.reconnecting ? { reconnecting: true } : {}),
+            ...(call?.poor ? { poor: true } : {}),
             ...(leaveView() ? { leave: leaveView() } : {}),
             ...(room ? { room } : {}),
             ...(recordedNow() ? { recording: true } : {}),
