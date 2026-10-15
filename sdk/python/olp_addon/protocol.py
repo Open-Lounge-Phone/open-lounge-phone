@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 PROTOCOL_VERSION = 1
-FW = "olp-addon/0.1.0"
+FW = "olp-addon/0.2.0"
 
 Message = dict[str, Any]
 
@@ -66,8 +67,55 @@ def call_hangup(call_id: str) -> Message:
     return {"t": "call.hangup", "callId": call_id}
 
 
-def call_address(address: str) -> Message:
-    return {"t": "call.address", "address": address}
+#: A share's id: 1–30 of a-z, 0-9 and dashes (the part after the second `+` of its address).
+SHARE_ID_RE = re.compile(r"^[a-z0-9-]{1,30}$")
+#: The most shares one add-on offers.
+MAX_SHARES = 100
+
+
+def check_share_id(share_id: str) -> str:
+    if not isinstance(share_id, str) or not SHARE_ID_RE.match(share_id):
+        raise ValueError(f"a share id is 1-30 of a-z, 0-9 and dashes: {share_id!r}")
+    return share_id
+
+
+def call_address(address: str, share: str | None = None) -> Message:
+    msg: Message = {"t": "call.address", "address": address}
+    if share is not None:
+        msg["share"] = check_share_id(share)
+    return msg
+
+
+def addon_shares(shares: list[dict[str, str]]) -> Message:
+    """What the add-on offers for sharing (`addon.shares`); replaces what it said before."""
+    return {"t": "addon.shares", "shares": shares}
+
+
+def share_created(request_id: str, share_id: str) -> Message:
+    return {"t": "addon.share.created", "requestId": request_id, "id": check_share_id(share_id)}
+
+
+def share_refused(request_id: str, reason: str) -> Message:
+    text = (reason or "").strip()[:200] or "No reason given."
+    return {"t": "addon.share.refused", "requestId": request_id, "reason": text}
+
+
+def normalize_shares(shares: list[Any]) -> list[dict[str, str]]:
+    """`[{"id", "label"}]` checked: valid ids, labels of 1–40 characters, each id once."""
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for s in shares:
+        share_id = check_share_id(s["id"] if isinstance(s, dict) else getattr(s, "id"))
+        label = str(s["label"] if isinstance(s, dict) else getattr(s, "label")).strip()
+        if not 1 <= len(label) <= 40:
+            raise ValueError(f"a share's label is 1-40 characters: {label!r}")
+        if share_id in seen:
+            continue
+        seen.add(share_id)
+        out.append({"id": share_id, "label": label})
+    if len(out) > MAX_SHARES:
+        raise ValueError(f"an add-on offers at most {MAX_SHARES} shares")
+    return out
 
 
 def rtc_sdp(call_id: str, kind: str, sdp: str) -> Message:
@@ -95,6 +143,45 @@ def caller_of(ringing: Message) -> Party:
         address=frm.get("address"),
         name=str(frm.get("label", "")),
         addon=frm.get("kind") == "addon",
+    )
+
+
+@dataclass(frozen=True)
+class Share:
+    """The share a call came in through (`call.ringing.share`): None means its owner is calling."""
+
+    id: str
+    label: str
+    #: The grant the caller holds (stable until its owner takes the share back).
+    grant_id: str
+
+
+def share_of(ringing: Message) -> Share | None:
+    s = ringing.get("share")
+    if not isinstance(s, dict) or not s.get("id"):
+        return None
+    return Share(id=str(s["id"]), label=str(s.get("label", "")), grant_id=str(s.get("grantId", "")))
+
+
+@dataclass(frozen=True)
+class ShareRequest:
+    """Its owner asks for a new shared scope ("New shared project with…", `addon.share.request`)."""
+
+    request_id: str
+    #: What its owner called it.
+    label: str
+    #: Its owner's address (`handle@host`).
+    by: str
+    #: The people to give it to, by address.
+    with_: tuple[str, ...]
+
+
+def share_request_of(msg: Message) -> ShareRequest:
+    return ShareRequest(
+        request_id=str(msg.get("requestId", "")),
+        label=str(msg.get("label", "")),
+        by=str(msg.get("by", "")),
+        with_=tuple(str(a) for a in msg.get("with") or []),
     )
 
 

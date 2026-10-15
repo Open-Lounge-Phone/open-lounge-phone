@@ -2,11 +2,14 @@
 
     python examples/echo.py --server https://hub.example --key echo.addon-key
     python examples/echo.py --server https://hub.example --key echo.addon-key --call you@hub.example
+    python examples/echo.py --server https://hub.example --key echo.addon-key --share bookclub:"Book club"
 
 The first run prints a 6-digit code: enter it in the companion app (Settings → Add-ons → Link an
 add-on). Then call it from the app, or from your own phone's key. Press # on the app's keypad to
-make it hang up. With --call it calls that address (you, or a connection you allowed) once
-it's connected.
+make it hang up. With --call it calls that address (you) once it's connected; add --call-share
+to call within a share (someone holding it). --share offers a share (repeatable); its owner gives
+it to people in the app, and they call it at its own address. "New shared project with…" in the
+app makes a new share named after what its owner typed.
 """
 
 from __future__ import annotations
@@ -15,10 +18,11 @@ import argparse
 import asyncio
 import logging
 import math
+import re
 import struct
 from collections import deque
 
-from olp_addon import Addon, Call, frame_bytes
+from olp_addon import Addon, Call, ShareRequest, frame_bytes
 
 DELAY_S = 0.5
 
@@ -53,6 +57,13 @@ async def main() -> None:
     ap.add_argument("--key", default="echo.addon-key", help="its key file (made on first run)")
     ap.add_argument("--rate", type=int, default=48_000, help="PCM sample rate (default 48000)")
     ap.add_argument("--call", help="call this address once connected")
+    ap.add_argument("--call-share", help="with --call: within this share (its id)")
+    ap.add_argument(
+        "--share",
+        action="append",
+        default=[],
+        help="offer a share, as id:label (e.g. bookclub:'Book club'); repeatable",
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
@@ -60,10 +71,22 @@ async def main() -> None:
     addon = Addon(args.server, args.key, rate=args.rate)
     assert frame_bytes(args.rate) > 0
 
+    if args.share:
+        addon.set_shares([dict(zip(("id", "label"), s.split(":", 1))) for s in args.share])
+
+    @addon.on_share_request
+    def make(req: ShareRequest) -> str:
+        # A real add-on makes the scope here (a shared project, say) and answers its id.
+        share_id = re.sub(r"[^a-z0-9-]+", "-", req.label.lower()).strip("-")[:30] or "shared"
+        print(f"share request {req.label!r} by {req.by} with {', '.join(req.with_)}", flush=True)
+        return share_id
+
     @addon.on_call
     async def answer(call: Call) -> None:
         who = call.caller
         print(f"call from {who.name} <{who.address}>" if who else "call", flush=True)
+        if call.share:
+            print(f"through share {call.share.id} ({call.share.label})", flush=True)
         call.on_key = lambda key: print(f"key {key}", flush=True) or (
             asyncio.ensure_future(call.hangup()) if key == "#" else None
         )
@@ -77,7 +100,7 @@ async def main() -> None:
     ident = addon.identity
     print(f"ready {ident.address if ident else addon.device_id}", flush=True)
     if args.call:
-        call = await addon.call(args.call)
+        call = await addon.call(args.call, share=args.call_share)
         print(f"calling {args.call}: {call.state}", flush=True)
         if not call.ended:
             await echo(call, args.rate)

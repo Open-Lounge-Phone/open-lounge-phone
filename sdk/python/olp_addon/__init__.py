@@ -16,11 +16,11 @@
 See README.md and docs/add-ons.md. Apache-2.0.
 """
 
-from .addon import Addon, AddonError, AddonRemoved
+from .addon import Addon, AddonError, AddonRemoved, ShareRefused
 from .audio import FRAME_MS, Resampler, frame_bytes
 from .call import Call, CallEnded
 from .keys import AddonKey
-from .protocol import Identity, Party
+from .protocol import Identity, Party, Share, ShareRequest
 
 __all__ = [
     "Addon",
@@ -33,6 +33,9 @@ __all__ = [
     "Identity",
     "Party",
     "Resampler",
+    "Share",
+    "ShareRefused",
+    "ShareRequest",
     "frame_bytes",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

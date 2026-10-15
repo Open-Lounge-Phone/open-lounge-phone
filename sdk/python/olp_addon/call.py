@@ -40,10 +40,15 @@ class Call:
         call_id: str | None = None,
         caller: p.Party | None = None,
         callee: str | None = None,
+        share: p.Share | None = None,
     ) -> None:
         self.direction = direction
         #: Incoming: who is calling (verified by the server). Outgoing: None.
         self.caller = caller
+        #: The share it's about: incoming, the one the caller came in through (None: its owner
+        #: is calling); outgoing, the one it was placed within (None: none named). Keep the
+        #: conversation inside that share.
+        self.share = share
         #: Outgoing: the address dialled.
         self.callee = callee
         self.id = call_id

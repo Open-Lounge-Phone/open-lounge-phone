@@ -21,6 +21,7 @@ from .keys import AddonKey
 log = logging.getLogger("olp_addon")
 
 CallHandler = Callable[[Call], Awaitable[Any]]
+ShareRequestHandler = Callable[[p.ShareRequest], Any]
 
 #: Seconds between keep-alive pings (the server and proxies close quiet sockets).
 PING_EVERY_S = 25.0
@@ -43,6 +44,10 @@ class AddonError(Exception):
 
 class AddonRemoved(AddonError):
     """Its owner removed the add-on (the server said `wipe`); the link is forgotten."""
+
+
+class ShareRefused(Exception):
+    """Raised by an `on_share_request` handler to say no; its message is shown to the owner."""
 
 
 class Addon:
@@ -69,6 +74,9 @@ class Addon:
         #: Who it is and whose (from the server's `config`), once connected.
         self.identity: p.Identity | None = None
         self._handler: CallHandler | None = None
+        self._share_handler: ShareRequestHandler | None = None
+        #: What it offers for sharing (None: never said, so nothing is sent).
+        self._shares: list[dict[str, str]] | None = None
         self._on_status: Callable[[bool], Any] | None = None
         self._ws: Any = None
         self._calls: dict[str, Call] = {}
@@ -152,21 +160,93 @@ class Addon:
         self._handler = handler
         return handler
 
-    async def call(self, address: str) -> Call:
-        """Calls its owner (`handle@host`) or a connection its owner allowed. Returns once the
-        server answers (`call.state`): `call.state` is then `ringing`, or `ended` with a
-        `reason` if it was refused."""
+    async def call(self, address: str, share: str | None = None) -> Call:
+        """Calls its owner (`handle@host`), or, with `share` (a share id), someone who holds
+        that share; they see the share's label with the add-on's name. Returns once the server
+        answers (`call.state`): `call.state` is then `ringing`, or `ended` with a `reason` if it
+        was refused (`unavailable` when they may not be called)."""
+        msg = p.call_address(address, share)
         await self._ready.wait()
         async with self._place_lock:
-            call = Call(self._send, direction="out", rate=self.rate, callee=address)
+            label = next((s["label"] for s in self._shares or [] if s["id"] == share), share or "")
+            call = Call(
+                self._send,
+                direction="out",
+                rate=self.rate,
+                callee=address,
+                share=p.Share(id=share, label=label, grant_id="") if share else None,
+            )
             self._placing = call
             try:
-                await self._send(p.call_address(address))
+                await self._send(msg)
                 while call.id is None and not call.ended:
                     await asyncio.sleep(0.01)
             finally:
                 self._placing = None
             return call
+
+    # --- sharing (docs/add-ons.md, Sharing) -------------------------------------------------
+
+    @property
+    def shares(self) -> list[dict[str, str]]:
+        """What it offers for sharing, as last set."""
+        return list(self._shares or [])
+
+    def set_shares(self, shares: list[Any]) -> None:
+        """Says which parts of itself can be shared: `[{"id": "bookclub", "label": "Book club"},
+        …]` (ids: 1–30 of a-z, 0-9 and dashes; labels: 1–40 characters). Replaces the list; a
+        share left out is gone, with everyone it was given to. Sent now if connected, and again
+        after every reconnect. Its owner then gives shares to people."""
+        self._shares = p.normalize_shares(shares)
+        if self._ready.is_set() and self._ws is not None:
+            self._spawn(self._send_shares())
+
+    def on_share_request(self, handler: ShareRequestHandler) -> ShareRequestHandler:
+        """Sets the handler (usable as a decorator) for its owner's "New shared project with…".
+        `handler(request)` (sync or async) makes the scope and returns the new share's id; the
+        bridge adds `{id, label: request.label}` to `shares` if it isn't there yet, tells the
+        server, and the server gives it to `request.with_`. Raise `ShareRefused(reason)` or
+        return None to say no. Without a handler, requests are refused."""
+        self._share_handler = handler
+        return handler
+
+    async def _send_shares(self) -> None:
+        if self._shares is None:
+            return
+        try:
+            await self._send(p.addon_shares(self._shares))
+        except ConnectionError:
+            pass  # sent again on the next connection
+
+    async def _share_request(self, msg: p.Message) -> None:
+        req = p.share_request_of(msg)
+        try:
+            if self._share_handler is None:
+                raise ShareRefused("This add-on doesn't make shared projects.")
+            result = self._share_handler(req)
+            if inspect.isawaitable(result):
+                result = await result
+            if not result:
+                raise ShareRefused("No.")
+            share_id = p.check_share_id(str(result))
+            if not any(s["id"] == share_id for s in self._shares or []):
+                self._shares = p.normalize_shares(
+                    [*(self._shares or []), {"id": share_id, "label": req.label}]
+                )
+            await self._send_shares()
+            await self._send(p.share_created(req.request_id, share_id))
+        except ShareRefused as e:
+            await self._send(p.share_refused(req.request_id, str(e)))
+        except ConnectionError:
+            pass  # the request lapses; its owner can ask again
+        except Exception:
+            log.exception("share request handler failed")
+            await self._send(p.share_refused(req.request_id, "Something went wrong."))
+
+    def _spawn(self, work: Awaitable[Any]) -> None:
+        task = asyncio.ensure_future(work)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     # --- running ---------------------------------------------------------------------------
 
@@ -254,7 +334,11 @@ class Addon:
             first = not self._ready.is_set()
             self._ready.set()
             if first:
+                # A new connection: say again what it offers for sharing.
+                await self._send_shares()
                 await self._status(True)
+        elif t == "addon.share.request":
+            self._spawn(self._share_request(msg))
         elif t == "wipe":
             self.forget()
             self._stopped = True
@@ -274,15 +358,18 @@ class Addon:
     async def _ringing(self, msg: p.Message) -> None:
         call_id = str(msg["callId"])
         call = Call(
-            self._send, direction="in", rate=self.rate, call_id=call_id, caller=p.caller_of(msg)
+            self._send,
+            direction="in",
+            rate=self.rate,
+            call_id=call_id,
+            caller=p.caller_of(msg),
+            share=p.share_of(msg),
         )
         self._calls[call_id] = call
         if not self._handler:
             await call.hangup()
             return
-        task = asyncio.ensure_future(self._run_handler(call))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._spawn(self._run_handler(call))
 
     async def _run_handler(self, call: Call) -> None:
         try:

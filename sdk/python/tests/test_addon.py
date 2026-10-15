@@ -11,7 +11,7 @@ from pathlib import Path
 import websockets
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from olp_addon import Addon, AddonRemoved, Call
+from olp_addon import Addon, AddonRemoved, Call, Share, ShareRefused, ShareRequest
 from olp_addon.keys import b64url, from_b64url
 
 
@@ -189,6 +189,129 @@ class AddonTest(unittest.IsolatedAsyncioTestCase):
         await self.fake.send({"t": "call.state", "callId": "c10", "state": "ended", "reason": "unavailable"})
         call = await asyncio.wait_for(refused, 5)
         self.assertEqual((call.state, call.reason), ("ended", "unavailable"))
+        await addon.stop()
+
+    async def test_says_what_it_shares_now_and_after_every_reconnect(self) -> None:
+        addon = await self.linked()
+        addon.set_shares([{"id": "bookclub", "label": "Book club"}, {"id": "bookclub", "label": "x"}])
+        await addon.start(timeout=5)
+        first = await self.fake.next("addon.shares")
+        self.assertEqual(first["shares"], [{"id": "bookclub", "label": "Book club"}])
+        # A change goes out at once.
+        addon.set_shares([{"id": "bookclub", "label": "Book club"}, {"id": "garden", "label": "Garden"}])
+        changed = await self.fake.next("addon.shares")
+        self.assertEqual([s["id"] for s in changed["shares"]], ["bookclub", "garden"])
+        # The server drops the connection: the list goes out again once it's back.
+        assert self.fake.ws is not None
+        await self.fake.ws.close()
+        again = await asyncio.wait_for(self.fake.next("addon.shares"), 10)
+        self.assertEqual([s["id"] for s in again["shares"]], ["bookclub", "garden"])
+        with self.assertRaises(ValueError):
+            addon.set_shares([{"id": "Book Club", "label": "Book club"}])
+        with self.assertRaises(ValueError):
+            addon.set_shares([{"id": "x", "label": ""}])
+        await addon.stop()
+
+    async def test_without_shares_it_never_says_any(self) -> None:
+        addon = await self.linked()
+        await addon.start(timeout=5)
+        await self.fake.send(
+            {"t": "call.ringing", "callId": "c1", "from": {"label": "Jo", "address": "jo@x.example"}}
+        )
+        await self.fake.next("call.hangup")  # no handler: declined
+        seen: list[str] = []
+        while not self.fake.inbox.empty():
+            seen.append(self.fake.inbox.get_nowait()[0])
+        self.assertNotIn("addon.shares", seen)
+        await addon.stop()
+
+    async def test_tells_a_call_through_a_share_from_its_owners(self) -> None:
+        addon = await self.linked()
+        calls: list[Call] = []
+
+        @addon.on_call
+        async def take(call: Call) -> None:
+            calls.append(call)
+
+        await addon.start(timeout=5)
+        await self.fake.send(
+            {"t": "call.ringing", "callId": "c1", "from": {"label": "Jo", "address": "jo@x.example"}}
+        )
+        await self.fake.send(
+            {
+                "t": "call.ringing",
+                "callId": "c2",
+                "from": {"label": "Ana", "address": "ana@x.example"},
+                "share": {"id": "bookclub", "label": "Book club", "grantId": "ag_1"},
+            }
+        )
+        for _ in range(100):
+            if len(calls) == 2:
+                break
+            await asyncio.sleep(0.02)
+        self.assertIsNone(calls[0].share)
+        self.assertEqual(calls[1].share, Share(id="bookclub", label="Book club", grant_id="ag_1"))
+        await addon.stop()
+
+    async def test_calls_within_a_share(self) -> None:
+        addon = await self.linked()
+        addon.set_shares([{"id": "bookclub", "label": "Book club"}])
+        await addon.start(timeout=5)
+        placing = asyncio.ensure_future(addon.call("ana@x.example", share="bookclub"))
+        self.assertEqual(
+            await self.fake.next("call.address"),
+            {"t": "call.address", "address": "ana@x.example", "share": "bookclub"},
+        )
+        await self.fake.send({"t": "call.state", "callId": "c3", "state": "ringing"})
+        call = await asyncio.wait_for(placing, 5)
+        self.assertEqual(call.share, Share(id="bookclub", label="Book club", grant_id=""))
+        with self.assertRaises(ValueError):
+            await addon.call("ana@x.example", share="Book Club")
+        await addon.stop()
+
+    async def test_answers_its_owners_share_requests(self) -> None:
+        addon = await self.linked()
+        asked: list[ShareRequest] = []
+
+        @addon.on_share_request
+        async def make(req: ShareRequest) -> str:
+            asked.append(req)
+            if req.label == "Nope":
+                raise ShareRefused("Not now.")
+            return "garden"
+
+        await addon.start(timeout=5)
+        await self.fake.send(
+            {
+                "t": "addon.share.request",
+                "requestId": "sr_1",
+                "label": "Garden",
+                "by": "jo@x.example",
+                "with": ["ana@x.example"],
+            }
+        )
+        shares = await self.fake.next("addon.shares")
+        self.assertEqual(shares["shares"], [{"id": "garden", "label": "Garden"}])
+        self.assertEqual(
+            await self.fake.next("addon.share.created"),
+            {"t": "addon.share.created", "requestId": "sr_1", "id": "garden"},
+        )
+        self.assertEqual(asked[0], ShareRequest("sr_1", "Garden", "jo@x.example", ("ana@x.example",)))
+        self.assertEqual(addon.shares, [{"id": "garden", "label": "Garden"}])
+        await self.fake.send({"t": "addon.share.request", "requestId": "sr_2", "label": "Nope", "by": "jo@x.example", "with": []})
+        self.assertEqual(
+            await self.fake.next("addon.share.refused"),
+            {"t": "addon.share.refused", "requestId": "sr_2", "reason": "Not now."},
+        )
+        await addon.stop()
+
+    async def test_refuses_share_requests_without_a_handler(self) -> None:
+        addon = await self.linked()
+        await addon.start(timeout=5)
+        await self.fake.send({"t": "addon.share.request", "requestId": "sr_1", "label": "X", "by": "jo@x.example", "with": []})
+        refused = await self.fake.next("addon.share.refused")
+        self.assertEqual(refused["requestId"], "sr_1")
+        self.assertTrue(refused["reason"])
         await addon.stop()
 
     async def test_declines_calls_without_a_handler(self) -> None:
