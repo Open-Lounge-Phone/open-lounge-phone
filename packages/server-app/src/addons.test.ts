@@ -660,7 +660,7 @@ describe("sharing add-ons on one server", () => {
     expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([]);
   });
 
-  it("New shared project with…: the add-on makes it, and the people get it", async () => {
+  it("Ask it for a new share…: the add-on makes it, and the people get it", async () => {
     const anaApp = await a.connectApp(ana.token);
     const ask = (label: string, w = [`conn:${anaConn}`]) =>
       a.http(`/addons/${seat.id}/share-requests`, {

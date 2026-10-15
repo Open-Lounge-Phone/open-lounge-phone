@@ -3398,7 +3398,7 @@ export class HouseholdHub {
     }
   }
 
-  /** The add-on answers its owner's "New shared project with…". */
+  /** The add-on answers its owner's "Ask it for a new share…". */
   private async addonShareAnswer(
     peer: Peer,
     msg:

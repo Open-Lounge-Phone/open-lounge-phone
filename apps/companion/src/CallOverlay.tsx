@@ -324,7 +324,7 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                 onClose={() => conn.dismiss()}
               />
             )}
-            {keypad && call.phase === "active" && call.addon && (
+            {keypad && call.phase === "active" && call.addon && !call.noKeys && (
               <Keypad onKey={(k) => conn.sendKey(k)} />
             )}
             {picking === "transfer" && call.phase === "active" && (
@@ -384,7 +384,7 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                   >
                     Audio
                   </button>
-                  {call.phase === "active" && call.addon && (
+                  {call.phase === "active" && call.addon && !call.noKeys && (
                     <button
                       type="button"
                       className={`round ${keypad ? "on" : ""}`}

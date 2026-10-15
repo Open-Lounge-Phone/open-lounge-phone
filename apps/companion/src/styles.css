@@ -1103,7 +1103,7 @@ fieldset.ownership legend {
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
   background: var(--accent, #5bb896);
-  color: var(--accent-ink, #0c1f18);
+  color: var(--accent-text);
   vertical-align: middle;
 }
 
@@ -1456,4 +1456,98 @@ dl.phone-facts {
 .overlay .waiting-bar {
   justify-content: center;
   background: rgb(255 255 255 / 14%);
+}
+
+/* The Add-ons tab: a list of add-on cards, each opening its page. */
+.addons-tab h2 .badge {
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+.addon-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.addon-card {
+  padding: 0;
+}
+.addon-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+}
+.addon-open .row {
+  gap: 0.4rem;
+}
+.plain-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.plain-list li + li {
+  margin-top: 0.2rem;
+}
+.addons-tab .block {
+  display: block;
+}
+.addons-tab .grow,
+.addon-contacts .grow {
+  flex: 1;
+  min-width: 0;
+}
+.addons-tab code {
+  overflow-wrap: anywhere;
+}
+.addon-shares {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.addon-shares > li + li {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+/* Put on a key: the phone's ten keys, with what each calls now. */
+.key-pick {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+.key-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.key-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.35rem 0.1rem;
+  min-height: 44px;
+  overflow: hidden;
+}
+.key-choice .small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.key-choice.chosen {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.key-choice .keycap {
+  width: 32px;
+  height: 32px;
+}
+.addon-contacts .muted.block {
+  display: block;
 }

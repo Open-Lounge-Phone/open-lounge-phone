@@ -532,7 +532,7 @@ export class AddonStore {
     );
   }
 
-  // --- "New shared project with…" -----------------------------------------------------------
+  // --- "Ask it for a new share…" -----------------------------------------------------------
 
   async createRequest(
     input: { addonId: string; label: string; holders: ShareHolder[]; state: ShareRequestState },

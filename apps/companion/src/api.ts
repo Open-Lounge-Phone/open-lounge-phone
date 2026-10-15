@@ -266,7 +266,14 @@ export interface ConnectionView {
   /** Household phones on their side that you may call. */
   phones?: { deviceId: string; label: string }[];
   /** Shares of their add-ons they gave you (another server). */
-  addonShares?: { addon: string; share: string; label: string; address: string }[];
+  addonShares?: {
+    addon: string;
+    share: string;
+    label: string;
+    address: string;
+    /** You stopped its calls (your own server refuses them). */
+    muted?: boolean;
+  }[];
 }
 
 export interface ConnectionsInfo {
@@ -280,7 +287,7 @@ export interface ConnectionsInfo {
   sharePresence?: boolean;
 }
 
-/** One of your add-ons (Settings → Add-ons, docs/add-ons.md). */
+/** One of your add-ons (the Add-ons tab, docs/add-ons.md). */
 export interface AddonView {
   id: string;
   name: string;
@@ -297,6 +304,23 @@ export interface AddonView {
   shares: AddonShareView[];
   /** Earlier "who may talk to it" entries were removed (sharing is per share now): say so once. */
   allowNote: boolean;
+  /** What it said it does (`addon.about`); null: it never said. */
+  about?: AddonAbout | null;
+  /** What the server lets it do now. */
+  rules?: { answers: boolean; calls: boolean; shares: boolean; keys: boolean; lines: number };
+}
+
+/** What an add-on said about itself (docs/add-ons.md). */
+export interface AddonAbout {
+  summary?: string;
+  /** `nothing`: it only plays sound; `live`: listens, keeps nothing; `keeps`: keeps what it hears. */
+  hears: "nothing" | "live" | "keeps";
+  transcribes: boolean;
+  answers: boolean;
+  calls: boolean;
+  shares?: boolean;
+  keys: boolean;
+  lines?: number;
 }
 
 /** One share of your add-on: its own address, and the people you gave it to. */
@@ -324,9 +348,21 @@ export interface HeldShare {
   addon: string;
   share: { id: string; label: string };
   address: string;
+  /** You stopped its calls. */
+  muted?: boolean;
+  /** What it said it does (when it said). */
+  about?: AddonAbout;
 }
 
-/** "New shared project with…": where the add-on's answer is. */
+/** An add-on (or a share of one) in your contacts. */
+export interface AddonContact {
+  address: string;
+  label: string;
+  /** You can call it now. */
+  ok: boolean;
+}
+
+/** "Ask it for a new share…": where the add-on's answer is. */
 export interface ShareRequestView {
   id: string;
   label: string;
@@ -931,7 +967,7 @@ export function createApi(opts: ApiOptions) {
     // Connections (knock, then talk)
     connections: () => request<ConnectionsInfo>("GET", "/connections"),
 
-    // Add-ons (Settings → Add-ons)
+    // Add-ons (the Add-ons tab)
     addons: () => request<{ enabled: boolean; addons: AddonView[] }>("GET", "/addons"),
     linkAddon: (input: { code: string; name: string }) =>
       request<AddonView>("POST", "/addons/link", input),
@@ -955,6 +991,17 @@ export function createApi(opts: ApiOptions) {
     dismissAddonNote: (addonId: string) =>
       request<void>("POST", `/addons/${enc(addonId)}/note/dismiss`),
     removeAddon: (id: string) => request<void>("DELETE", `/addons/${enc(id)}`),
+    addonContacts: () => request<AddonContact[]>("GET", "/addons/contacts"),
+    addAddonContact: (address: string, label?: string) =>
+      request<{ address: string; label: string }>("PUT", "/addons/contacts", {
+        address,
+        ...(label ? { label } : {}),
+      }),
+    removeAddonContact: (address: string) =>
+      request<void>("DELETE", "/addons/contacts", { address }),
+    muteAddon: (address: string, muted: boolean) =>
+      request<void>("PUT", "/addons/muted", { address, muted }),
+    leaveShare: (address: string) => request<void>("POST", "/addons/leave", { address }),
     knock: (to: string, note?: string) =>
       request<{ status: "sent" | "connected"; connection: ConnectionView }>(
         "POST",
@@ -1082,8 +1129,12 @@ export function createApi(opts: ApiOptions) {
       }),
     unblockForLines: (kind: "address" | "server", value: string) =>
       request<void>("DELETE", `/space/line-blocks/${kind}/${enc(value)}`),
-    addLineToPhone: (deviceId: string, address: string, label: string) =>
-      request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/lines`, { address, label }),
+    addLineToPhone: (deviceId: string, address: string, label: string, key?: number) =>
+      request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/lines`, {
+        address,
+        label,
+        ...(key !== undefined ? { key } : {}),
+      }),
     removeLineFromPhone: (deviceId: string, contactId: string) =>
       request<void>("DELETE", `/devices/${enc(deviceId)}/lines/${enc(contactId)}`),
     spaceHours: () =>

@@ -1,4 +1,4 @@
-// Words and checks for add-ons in the app (Settings → Add-ons). Pure.
+// Words and checks for add-ons in the app (the Add-ons tab). Pure.
 
 /** The name after `+`: like a handle (2–30 of a-z, 0-9, dot, dash, underscore). */
 const NAME_RE = /^[a-z0-9._-]{2,30}$/;
@@ -42,7 +42,7 @@ export const addonCallLabel = (name: string, share?: string): string =>
 export const heldShareLabel = (owner: string, addon: string, share: string): string =>
   `${owner}'s ${addon} · ${share}`;
 
-/** Where "New shared project with…" stands, in words. */
+/** Where "Ask it for a new share…" stands, in words. */
 export function shareRequestText(
   addon: string,
   r: { state: string; label: string; reason?: string; people: string[] },
@@ -62,3 +62,72 @@ export function shareRequestText(
       return `${addon} didn't answer. Try again later.`;
   }
 }
+
+/** What an add-on said about itself (`addon.about`), as the app shows it. */
+export interface AboutView {
+  summary?: string;
+  hears: "nothing" | "live" | "keeps";
+  transcribes: boolean;
+  answers: boolean;
+  calls: boolean;
+  shares?: boolean;
+  keys: boolean;
+  lines?: number;
+}
+
+/**
+ * What an add-on does, in plain sentences, from what it said about itself. Whether it takes calls,
+ * calls you, offers shares, takes keys and how many calls at once are held to by the server; what
+ * it does with what it hears is its own word, and said so. Nothing here knows any particular
+ * add-on.
+ */
+export function aboutLines(about: AboutView | null | undefined, name: string): string[] {
+  if (!about) {
+    return [
+      `${name} hasn't said what it does.`,
+      "You can call it, it may call you, and it can hear what you say.",
+    ];
+  }
+  const out: string[] = [];
+  out.push(about.answers ? "You can call it." : "It doesn't take calls.");
+  out.push(about.calls ? "It may call you." : "It never calls you.");
+  out.push(
+    about.hears === "nothing"
+      ? "It only plays sound. It says it doesn't use what you say."
+      : about.hears === "live"
+        ? "It listens during calls. It says it keeps nothing afterwards."
+        : "It keeps what it hears: recordings, transcripts or notes.",
+  );
+  if (about.transcribes && about.hears !== "nothing") out.push("It turns what it hears into text.");
+  if (about.keys) out.push("It responds to keys you press during a call.");
+  if (about.shares) out.push("It offers parts of itself to share with people you choose.");
+  if ((about.lines ?? 1) > 1) out.push(`It takes up to ${about.lines} calls at once.`);
+  return out;
+}
+
+/** What every caller should know before calling an add-on (or being given one of its shares). */
+export const learnsText = (name: string, who: "you" | string = "you"): string =>
+  who === "you"
+    ? `When you call, ${name} learns your name and address, and can hear what you say.`
+    : `When ${who} calls, ${name} learns their name and address, and can hear what they say.`;
+
+/** Its status, in words (the server's view). */
+export function addonStatus(
+  a: { online: boolean; lastSeen: number | null },
+  enabled: boolean,
+  when: (ms: number) => string,
+): string {
+  if (!enabled) return "Off: this server doesn't offer add-ons now";
+  if (a.online) return "Online";
+  return a.lastSeen
+    ? `Offline · last seen ${when(a.lastSeen)}`
+    : "Offline · it hasn't connected yet";
+}
+
+/** The first free speed-dial slot of a phone (keypad order 1…9, 0), or slot 0 if none is free. */
+export function firstFreeSlot(buttons: Record<string, string>, slots: number[]): number {
+  return slots.find((s) => !buttons[String(s)]) ?? slots[0] ?? 0;
+}
+
+/** A key label for an add-on (phones show up to 24 characters). */
+export const keyLabelFor = (label: string): string => label.trim().slice(0, 24);

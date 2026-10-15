@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Account } from "./Account.tsx";
-import { Addons } from "./Addons.tsx";
+import { AddonContactsCard, Addons } from "./Addons.tsx";
 import { Admin } from "./Admin.tsx";
 import {
   type Api,
@@ -62,6 +62,7 @@ export type Route =
   | { name: "admin" }
   | { name: "directory" }
   | { name: "voicemail" }
+  | { name: "addons" }
   | { name: "settings" };
 
 function clearHash() {
@@ -323,6 +324,8 @@ function SignedIn({
   const [unheard, setUnheard] = useState(0);
   /** Knocks waiting for this person's answer (Connections tab badge). */
   const [knocks, setKnocks] = useState(0);
+  /** The Add-ons tab: when this server offers add-ons, or you have some (or shares of some). */
+  const [addonsTab, setAddonsTab] = useState(false);
   const [toast, setToast] = useState<string>();
   /** A party line that just opened: its toast offers to join. */
   const [opened, setOpened] = useState<{ roomId: string; name: string }>();
@@ -462,6 +465,12 @@ function SignedIn({
       (c) => setKnocks(groupConnections(c.connections).requests.length),
       () => {},
     );
+    Promise.all([
+      baseApi.addons().catch(() => undefined),
+      baseApi.addonsShared().catch(() => undefined),
+    ]).then(([mine, held]) =>
+      setAddonsTab(!!mine?.enabled || !!mine?.addons.length || !!held?.held.length),
+    );
   }, [baseApi, connSeq]);
 
   // Live voicemail announcements.
@@ -560,6 +569,11 @@ function SignedIn({
           <Tab route={route} name="rooms" onGo={setRoute}>
             Rooms
           </Tab>
+          {addonsTab && (
+            <Tab route={route} name="addons" onGo={setRoute}>
+              Add-ons
+            </Tab>
+          )}
           <Tab route={route} name="connections" onGo={setRoute}>
             <span className="wide-only">Connections</span>
             <span className="narrow-only">Connect</span>
@@ -707,6 +721,14 @@ function SignedIn({
             onPair={() => setRoute({ name: "pair" })}
           />
         )}
+        {me && !loungeLink && !welcome && route.name === "home" && (
+          <AddonContactsCard
+            api={api}
+            conn={conn}
+            refreshKey={connSeq}
+            onAddons={() => setRoute({ name: "addons" })}
+          />
+        )}
         {me && route.name === "pair" && (
           <Pair
             api={api}
@@ -788,6 +810,7 @@ function SignedIn({
             onCallPhone={(c, p) => void conn?.callSharedPhone(c.id, p.deviceId, p.label)}
             onCallLine={(address) => void conn?.callLine(address)}
             onCallAddon={(address, label) => void conn?.callAddon(address, label)}
+            onAddons={() => setRoute({ name: "addons" })}
           />
         )}
         {me && route.name === "rooms" && (
@@ -811,8 +834,15 @@ function SignedIn({
             onBack={() => setRoute({ name: "home" })}
           />
         )}
-        {me && route.name === "settings" && (
-          <Addons api={api} conn={conn} address={meInfo?.account?.address} />
+        {me && route.name === "addons" && (
+          <Addons
+            api={api}
+            conn={conn}
+            address={meInfo?.account?.address}
+            devices={devices}
+            meId={me.user.id}
+            onBack={() => setRoute({ name: "home" })}
+          />
         )}
         {meInfo?.operator && route.name === "admin" && (
           <Admin api={baseApi} sessionToken={token} onBack={() => setRoute({ name: "home" })} />

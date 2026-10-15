@@ -100,7 +100,7 @@ class Addon:
 
     async def link(self, on_code: Callable[..., Any] | None = None) -> str:
         """Asks the server for a 6-digit code and waits until its owner enters it in the app
-        (Settings → Add-ons → Link an add-on). `on_code(code)` or `on_code(code, expires_at)`
+        (the Add-ons tab → Link an add-on). `on_code(code)` or `on_code(code, expires_at)`
         gets it (default: printed); `expires_at` is when the code stops working, in ms since the
         Unix epoch (or None). Answers the add-on's id on the server, which is saved next to
         the key."""
@@ -231,7 +231,7 @@ class Addon:
             self._spawn(self._send_shares())
 
     def on_share_request(self, handler: ShareRequestHandler) -> ShareRequestHandler:
-        """Sets the handler (usable as a decorator) for its owner's "New shared project with…".
+        """Sets the handler (usable as a decorator) for its owner's "Ask it for a new share…".
         `handler(request)` (sync or async) makes the scope and returns the new share's id; the
         bridge adds `{id, label: request.label}` to `shares` if it isn't there yet, tells the
         server, and the server gives it to `request.with_`. Raise `ShareRefused(reason)` or

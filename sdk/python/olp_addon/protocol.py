@@ -214,7 +214,7 @@ def share_of(ringing: Message) -> Share | None:
 
 @dataclass(frozen=True)
 class ShareRequest:
-    """Its owner asks for a new shared scope ("New shared project with…", `addon.share.request`)."""
+    """Its owner asks for a new shared scope ("Ask it for a new share…", `addon.share.request`)."""
 
     request_id: str
     #: What its owner called it.

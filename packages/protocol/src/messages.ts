@@ -634,7 +634,7 @@ export type PhoneMode = z.infer<typeof PhoneMode>;
 export const PairKind = z
   .enum(["kids", "personal", "lounge", "addon"])
   .describe(
-    "A `PhoneMode`, or `addon`: an add-on asking to be linked to someone's account (server feature `addons`). Its code is claimed in the companion app under Settings → Add-ons, never as a phone.",
+    "A `PhoneMode`, or `addon`: an add-on asking to be linked to someone's account (server feature `addons`). Its code is claimed in the companion app under the Add-ons tab, never as a phone.",
   );
 export type PairKind = z.infer<typeof PairKind>;
 
@@ -1332,7 +1332,7 @@ export const AddonShareRequest = z
       .describe("The people to give it to, by address (`handle@host`)."),
   })
   .describe(
-    'Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("New shared project with…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.',
+    'Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("Ask it for a new share…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.',
   );
 
 export const ServerToDevice = z.discriminatedUnion("t", [

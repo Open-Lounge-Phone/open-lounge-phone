@@ -62,7 +62,7 @@ async def talk(call):
     else:
         ...  # call.share.id, .label, .grant_id: stay inside that share
 
-@addon.on_share_request          # the owner's "New shared project with…" in the app
+@addon.on_share_request          # the owner's "Ask it for a new share…" in the app
 async def make(req):             # req.label, req.by, req.with_ (addresses)
     project = await create_project(req.label, members=req.with_)   # yours
     return project.slug           # the new share's id; or raise ShareRefused("why")
@@ -118,7 +118,7 @@ and only its owner reaches it.
   connected, and again after every reconnect; nothing is sent until it's first called.
 
 `@addon.on_share_request` / `addon.on_share_request(handler)`
-: `handler(request)` (sync or async) for its owner's "New shared project with…": `request.label`,
+: `handler(request)` (sync or async) for its owner's "Ask it for a new share…": `request.label`,
   `request.by` (the owner's address), `request.with_` (addresses), `request.request_id`. Make the
   scope and return its share id; the bridge adds `{id, label}` to `shares` if needed, tells the
   server, and the server gives it to those people. Raise `ShareRefused(reason)` (or return None)
@@ -155,7 +155,7 @@ it hang up.
 .venv/bin/python examples/echo.py --server http://localhost:8787 --key echo.addon-key --share bookclub:"Book club"
 ```
 
-With `--share` it offers that share; "New shared project with…" in the app makes a new one named
+With `--share` it offers that share; "Ask it for a new share…" in the app makes a new one named
 after what you typed.
 
 ## Tests

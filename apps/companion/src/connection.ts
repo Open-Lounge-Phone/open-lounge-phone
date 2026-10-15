@@ -270,9 +270,15 @@ export class Connection {
    * Calls an add-on by its address (`you+seat@example.org`): your own, or one whose owner allowed
    * you. The server refuses anything else (`unavailable`).
    */
-  async callAddon(address: string, label: string): Promise<void> {
+  async callAddon(address: string, label: string, opts: { keys?: boolean } = {}): Promise<void> {
     await this.dialWith(
-      { type: "dial", label, person: true, addon: true },
+      {
+        type: "dial",
+        label,
+        person: true,
+        addon: true,
+        ...(opts.keys === false ? { noKeys: true } : {}),
+      },
       { t: "call.address", address },
     );
   }

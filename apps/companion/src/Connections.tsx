@@ -1,14 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { renderSVG } from "uqr";
-import { addonAddressProblem, heldShareLabel } from "./addonText.ts";
-import type {
-  AddonView,
-  Api,
-  ConnectionsInfo,
-  ConnectionView,
-  HeldShare,
-  Retention,
-} from "./api.ts";
+import { heldShareLabel } from "./addonText.ts";
+import type { Api, ConnectionsInfo, ConnectionView, Retention } from "./api.ts";
 import { daysLeft, groupConnections, hostBadge } from "./connectionGroups.ts";
 import { addressProblem, serverName, serverProblem } from "./fields.ts";
 import { BuddyTimeline } from "./Timeline.tsx";
@@ -31,6 +24,8 @@ interface Props {
   onCallLine?: ((address: string) => void) | undefined;
   /** Call an add-on (yours) or a share of one (given to you) by its address. */
   onCallAddon?: ((address: string, label: string) => void) | undefined;
+  /** Opens the Add-ons tab. */
+  onAddons?: (() => void) | undefined;
 }
 
 /**
@@ -47,6 +42,7 @@ export function Connections({
   onCallPhone,
   onCallLine,
   onCallAddon,
+  onAddons,
 }: Props) {
   const [info, setInfo] = useState<ConnectionsInfo>();
   const [error, setError] = useState<string>();
@@ -56,9 +52,9 @@ export function Connections({
   const [retention, setRetention] = useState<Retention>();
   /** What "Space default" means here (the active space's history setting). */
   const [spaceDefault, setSpaceDefault] = useState<"30d" | "1y" | "forever">("forever");
-  /** Add-ons: your own, and shares of others' (on this server) given to you. */
-  const [addons, setAddons] = useState<{ mine: AddonView[]; held: HeldShare[] }>();
-  const withAddons = onCallAddon !== undefined;
+  /** Whether there's anything under Add-ons to point at. */
+  const [addons, setAddons] = useState(false);
+  const withAddons = onAddons !== undefined;
 
   const load = useCallback(async () => {
     try {
@@ -71,10 +67,7 @@ export function Connections({
           api.addons().catch(() => undefined),
           api.addonsShared().catch(() => undefined),
         ]);
-        setAddons({
-          mine: mine?.enabled ? mine.addons : [],
-          held: shared?.held ?? [],
-        });
+        setAddons(!!mine?.addons.length || !!shared?.held.length);
       }
       onRequests(groupConnections(next.connections).requests.length);
     } catch (e) {
@@ -221,15 +214,15 @@ export function Connections({
         }
       />
       {onCallLine && <CallLineForm onCall={onCallLine} />}
-      {onCallAddon && addons && (addons.mine.length > 0 || addons.held.length > 0) && (
-        <AddonEntries addons={addons} onCall={onCallAddon} />
-      )}
-      {onCallAddon && (
-        <CallAddonForm
-          onCall={(address) =>
-            onCallAddon(address, address.slice(address.indexOf("+") + 1).split("@")[0] ?? address)
-          }
-        />
+      {onAddons && addons && (
+        <div className="card row wrap">
+          <span className="grow">
+            Your add-ons, and the ones shared with you, are under Add-ons.
+          </span>
+          <button type="button" onClick={onAddons}>
+            Add-ons
+          </button>
+        </div>
       )}
 
       {groups.requests.length > 0 && (
@@ -455,115 +448,6 @@ function CallLineForm({ onCall }: { onCall(address: string): void }) {
       </button>
       <span className="hint">
         Businesses can publish a line anyone may call. They see your address when you call.
-      </span>
-    </form>
-  );
-}
-
-/**
- * Add-ons you can call: your own (with what you shared of them), and shares of other people's
- * add-ons on this server that they gave you. Shares from other servers are on that connection.
- */
-function AddonEntries({
-  addons,
-  onCall,
-}: {
-  addons: { mine: AddonView[]; held: HeldShare[] };
-  onCall(address: string, label: string): void;
-}) {
-  return (
-    <div className="card stack">
-      <h3>Add-ons</h3>
-      <ul className="stack">
-        {addons.mine.map((a) => (
-          <li key={a.id} className="stack">
-            <div className="person">
-              <span>
-                <strong>{a.name}</strong> <span className="badge">add-on</span>{" "}
-                <span className="muted small">yours</span>
-              </span>
-              <button type="button" onClick={() => onCall(a.address, a.name)}>
-                Call
-              </button>
-            </div>
-            {a.shares.length > 0 && (
-              <ul className="shared-phones">
-                {a.shares.map((s) => (
-                  <li key={s.id} className="muted small">
-                    {s.label}:{" "}
-                    {s.holders.length
-                      ? `shared with ${s.holders.map((h) => h.name).join(", ")}`
-                      : "not shared with anyone"}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-        {addons.held.map((h) => (
-          <li key={h.grantId} className="person">
-            <span>
-              {heldShareLabel(h.owner.name, h.addon, h.share.label)}{" "}
-              <span className="badge">add-on</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => onCall(h.address, `${h.addon} · ${h.share.label}`)}
-            >
-              Call
-            </button>
-          </li>
-        ))}
-      </ul>
-      {addons.mine.length > 0 && (
-        <span className="hint">Give its shares to people in Settings → Add-ons.</span>
-      )}
-    </div>
-  );
-}
-
-/** Someone's add-on, or a share of one given to you: call it by its address. */
-function CallAddonForm({ onCall }: { onCall(address: string): void }) {
-  const [to, setTo] = useState("");
-  const [problem, setProblem] = useState<string>();
-  return (
-    <form
-      className="card stack"
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        const p = addonAddressProblem(to);
-        setProblem(p);
-        if (!p) onCall(to.trim().toLowerCase());
-      }}
-    >
-      <h3>Call an add-on</h3>
-      <label>
-        The add-on's address
-        <input
-          value={to}
-          onChange={(e) => {
-            setTo(e.target.value);
-            setProblem(undefined);
-          }}
-          inputMode="email"
-          autoComplete="off"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-invalid={problem ? true : undefined}
-        />
-        <span className={problem ? "hint error" : "hint"}>
-          {problem ?? "Like name+seat@server, for example jo+seat@example.org."}
-        </span>
-      </label>
-      <button type="submit" className="primary">
-        Call
-      </button>
-      <span className="hint">
-        An add-on is a service linked to someone's account. Only its owner calls it at its own
-        address; a share of it (name+seat+project@server) only the people its owner gave it to. It's
-        told who is calling.
       </span>
     </form>
   );

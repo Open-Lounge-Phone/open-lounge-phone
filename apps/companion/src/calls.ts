@@ -32,6 +32,8 @@ export type CallView =
       queue?: QueueView;
       /** Calling an add-on (shown with an add-on badge). */
       addon?: boolean;
+      /** The add-on said it doesn't take keys: no keypad. */
+      noKeys?: boolean;
     }
   | {
       phase: "incoming";
@@ -57,6 +59,7 @@ export type CallView =
       recording?: string;
       /** The other side is an add-on (keys pressed go to it: `call.key`). */
       addon?: boolean;
+      noKeys?: boolean;
     }
   | {
       phase: "ended";
@@ -73,6 +76,7 @@ export type CallView =
       /** You asked a public line to call you back: your place is kept until then (epoch ms). */
       callbackUntil?: number;
       addon?: boolean;
+      noKeys?: boolean;
     };
 
 export type CallEvent =
@@ -83,6 +87,7 @@ export type CallEvent =
       person?: boolean;
       via?: string;
       addon?: boolean;
+      noKeys?: boolean;
     }
   | { type: "answer" }
   | { type: "hangup" }
@@ -128,6 +133,7 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
           ...(e.person ? { person: true } : {}),
           ...(e.via ? { via: e.via } : {}),
           ...(e.addon ? { addon: true } : {}),
+          ...(e.addon && e.noKeys ? { noKeys: true } : {}),
         },
       };
     case "answer":
@@ -206,8 +212,10 @@ function labelOf(v: CallView): string {
 }
 
 /** The other side is an add-on: carried from phase to phase. */
-const addonOf = (v: CallView): { addon?: true } =>
-  v.phase !== "idle" && v.addon ? { addon: true } : {};
+const addonOf = (v: CallView): { addon?: true; noKeys?: true } =>
+  v.phase !== "idle" && v.addon
+    ? { addon: true, ...("noKeys" in v && v.noKeys ? { noKeys: true as const } : {}) }
+    : {};
 
 function stateFor(
   view: CallView,

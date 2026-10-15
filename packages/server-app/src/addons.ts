@@ -35,7 +35,7 @@ import { peerSupports, UNAVAILABLE } from "./peers.ts";
 /** What linking says when the server's operator hasn't turned add-ons on. */
 export const ADDONS_OFF = "This server doesn't offer add-ons. Its operator can turn them on.";
 /** A phone's pairing screen, given an add-on's code. */
-export const ADDON_CODE = "That code is for an add-on: link it under Settings → Add-ons.";
+export const ADDON_CODE = "That code is for an add-on: link it under Add-ons.";
 /** The add-ons screen, given a phone's code. */
 export const PHONE_CODE = "That code is for a phone: add it under Phones.";
 /** `call.ringing.share.grantId` when its owner calls within one of its shares. */
@@ -44,7 +44,7 @@ export const OWNER_GRANT = "owner";
 export const MAX_ADDON_CONTACTS = 50;
 /** How many add-ons one account may link. */
 export const MAX_ADDONS_PER_ACCOUNT = 10;
-/** How long the owner's "New shared project with…" waits for the add-on's answer. */
+/** How long the owner's "Ask it for a new share…" waits for the add-on's answer. */
 export const SHARE_REQUEST_MS = 60_000;
 /** How many people one share may be given to. */
 export const MAX_HOLDERS_PER_SHARE = 50;
@@ -507,7 +507,7 @@ const RequestBody = z.object({
   with: z.array(PersonRef).max(MAX_HOLDERS_PER_SHARE),
 });
 
-/** Settings → Add-ons: link (with the add-on's code), list, shares and who holds them, remove. */
+/** the Add-ons tab: link (with the add-on's code), list, shares and who holds them, remove. */
 export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): void {
   const { store } = env;
   const notify = (accountId: string, msg: ServerToApp) => live.notifyAccount(accountId, msg);
@@ -881,7 +881,7 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
   });
 
   /**
-   * "New shared project with…": asks the add-on for a new share for these people. It answers
+   * "Ask it for a new share…": asks the add-on for a new share for these people. It answers
    * on its socket; the app follows the request with GET until it's settled.
    */
   api.post("/addons/:id/share-requests", async (c) => {

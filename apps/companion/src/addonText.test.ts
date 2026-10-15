@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  aboutLines,
   addonAddressProblem,
   addonCallLabel,
   addonNameProblem,
   addonPreview,
+  addonStatus,
+  firstFreeSlot,
   heldShareLabel,
   isAddonAddress,
+  learnsText,
   shareRequestText,
 } from "./addonText.ts";
 
@@ -63,5 +67,61 @@ describe("add-on words", () => {
     );
     expect(shareRequestText("seat", { ...r, state: "offline" })).toMatch(/offline/);
     expect(shareRequestText("seat", { ...r, state: "timeout" })).toMatch(/didn't answer/);
+  });
+});
+
+describe("what an add-on does, in words", () => {
+  it("says only what it said, plainly; nothing about any particular add-on", () => {
+    expect(aboutLines(null, "radio")).toEqual([
+      "radio hasn't said what it does.",
+      "You can call it, it may call you, and it can hear what you say.",
+    ]);
+    const radio = {
+      hears: "nothing" as const,
+      transcribes: true,
+      answers: true,
+      calls: false,
+      shares: true,
+      keys: false,
+      lines: 5,
+    };
+    expect(aboutLines(radio, "radio")).toEqual([
+      "You can call it.",
+      "It never calls you.",
+      "It only plays sound. It says it doesn't use what you say.",
+      "It offers parts of itself to share with people you choose.",
+      "It takes up to 5 calls at once.",
+    ]);
+    const notes = { ...radio, hears: "keeps" as const, calls: true, keys: true, lines: 1 };
+    expect(aboutLines(notes, "notes")).toEqual([
+      "You can call it.",
+      "It may call you.",
+      "It keeps what it hears: recordings, transcripts or notes.",
+      "It turns what it hears into text.",
+      "It responds to keys you press during a call.",
+      "It offers parts of itself to share with people you choose.",
+    ]);
+  });
+
+  it("says what it learns about callers, and where it stands", () => {
+    expect(learnsText("echo")).toBe(
+      "When you call, echo learns your name and address, and can hear what you say.",
+    );
+    expect(learnsText("echo", "Ana")).toBe(
+      "When Ana calls, echo learns their name and address, and can hear what they say.",
+    );
+    const when = () => "5 min ago";
+    expect(addonStatus({ online: true, lastSeen: 1 }, true, when)).toBe("Online");
+    expect(addonStatus({ online: false, lastSeen: 1 }, true, when)).toBe(
+      "Offline · last seen 5 min ago",
+    );
+    expect(addonStatus({ online: false, lastSeen: null }, true, when)).toMatch(/hasn't connected/);
+    expect(addonStatus({ online: true, lastSeen: 1 }, false, when)).toMatch(/doesn't offer/);
+  });
+
+  it("picks the first free key", () => {
+    const slots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    expect(firstFreeSlot({ "0": "u1", "1": "u2" }, slots)).toBe(2);
+    expect(firstFreeSlot(Object.fromEntries(slots.map((s) => [String(s), "x"])), slots)).toBe(0);
   });
 });

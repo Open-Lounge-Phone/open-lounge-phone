@@ -4,11 +4,11 @@
     python examples/echo.py --server https://hub.example --key echo.addon-key --call you@hub.example
     python examples/echo.py --server https://hub.example --key echo.addon-key --share bookclub:"Book club"
 
-The first run prints a 6-digit code: enter it in the companion app (Settings → Add-ons → Link an
+The first run prints a 6-digit code: enter it in the companion app (Add-ons → Link an
 add-on). Then call it from the app, or from your own phone's key. Press # on the app's keypad to
 make it hang up. With --call it calls that address (you) once it's connected; add --call-share
 to call within a share (someone holding it). --share offers a share (repeatable); its owner gives
-it to people in the app, and they call it at its own address. "New shared project with…" in the
+it to people in the app, and they call it at its own address. "Ask it for a new share…" in the
 app makes a new share named after what its owner typed.
 """
 

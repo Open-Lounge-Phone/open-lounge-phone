@@ -429,6 +429,22 @@ describe("add-ons", () => {
     expect(run([ringing("c2")]).view).not.toHaveProperty("addon");
   });
 
+  it("an add-on that takes no keys has no keypad, all through the call", () => {
+    let { view } = run([{ type: "dial", label: "radio", person: true, addon: true, noKeys: true }]);
+    expect(view).toMatchObject({ phase: "outgoing", addon: true, noKeys: true });
+    view = run(
+      [
+        { type: "server", now: 1, msg: { t: "call.state", callId: "c9", state: "ringing" } },
+        state("c9", "connecting"),
+        state("c9", "active"),
+      ],
+      view,
+    ).view;
+    expect(view).toMatchObject({ phase: "active", addon: true, noKeys: true });
+    // Without the add-on mark it means nothing.
+    expect(run([{ type: "dial", label: "x", noKeys: true }]).view).not.toHaveProperty("noKeys");
+  });
+
   it("an add-on calling within a share shows the share with its name", () => {
     const { view } = run([
       {
