@@ -10,7 +10,22 @@ Passives (R, C) come from lib.py (JLC basic codes).
 
 from __future__ import annotations
 
-from lib import SPECS, spec
+from lib import CAP_EXTRA, RES_EXTRA, SPECS, spec
+
+# Passives beyond lib.py's basic tables (hw v0.901 wired network), checked with lcsc.py
+RES_EXTRA.update({
+    ("49.9", "0603"): ("C23185", "0603WAF499JT5E"),     # W5500 TX pull-ups / RX termination
+    ("12.4k", "0603"): ("C22865", "0603WAF1242T5E"),    # W5500 EXRES1, 1 %
+    ("10", "0603"): ("C22859", "0603WAF100JT5E"),       # magnetics centre-tap feed
+    ("51", "2512"): ("C25490", "25121WJ0510T4E"),       # PoE minimum-load bleeder (not fitted)
+})
+CAP_EXTRA.update({
+    "18p": ("C1647", "0603", "50V C0G", "CL10C180JB8NNNC"),
+    "6.8n": ("C1631", "0603", "50V X7R", "0603B682K500NT"),
+    "10n": ("C57112", "0603", "50V X7R", "0603B103K500NT"),
+    "10u@25V": ("C15850", "0805", "25V X5R", "CL21A106KAYNNNE"),
+    "1n@2kV": ("C9196", "1206", "2kV X7R", "1206B102K202NT"),
+})
 
 # ---------------------------------------------------------------------------------------------
 # MCU. WROOM-1U (U.FL + a general-purpose 2.4 GHz antenna, user-upgradable; owner 2026-09-30):
@@ -49,11 +64,12 @@ spec(
     desc="USB-C 16P receptacle (USB 2.0): 5 V power sink + ESP32 native USB (flashing, console)",
     datasheet="https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf",
     pins=[
-        ("A1", "GND", "pwr_in"), ("A4", "VBUS", "pas"), ("A5", "CC1", "pas"),
-        ("A6", "DP", "pas"), ("A7", "DN", "pas"), ("A8", "SBU1", "nc"), ("A9", "VBUS", "pas"),
-        ("A12", "GND", "pwr_in"), ("B1", "GND", "pwr_in"), ("B4", "VBUS", "pas"),
+        # VBUS: A4/B9 share one pad (west), A9/B4 the other (east); the plug joins all four
+        ("A1", "GND", "pwr_in"), ("A4", "VBUS_W", "pas"), ("A5", "CC1", "pas"),
+        ("A6", "DP", "pas"), ("A7", "DN", "pas"), ("A8", "SBU1", "nc"), ("A9", "VBUS_E", "pas"),
+        ("A12", "GND", "pwr_in"), ("B1", "GND", "pwr_in"), ("B4", "VBUS_E", "pas"),
         ("B5", "CC2", "pas"), ("B6", "DP", "pas"), ("B7", "DN", "pas"), ("B8", "SBU2", "nc"),
-        ("B9", "VBUS", "pas"), ("B12", "GND", "pwr_in"), ("SH", "SHIELD", "pas"),
+        ("B9", "VBUS_W", "pas"), ("B12", "GND", "pwr_in"), ("SH", "SHIELD", "pas"),
     ],
 )
 
@@ -182,6 +198,124 @@ spec(
     desc="Tactile switch 5.1x5.1 mm (RESET, BOOT)",
     datasheet="https://datasheet.lcsc.com/datasheet/pdf/56c8799ae5193945a16a1ffbe378246a.pdf",
     pins=[(1, "A", "pas"), (2, "B", "pas")],
+)
+
+
+# ---------------------------------------------------------------------------------------------
+# Wired network (hw v0.901): W5500 Ethernet controller on SPI, an RJ45 with PoE magnetics, an
+# isolated 802.3af PoE module. Diode-OR of USB VBUS and the PoE 5 V.
+
+spec(
+    # WIZnet W5500 datasheet v1.1.0: pin list p8-10 (RSVD 23 "must be tied to GND", 38-42 NC
+    # with internal pull-downs, VBG "must be left floating", PMODE[2:0] = 111 = all capable,
+    # auto-negotiation), EXRES1 12.4 k 1 % p11, crystal 25 MHz p11/p60, MISO Hi-Z while SCSn is
+    # high p10 + TCHZ 2.16 ns p61, RSTn low >= 500 us and PLL lock <= 1 ms p60, currents p59-60
+    # (132 mA 100M TX, 65 mA auto-negotiation, 13 mA PHY power-down)
+    "W5500", ref="U", mpn="W5500", manufacturer="WIZnet", lcsc="C32843",
+    footprint="Package_QFP:LQFP-48_7x7mm_P0.5mm",
+    desc="Hardwired TCP/IP Ethernet controller with 10/100 PHY, SPI (wired network)",
+    datasheet="https://docs.wiznet.io/assets/files/W5500_ds_v110e-226ffec190c588b69f88d629789585e1.pdf",
+    pins=[
+        (1, "TXN", "pas"), (2, "TXP", "pas"), (3, "AGND", "pwr_in"), (4, "AVDD", "pwr_in"),
+        (5, "RXN", "pas"), (6, "RXP", "pas"), (7, "DNC", "nc"), (8, "AVDD", "pwr_in"),
+        (9, "AGND", "pwr_in"), (10, "EXRES1", "pas"), (11, "AVDD", "pwr_in"), (12, "NC12", "nc"),
+        (13, "NC13", "nc"), (14, "AGND", "pwr_in"), (15, "AVDD", "pwr_in"), (16, "AGND", "pwr_in"),
+        (17, "AVDD", "pwr_in"), (18, "VBG", "nc"), (19, "AGND", "pwr_in"), (20, "TOCAP", "pas"),
+        (21, "AVDD", "pwr_in"), (22, "1V2O", "pas"), (23, "RSVD23", "in"), (24, "SPDLED", "out"),
+        (25, "LINKLED", "out"), (26, "DUPLED", "out"), (27, "ACTLED", "out"), (28, "VDD", "pwr_in"),
+        (29, "GND", "pwr_in"), (30, "XI", "pas"), (31, "XO", "pas"), (32, "SCSn", "in"),
+        (33, "SCLK", "in"), (34, "MISO", "tri"), (35, "MOSI", "in"), (36, "INTn", "out"),
+        (37, "RSTn", "in"), (38, "RSVD38", "nc"), (39, "RSVD39", "nc"), (40, "RSVD40", "nc"),
+        (41, "RSVD41", "nc"), (42, "RSVD42", "nc"), (43, "PMODE2", "in"), (44, "PMODE1", "in"),
+        (45, "PMODE0", "in"), (46, "NC46", "nc"), (47, "NC47", "nc"), (48, "AGND", "pwr_in"),
+    ],
+)
+
+spec(
+    # HanRun HR871150C rev 00: schematic p1 (chip side P1/P2 = pair 1-2, P4/P5 = pair 3-6, P3 =
+    # the joined TX/RX centre tap, P6 not fitted; cable-side centre taps out on P7/P8 (pairs 1-2,
+    # 3-6) and P9/P10 (4-5, 7-8) for a PoE PD; 4 x 22 nF + 75 R Bob Smith to SHIELD through
+    # 1000 pF 2 kV inside; LEDs 11 A / 12 K yellow (left), 13 A / 14 K green (right)); 1500 Vrms
+    # isolation, 57 V / 350 mA per centre tap p1-2; drawing and PCB layout p2-3.
+    "RJ45_POE", ref="J", mpn="HR871150C", manufacturer="HanRun", lcsc="C19724786",
+    footprint="OpenLoungePhone:RJ45_HanRun_HR871150C",
+    desc="RJ45 with 10/100 PoE magnetics (cable-side centre taps out) and 2 LEDs",
+    datasheet="https://www.lcsc.com/datasheet/C19724786.pdf",
+    pins=[(1, "TD+", "pas"), (2, "TD-", "pas"), (3, "CT", "pas"), (4, "RD+", "pas"),
+          (5, "RD-", "pas"), (7, "VC1+", "pas"), (8, "VC1-", "pas"), (9, "VC2+", "pas"),
+          (10, "VC2-", "pas"), (11, "LEDY_A", "pas"), (12, "LEDY_K", "pas"),
+          (13, "LEDG_A", "pas"), (14, "LEDG_K", "pas"), ("SH", "SHIELD", "pas")],
+)
+
+spec(
+    # SDAPO DP9900 series (DP9900LP-5V): pins p3 (1, 2 +VDC; 3 -VDC; 4 ADJ; 5, 6 VIN+; 7, 8
+    # VIN-), typical connection p3 (two bridges for mode A + B, SMAJ58A, 100 uF 25 V + 10 uF out),
+    # ADJ: 100 k to -VDC = 5.27 V p4, 4.75-5.25 V, minimum load 100 mA, 1.4 A out, 1500 V
+    # input-output isolation p5-6, LP package 21.2 x 14.2 x 8.0 (+-0.5) mm p8. Pin-compatible
+    # with the Silvertel Ag9905LP (KiCad's Ag99xxLP footprint).
+    "DP9900LP-5V", ref="PS", mpn="DP9900LP-5V", manufacturer="SDAPO", lcsc="C5380108",
+    footprint="Converter_DCDC:Converter_DCDC_Silvertel_Ag99xxLP_THT",
+    desc="Isolated IEEE 802.3af PoE PD module, 5 V 1.4 A (class 0), external bridges",
+    datasheet="https://www.lcsc.com/datasheet/C5380108.pdf",
+    pins=[(1, "+VDC", "pas"), (2, "+VDC", "pas"), (3, "-VDC", "pas"), (4, "ADJ", "pas"),
+          (5, "VIN+", "pas"), (6, "VIN+", "pas"), (7, "VIN-", "pas"), (8, "VIN-", "pas")],
+)
+
+spec(
+    # MDD MB1S-MB10S rev 2024A2 p1: MBS, 1 kV 1 A, pins 1 (+), 2 (-), 3 and 4 (~), numbered
+    # counter-clockwise like KiCad's TO-269AA pads
+    "MB10S", ref="BR", mpn="MB10S-50MIL", manufacturer="MDD", lcsc="C2488",
+    footprint="Package_TO_SOT_SMD:TO-269AA", desc="Bridge rectifier 1 kV 1 A (PoE mode A / B)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/d166b641999f7c4a86c69b88af3f89c6.pdf",
+    pins=[(1, "+", "pas"), (2, "-", "pas"), (3, "AC1", "pas"), (4, "AC2", "pas")],
+)
+
+spec(
+    # SMAJ58A: 58 V stand-off, 93.6 V clamp; KiCad D_SMA pad 1 = cathode
+    "SMAJ58A", ref="D", mpn="SMAJ58A", manufacturer="MDD", lcsc="C123816",
+    footprint="Diode_SMD:D_SMA", desc="TVS 58 V uni (PoE input, DP9900 typical connection)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/57d80c866df506764ddd60be335ccdff.pdf",
+    pins=[(1, "K", "pas"), (2, "A", "pas")],
+)
+
+spec(
+    # SS34: 40 V 3 A Schottky, 0.55 V at 3 A; KiCad D_SMA pad 1 = cathode
+    "SS34", ref="D", mpn="SS34", manufacturer="MDD", lcsc="C8678",
+    footprint="Diode_SMD:D_SMA", desc="Schottky 40 V 3 A (PoE 5 V into the 5 V OR)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf",
+    pins=[(1, "K", "pas"), (2, "A", "pas")],
+)
+
+spec(
+    # B5819W: 40 V 1 A Schottky, 0.6 V at 1 A; KiCad D_SOD-123 pad 1 = cathode
+    "B5819W", ref="D", mpn="B5819W SL", manufacturer="Slkor", lcsc="C8598",
+    footprint="Diode_SMD:D_SOD-123", desc="Schottky 40 V 1 A (USB VBUS into the 5 V OR)",
+    pins=[(1, "K", "pas"), (2, "A", "pas")],
+)
+
+spec(
+    # YXC X322525MOB4SI: 25 MHz, 12 pF load, +-10 ppm; 3225 4-pad, pads 1/3 crystal, 2/4 case GND
+    "XTAL_25M", ref="Y", mpn="X322525MOB4SI", manufacturer="YXC", lcsc="C9006",
+    footprint="Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm",
+    desc="Crystal 25 MHz 12 pF 3225 (W5500 clock; 18 pF load caps)",
+    datasheet="https://datasheet.lcsc.com/datasheet/pdf/a84bd8d530dd46e4b0f6d0ee59d8a89c.pdf",
+    pins=[(1, "X1", "pas"), (2, "GND", "pas"), (3, "X2", "pas"), (4, "GND", "pas")],
+)
+
+spec(
+    "BEAD_600R", ref="FB", mpn="GZ1608D601TF", manufacturer="Sunlord", lcsc="C1002",
+    footprint="Inductor_SMD:L_0603_1608Metric",
+    desc="Ferrite bead 600 R at 100 MHz, 200 mA, 0603 (W5500 analog supply)",
+    pins=[(1, "1", "pas"), (2, "2", "pas")],
+)
+
+spec(
+    # CA45 tantalum, case D (7343-28): 100 uF 16 V, 200 mOhm ESR at 100 kHz (the DP9900's
+    # >= 100 uF low-ESR output capacitor; 2.8 mm tall, fits under the board). Pad 1 = anode (+).
+    "TANT_100U", ref="C", mpn="CA45-D-16V-100uF-K", manufacturer="Hunan Xiangyee", lcsc="C171666",
+    footprint="Capacitor_Tantalum_SMD:CP_EIA-7343-31_Kemet-D",
+    desc="Tantalum 100 uF 16 V case D (PoE module output)",
+    pins=[(1, "+", "pas"), (2, "-", "pas")],
 )
 
 

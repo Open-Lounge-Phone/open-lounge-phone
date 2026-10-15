@@ -1,9 +1,11 @@
-"""The minimal board (M1, owner decision 2026-09-30): core only plus one status LED.
+"""The minimal board (M1, owner decision 2026-09-30): core only plus one status LED; hw v0.901
+adds a wired network (RJ45, W5500, isolated PoE).
 
 2 layers, 156 x 88 mm (M2 placement, DESIGN.md §9). Blocks (one review page each):
 
 - power:   USB-C receptacle (5 V sink, 2 x 5.1 k Rd, D+/D- to the ESP32 native USB through one
-           USBLC6-2SC6), SGM2212-3.3 LDO (800 mA), bulk + decoupling per the module datasheet.
+           USBLC6-2SC6), a Schottky OR of USB VBUS and the PoE 5 V into the 5 V rail V5,
+           SGM2212-3.3 LDO (800 mA), bulk + decoupling per the module datasheet.
 - mcu:     ESP32-S3-WROOM-1U-N16R8 (U.FL antenna), EN RC reset + RESET button, BOOT on GPIO0.
 - keys:    12 MX hot-swap sockets straight to GPIOs (internal pull-ups), plus the hook switch
            (a 13th socket under the hook plunger).
@@ -13,6 +15,11 @@
 - ui:      2x4 socket for the WeAct 2.13" e-paper module (2 standoff holes for the 2.9" option), piezo ringer on one
            GPIO through an NPN, one reverse-mount status LED, board marking (logo + name) and
            four M3 mounting holes.
+- ethernet: W5500 (SPI: the display's clock and data lines, CS on GPIO0 = BOOT, MISO on GPIO45)
+           per WIZnet's joined-centre-tap reference, its own SGM2212-3.3, the RJ45's chip side
+           and LEDs (hw v0.901).
+- poe:     the RJ45's cable-side centre taps -> two bridges (mode A + B) -> SMAJ58A -> an
+           isolated DP9900LP-5V module -> a Schottky into V5 (hw v0.901).
 
 Not on this board (owner): NFC, battery/charger/fuel gauge, per-key LEDs, I/O expander, hall
 sensor, privacy-light circuits, mute switch, speaker/amp, accelerometer, radar, extra ESD
@@ -37,26 +44,34 @@ PIN_TABLE = yaml.safe_load((Path(__file__).with_name("pin_table.yaml")).read_tex
 def build(d: Design) -> None:
     GND = rail("GND")
     VBUS = rail("VBUS")
+    V5 = rail("V5")
     V3V3 = rail("3V3")
     nets = {row["net"]: Net(row["net"]) for row in PIN_TABLE.values() if row.get("net")}
     nets["EN"] = Net("EN")
 
-    for name, fn, args in (("power", power, (nets, GND, VBUS, V3V3)),
+    nets["POE_5V"] = rail("POE_5V")
+    for name, fn, args in (("power", power, (nets, GND, VBUS, V5, V3V3)),
                            ("mcu", mcu, (nets, GND, V3V3)),
                            ("keys", keys, (d, nets, GND)),
                            ("audio", audio, (nets, GND, V3V3)),
-                           ("ui", ui, (nets, GND, VBUS, V3V3))):
+                           ("ui", ui, (nets, GND, V5, V3V3)),
+                           ("ethernet", ethernet, (nets, GND, V5, V3V3)),
+                           ("poe", poe, (nets, GND, V5))):
         BLOCK["name"] = name
         fn(*args)
 
 
 # ---------------------------------------------------------------------------------------------
-def power(n, GND, VBUS, V3V3):
+def power(n, GND, VBUS, V5, V3V3):
     """USB-C sink: 5.1 k Rd on each CC pin = a plain 5 V sink at USB default power (no PD).
     No fuse: a compliant USB source current-limits its VBUS, the board has no battery, and the
-    LDO limits (>= 810 mA) and shuts down on over-temperature (SGM2212 p6, p10)."""
+    LDO limits (>= 810 mA) and shuts down on over-temperature (SGM2212 p6, p10).
+    hw v0.901: VBUS reaches the 5 V rail V5 through a Schottky (the PoE 5 V comes in through
+    another, poe()), so neither source can feed the other. Only the receptacle's A9/B4 VBUS
+    pad is used (the plug joins all four VBUS contacts; 0.5 A on two contacts)."""
     j = make("USB-C", ref="J1", note="power + native USB (flash/console)")
-    j["VBUS"] += VBUS
+    j["VBUS_E"] += VBUS
+    j["VBUS_W"] += NC
     j["GND"] += GND
     j["SHIELD"] += GND
     cc1, cc2 = Net("CC1"), Net("CC2")
@@ -70,16 +85,24 @@ def power(n, GND, VBUS, V3V3):
     esd = make("USBLC6-2SC6", ref="D1", note="USB D+/D- ESD, at the connector")
     esd["IO1"] += n["USB_DP"]
     esd["IO2"] += n["USB_DN"]
-    esd["VBUS"] += VBUS
+    esd["VBUS"] += V5      # the clamp's supply reference: the 5 V rail behind the OR
     esd["GND"] += GND
 
-    # 3.3 V LDO. C_IN: 10 uF (the USB attach limit is 10 uF, SGM2212 p10 asks >= 2.2 uF);
-    # C_OUT: 2.2 uF at the LDO (p10) + 22 uF/100 nF at the module (WROOM-1 p41).
+    # USB into the 5 V OR; a bleeder holds an open VBUS at 0 V against the diode's reverse
+    # leakage while PoE runs the board (a USB-C sink must not drive VBUS)
+    du = make("B5819W", ref="D3", note="USB VBUS -> V5 (OR)")
+    du["A"] += VBUS
+    du["K"] += V5
+    series(VBUS, GND, R("10k", note="VBUS bleeder (diode leakage with PoE power)"))
+
+    # 3.3 V LDO. C_IN 4.7 uF here + 4.7 uF at the Ethernet LDO: the whole V5 rail stays under the
+    # 10 uF USB attach limit (SGM2212 p10 asks >= 2.2 uF); C_OUT: 2.2 uF at the LDO (p10) +
+    # 22 uF/100 nF at the module (WROOM-1 p41).
     u = make("SGM2212-3.3", ref="U2", note="3V3 LDO, 800 mA")
-    u["VIN"] += VBUS
+    u["VIN"] += V5
     u["VOUT"] += V3V3
     u["GND"] += GND
-    decouple(VBUS, GND, "10u", note="LDO C_IN / VBUS bulk (<= 10 uF USB attach)")
+    decouple(V5, GND, "4.7u", note="LDO C_IN / V5 bulk (V5 total <= 10 uF: USB attach)")
     decouple(V3V3, GND, "2.2u", note="LDO C_OUT (SGM2212 p10)")
 
 
@@ -98,9 +121,14 @@ def mcu(n, GND, V3V3):
     rst = make("TACT", ref="SW1", note="RESET")
     rst["A"] += n["EN"]
     rst["B"] += GND
-    # BOOT: GPIO0 has an internal weak pull-up (p13); the button pulls it low at reset
+    # BOOT: GPIO0 has an internal weak pull-up (p13); the button pulls it low at reset.
+    # hw v0.901: GPIO0 is also the W5500's chip select (ETH_CS, 10 k pull-up in ethernet()), so
+    # the button reaches it through 1 k: 3.3 V x 1k / 11k = 0.30 V at reset (download mode), and
+    # a press while firmware drives CS only costs 3.3 mA.
+    sw = Net("BOOT_SW")
+    series(n["ETH_CS"], sw, R("1k", note="BOOT button series (GPIO0 is also ETH_CS)"))
     boot = make("TACT", ref="SW2", note="BOOT (hold + RESET = download mode)")
-    boot["A"] += n["BOOT"]
+    boot["A"] += sw
     boot["B"] += GND
 
 
@@ -174,7 +202,7 @@ def audio(n, GND, V3V3):
     series(det, n["JACK_DET"], R("1k", note="GPIO series (contact reaches the plug)"))
 
 
-def ui(n, GND, VBUS, V3V3):
+def ui(n, GND, V5, V3V3):
     # display module socket (WeAct e-Paper 2x4 order, 2.13" or 2.9"; the module plugs in directly)
     h = make("DISPLAY_HDR", ref="J3", note="SPI display module (WeAct 2.9\" plugs in)")
     h["VCC"] += V3V3
@@ -187,9 +215,9 @@ def ui(n, GND, VBUS, V3V3):
     bz = make("PIEZO", ref="BZ1", note="ringer")
     q = make("MMBT3904", ref="Q1", note="ringer driver")
     drv = Net("BUZZER_DRV")
-    bz[1] += VBUS
+    bz[1] += V5
     bz[2] += drv
-    series(VBUS, drv, R("1k", note="piezo charge/discharge (TDK PS p2)"))
+    series(V5, drv, R("1k", note="piezo charge/discharge (TDK PS p2)"))
     base = Net("BUZZER_B")
     q["C"] += drv
     q["E"] += GND
@@ -211,3 +239,155 @@ def ui(n, GND, VBUS, V3V3):
     # drawing: 86.2 x 31.9 mm hole pattern); the 2x4 socket J3 holds the other end
     for _ in range(2):
         graphic("MountingHole:MountingHole_3.2mm_M3", "M3 display standoff", prefix="H")
+
+
+def ethernet(n, GND, V5, V3V3):
+    """W5500 on the display's SPI bus (EPD_CLK/EPD_DIN = SCLK/MOSI, separate chip selects),
+    WIZnet's reference circuit for magnetics with joined TX/RX centre taps (the HR871150C's P3):
+    TX+/- 49.9 R to the analog 3.3 V, RX+/- AC-coupled (6.8 nF, required with a joined centre tap)
+    into 2 x 49.9 R to a 10 nF node, the centre tap fed through 10 R with 100 nF.
+
+    GPIO budget: no free GPIO for RSTn or INTn. INTn stays open (ESP-IDF polls: int_gpio_num -1,
+    poll_period_ms > 0); RSTn follows EN through a second RC (10 k / 1 uF), so the W5500 is held in
+    reset through the module's strap window (S3: GPIO straps held 3 ms after EN rises) and resets
+    with the RESET button; firmware also soft-resets it (MR.RST).
+    Straps: SCSn = GPIO0 with a 10 k pull-up (high at reset = SPI boot, and MISO is then Hi-Z,
+    W5500 p10); MISO = GPIO45 (VDD_SPI strap, must read low) with a 10 k pull-down."""
+    E3, EA = rail("ETH_3V3"), rail("ETH_3V3A")
+    # own regulator: keeps the W5500's 130 mA off the module's LDO (heat) and its supply clean
+    ldo = make("SGM2212-3.3", ref="U5", note="ETH_3V3 LDO (W5500)")
+    ldo["VIN"] += V5
+    ldo["VOUT"] += E3
+    ldo["GND"] += GND
+    decouple(V5, GND, "4.7u", note="Ethernet LDO C_IN (V5 total <= 10 uF: USB attach)")
+    decouple(E3, GND, "2.2u", note="Ethernet LDO C_OUT (SGM2212 p10)")
+    fb = make("BEAD_600R", ref="FB1", note="digital -> analog 3.3 V (WIZnet ref)")
+    fb[1] += E3
+    fb[2] += EA
+
+    u = make("W5500", ref="U4")
+    u["VDD"] += E3
+    u["GND"] += GND
+    u["AVDD"] += EA
+    u["AGND"] += GND
+    decouple(E3, GND, "10u", "100n", note="W5500 VDD pin 28")
+    decouple(EA, GND, "10u", note="W5500 AVDD bulk")
+    decouple(EA, GND, "100n", "100n", "100n", "100n", "100n", "100n",
+             note="W5500 AVDD pins 4/8/11/15/17/21")
+    for p in ("DNC", "NC12", "NC13", "VBG", "NC46", "NC47", "RSVD38", "RSVD39", "RSVD40",
+              "RSVD41", "RSVD42", "SPDLED", "DUPLED", "INTn"):
+        u[p] += NC
+    u["RSVD23"] += GND                       # "must be tied to GND" (p9)
+    for p in ("PMODE0", "PMODE1", "PMODE2"):  # 111: all capable, auto-negotiation (p10)
+        u[p] += E3
+    for pin, net, part in (("EXRES1", "W5500_EXRES", R("12.4k", note="EXRES1 12.4 k 1 % (p11)")),
+                           ("TOCAP", "W5500_TOCAP", C("4.7u", note="TOCAP (p8)")),
+                           ("1V2O", "W5500_1V2O", C("10n", note="1V2O (p8)"))):
+        x = Net(net)
+        u[pin] += x
+        series(x, GND, part)
+
+    # 25 MHz crystal, 18 pF load caps (12 pF crystal), 1 M across (p11 fig. 3)
+    y = make("XTAL_25M", ref="Y1")
+    xi, xo = Net("W5500_XI"), Net("W5500_XO")
+    u["XI"] += xi
+    u["XO"] += xo
+    y["X1"] += xi
+    y["X2"] += xo
+    y["GND"] += GND
+    series(xi, GND, C("18p", note="crystal load"))
+    series(xo, GND, C("18p", note="crystal load"))
+    series(xi, xo, R("1M", note="crystal bias (W5500 p11)"))
+
+    # SPI: shared clock/data with the display; own CS and MISO
+    u["SCLK"] += n["EPD_CLK"]
+    u["MOSI"] += n["EPD_DIN"]
+    u["SCSn"] += n["ETH_CS"]
+    u["MISO"] += n["ETH_MISO"]
+    series(n["ETH_CS"], V3V3, R("10k", note="ETH_CS pull-up: high at reset (SPI boot, MISO Hi-Z)"))
+    series(n["ETH_MISO"], GND, R("10k", note="ETH_MISO pull-down: GPIO45 strap low at reset"))
+    # reset: follows EN, one RC later
+    rst = Net("ETH_RST")
+    u["RSTn"] += rst
+    series(n["EN"], rst, R("10k", note="RSTn from EN (no free GPIO)"))
+    series(rst, GND, C("1u", note="RSTn delay past the strap window"))
+
+    # magnetics (chip side of the RJ45; its cable side is in poe())
+    j = make("RJ45_POE", ref="J4", note="Ethernet + PoE")
+    n["_J4"] = j                             # poe() wires its cable side
+    txp, txn, rxp, rxn = Net("ETH_TXP"), Net("ETH_TXN"), Net("ETH_RXP"), Net("ETH_RXN")
+    u["TXP"] += txp
+    u["TXN"] += txn
+    u["RXP"] += rxp
+    u["RXN"] += rxn
+    j["TD+"] += txp
+    j["TD-"] += txn
+    series(txp, EA, R("49.9", note="TX+ termination (WIZnet ref)"))
+    series(txn, EA, R("49.9", note="TX- termination (WIZnet ref)"))
+    jrp, jrn = Net("ETH_RDP_J"), Net("ETH_RDN_J")
+    j["RD+"] += jrp
+    j["RD-"] += jrn
+    series(jrp, rxp, C("6.8n", note="RX+ AC coupling (joined centre tap)"))
+    series(jrn, rxn, C("6.8n", note="RX- AC coupling (joined centre tap)"))
+    rxc = Net("ETH_RXC")
+    series(rxp, rxc, R("49.9", note="RX termination"))
+    series(rxn, rxc, R("49.9", note="RX termination"))
+    series(rxc, GND, C("10n", note="RX termination centre"))
+    ct = Net("ETH_CT")
+    j["CT"] += ct
+    series(EA, ct, R("10", note="centre-tap feed (WIZnet joined-CT ref)"))
+    series(ct, GND, C("100n", note="centre-tap bypass"))
+    shield = Net("ETH_SHIELD")
+    j["SHIELD"] += shield
+    series(shield, GND, C("1n@2kV", note="RJ45 shield to GND (2 kV)"))
+    # LEDs: green = link (W5500 LINKLED), yellow = activity (ACTLED); active low, ~4 mA
+    for a, k, pin, what in (("LEDG_A", "LEDG_K", "LINKLED", "link"),
+                            ("LEDY_A", "LEDY_K", "ACTLED", "activity")):
+        j[a] += E3
+        kn = Net(f"ETH_LED_{what.upper()}_K")
+        j[k] += kn
+        pn = Net(f"ETH_{pin}")
+        u[pin] += pn
+        series(kn, pn, R("330", note=f"RJ45 {what} LED"))
+
+
+def poe(n, GND, V5):
+    """IEEE 802.3af PD (DP9900LP-5V typical connection, p3): the RJ45's cable-side centre taps
+    -> two bridges (mode A data pairs, mode B spare pairs) -> SMAJ58A -> the isolated module ->
+    100 uF + 10 uF -> a Schottky into V5. ADJ 100 k to -VDC lifts the output to 5.27 V (p4), which
+    pays the OR diode's drop. Everything on the bridge side is isolated from GND (1500 V, layout
+    keeps 3 mm, checks.check_poe)."""
+    j = n["_J4"]
+    va1, va2, vb1, vb2 = Net("POE_VA1"), Net("POE_VA2"), Net("POE_VB1"), Net("POE_VB2")
+    j["VC1+"] += va1
+    j["VC1-"] += va2
+    j["VC2+"] += vb1
+    j["VC2-"] += vb2
+    vp, vn = Net("POE_VIN_P"), Net("POE_VIN_N")
+    for ref, a, b in (("BR1", va1, va2), ("BR2", vb1, vb2)):
+        br = make("MB10S", ref=ref, note="PoE input bridge (mode A)" if ref == "BR1" else
+                  "PoE input bridge (mode B)")
+        br["AC1"] += a
+        br["AC2"] += b
+        br["+"] += vp
+        br["-"] += vn
+    tvs = make("SMAJ58A", ref="D4", note="PoE input TVS")
+    tvs["K"] += vp
+    tvs["A"] += vn
+    m = make("DP9900LP-5V", ref="PS1", note="isolated PoE PD, 5 V")
+    m["VIN+"] += vp
+    m["VIN-"] += vn
+    m["+VDC"] += n["POE_5V"]
+    m["-VDC"] += GND
+    adj = Net("POE_ADJ")
+    m["ADJ"] += adj
+    series(adj, GND, R("100k", note="ADJ to -VDC: 5.27 V (DP9900 p4)"))
+    ct = make("TANT_100U", note="PoE module output (>= 100 uF low ESR, p3)")
+    ct["+"] += n["POE_5V"]
+    ct["-"] += GND
+    series(n["POE_5V"], GND, C("10u@25V", note="PoE module output (p3)"))
+    series(n["POE_5V"], GND, R("51", size="2512", dnp=True,
+                               note="minimum-load bleeder (100 mA, p6): fit if the board idles below it"))
+    d = make("SS34", ref="D5", note="PoE 5 V -> V5 (OR)")
+    d["A"] += n["POE_5V"]
+    d["K"] += V5
