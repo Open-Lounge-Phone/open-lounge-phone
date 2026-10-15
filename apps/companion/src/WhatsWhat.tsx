@@ -26,15 +26,18 @@ export const TERMS: { term: string; means: string }[] = [
   },
   {
     term: "Household",
-    means: "Everyone who's been invited to this server, plus its phones.",
+    means:
+      "The people you've invited and your phones. A server can hold many households (the public hub holds everyone's); each one is private to its own people.",
   },
   {
     term: "Guardian",
-    means: "Can manage phones, people and quiet hours.",
+    means:
+      "Can manage the household's phones, people, quiet hours and settings. One guardian is the owner, who can hand the household on to another guardian.",
   },
   {
     term: "Contact",
-    means: "Can call and be called by the phones they're allowed on, and by other people here.",
+    means:
+      "Can call and be called by the phones they're allowed on, and by the other people in the household.",
   },
   {
     term: "Available for calls",
@@ -55,6 +58,16 @@ export const TERMS: { term: string; means: string }[] = [
     term: "Team or organization",
     means:
       "A space for grown-ups (a studio, a club, a venue) instead of a household: their own phones and shared Lounge phones, no kids' phones or quiet hours.",
+  },
+  {
+    term: "Recovery code",
+    means:
+      "A one-time code you keep somewhere safe. With your handle, it gets you back in if you lose every passkey: you make a new passkey and get a new code.",
+  },
+  {
+    term: "Add-on",
+    means:
+      "A service you link to your account, like an AI companion. It gets its own address (yourname+name@server), and only you and the people you choose can talk to it.",
   },
   {
     term: "Fair use",
