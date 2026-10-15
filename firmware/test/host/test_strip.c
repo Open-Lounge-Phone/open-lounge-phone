@@ -129,6 +129,20 @@ TEST(strip_labels_an_addon_calling) {
   char label[STATUS_MAX + 1];
   strip_addon_label(label, "seat");
   CHECK_STR(label, "SEAT - ADD-ON");
+  // In a call and while waiting, a long name is shortened, never left unmarked.
+  strip_addon_label(label, "thinking-room");
+  CHECK_STR(label, "THINKIN - ADD-ON");
+  ph.kind = PH_INCALL;
+  ph.connected = true;
+  in.call_started_ms = 0;
+  in.now_ms = 1000;
+  snprintf(ph.waiting_id, sizeof ph.waiting_id, "w1");
+  ph.waiting_addon = true;
+  snprintf(ph.waiting_from, sizeof ph.waiting_from, "call-failed");
+  strip_lines(&in, out);
+  CHECK(strstr(out[0], "ADD-ON") || strstr(out[1], "ADD-ON"));
+  ph.waiting_id[0] = 0;
+  ph.kind = PH_INCOMING;
   // Anyone else: as before.
   ph.addon = false;
   snprintf(ph.from, sizeof ph.from, "Mom");

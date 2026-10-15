@@ -56,8 +56,9 @@ static const char *end_text(const char *r) {
 
 void strip_addon_label(char *dst, const char *name) {
   char buf[96];
-  snprintf(buf, sizeof buf, "%s - ADD-ON", name);
-  clip(dst, strlen(buf) <= STATUS_WIDTH ? buf : name);
+  int room = STATUS_WIDTH - (int)strlen(" - ADD-ON");
+  snprintf(buf, sizeof buf, "%.*s - ADD-ON", room, name);
+  clip(dst, buf);
 }
 
 void strip_owner_line(char *dst, const phone_config_t *c) {
@@ -101,12 +102,10 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       return with_name(out, "CALLING", name, "");
     case PH_INCOMING: {
       if (s->callback) return set2(out, s->from, "CALLS YOU BACK");
-      if (s->addon) {
-        char label[STATUS_MAX + 1];
-        strip_addon_label(label, s->from);
-        char name_only[STATUS_MAX + 1];
-        clip(name_only, s->from);
-        return set2(out, label, strcmp(label, name_only) ? "LIFT TO ANSWER" : "ADD-ON CALLING");
+      if (s->addon) {  // always marked: the whole label when it fits, else ADD-ON CALLING below
+        snprintf(buf, sizeof buf, "%.30s - ADD-ON", s->from);
+        if (strlen(buf) <= STATUS_WIDTH) return set2(out, buf, "LIFT TO ANSWER");
+        return set2(out, s->from, "ADD-ON CALLING");
       }
       int n = with_name(out, "", s->from, "CALLING");
       // In turn on the second line: BACK silences the ringer here (until it's silenced).

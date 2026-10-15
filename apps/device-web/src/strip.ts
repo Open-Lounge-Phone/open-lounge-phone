@@ -71,13 +71,29 @@ function withName(prefix: string, name: string, suffix = ""): StatusLines {
 }
 
 /**
- * An add-on's name with its label, `SEAT · ADD-ON` (or, calling within one of its shares, the
- * share: `SEAT · BOOK CLUB`), when that fits on one line; else just the name (the other line
- * then says it's an add-on, or which share).
+ * An add-on's name, always marked as one: `SEAT · ADD-ON`, the name shortened when it must be
+ * (whatever its name, it never shows as a person or a phone would).
  */
-export function addonLabel(name: string, share?: string): string {
-  const labelled = `${name.trim()} · ${share?.trim() || "ADD-ON"}`;
-  return labelled.length <= STATUS_WIDTH ? clip(labelled) : clip(name.trim());
+export function addonLabel(name: string): string {
+  const mark = " · ADD-ON";
+  const n = name.trim();
+  const room = STATUS_WIDTH - mark.length;
+  return clip(`${n.length > room ? n.slice(0, room) : n}${mark}`);
+}
+
+/**
+ * An add-on calling: `SEAT · ADD-ON` / `LIFT TO ANSWER` when that fits, else the name and
+ * `ADD-ON CALLING`. Within a share, the share with its name (`SEAT · BOOK CLUB`, when it fits)
+ * and always `ADD-ON CALLING` below, so a share's label can't pass for a person.
+ */
+function addonCalling(name: string, share?: string): StatusLines {
+  const n = name.trim();
+  if (share?.trim()) {
+    const both = `${n} · ${share.trim()}`;
+    return [clip(both.length <= STATUS_WIDTH ? both : n), "ADD-ON CALLING"];
+  }
+  const full = `${n} · ADD-ON`;
+  return full.length <= STATUS_WIDTH ? [clip(full), "LIFT TO ANSWER"] : [clip(n), "ADD-ON CALLING"];
 }
 
 function clock(ms: number): string {
@@ -118,11 +134,7 @@ export function statusLines(input: StatusInput): StatusLines {
       return withName("CALLING", name);
     case "incoming": {
       if (s.callback) return [clip(s.from.trim()), "CALLS YOU BACK"];
-      if (s.addon) {
-        const labelled = addonLabel(s.from, s.share);
-        if (labelled !== clip(s.from.trim())) return [labelled, "LIFT TO ANSWER"];
-        return [labelled, s.share ? clip(s.share.trim()) : "ADD-ON CALLING"];
-      }
+      if (s.addon) return addonCalling(s.from, s.share);
       const who = withName("", s.from.trim(), "CALLING");
       // In turn on the second line: BACK silences the ringer here (until it's silenced).
       const answer = !s.silenced && hintNow(input.now) ? "BACK: SILENCE" : "LIFT TO ANSWER";
@@ -132,9 +144,7 @@ export function statusLines(input: StatusInput): StatusLines {
       if (s.transferPending) return ["TRANSFER TO?", "PRESS A KEY"];
       // Call waiting: who, and the keys (a long name takes turns with them).
       if (s.waiting) {
-        const who = s.waiting.addon
-          ? addonLabel(s.waiting.from, s.waiting.share)
-          : clip(s.waiting.from.trim());
+        const who = s.waiting.addon ? addonLabel(s.waiting.from) : clip(s.waiting.from.trim());
         const top = `WAITING: ${who}`;
         if (top.length <= STATUS_WIDTH) return [top, WAITING_KEYS];
         return ["CALL WAITING", hintNow(input.now) ? WAITING_KEYS : who];

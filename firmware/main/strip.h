@@ -53,8 +53,8 @@ typedef struct {
 /** Returns the number of lines (1 or 2) written to out. */
 int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]);
 /**
- * An add-on's name with its label, "SEAT - ADD-ON", when that fits on one line (the font has no
- * middle dot); else just the name. `dst` holds at least STATUS_MAX + 1 bytes.
+ * An add-on's name, always marked as one: "SEAT - ADD-ON" (the font has no middle dot), the name
+ * shortened when it must be ("THINKIN - ADD-ON"). `dst` holds at least STATUS_MAX + 1 bytes.
  */
 void strip_addon_label(char *dst, const char *name);
 /** The trust line: "KIDS: SMITHS", "ANA'S PHONE", "LOUNGE: STUDIO" (≤ STATUS_MAX chars). */

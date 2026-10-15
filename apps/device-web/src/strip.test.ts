@@ -53,17 +53,58 @@ describe("statusLines", () => {
       lines({ deviceState: { kind: "incoming", callId: "c", from, addon: true } });
     expect(incoming("Seat")).toEqual(["SEAT · ADD-ON", "LIFT TO ANSWER"]);
     expect(incoming("Notes taker")).toEqual(["NOTES TAKER", "ADD-ON CALLING"]);
+    // In a call (and call waiting) the name is always marked, shortened if it must be.
     expect(addonLabel("seat")).toBe("SEAT · ADD-ON");
-    expect(addonLabel("thinking-room")).toBe("THINKING-ROOM");
-    // Within a share: the share instead of ADD-ON.
+    expect(addonLabel("thinking-room")).toBe("THINKIN · ADD-ON");
+    // Within a share: the share with its name, and always ADD-ON CALLING below it.
     const share = (from: string, label: string) =>
       lines({ deviceState: { kind: "incoming", callId: "c", from, addon: true, share: label } });
-    expect(share("Seat", "Book club")).toEqual(["SEAT · BOOK CLUB", "LIFT TO ANSWER"]);
-    expect(share("Seat", "Garden project")).toEqual(["SEAT", "GARDEN PROJECT"]);
+    expect(share("Seat", "Book club")).toEqual(["SEAT · BOOK CLUB", "ADD-ON CALLING"]);
+    expect(share("Seat", "Garden project")).toEqual(["SEAT", "ADD-ON CALLING"]);
     expect(lines({ deviceState: { kind: "incoming", callId: "c", from: "Seat" } })).toEqual([
       "SEAT CALLING",
       "LIFT TO ANSWER",
     ]);
+  });
+
+  it("never lets an add-on pass for a person, a phone or the phone itself", () => {
+    // Names and share labels that look like people or like the phone's own words.
+    for (const [from, share] of [
+      ["police", undefined],
+      ["mom", "Call failed"],
+      ["call-failed", undefined],
+      ["grandma", "Grandma"],
+      ["a-very-long-add-on-name", "Emergency services"],
+    ] as const) {
+      const shown = lines({
+        deviceState: {
+          kind: "incoming",
+          callId: "c",
+          from,
+          addon: true,
+          ...(share ? { share } : {}),
+        },
+      });
+      expect(shown.join(" "), `${from} ${share}`).toMatch(/ADD-ON/);
+      const waiting = lines({
+        deviceState: {
+          kind: "incall",
+          callId: "c",
+          connected: true,
+          waiting: { callId: "w", from, addon: true, ...(share ? { share } : {}) },
+        },
+        now: 0, // (not a moment that shows a key hint instead)
+        callStartedAt: -1000,
+      });
+      expect(waiting.join(" "), `waiting ${from}`).toMatch(/ADD-ON/);
+      const inCall = lines({
+        deviceState: { kind: "incall", callId: "c", connected: true },
+        activeLabel: addonLabel(from),
+        now: 0,
+        callStartedAt: -1000,
+      });
+      expect(inCall.join(" "), `in call ${from}`).toMatch(/ADD-ON/);
+    }
   });
 
   it("runs a call timer once connected", () => {
