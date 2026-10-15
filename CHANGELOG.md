@@ -44,10 +44,33 @@ and the browser phone show what's new here; [docs/phone-ux.md](docs/phone-ux.md)
   encrypted with the space's key).
 - **Phones**: BACK silences a ringing call here; a notice's recording loops while the handset is
   up; a late hang-up no longer gets a second ended (it could end the sender's next call).
+- **Add-on sharing** ([docs/add-ons.md](docs/add-ons.md#sharing), migration 0031). An add-on
+  says which parts of itself can be shared (`addon.shares`, e.g. one shared project); its owner
+  gives a share to connections or people in their spaces on the add-on's card (Settings →
+  Add-ons: each share's address with Copy, Give to…, Revoke). A share has its own address,
+  `handle+name+share@host`; only the people holding it get through, and the add-on is told which
+  share and grant (`call.ringing.share`). It calls its owner or a holder within a share
+  (`call.address.share`; they see `SEAT · BOOK CLUB`, "seat · Book club" in apps). Revoking, or
+  the add-on dropping a share, ends calls into it at once. **New shared project with…** asks the
+  add-on (`addon.share.request` → `addon.share.created` / `addon.share.refused`; offline and
+  silent requests say so). Connections lists your add-ons and the shares given to you.
+  Granting, revoking and requests are audited. Across servers: federation feature
+  `addon-shares` (the call target's `share`, `CallBody.addonShare`, `POST /fed/v1/addon-shares`);
+  servers without it can't receive grants or calls into shares. The Python bridge is 0.2.0
+  (`set_shares`, `call.share`, `on_share_request`, `call(address, share=)`).
+- **Breaking for add-ons: the whole-add-on allow-list is gone.** Since 0.6.0 an owner could let
+  connections talk to an add-on as a whole; 0.7.0 drops those entries (migration 0031), shows
+  the owner a one-time note on the add-on's card, removes "Who may talk to it" and
+  `PUT /api/addons/:id/allow` (`POST /api/addons/link` ignores `allow`). An add-on's own address
+  is its owner's alone; anyone else needs a share. An add-on that called allowed connections
+  with `call.address` (no share) is refused `unavailable` now: give those people a share and
+  call within it.
 - Protocol (additive): `call.hangup.lost`, `call.ringing.waiting`, `hello.features`,
   `config.missed[].{kind,at,count,id}`, `call.back`, `missed.changed`, `config.checkin`,
-  `config.chime`, `config.intercom`, `notice.chime`; device features `missed-calls`,
-  `call-waiting`, `checkin`, `chime`, `intercom`.
+  `config.chime`, `config.intercom`, `notice.chime`, `addon.shares`, `addon.share.request`,
+  `addon.share.created`, `addon.share.refused`, `call.ringing.share`, `call.ringing.from.share`,
+  `call.address.share`; device features `missed-calls`, `call-waiting`, `checkin`, `chime`,
+  `intercom`, `addon-shares`.
 
 ## 0.6.0 (2026-10-14, `server-v0.6.0`)
 

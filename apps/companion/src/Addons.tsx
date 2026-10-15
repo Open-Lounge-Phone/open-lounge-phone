@@ -407,7 +407,7 @@ function NewShareForm({
   const waiting = request?.state === "waiting";
 
   useEffect(() => {
-    if (!request || request.state !== "waiting") {
+    if (request?.state !== "waiting") {
       if (request?.state === "created") onChanged();
       return;
     }

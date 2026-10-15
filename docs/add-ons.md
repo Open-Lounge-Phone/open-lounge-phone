@@ -18,14 +18,18 @@ it.
 - **An endpoint on your account.** Linking one gives it an address that is part of your account,
   such as `jesse+seat@hub.example`. Nothing separate to sign up for or manage. Removing it from
   your account revokes it at once.
-- **Reachable only by people you choose.** By default only you can call it and only you can be
-  called by it. You can allow some of your connections too, and only them. Nobody can knock on an
-  add-on, it never appears in a directory, and kids' phones can't reach one.
+- **Yours alone, unless it offers a part to share.** Only you can call it at its address, and it
+  calls only you. An add-on may offer parts of itself for sharing (one shared project, say); you
+  give such a part to specific people, and they reach that part, and only it, at its own address
+  ([Sharing](#sharing)). Nobody can knock on an add-on, it never appears in a directory, and
+  kids' phones can't reach one.
 - **Told who's speaking.** Every call tells the add-on the verified caller: their address and
   name, checked by their server. It can greet people by name and keep separate memories per
   person.
 - **Labelled.** Apps show the name with an "add-on" badge; phones show `SEAT · ADD-ON` (the
   hardware phone's font writes `SEAT - ADD-ON`) when it fits, or the name and `ADD-ON CALLING`.
+  A call within a share shows the share instead: `SEAT · BOOK CLUB` on the browser phone,
+  "seat · Book club" in apps.
 
 ## Turning add-ons on (operators)
 
@@ -35,31 +39,34 @@ Off by default. Self-hosted: `ADDONS=on` ([self-hosting.md](self-hosting.md)). C
 
 While add-ons are off, nobody can link one ("This server doesn't offer add-ons. Its operator can
 turn them on."), add-ons linked earlier can't connect or be called (the app says so), and the
-server doesn't list the `addons` feature, so other servers never offer it add-on calls.
+server doesn't list the `addons` and `addon-shares` features, so other servers never offer it
+add-on calls or share grants.
 
 ## Using one
 
 1. **Link.** Start linking in the add-on; it shows a 6-digit code. In the companion app open
-   **Settings → Add-ons → Link an add-on**, type the code, choose its name (the part after `+`:
-   2 to 30 letters, digits, dots, dashes or underscores) and who besides you may talk to it (any
-   of your connections). It's linked in the space you're in.
-2. **Call it** from the add-on's **Call** button, or put its address on a key of your own phone
-   (the phone's page → **Public lines and add-ons**, then choose that key; your keys at a Lounge
-   phone come from your phone, so it's there too). A connection you allowed calls it under **Connections → Call an add-on**, on
-   this server or another one.
-3. **It calls you** (or a connection you allowed), for a check-in it planned, say. It rings
-   wherever you can be rung: your apps, your own phones, a Lounge phone you're signed in at.
-4. **Manage it** in the same place: its address with **Copy**, whether it's online now (as the
-   server reports it), **Who may talk to it**, and **Remove** (it's cut off at once and told to
-   forget its link).
+   **Settings → Add-ons → Link an add-on**, type the code and choose its name (the part after
+   `+`: 2 to 30 letters, digits, dots, dashes or underscores). It's linked in the space you're in.
+2. **Call it** from the add-on's **Call** button (Settings → Add-ons, or Connections), or put its
+   address on a key of your own phone (the phone's page → **Public lines and add-ons**, then
+   choose that key; your keys at a Lounge phone come from your phone, so it's there too).
+3. **It calls you**, for a check-in it planned, say. It rings wherever you can be rung: your
+   apps, your own phones, a Lounge phone you're signed in at.
+4. **Share parts of it** if it offers any: on its card, each share has its own address with
+   **Copy**, the people who hold it (**Revoke**), and **Give to…**; **New shared project with…**
+   asks the add-on for a new one ([Sharing](#sharing)).
+5. **Manage it** in the same place: its address with **Copy**, whether it's online now (as the
+   server reports it), and **Remove** (it's cut off at once, told to forget its link, and every
+   share of it goes).
 
 A call with an add-on is one to one: no Add caller, no Transfer. The app shows a **Keypad**
 during the call; the add-on hears the keys ("press 1 to…"). Calls to and from an add-on don't go
 to voicemail.
 
 **Fair use:** an add-on's call minutes count against its owner's allowance, whoever placed the
-call ([hub.md](hub.md)). **Audit:** linking, changes to who may talk to it and removing it go in
-the space's audit trail (names and counts, never content). The rules in full:
+call ([hub.md](hub.md)). **Audit:** linking, granting and revoking shares, share requests and
+their results (made, refused, offline, no answer), and removing it go in the space's audit trail
+(names, ids and counts, never content). The rules in full:
 [security-model.md](security-model.md#add-ons).
 
 ## Building one
@@ -92,9 +99,11 @@ asyncio.run(addon.run())   # prints the link code the first time, then takes cal
 - `addon.online` and `@addon.on_status`: whether it's connected now, and a handler for changes.
 - `@addon.on_call`: gets each ringing `Call`. `await addon.run()` (or `start()`/`stop()`) stays
   connected; it raises `AddonRemoved` when its owner removes it.
-- `await addon.call(address) -> Call`: calls its owner or an allowed connection (`call.state` is
-  `ringing`, or `ended` with `call.reason`).
-- `Call`: `.caller` (`.address`, `.name`), `.callee`, `.state`, `.reason`, `await answer()`,
+- `await addon.call(address, share=None) -> Call`: calls its owner, or with `share` someone
+  holding that share (`call.state` is `ringing`, or `ended` with `call.reason`).
+- `addon.set_shares([{"id": …, "label": …}])`, `call.share`, `@addon.on_share_request`: see
+  [Sharing](#sharing).
+- `Call`: `.caller` (`.address`, `.name`), `.share`, `.callee`, `.state`, `.reason`, `await answer()`,
   `await hangup()`, `frames()`, `await send(pcm)`, `clear()`, `on_key`, `on_hangup`,
   `await wait_active()`, `await wait_ended()`.
 - Audio is converted for you: apps send Opus, hardware phones PCMU; the bridge resamples.
@@ -146,7 +155,7 @@ A call to it:
 → {"t":"call.hangup","callId":"call_…"}   or   ← {"t":"call.state",…,"state":"ended","reason":"hangup"}
 ```
 
-A call from it (people only: its owner, or a connection on its list, by address):
+A call from it (people only: its owner, or, naming a share, someone who holds it; by address):
 
 ```json
 → {"t":"call.address","address":"jesse@hub.example"}
@@ -156,11 +165,13 @@ A call from it (people only: its owner, or a connection on its list, by address)
 ← {"t":"rtc.sdp","callId":"call_…","type":"answer","sdp":"…"}
 ```
 
-The people it calls see `call.ringing` with `from: {"label":"seat","address":"jesse+seat@hub.example","kind":"addon"}`.
+The people it calls see `call.ringing` with `from: {"label":"seat","address":"jesse+seat@hub.example","kind":"addon"}`
+(within a share: `"address":"jesse+seat+bookclub@hub.example"` and `"share":"Book club"`).
 
 Other rules: `{"t":"ping"}` → `{"t":"pong"}` keeps the socket open (every 25 s or so). An add-on
 may send only `ping`, `call.address`, `call.answer`, `call.hangup`, `rtc.sdp` and `rtc.ice`
-(without `peer`); anything else is answered with an `error`. One call at a time: a second call
+(without `peer`), and `addon.shares`, `addon.share.created` and `addon.share.refused`
+([Sharing](#sharing)); anything else is answered with an `error`. One call at a time: a second call
 to it while it's on one gets `busy`. Every refusal of a call to or from it — unknown, not
 allowed, add-ons off — ends `unavailable` (or `denied` with a `note`, for fair use). Removed by
 its owner, it gets `{"t":"wipe","reason":"removed"}` and the socket closes; it should forget its
@@ -173,16 +184,31 @@ and closes.
 Calls to and from add-ons on other servers use the federation feature `addons`
 ([federation-spec.md](federation-spec.md)): the `addon` call target
 (`{"kind":"addon","handle":"jesse","name":"seat"}`) and, for a call from an add-on, `CallBody.addon`
-(its name; `from` is its owner and `to` must be a person). The add-on's server checks the
-connection and the list; a call through a kids' phone or a guest is refused, and a server that
-doesn't list `addons` is never offered add-on calls (the caller hears "That server doesn't take
-add-on calls"). Keys travel as `call.key` on the server-pair stream.
+(its name; `from` is its owner and `to` must be a person). Shares add the feature
+`addon-shares`: the target's `share` (`{"kind":"addon","handle":"jesse","name":"seat","share":"bookclub"}`),
+`CallBody.addonShare` (`{"id":"bookclub","label":"Book club"}`, for a call from an add-on within a
+share) and `POST /fed/v1/addon-shares` (the shares a person there holds, for their server to list).
+The add-on's server decides every call by its own grants; a call through a kids' phone or a
+guest is refused, a server that doesn't list `addons` is never offered add-on calls ("That server
+doesn't take add-on calls"), and one that doesn't list `addon-shares` can't receive grants or
+calls into shares ("That server doesn't take shared add-ons yet"). Keys travel as `call.key` on
+the server-pair stream.
 
 ### The app's side (HTTP)
 
-`GET /api/addons` (yours, with `online` as the server sees it, and whether the server offers
-add-ons), `POST /api/addons/link {code, name, allow}`, `PUT /api/addons/:id/allow {connections}`,
-`DELETE /api/addons/:id`. Apps call one with `call.address` and send keys with `call.key`.
+- `GET /api/addons`: yours, with `online` as the server sees it, `shares` (`id`, `label`,
+  `address`, `holders` with `grantId`, `name`, `address`), `allowNote`, and whether the server
+  offers add-ons. `POST /api/addons/link {code, name}`. `DELETE /api/addons/:id`.
+- `GET /api/addons/people`: who you can give a share to (`ref` `conn:<id>` or `user:<id>`,
+  `name`, `address`, `where`). `POST /api/addons/:id/shares/:share/grants {to: ref}` →
+  `{grantId, name, address}`; `DELETE /api/addons/:id/grants/:grantId`.
+- `POST /api/addons/:id/share-requests {label, with: [ref]}` and
+  `GET /api/addons/:id/share-requests/:requestId` → `{id, label, state, shareId?, reason?,
+  people}`, `state` one of `waiting`, `created`, `refused`, `offline`, `timeout`.
+- `GET /api/addons/shared`: shares of other people's add-ons on this server given to you
+  (`owner`, `addon`, `share`, `address`); shares from other servers come with that connection in
+  `GET /api/connections` (`addonShares`). `POST /api/addons/:id/note/dismiss`.
+- Apps call an add-on or a share with `call.address` and send keys with `call.key`.
 
 ## Example: a thinking room
 
@@ -194,46 +220,55 @@ The Seat will use the bridge in a voice worker next to its own servers:
   bridge, answers with its own voice, and files the conversation where it always does.
 - The Seat can call you too, for a check-in at the time you planned.
 - Someone you share a project with (a co-founder, a coach) calls that project's address, and the
-  Seat works only inside that shared project; it knows it's them.
+  Seat works only inside that shared project; it knows it's them. The Seat offers each shared
+  project as a share, and its check-in calls to them name the share.
 
 The same pattern fits a dedicated "thinking room" phone whose only key is the Seat, or a
 conversation with yourself that feels more natural than typing.
 
-## Sharing (planned)
-
-> **Status: planned** (server 0.7.x). Today an add-on can be reached by its owner and by the
-> connections on its allow-list. The design below replaces that allow-list.
+## Sharing
 
 An add-on is personal by default: only its owner can call it at its address. Sharing is
 something the **add-on defines**: it says which parts of itself can be shared. Open Lounge Phone
 decides **who** gets each part and enforces it. A private assistant can't be opened up to
-several people as a whole. Only the pieces it offers can be shared, such as one shared project.
+several people as a whole; only the pieces it offers can be shared, such as one shared project.
+(Server 0.7.0 replaced the earlier whole-add-on allow-list with this: those entries were
+removed, and the owner sees a one-time note on the add-on's card.)
 
-**Shares.**
-- After connecting, the add-on sends the list of what it offers: `addon.shares {shares: [{id,
-  label}]}`, e.g. `{id: "bookclub", label: "Book club"}`. It replaces the previous list. The
-  `id` is 1–30 of `[a-z0-9-]`.
-- A share's only power today is **calls into that scope**; later shares may carry actions too
-  (see Phases).
+**Shares.** After connecting, and whenever the list changes, the add-on sends what it offers:
 
-**Each share has its own address:** `handle+addon+share@host`, e.g.
-`jesse+seat+bookclub@hub.openloungephone.app`.
-- A key on Ana's phone dials straight into the Book club project, with no mix-ups.
-- The plain add-on address (`jesse+seat@…`) stays the owner's alone.
+```json
+→ {"t":"addon.shares","shares":[{"id":"bookclub","label":"Book club"}]}
+```
 
-**Granting.**
-- On the add-on's card (Settings → Add-ons, and People), the owner gives a share to people: their
-  connections, or people in their spaces, here or on other servers.
-- The server stores the grants and refuses any call to a share address from someone without
-  one (`unavailable`, as for every refusal).
-- Revoking a grant, or the add-on dropping a share, takes effect at once and ends that person's
-  calls into it.
+- `id`: 1–30 of `[a-z0-9-]`, unique per add-on; `label`: 1–40 characters; up to 100 shares.
+- It replaces the previous list. A share left out is gone: its grants are deleted, and the
+  holders' calls into it end now. Sending it again later starts with nobody holding it.
+- A share's only power today is **calls into that scope**.
 
-**What the add-on is told.**
-- A call that came in through a share carries it: `call.ringing {from: {label, address},
-  share: {id, label, grantId}}`. `grantId` names the grant, so the add-on can attribute what
-  happens to it.
-- A call without `share` is from the owner.
+**Each share has its own address:** `handle+name+share@host`, e.g.
+`jesse+seat+bookclub@hub.openloungephone.app`. Its owner copies it from the card; a holder sees
+it under Connections and can put it on a key of their own phone (never a kids' phone). The
+plain add-on address (`jesse+seat@…`) stays the owner's alone; the owner calls there, not at a
+share's address.
+
+**Granting.** On the add-on's card (Settings → Add-ons) the owner gives a share to people:
+their connections, here or on other servers that list `addon-shares`, or people in their spaces.
+The server keeps the grants (by the person's server and stable account id) and refuses any call
+to a share address from someone without one, with `unavailable` like every refusal. A grant also
+stops working when that person is no longer the owner's connection (or, here, in one of the
+owner's spaces), and goes with the connection. **Revoke** takes it back and ends that person's
+calls into the share at once.
+
+**What the add-on is told.** A call that came in through a share carries it:
+
+```json
+← {"t":"call.ringing","callId":"call_…","from":{"label":"Ana","address":"ana@other.example"},
+   "share":{"id":"bookclub","label":"Book club","grantId":"ag_…"}}
+```
+
+- No `share`: its owner is calling.
+- `grantId` names the grant, so the add-on can attribute what happens to it.
 - The add-on must keep the conversation inside that scope (in the Seat: read and write only that
   shared project). The server can't see inside the add-on, so this part is the add-on's job, and
   it should be enforced by the add-on's own permissions, not only by instructions to a model.
@@ -241,44 +276,66 @@ several people as a whole. Only the pieces it offers can be shared, such as one 
   job is that nobody without a grant gets in.
 - A share holder gets voice access through the share. They don't become a user of the add-on.
 
-**New shared projects from the hub.**
-- The owner can ask from the card: **New shared project with…** (name, people). The server sends
-  `addon.share.request {requestId, label, by, with: [addresses]}`. `by` is the owner's address,
-  so the add-on can attribute and name the new scope.
-- The add-on creates the scope, sends its updated `addon.shares`, and answers
-  `addon.share.created {requestId, id}`.
-- The server then grants it to those people. The owner started it, so no second confirmation is
-  needed.
-- An add-on may also refuse with `addon.share.refused {requestId, reason}`.
+**New shared projects from the hub.** On the card, **New shared project with…** (a name, people)
+sends:
 
-**Calling out within a share.** `call.address {address, share?}`: the add-on may call its owner,
-or a person who holds that share, with the share named. The callee sees e.g.
-`SEAT · BOOK CLUB`.
+```json
+← {"t":"addon.share.request","requestId":"sr_…","label":"Garden","by":"jesse@hub.example",
+   "with":["ana@hub.example","bob@other.example"]}
+```
 
-**Who sees what (People tab).**
-- The owner sees their add-ons with their shares and who holds each.
-- A person who holds a share sees it as an entry, e.g. "Jesse's Seat · Book club", with Call.
-- Nobody else in the household sees a private add-on.
-- Holders on another server see it on that connection (like a connection's shared phones).
+- The add-on makes the scope, sends its updated `addon.shares` (with the new share), then
+  answers `→ {"t":"addon.share.created","requestId":"sr_…","id":"garden"}`. The server then gives
+  the share to the people in `with`; the owner started it, so no second confirmation is needed.
+- Or `→ {"t":"addon.share.refused","requestId":"sr_…","reason":"…"}` (shown to its owner as it is).
+- The app shows where it stands: waiting, done, refused with the reason, "offline" (it wasn't
+  connected, so it wasn't asked) or "didn't answer" (no answer within a minute; a late answer is
+  turned down with an `error`).
 
-**Protocol and federation:**
-- additive messages `addon.shares`, `addon.share.request`, `addon.share.created`,
-  `addon.share.refused`;
-- `call.ringing.share`, `call.address.share`;
-- the federation call target gains `share`, behind the `addon-shares` feature flag;
-- servers without it can't receive share grants or calls.
+**Calling out within a share.** `→ {"t":"call.address","address":"ana@other.example","share":"bookclub"}`:
+the add-on may call its owner, or a person who holds that share. The callee sees the add-on with
+the share: `call.ringing.from` `{"label":"seat","address":"jesse+seat+bookclub@hub.example",
+"kind":"addon","share":"Book club"}`, `SEAT · BOOK CLUB` on the browser phone. Without `share`
+it may call only its owner.
 
-**Migration:** existing allow-list entries are dropped. They granted the whole add-on, which this
-design rules out, and the owner is told on the card. Shares start empty.
+**Who sees what.**
+- The owner: Settings → Add-ons lists each add-on's shares and who holds each; Connections lists
+  their add-ons with who has each share.
+- A person holding a share on the same server: Connections lists it as "Jesse's seat · Book
+  club" with **Call**.
+- Holders on another server: their server is told (`POST /fed/v1/addon-shares`, feature
+  `addon-shares`) and shows it on that connection, like a connection's shared phones.
+- Nobody else, in the owner's household or anywhere, sees a private add-on or its shares.
+
+**Python.** The bridge (0.2.0) does the messages:
+
+```python
+addon.set_shares([{"id": "bookclub", "label": "Book club"}])   # sent now and after reconnects
+
+@addon.on_call
+async def talk(call):
+    scope = call.share.id if call.share else None   # None: its owner
+    ...
+
+@addon.on_share_request
+async def make(req):                  # req.label, req.by, req.with_, req.request_id
+    return await create_project(req.label)   # its share id; or raise ShareRefused("why")
+
+await addon.call("ana@other.example", share="bookclub")
+```
+
+Code written before shares keeps working: it sends no shares, and only its owner reaches it.
 
 ## Phases
 
-1. Server, apps and phones: device mode `addon`, sub-addresses, allow-lists, `call.address`,
+1. Server, apps and phones: device mode `addon`, sub-addresses, `call.address`,
    labels, the federation flag and feature, `ADDONS`, fair use, audit; companion
    **Settings → Add-ons**. **Done** (server 0.6.0, unreleased; firmware 0.9.3 shows the label).
 2. The bridge (Python) with the echo demo and an end-to-end test. **Done.**
 3. Thinking Room's Seat on the bridge (in its own repository).
-4. **Sharing** (above): add-on-defined shares, one address per share, grants and the People tab.
+4. **Sharing** (above): add-on-defined shares, one address per share, grants, share requests,
+   the federation feature `addon-shares`, bridge 0.2.0. **Done** (server 0.7.0, unreleased; the
+   hardware phone still shows `SEAT - ADD-ON` for a call within a share).
 5. Later: shares that carry actions too (the add-on declares them, e.g. "add a task", and the hub
    shows them as buttons; the add-on does the work); add-ons that receive voicemail or send
    notices; keys from hardware phones during a call (today only the apps' keypad sends them).
