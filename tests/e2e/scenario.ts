@@ -136,7 +136,9 @@ export async function pairAndCall({ base, setupToken }: Target): Promise<void> {
   for (;;) {
     const config = await device.next("config");
     if (config.missed) {
-      expect(config.missed).toEqual([{ from: "Mom" }]);
+      // A message (servers since 0.7.0 say so with `kind`; older ones send `from` only).
+      expect(config.missed).toEqual([expect.objectContaining({ from: "Mom" })]);
+      expect(config.missed[0]?.kind ?? "voicemail").toBe("voicemail");
       break;
     }
   }
