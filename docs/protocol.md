@@ -510,7 +510,7 @@ Sent after authentication and whenever guardians change settings.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24) }[] | yes | Only mapped buttons are listed. |
+| `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24), addon?: `true` }[] | yes | Only mapped buttons are listed. |
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `utcOffsetMin` | integer (≥-720, ≤840) |  | The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock knows local time: hardware phones install updates overnight. |

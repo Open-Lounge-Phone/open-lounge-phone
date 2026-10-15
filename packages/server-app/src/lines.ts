@@ -99,6 +99,8 @@ const BlockBody = z.object({ entry: Entry });
 const PhoneLine = z.object({
   address: z.string().trim().min(3).max(300),
   label: z.string().trim().min(1).max(24),
+  /** Also put it on this key (0–15), in the same step. */
+  key: z.number().int().min(0).max(15).optional(),
 });
 
 /** A line's address on this server. */
@@ -484,8 +486,13 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
       ? `${addr.handle}@${addr.host}`
       : formatAddonAddress(addon as AddonAddress);
     const id = await store.lines.addToPhone(p.device.id, address, b.label);
+    if (b.key !== undefined) await store.setButton(p.device.id, b.key, id);
     await live.refreshDevice(user.householdId, p.device.id);
-    await auditPhone(env, c, p.device, "phone.line", { contactId: id, address });
+    await auditPhone(env, c, p.device, "phone.line", {
+      contactId: id,
+      address,
+      ...(b.key !== undefined ? { index: b.key } : {}),
+    });
     return c.json({ id });
   });
 

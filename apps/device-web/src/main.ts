@@ -646,6 +646,12 @@ function labelFor(index: number): string | undefined {
   return config?.buttons.find((b) => b.index === index)?.label;
 }
 
+/** Who a key calls, as the display shows it while calling: an add-on marked as one. */
+function callLabelFor(index: number): string | undefined {
+  const b = config?.buttons.find((x) => x.index === index);
+  return b?.addon ? addonLabel(b.label) : b?.label;
+}
+
 function step(input: DeviceInput): void {
   const prev = deviceState;
   // What this phone last called, for MENU 8 Redial (not on a Lounge phone: it forgets people).
@@ -706,7 +712,7 @@ function step(input: DeviceInput): void {
   // Transferred (attended): the call goes on under a new id; the old audio goes.
   if (s.kind === "incall" && call && call.callId !== s.callId) endCall();
   if (s.kind === "dialing") {
-    activeLabel = labelFor(s.button);
+    activeLabel = callLabelFor(s.button);
   } else if (s.kind === "incoming") {
     // An add-on keeps its label in the call too ("IN CALL 00:12" / "SEAT · ADD-ON").
     activeLabel = s.addon ? addonLabel(s.from) : s.from;

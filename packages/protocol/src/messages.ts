@@ -857,6 +857,10 @@ export const PairDone = z
 export const ButtonConfig = z.object({
   index: z.number().int().min(0).max(15),
   label: z.string().min(1).max(24),
+  addon: z
+    .literal(true)
+    .optional()
+    .describe("The key calls an add-on: show it as one while calling (e.g. `ECHO · ADD-ON`)."),
 });
 
 export const Config = z
@@ -1066,7 +1070,9 @@ export const CallRinging = z
       .object({
         id: ShareId,
         label: ShareLabel,
-        grantId: Id.describe("The grant the caller holds (stable until it's revoked)."),
+        grantId: Id.describe(
+          "The grant the caller holds (stable until it's revoked); `owner` when its owner calls within the share.",
+        ),
       })
       .optional()
       .describe(

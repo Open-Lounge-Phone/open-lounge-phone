@@ -14,7 +14,7 @@ import {
   type ShareHolder,
   type ShareRequest,
 } from "@openloungephone/db";
-import { ADDON_NAME_RE, parseAddonAddress } from "@openloungephone/federation";
+import { ADDON_NAME_RE, formatAddonAddress, parseAddonAddress } from "@openloungephone/federation";
 import type {
   AddonAbout,
   DeviceToServer,
@@ -38,6 +38,10 @@ export const ADDONS_OFF = "This server doesn't offer add-ons. Its operator can t
 export const ADDON_CODE = "That code is for an add-on: link it under Settings → Add-ons.";
 /** The add-ons screen, given a phone's code. */
 export const PHONE_CODE = "That code is for a phone: add it under Phones.";
+/** `call.ringing.share.grantId` when its owner calls within one of its shares. */
+export const OWNER_GRANT = "owner";
+/** Add-on addresses one account may keep in its contacts. */
+export const MAX_ADDON_CONTACTS = 50;
 /** How many add-ons one account may link. */
 export const MAX_ADDONS_PER_ACCOUNT = 10;
 /** How long the owner's "New shared project with…" waits for the add-on's answer. */
@@ -230,6 +234,10 @@ export async function addonAccess(
   }
   const share = await store.addons.share(addon.id, shareId);
   if (!share) return undefined;
+  // Its owner may talk to it within any of its shares too (the add-on is told `owner`).
+  if (who.host === LOCAL_HOST && who.accountId === addon.accountId) {
+    return { share: { id: share.id, label: share.label, grantId: OWNER_GRANT } };
+  }
   const grant = await store.addons.grantFor(addon.id, shareId, who.host, who.accountId);
   if (!grant || !(await stillReachable(env, addon.accountId, who))) return undefined;
   return { share: { id: share.id, label: share.label, grantId: grant.id } };
@@ -490,6 +498,10 @@ const GrantBody = z.object({ to: PersonRef });
 const AddonAddressText = z.string().trim().min(5).max(300);
 const MutedBody = z.object({ address: AddonAddressText, muted: z.boolean() });
 const LeaveBody = z.object({ address: AddonAddressText });
+const ContactBody = z.object({
+  address: AddonAddressText,
+  label: z.string().trim().min(1).max(40).optional(),
+});
 const RequestBody = z.object({
   label: z.string().trim().min(1, "Give it a name.").max(40),
   with: z.array(PersonRef).max(MAX_HOLDERS_PER_SHARE),
@@ -668,6 +680,74 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     if (conn?.state !== "active" || !conn.peerAccount) return undefined;
     return { a, host, ownerAccount: conn.peerAccount, conn };
   };
+
+  /**
+   * An add-on (or one of its shares) this account may call now, by address: its own, a share of
+   * its own, or a share given to it (here, or by a connection's server). Answers its address in
+   * canonical form and what to call it, or undefined.
+   */
+  const callable = async (account: Account, address: string) => {
+    const a = parseAddonAddress(address);
+    if (!a || !env.addons) return undefined;
+    const host = a.host === ownHost(env) ? LOCAL_HOST : a.host;
+    const canonical = formatAddonAddress({ ...a, host: host || ownHost(env) });
+    if (host === LOCAL_HOST) {
+      const addon = await store.addons.byAddress(a.handle, a.name);
+      const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+      const access = addon && (await addonAccess(env, addon, who, a.share));
+      if (!addon || !access) return undefined;
+      return {
+        address: canonical,
+        label: access.share ? `${addon.name} · ${access.share.label}` : addon.name,
+      };
+    }
+    const conn = await store.connections.find(account.id, host, a.handle);
+    if (conn?.state !== "active" || !a.share) return undefined;
+    const held = (await store.addons.received(conn.id)).find(
+      (x) => x.addon === a.name && x.share === a.share,
+    );
+    return held && { address: canonical, label: `${a.name} · ${held.label}` };
+  };
+
+  /** Add-ons in your contacts (Home's call list): each with whether you can call it now. */
+  api.get("/addons/contacts", async (c) => {
+    const account = c.get("account");
+    const out = [];
+    for (const x of await store.addons.contacts(account.id)) {
+      out.push({ ...x, ok: !!(await callable(account, x.address)) });
+    }
+    return c.json(out);
+  });
+
+  /** Adds an add-on (or a share) you may call to your contacts. */
+  api.put("/addons/contacts", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, ContactBody);
+    if (b instanceof Response) return b;
+    const it = await callable(account, b.address);
+    if (!it) return c.json({ error: "You can't call that add-on." }, 404);
+    const have = await store.addons.contacts(account.id);
+    if (!have.some((x) => x.address === it.address) && have.length >= MAX_ADDON_CONTACTS) {
+      return c.json(
+        { error: `You can keep up to ${MAX_ADDON_CONTACTS} add-ons in contacts.` },
+        403,
+      );
+    }
+    const label = b.label === undefined ? it.label : cleanText(b.label, 40);
+    if (!label) return c.json({ error: "Use plain words for its name." }, 400);
+    await store.addons.setContact(account.id, it.address, label, env.now());
+    await notify(account.id, { t: "connections.changed" });
+    return c.json({ address: it.address, label });
+  });
+
+  api.delete("/addons/contacts", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, LeaveBody);
+    if (b instanceof Response) return b;
+    await store.addons.removeContact(account.id, b.address.trim().toLowerCase());
+    await notify(account.id, { t: "connections.changed" });
+    return c.body(null, 204);
+  });
 
   /**
    * "Stop its calls" (or let them through again): a holder's own choice, kept and enforced by

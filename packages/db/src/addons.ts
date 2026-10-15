@@ -466,6 +466,34 @@ export class AddonStore {
     );
   }
 
+  // --- contacts (Home's call list in the app) ----------------------------------------------
+
+  async contacts(accountId: string): Promise<{ address: string; label: string }[]> {
+    return this.sql.all(
+      "SELECT address, label FROM addon_contacts WHERE account_id = ? ORDER BY created_at, rowid",
+      accountId,
+    );
+  }
+
+  async setContact(accountId: string, address: string, label: string, now: number): Promise<void> {
+    await this.sql.run(
+      `INSERT INTO addon_contacts (account_id, address, label, created_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (account_id, address) DO UPDATE SET label = excluded.label`,
+      accountId,
+      address.toLowerCase(),
+      label,
+      now,
+    );
+  }
+
+  async removeContact(accountId: string, address: string): Promise<void> {
+    await this.sql.run(
+      "DELETE FROM addon_contacts WHERE account_id = ? AND address = ?",
+      accountId,
+      address.toLowerCase(),
+    );
+  }
+
   /** Drops one share another server told us we hold (we gave it back). */
   async dropReceived(connectionId: string, addon: string, share: string): Promise<void> {
     await this.sql.run(

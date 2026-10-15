@@ -408,9 +408,14 @@ describe("sharing add-ons on one server", () => {
     expect(await anaApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
     anaApp.write({ t: "call.address", address: "jesse+seat@a.test" });
     expect(await anaApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
-    // Its owner calls its own address (no share), not a share's.
+    // Its owner calls it at its own address, or within any of its shares (told `owner`).
     const app = await a.connectApp(jesse.token);
     app.write({ t: "call.address", address: "jesse+seat+bookclub@a.test" });
+    const within = await seat.conn.next("call.ringing");
+    expect(within.share).toEqual({ id: "bookclub", label: "Book club", grantId: "owner" });
+    seat.conn.write({ t: "call.hangup", callId: within.callId });
+    await app.nextState("ended");
+    app.write({ t: "call.address", address: "jesse+seat+nope@a.test" });
     expect(await app.nextState("ended")).toMatchObject({ reason: "unavailable" });
     app.write({ t: "call.address", address: "jesse+seat@a.test" });
     expect((await seat.conn.next("call.ringing")).share).toBeUndefined();
@@ -935,5 +940,75 @@ describe("sharing add-ons across servers", () => {
     expect(await bobsShares()).toEqual([
       { ...shares[0], address: "jesse+seat+x@a.test", muted: false },
     ]);
+  });
+});
+
+describe("making an add-on easy to reach", () => {
+  it("contacts: only add-ons and shares you may call; plain names", async () => {
+    const net = new Network();
+    const a = await net.server("a.test", { env: { addons: true } });
+    const jesse = await a.person("jesse", "Jesse");
+    const ana = await a.person("ana", "Ana");
+    const anaConn = (await connect(a, jesse, a, ana)).aSide;
+    const seat = await linkAddon(a, jesse);
+    await declare(a, seat, [BOOK_CLUB]);
+    const put = (token: string, address: string, label?: string) =>
+      a.http("/addons/contacts", {
+        method: "PUT",
+        token,
+        body: { address, ...(label ? { label } : {}) },
+      });
+    expect((await put(jesse.token, "Jesse+Seat@a.test")).json).toEqual({
+      address: "jesse+seat@a.test",
+      label: "seat",
+    });
+    expectStatus(await put(jesse.token, "jesse+seat+bookclub@a.test"), 200);
+    // Not hers (yet), and not someone's made-up address.
+    expectStatus(await put(ana.token, "jesse+seat+bookclub@a.test"), 404);
+    expectStatus(await put(ana.token, "jesse+seat@a.test"), 404);
+    await give(a, jesse, seat.id, "bookclub", `conn:${anaConn}`);
+    expect((await put(ana.token, "jesse+seat+bookclub@a.test")).json.label).toBe(
+      "seat · Book club",
+    );
+    expectStatus(await put(ana.token, "jesse+seat+bookclub@a.test", "Mom‮"), 400);
+    expect((await a.http("/addons/contacts", { token: jesse.token })).json).toEqual([
+      { address: "jesse+seat@a.test", label: "seat", ok: true },
+      { address: "jesse+seat+bookclub@a.test", label: "seat · Book club", ok: true },
+    ]);
+    // Taken back: still listed, but it says so.
+    await a.http(`/connections/${anaConn}`, { method: "DELETE", token: jesse.token });
+    expect((await a.http("/addons/contacts", { token: ana.token })).json).toEqual([
+      { address: "jesse+seat+bookclub@a.test", label: "seat · Book club", ok: false },
+    ]);
+    const del = await a.api.request("/addons/contacts", {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${ana.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ address: "jesse+seat+bookclub@a.test" }),
+    });
+    expect(del.status).toBe(204);
+    expect((await a.http("/addons/contacts", { token: ana.token })).json).toEqual([]);
+  });
+
+  it("put on a key in one step; the phone knows the key calls an add-on", async () => {
+    const net = new Network();
+    const a = await net.server("a.test", { env: { addons: true } });
+    const jesse = await a.person("jesse", "Jesse");
+    const seat = await linkAddon(a, jesse);
+    const phone = await a.pairDevice(jesse.token, "Desk", { forMe: true });
+    const desk = await a.connectDevice(phone.deviceId as string, phone.key?.pair as CryptoKeyPair);
+    const res = await a.http(`/devices/${phone.deviceId}/lines`, {
+      method: "PUT",
+      token: jesse.token,
+      body: { address: "jesse+seat@a.test", label: "Seat", key: 1 },
+    });
+    expectStatus(res, 200);
+    await vi.waitFor(() =>
+      expect(desk.all("config").at(-1)?.buttons).toEqual([
+        { index: 1, label: "Seat", addon: true },
+      ]),
+    );
+    desk.write({ t: "hook", state: "up" });
+    desk.write({ t: "button", index: 1 });
+    await seat.conn.next("call.ringing");
   });
 });

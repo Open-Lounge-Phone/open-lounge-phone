@@ -2310,10 +2310,20 @@ export class HouseholdHub {
       this.remember(peer);
     }
     const byId = new Map(contacts.map((c) => [c.id, c]));
+    // Keys that call an add-on say so (the phone shows it as one while calling).
+    const addonKeys = new Set(
+      (await store.lines.onPhone(peer.id))
+        .filter((l) => parseAddonAddress(l.address))
+        .map((l) => l.id),
+    );
     const mapped = [...buttons]
-      .map(([index, userId]) => ({ index, contact: byId.get(userId) }))
+      .map(([index, userId]) => ({ index, userId, contact: byId.get(userId) }))
       .filter((b) => b.contact?.deviceCanCall)
-      .map((b) => ({ index: b.index, label: b.contact?.label ?? "" }));
+      .map((b) => ({
+        index: b.index,
+        label: b.contact?.label ?? "",
+        ...(addonKeys.has(b.userId) ? { addon: true as const } : {}),
+      }));
     const end = quiet ? nextQuietChange(schedule, now) : undefined;
     let quietUntil: string | undefined;
     if (end) {

@@ -1683,6 +1683,12 @@ describe("0032 add-on about and mutes", () => {
     expect(await s.addons.leave(g?.id ?? "", guardian.accountId)).toBe(false);
     expect(await s.addons.leave(g?.id ?? "", bob.id)).toBe(true);
     expect(await s.addons.grants(seat.id)).toEqual([]);
+    // Contacts: by address, one row each, removable.
+    await s.addons.setContact(bob.id, "Mom+Seat@x", "seat", T0);
+    await s.addons.setContact(bob.id, "mom+seat@x", "Seat", T0);
+    expect(await s.addons.contacts(bob.id)).toEqual([{ address: "mom+seat@x", label: "Seat" }]);
+    await s.addons.removeContact(bob.id, "MOM+SEAT@x");
+    expect(await s.addons.contacts(bob.id)).toEqual([]);
     old.db.close();
   });
 });

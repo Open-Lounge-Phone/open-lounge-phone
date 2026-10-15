@@ -1278,6 +1278,10 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 24
+                },
+                "addon": {
+                  "type": "boolean",
+                  "const": true
                 }
               },
               "required": ["index", "label"]

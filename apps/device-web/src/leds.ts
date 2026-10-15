@@ -19,7 +19,8 @@ export type LedMode =
 export type Connection = "connecting" | "online" | "offline";
 
 export interface DeviceConfig {
-  buttons: { index: number; label: string }[];
+  /** `addon`: the key calls an add-on (shown as one while calling). */
+  buttons: { index: number; label: string; addon?: true }[];
   quiet: boolean;
   /** Local "HH:MM" when current quiet hours end. */
   quietUntil?: string;
