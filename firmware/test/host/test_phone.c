@@ -33,8 +33,8 @@ static void in_call(phone_state_t *s) {
 TEST(phone_hold_add_merge) {
   phone_state_t s;
   in_call(&s);
-  phone_action_t a[2];
-  CHECK(phone_actions(&s, a) == 2 && a[0] == ACT_HOLD && a[1] == ACT_TRANSFER);
+  phone_action_t a[3];
+  CHECK(phone_actions(&s, a) == 3 && a[0] == ACT_HOLD && a[1] == ACT_TRANSFER && a[2] == ACT_MUTE);
   phone_action(&s, ACT_HOLD, emit);
   CHECK(s.kind == PH_OFFHOOK);
   CHECK_STR(s.held, "c1");
@@ -46,7 +46,7 @@ TEST(phone_hold_add_merge) {
   server(&s, "{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"active\"}");
   CHECK(s.kind == PH_INCALL && s.connected);
   CHECK_STR(s.held, "c1");
-  CHECK(phone_actions(&s, a) == 2 && a[0] == ACT_MERGE);
+  CHECK(phone_actions(&s, a) == 3 && a[0] == ACT_MERGE);
   s_n = 0;
   phone_action(&s, ACT_MERGE, emit);
   CHECK(s.kind == PH_INROOM && !s.room_id[0]);
@@ -98,7 +98,7 @@ TEST(phone_transfer_blind_and_attended) {
 TEST(phone_room_mute_and_no_actions) {
   phone_state_t s;
   phone_init(&s);
-  phone_action_t a[2];
+  phone_action_t a[3];
   CHECK(phone_actions(&s, a) == 0);
   phone_action(&s, ACT_HOLD, emit);  // not offered: nothing
   CHECK(s.kind == PH_IDLE);
@@ -111,7 +111,27 @@ TEST(phone_room_mute_and_no_actions) {
   CHECK_STR(s_sent[0], "{\"t\":\"room.mute\",\"roomId\":\"r1\",\"muted\":true}");
   in_call(&s);
   s.held_by_them = true;
-  CHECK(phone_actions(&s, a) == 0);
+  CHECK(phone_actions(&s, a) == 1 && a[0] == ACT_MUTE);  // only mute while they hold you
+}
+
+TEST(phone_mutes_a_call_locally) {
+  phone_state_t s;
+  in_call(&s);
+  phone_action(&s, ACT_MUTE, emit);
+  CHECK(s.muted && s.kind == PH_INCALL);
+  CHECK(s_n == 0);  // the phone's own mic: nothing goes to the server
+  phone_action_t a[3];
+  CHECK(phone_actions(&s, a) == 3 && a[2] == ACT_UNMUTE);
+  // They hold us and come back: still muted.
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"active\",\"hold\":\"them\"}");
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"active\"}");
+  CHECK(s.muted);
+  phone_action(&s, ACT_UNMUTE, emit);
+  CHECK(!s.muted && s_n == 0);
+  // The digits: 1 hold / resume / merge, 2 transfer, 3 mute.
+  CHECK(phone_action_digit(ACT_HOLD) == 1 && phone_action_digit(ACT_RESUME) == 1);
+  CHECK(phone_action_digit(ACT_MERGE) == 1 && phone_action_digit(ACT_TRANSFER) == 2);
+  CHECK(phone_action_digit(ACT_MUTE) == 3 && phone_action_digit(ACT_UNMUTE) == 3);
 }
 
 TEST(phone_voicemail_offer_keeps_ticket) {
@@ -249,4 +269,26 @@ TEST(phone_free_lounge_phone_told_to_sign_in_for_a_line) {
   phone_button(&s, 0, emit);
   server(&s, "{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"ended\",\"reason\":\"denied\"}");
   CHECK(s.kind == PH_OFFHOOK && !s.sign_in);
+}
+
+TEST(phone_lost_connection_ends_the_call_saying_why) {
+  phone_state_t s;
+  in_call(&s);
+  phone_lost(&s, emit);
+  CHECK(s.kind == PH_OFFHOOK && s.lost);
+  CHECK_STR(s.last_end, "error");
+  CHECK_STR(s_sent[0], "{\"t\":\"call.hangup\",\"callId\":\"c1\",\"lost\":true}");
+  // The other side gave up first: the server's note says so.
+  in_call(&s);
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":\"error\","
+             "\"note\":\"The connection was lost\"}");
+  CHECK(s.kind == PH_OFFHOOK && s.lost);
+  in_call(&s);
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":\"error\"}");
+  CHECK(s.kind == PH_OFFHOOK && !s.lost);
+  // Outside a call there's nothing to lose.
+  phone_init(&s);
+  s_n = 0;
+  phone_lost(&s, emit);
+  CHECK(s.kind == PH_IDLE && s_n == 0);
 }

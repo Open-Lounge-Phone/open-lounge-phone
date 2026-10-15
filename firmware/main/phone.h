@@ -1,6 +1,9 @@
 // The server's note when a Lounge phone with nobody signed in calls a public line (core
 // `SIGN_IN_FOR_LINES_NOTE`): the phone shows SIGN IN TO CALL.
 #define PHONE_SIGN_IN_NOTE "Sign in at this phone to call a public line"
+// The server's note when a call's audio connection was lost (core `CONNECTION_LOST_NOTE`): the
+// phone shows CONNECTION LOST.
+#define PHONE_LOST_NOTE "The connection was lost"
 
 // A C mirror of `deviceStep` (packages/core/src/device.ts): the handset state machine every
 // Open Lounge Phone runs: hook, keys, incoming/outgoing calls, rooms, the voicemail offer, and the
@@ -28,7 +31,7 @@ typedef struct {
   bool connected;      // incall
   bool held_by_them;   // incall
   char room_id[65];    // inroom ("" while joining)
-  bool muted;          // inroom
+  bool muted;          // incall: MENU 3 (local: the mic sends silence); inroom: room.mute
   bool recorded;       // incall / inroom: announced as recorded (status LED + REC)
   char vm_ticket[129];  // voicemail: the offer's single-use ticket
   int vm_max_ms;       // voicemail: the longest message accepted
@@ -49,6 +52,8 @@ typedef struct {
   bool sign_in;
   // incoming: the caller is an add-on (call.ringing from.kind "addon"): shown "SEAT - ADD-ON".
   bool addon;
+  // offhook: the last call's audio connection dropped and couldn't be restored (CONNECTION LOST).
+  bool lost;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */
@@ -66,11 +71,17 @@ void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_f
 void phone_extension(phone_state_t *s, const char *number, phone_emit_fn emit);
 /** The phone ends its call itself (e.g. the media failed): hang up, stay off the hook. */
 void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit);
+/** The call's audio connection dropped and didn't come back (core input `lost`): hang up with
+ * `lost`, so the other side is told why, and show CONNECTION LOST. */
+void phone_lost(phone_state_t *s, phone_emit_fn emit);
 /** call.ringing / call.state / room.state / room.ended. Returns false for other messages. */
 bool phone_server(phone_state_t *s, const cJSON *msg, phone_emit_fn emit);
 const char *phone_kind_name(phone_kind_t k);
-/** The actions MENU offers now (core `callActions`), in order; returns how many (≤ 2). */
-int phone_actions(const phone_state_t *s, phone_action_t out[2]);
+/** The actions MENU offers now (core `callActions`), in order; returns how many (≤ 3). */
+int phone_actions(const phone_state_t *s, phone_action_t out[3]);
+/** The digit an action has on the call screen (core `callActionDigit`): 1 hold / resume /
+ * merge, 2 transfer, 3 mute / unmute. */
+int phone_action_digit(phone_action_t a);
 /** Do one (ignored unless phone_actions offers it). */
 void phone_action(phone_state_t *s, phone_action_t a, phone_emit_fn emit);
 const char *phone_action_name(phone_action_t a);

@@ -113,16 +113,21 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       if (s->held_by_them) return *name ? set2(out, "ON HOLD", name) : set1(out, "ON HOLD");
       if (!s->connected || in->call_started_ms < 0)
         return *name ? set2(out, "CONNECTING", name) : set1(out, "CONNECTING");
+      // Never a timer while there's no audio: say it's coming back.
+      if (in->reconnecting) return *name ? set2(out, "RECONNECTING", name) : set1(out, "RECONNECTING");
       {
         char t[16];
         clock_text(t, sizeof t, in->now_ms - in->call_started_ms);
-        snprintf(buf, sizeof buf, "%s %s", s->recorded ? "REC" : "IN CALL", t);
+        const char *what = s->muted ? (s->recorded ? "REC MUTED" : "MUTED")
+                                    : (s->recorded ? "REC" : "IN CALL");
+        snprintf(buf, sizeof buf, "%s %s", what, t);
         return *name ? set2(out, buf, name) : set1(out, buf);
       }
     case PH_INROOM:
       if (!s->room_id[0]) return set1(out, "JOINING ROOM");
       return set2(out, s->recorded ? "REC IN ROOM" : "IN ROOM", s->muted ? "MUTED" : "");
     case PH_OFFHOOK: {
+      if (s->lost) return set2(out, "CONNECTION LOST", "PRESS A KEY");
       if (s->held[0]) return *name ? set2(out, "ON HOLD", name) : set2(out, "CALL ON HOLD", "MENU 1 RESUMES");
       if (s->callback) return set2(out, "PLACE KEPT", "WE'LL CALL BACK");
       // A free Lounge phone tried a public line: only someone signed in can call one.

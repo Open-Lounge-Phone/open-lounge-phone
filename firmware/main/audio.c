@@ -24,7 +24,7 @@ static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static int16_t s_ring[RING];
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
-static bool s_offhook, s_call, s_held;
+static bool s_offhook, s_call, s_held, s_muted;
 static int16_t *s_rec_buf;  // leaving a voicemail: the mic goes here (no call needed)
 static const int16_t *s_play_buf;  // playing a voicemail to the earpiece
 static size_t s_play_len, s_play_pos;
@@ -174,6 +174,12 @@ void audio_hold(bool held) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+void audio_mute(bool muted) {
+  taskENTER_CRITICAL(&s_lock);
+  s_muted = muted;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
 static void task(void *arg) {
   int16_t mic[DSP_FRAME], out[DSP_FRAME];
   uint8_t ulaw[DSP_FRAME];
@@ -184,6 +190,7 @@ static void task(void *arg) {
   for (;;) {
     taskENTER_CRITICAL(&s_lock);
     bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
+    bool muted = s_muted;
     bool rec = s_rec_buf != NULL;
     bool play = s_play_buf != NULL;
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
@@ -194,7 +201,8 @@ static void task(void *arg) {
     taskEXIT_CRITICAL(&s_lock);
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
-    bool mic_want = (call && !held) || loop_ms > 0 || rec;
+    // Muted (MENU 3): the codec's mic is switched off too, not just left out.
+    bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec;
     if (mic_want != mic_now) {
       s_dev->mic(mic_want);
       mic_now = mic_want;
@@ -229,7 +237,8 @@ static void task(void *arg) {
       }
     }
     if (call && sender) {
-      if (held) memset(mic, 0, sizeof mic);  // on hold: silence keeps the connection alive
+      // On hold or muted: silence keeps the connection alive.
+      if (held || muted || !mic_now) memset(mic, 0, sizeof mic);
       dsp_ulaw_encode_buf(mic, ulaw, DSP_FRAME);
       sender(ulaw, DSP_FRAME, pts);
       taskENTER_CRITICAL(&s_lock);

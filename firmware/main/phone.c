@@ -88,6 +88,19 @@ void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit) {
   }
 }
 
+void phone_lost(phone_state_t *s, phone_emit_fn emit) {
+  if (s->kind != PH_INCALL || !s->call_id[0]) return;
+  char held[65];
+  CPY(held, s->held);
+  cJSON *m = msg("call.hangup");
+  cJSON_AddStringToObject(m, "callId", s->call_id);
+  cJSON_AddBoolToObject(m, "lost", true);
+  emit(m);
+  to_offhook(s, "error");
+  CPY(s->held, held);
+  s->lost = true;
+}
+
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
   if (s->kind == PH_OFFHOOK) {
     char held[65];
@@ -297,8 +310,10 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
           s->kind = ringing ? PH_DIALING : PH_INCALL;
           CPY(s->call_id, next);
         } else {
+          const char *note = str(m, "note");
           to_offhook(s, reason ? reason : "hangup");
           CPY(s->held, held);
+          s->lost = note && !strcmp(note, PHONE_LOST_NOTE);
         }
       } else if (!strcmp(state, "active")) {
         const char *hold = str(m, "hold");
@@ -314,17 +329,32 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
   return true;
 }
 
-int phone_actions(const phone_state_t *s, phone_action_t out[2]) {
+int phone_action_digit(phone_action_t a) {
+  switch (a) {
+    case ACT_TRANSFER: return 2;
+    case ACT_MUTE:
+    case ACT_UNMUTE: return 3;
+    default: return 1;
+  }
+}
+
+int phone_actions(const phone_state_t *s, phone_action_t out[3]) {
   if (s->kind == PH_INCALL && s->connected) {
+    phone_action_t mute = s->muted ? ACT_UNMUTE : ACT_MUTE;
     if (s->held[0]) {
       out[0] = ACT_MERGE;
       out[1] = ACT_TRANSFER;
-      return 2;
+      out[2] = mute;
+      return 3;
     }
-    if (s->held_by_them) return 0;
+    if (s->held_by_them) {
+      out[0] = mute;
+      return 1;
+    }
     out[0] = ACT_HOLD;
     out[1] = ACT_TRANSFER;
-    return 2;
+    out[2] = mute;
+    return 3;
   }
   if (s->kind == PH_OFFHOOK && s->held[0]) {
     out[0] = ACT_RESUME;
@@ -350,7 +380,7 @@ static void emit_hold(phone_emit_fn emit, const char *call_id, bool hold) {
 }
 
 void phone_action(phone_state_t *s, phone_action_t a, phone_emit_fn emit) {
-  phone_action_t offered[2];
+  phone_action_t offered[3];
   int n = phone_actions(s, offered);
   bool ok = false;
   for (int i = 0; i < n; i++) ok |= offered[i] == a;
@@ -393,6 +423,7 @@ void phone_action(phone_state_t *s, phone_action_t a, phone_emit_fn emit) {
     case ACT_MUTE:
     case ACT_UNMUTE: {
       s->muted = a == ACT_MUTE;
+      if (s->kind == PH_INCALL) break;  // a call's mic is the phone's own: nobody else is told
       cJSON *m = msg("room.mute");
       cJSON_AddStringToObject(m, "roomId", s->room_id);
       cJSON_AddBoolToObject(m, "muted", s->muted);

@@ -37,6 +37,8 @@ void audio_play(const int16_t *samples, size_t count);
 size_t audio_played(void);
 /** This phone put the call on hold: the mic is off and silence is sent; nothing plays. */
 void audio_hold(bool held);
+/** MENU 3 in a call: the mic is muted (silence is sent); the other side is still heard. */
+void audio_mute(bool muted);
 /** A received mu-law frame (any length) from the call. Safe from any task. */
 void audio_rx_ulaw(const uint8_t *data, size_t n);
 

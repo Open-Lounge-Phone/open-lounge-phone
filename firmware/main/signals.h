@@ -11,6 +11,7 @@ typedef enum {
   LED_RINGING,   // incoming call (fast)
   LED_BREATHE,   // missed calls / voicemail waiting
   LED_RECORDING, // double flash every second: this call or room is recorded
+  LED_MUTED,     // two slow blinks every 2 s: in a call or a room with the mic muted
 } led_pattern_t;
 
 typedef enum { BEEP_KEY, BEEP_PAIR, BEEP_ERROR, BEEP_OK, BEEP_NOTICE } beep_t;

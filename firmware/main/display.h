@@ -22,7 +22,10 @@ void display_epd_probe(void);
 
 /** Starts the display task (renders the latest text in the background). */
 void display_start(const display_driver_t *drv);
-/** Show up to 4 lines of text (≤ 2 lines use large type, as the protocol's strip model). */
+/** Lines a text screen holds: the menu's title and five rows fit the 2.13-inch at 2x. */
+#define SCREEN_LINES 6
+/** Show up to SCREEN_LINES lines of text (≤ 2 lines use large type, as the protocol's strip
+ * model). */
 void display_text(const char *const *lines, int n);
 /** Show a ready-made framebuffer instead of text (width*height bits packed row after row with no
  * padding, as gfx draws them; 1 = black); NULL goes back

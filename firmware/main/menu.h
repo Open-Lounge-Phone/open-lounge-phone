@@ -3,7 +3,8 @@
 // Items: 1 Volume (earpiece and ringer), 2 Voicemail, 3 Network (Wi-Fi and server; 4 opens it
 // too), 5 Open to chat and 8 Log out (a Lounge phone in use), 6 Dial an extension (team and
 // organization spaces), 7 Phone check (and the self-test), 9 Update now, 0 About. In a call or a
-// room MENU opens the call screen instead: the actions from 1, and 9 Volume.
+// room MENU opens the call screen instead: each action on its digit (1 hold / resume, 2 transfer,
+// 3 mute / unmute: phone_action_digit), and 9 Volume.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,16 +36,19 @@ typedef struct {
   char ext[8];          // MENU 6: the digits so far
   bool ext_transfer;    // …to transfer the call there (from the call screen)
   // What the call screen offers now (phone_actions), set by the app before each key and render.
-  phone_action_t actions[2];
+  phone_action_t actions[3];
   int n_actions;
+  bool in_call;  // the call screen is for a call (not a room): its title says CALL
 } menu_t;
 
 #define MENU_TIMEOUT_MS 20000
+/** Lines a menu screen may use (display.h SCREEN_LINES). */
+#define MENU_LINES 6
 
 /** Key events: 0-9 digit index (protocol order), 10 MENU, 11 BACK. Returns true if consumed. */
 bool menu_key(menu_t *m, int key, int64_t now_ms);
 void menu_tick(menu_t *m, int64_t now_ms);
 void menu_close(menu_t *m);
 /** Lines to show (≤ 4) for the open screen. */
-int menu_lines(const menu_t *m, char out[4][25]);
+int menu_lines(const menu_t *m, char out[MENU_LINES][25]);
 const char *menu_screen_name(menu_screen_t s);

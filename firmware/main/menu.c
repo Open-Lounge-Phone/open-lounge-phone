@@ -27,6 +27,13 @@ const char *menu_screen_name(menu_screen_t s) {
 
 void menu_close(menu_t *m) { m->screen = MENU_CLOSED; }
 
+/** The call screen's action on digit `d`, or -1. */
+static int call_action_on(const menu_t *m, int d) {
+  for (int i = 0; i < m->n_actions; i++)
+    if (phone_action_digit(m->actions[i]) == d) return (int)m->actions[i];
+  return -1;
+}
+
 /** The call screen offers a blind transfer (in a call, nothing on hold). */
 static bool call_can_transfer(const menu_t *m) {
   for (int i = 0; i < m->n_actions; i++)
@@ -90,8 +97,9 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     }
   } else if (m->screen == MENU_CALL) {
     int d = digit_of(key);
-    if (d >= 1 && d <= m->n_actions) {
-      app_post(EV_CALL_ACTION, m->actions[d - 1], NULL);
+    int action = call_action_on(m, d);
+    if (action >= 0) {
+      app_post(EV_CALL_ACTION, action, NULL);
       m->screen = MENU_CLOSED;
     } else if (d == 9) {
       m->screen = MENU_VOLUME;
@@ -144,7 +152,7 @@ static void upper(char *s) {
   for (; *s; s++) *s = (char)toupper((unsigned char)*s);
 }
 
-int menu_lines(const menu_t *m, char out[4][25]) {
+int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
   switch (m->screen) {
     case MENU_ROOT: {
       // The items that apply, packed into three lines that fit the screen (20 characters on
@@ -185,13 +193,21 @@ int menu_lines(const menu_t *m, char out[4][25]) {
     case MENU_CALL: {
       // One call has audio at a time on this phone, so "hold" doesn't add a caller here (the
       // browser phone and the app can: merge and attended transfer follow from that).
+      // Each action on its digit (1 hold / resume, 2 transfer, 3 mute), 9 the volume.
       static const char *labels[] = {"HOLD", "RESUME", "MERGE", "TRANSFER", "MUTE", "UNMUTE"};
-      bool room = m->n_actions && (m->actions[0] == ACT_MUTE || m->actions[0] == ACT_UNMUTE);
-      snprintf(out[0], 25, "%s", room ? "ROOM" : "CALL");
+      bool room = m->n_actions == 1 && (m->actions[0] == ACT_MUTE || m->actions[0] == ACT_UNMUTE);
+      snprintf(out[0], 25, "%s", room && !m->in_call ? "ROOM" : "CALL");
       int n = 1;
-      for (int i = 0; i < m->n_actions; i++)
-        snprintf(out[n++], 25, "%d %s%s", i + 1, labels[m->actions[i]],
-                 m->actions[i] == ACT_TRANSFER && m->extensions && call_can_transfer(m) ? " 6 EXT" : "");
+      for (int d = 1; d <= 3; d++) {
+        int a = call_action_on(m, d);
+        if (a < 0) continue;
+        if (d == 3) {  // mute shares its line with the volume
+          snprintf(out[n++], 25, "3 %s 9 VOLUME", labels[a]);
+          return n;
+        }
+        snprintf(out[n++], 25, "%d %s%s", d, labels[a],
+                 a == ACT_TRANSFER && m->extensions && call_can_transfer(m) ? " 6 EXT" : "");
+      }
       snprintf(out[n++], 25, "9 VOLUME");
       return n;
     }

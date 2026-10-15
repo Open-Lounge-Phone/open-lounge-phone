@@ -174,3 +174,45 @@ TEST(strip_free_lounge_phone_says_sign_in) {
   strip_lines(&in, out);
   CHECK_STR(out[0], "NOT ALLOWED");
 }
+
+TEST(strip_says_muted_in_a_call) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_INCALL;
+  ph.connected = true;
+  snprintf(ph.call_id, sizeof ph.call_id, "c1");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .active_label = "Ben",
+                      .call_started_ms = 0, .now_ms = 65000, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "IN CALL 01:05");
+  ph.muted = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "MUTED 01:05");
+  CHECK_STR(out[1], "BEN");
+  ph.recorded = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "REC MUTED 01:05");
+}
+
+TEST(strip_reconnecting_and_connection_lost) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_INCALL;
+  ph.connected = true;
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .active_label = "Ben",
+                      .call_started_ms = 0, .now_ms = 65000, .local_minute = -1,
+                      .reconnecting = true};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "RECONNECTING");
+  CHECK_STR(out[1], "BEN");
+  phone_init(&ph);
+  ph.kind = PH_OFFHOOK;
+  ph.lost = true;
+  snprintf(ph.last_end, sizeof ph.last_end, "error");
+  in.reconnecting = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "CONNECTION LOST");
+  CHECK_STR(out[1], "PRESS A KEY");
+}

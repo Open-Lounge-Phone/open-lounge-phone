@@ -224,6 +224,12 @@ static void handle(cmd_t *c) {
       break;
     case CMD_SDP:
       if (!s_peer) break;
+      if (s_have_remote) {
+        // A second offer mid-call is the other side restarting ICE: esp_peer 1.5.6 can't apply
+        // one to a running connection, so it's left unanswered (the restart then gives up).
+        ESP_LOGW(TAG, "remote SDP mid-call (an ICE restart) ignored: not supported here");
+        break;
+      }
       {
         esp_peer_msg_t m = {.type = ESP_PEER_MSG_TYPE_SDP, .data = (uint8_t *)c->text,
                             .size = (int)strlen(c->text)};

@@ -537,7 +537,7 @@ bool labs_busy(void) { return s_ic.st != IC_IDLE; }
 bool labs_standalone(void) { return s_cfg.mode != LM_PHONE; }
 bool labs_ringing(void) { return s_ic.st == IC_RINGING; }
 
-int labs_menu_lines(char out[4][25]) {
+int labs_menu_lines(char out[6][25]) {
   snprintf(out[0], 25, "LABS: %.18s", s_cfg.name);
   snprintf(out[1], 25, "%.18s.LOCAL", s_host);
   for (char *c = out[1]; *c; c++) *c = (char)toupper((unsigned char)*c);

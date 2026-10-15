@@ -25,4 +25,4 @@ void vmplay_stop(void);
 void vmplay_tick(int64_t now_ms);
 bool vmplay_active(void);
 /** Lines to show (≤ 4 × 20 chars). */
-int vmplay_lines(char out[4][25], int64_t now_ms);
+int vmplay_lines(char out[6][25], int64_t now_ms);

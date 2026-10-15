@@ -35,6 +35,7 @@ typedef struct {
   const phone_config_t *config;
   const char *active_label;   // the other party on the current or last call
   int64_t call_started_ms;    // -1 = not connected yet
+  bool reconnecting;          // the call's audio connection dropped and may come back
   int64_t now_ms;
   vm_stage_t vm_stage;        // leaving a voicemail (vmleave.c)
   int vm_remaining_ms;        // …while recording

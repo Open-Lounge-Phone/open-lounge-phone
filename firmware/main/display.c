@@ -12,7 +12,7 @@
 #include "gfx.h"
 
 static const char *TAG = "display";
-#define MAX_LINES 4
+#define MAX_LINES SCREEN_LINES
 #define FULL_EVERY 20  // a full refresh every N updates clears e-paper ghosting
 
 static const display_driver_t *s_drv;
@@ -49,7 +49,8 @@ static void task(void *arg) {
     bool switching = was_custom;
     was_custom = false;
     if (n == shown_n && !memcmp(lines, shown, sizeof lines)) continue;
-    const char *ptrs[MAX_LINES] = {lines[0], lines[1], lines[2], lines[3]};
+    const char *ptrs[MAX_LINES];
+    for (int i = 0; i < MAX_LINES; i++) ptrs[i] = lines[i];
     gfx_render_lines(s_fb, s_drv->width, s_drv->height, ptrs, n);
     bool full = switching || updates++ % FULL_EVERY == 0;
     s_drv->flush(s_fb, full);

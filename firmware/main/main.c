@@ -76,7 +76,7 @@ static char s_lounge_qr_shown[65];
 static menu_t s_menu;
 static char s_active_label[25];
 static int64_t s_call_started = -1;
-static char s_shown[4][25];
+static char s_shown[SCREEN_LINES][25];
 static int s_shown_n = -1;
 static int64_t s_boot_until;  // the boot logo stays this long
 static bool s_setup_qr;       // the setup QR screen is up
@@ -101,6 +101,10 @@ static char s_ota_msg[2][25];
 static compat_t s_compat = COMPAT_OK;
 #define COMPAT_RETRY_MS (60LL * 60 * 1000)
 static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
+// The call's audio connection dropped (esp_peer DISCONNECTED after CONNECTED): since when, or -1.
+// RECONNECTING is shown meanwhile; after RECONNECT_GIVE_UP_MS the call ends as lost.
+static int64_t s_reconnect_since = -1;
+#define RECONNECT_GIVE_UP_MS 15000
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
@@ -226,6 +230,7 @@ static void sync_media(void) {
   }
   send_local_sdp();
   audio_hold(s_phone.kind == PH_OFFHOOK && s_phone.held[0]);
+  audio_mute(s_phone.kind == PH_INCALL && s_phone.muted);  // MENU 3: the mic sends silence
   audio_set_offhook(s_hook_up);
   // No call tone over a message playing (the handset is up for it) or the self-test's tone.
   bool quiet = selftest_active() || vmplay_active();
@@ -275,7 +280,7 @@ static void render(void) {
     s_call_started = -1;
   }
 
-  char lines[4][25] = {{0}};
+  char lines[SCREEN_LINES][25] = {{0}};
   int n_status = 0;  // lines from the status strip (0 = a menu or another screen has them)
   s_menu.voicemail = 0;
   s_menu.callbacks = 0;
@@ -338,6 +343,7 @@ static void render(void) {
         .config = &s_cfg,
         .active_label = s_active_label,
         .call_started_ms = s_call_started,
+        .reconnecting = s_reconnect_since >= 0 && s_phone.kind == PH_INCALL,
         .now_ms = now,
         .local_minute = ota_local_minute(),
         .vm_stage = vm_leave_stage(),
@@ -374,7 +380,7 @@ static void render(void) {
   int w, h;
   display_size(&w, &h);
   // Text longer than a line scrolls in a loop (marquee.c) instead of being cut off.
-  char full[4][STATUS_MAX + 1] = {{0}};
+  char full[SCREEN_LINES][STATUS_MAX + 1] = {{0}};
   for (int i = 0; i < n; i++) snprintf(full[i], sizeof full[i], "%.40s", n_status ? strip[i] : lines[i]);
   long step = (long)(now / MARQUEE_STEP_MS);
   for (int i = 0; i < n; i++) marquee(lines[i], sizeof lines[i], full[i], line_capacity(w, h, n), step);
@@ -506,13 +512,18 @@ static void render(void) {
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
     memcpy(s_shown, lines, sizeof s_shown);
     s_shown_n = n;
-    static char logged[4][STATUS_MAX + 1];  // the log gets the whole text once, not each step
+    static char logged[SCREEN_LINES][STATUS_MAX + 1];  // the log gets the whole text once, not each step
     if (memcmp(full, logged, sizeof logged)) {
       memcpy(logged, full, sizeof logged);
-      ESP_LOGI(TAG, "STRIP [%s%s%s%s%s%s%s]", full[0], n > 1 ? "|" : "", n > 1 ? full[1] : "",
-               n > 2 ? "|" : "", n > 2 ? full[2] : "", n > 3 ? "|" : "", n > 3 ? full[3] : "");
+      char joined[SCREEN_LINES * (STATUS_MAX + 1) + 1] = "";
+      for (int i = 0; i < n; i++) {
+        if (i) strlcat(joined, "|", sizeof joined);
+        strlcat(joined, full[i], sizeof joined);
+      }
+      ESP_LOGI(TAG, "STRIP [%s]", joined);
     }
-    const char *ptrs[4] = {lines[0], lines[1], lines[2], lines[3]};
+    const char *ptrs[SCREEN_LINES];
+    for (int i = 0; i < SCREEN_LINES; i++) ptrs[i] = lines[i];
     display_text(ptrs, n);
   }
 
@@ -523,6 +534,8 @@ static void render(void) {
   else if (s_phone.kind == PH_INCOMING || s_lounge.challenge >= 0) led = LED_RINGING;
   else if ((s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM) && s_phone.recorded)
     led = LED_RECORDING;
+  else if ((s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM) && s_phone.muted)
+    led = LED_MUTED;  // MENU 3: a slow double blink
   else if (s_phone.kind == PH_INCALL || s_phone.kind == PH_INROOM || s_phone.kind == PH_DIALING)
     led = LED_ON;
   else if (s_phone.kind == PH_IDLE && s_cfg.missed_count > 0) led = LED_BREATHE;
@@ -961,6 +974,7 @@ static void on_key(int index) {
   menu_screen_t was = s_menu.screen;
   // MENU opens the menu in every state; in a call or a room it opens the call screen.
   s_menu.n_actions = phone_actions(&s_phone, s_menu.actions);
+  s_menu.in_call = s_phone.kind != PH_INROOM;
   if ((was != MENU_CLOSED || index == KEY_MENU_INDEX) && menu_key(&s_menu, index, now)) {
     ESP_LOGI(TAG, "MENU %s", menu_screen_name(s_menu.screen));
     if (s_menu.screen == MENU_ABOUT) {
@@ -1094,6 +1108,13 @@ static void tick(void) {
     finish_selftest();
   }
   vm_leave_tick(now);
+  if (s_reconnect_since >= 0 && (s_phone.kind != PH_INCALL || !media_active())) s_reconnect_since = -1;
+  if (s_reconnect_since >= 0 && now - s_reconnect_since >= RECONNECT_GIVE_UP_MS) {
+    ESP_LOGW(TAG, "call media didn't come back: CONNECTION LOST");
+    s_reconnect_since = -1;
+    media_stop();
+    phone_lost(&s_phone, emit);
+  }
   lounge_tick(&s_lounge, now);
   bool idle_screen = s_authed && s_conn == CONN_ONLINE && s_phone.kind == PH_IDLE && !s_hook_up;
   if (lounge_wants_refresh(&s_lounge, idle_screen, s_menu.screen != MENU_CLOSED, now))
@@ -1334,9 +1355,17 @@ void app_main(void) {
           }
           break;
         case EV_RTC_STATE:
-          if (ev.a != 1 && media_active()) {
-            // No media, no call: hang up (the caller hears it ended) rather than sit in silence.
-            ESP_LOGW(TAG, "call media %s: hanging up", ev.a == 2 ? "lost" : "failed");
+          if (ev.a == 1) {
+            if (s_reconnect_since >= 0) ESP_LOGI(TAG, "call media back");
+            s_reconnect_since = -1;
+          } else if (ev.a == 2 && media_active()) {
+            // Dropped mid-call: RECONNECTING while it may come back by itself (esp_peer can't
+            // restart ICE); tick() ends the call as lost if it doesn't.
+            ESP_LOGW(TAG, "call media lost: RECONNECTING (up to %d s)", RECONNECT_GIVE_UP_MS / 1000);
+            if (s_reconnect_since < 0) s_reconnect_since = now_ms();
+          } else if (ev.a == 3 && media_active()) {
+            // Never connected: hang up (the caller hears it ended) rather than sit in silence.
+            ESP_LOGW(TAG, "call media failed: hanging up");
             media_stop();
             phone_hangup(&s_phone, "error", emit);
           }

@@ -278,7 +278,7 @@ static void mmss(char *buf, size_t n, long ms) {
   snprintf(buf, n, "%02ld:%02ld", s / 60, s % 60);
 }
 
-int vmplay_lines(char out[4][25], int64_t now_ms) {
+int vmplay_lines(char out[6][25], int64_t now_ms) {
   char a[12], b[12];
   switch (s_stage) {
     case VP_FETCHING:
