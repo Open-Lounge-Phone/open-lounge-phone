@@ -848,3 +848,36 @@ export async function addonsAcross(jesse: Person, bob: Person) {
   expect(await addon.next("wipe")).toMatchObject({ reason: "removed" });
   bApp.ws.close();
 }
+
+/**
+ * Call waiting across servers: Jesse (A) talks with Carol (another household on A); Bob (B) calls
+ * her. Her server rings her softly where she's talking; answering puts Carol on hold.
+ */
+export async function waitingAcross(jesse: Person, bob: Person, carol: Person) {
+  const toCarol = (await connections(jesse)).find((c) => c.address === carol.address);
+  const toJesse = (await connections(bob)).find((c) => c.address === jesse.address);
+  const jApp = await appSocket(jesse);
+  const bApp = await appSocket(bob);
+  const cApp = await appSocket(carol);
+  jApp.send({ t: "call.connection", connectionId: toCarol?.id as string });
+  const first = await answered(jApp, cApp);
+  for (;;) if ((await cApp.next("call.state")).state === "active") break;
+  bApp.send({ t: "call.connection", connectionId: toJesse?.id as string });
+  const ring = await jApp.next("call.ringing");
+  expect(ring).toMatchObject({ waiting: true, from: { label: "Bob" } });
+  const second = ring.callId as string;
+  jApp.send({ t: "call.answer", callId: second });
+  for (;;) {
+    const m = await cApp.next("call.state");
+    if (m.state === "active" && m.hold === "them") break;
+  }
+  for (;;) if ((await bApp.next("call.state")).state === "connecting") break;
+  for (const [app, id] of [
+    [bApp, second],
+    [jApp, first],
+  ] as const) {
+    app.send({ t: "call.hangup", callId: id });
+  }
+  for (;;) if ((await cApp.next("call.state")).state === "ended") break;
+  for (const s of [jApp, bApp, cApp]) s.ws.close();
+}

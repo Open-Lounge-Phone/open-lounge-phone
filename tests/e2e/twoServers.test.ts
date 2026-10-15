@@ -25,6 +25,7 @@ import {
   signUp,
   timelineAcross,
   voicemailAcross,
+  waitingAcross,
   workplaceAcross,
 } from "./twoServers.ts";
 
@@ -105,7 +106,7 @@ afterAll(() => {
   for (const entry of running) stop(entry);
 });
 
-it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, block, workplace transfer, public line", async () => {
+it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timeline, key rotation mid-call, wipe, rooms, 3-way, call waiting, block, workplace transfer, public line", async () => {
   onTestFailed(() =>
     reportLogs(
       running.map((r) => r.log),
@@ -131,6 +132,8 @@ it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timel
   const carol = await signUp(a, "carol", "Carol");
   await connectLocally(jesse, carol);
   await mergeAcross(jesse, bob, carol);
+  // Call waiting: Bob (B) calls Jesse while she talks with Carol (A).
+  await waitingAcross(jesse, bob, carol);
   await block(jesse, bob);
   // A team space on A takes Bob's call and transfers him to its ring group.
   await workplaceAcross(a, bob);
