@@ -4,7 +4,7 @@
 
 The schematic is code (board_main.py), so there is no drawn sheet. This renders a
 "net-label schematic": page 1 is the overview (blocks, power tree, GPIO map); then one page per
-block (board_main.build: power, mcu, keys, audio, ui). Every IC/connector/switch is a box with
+block (board_main.build: power, mcu, keys, audio, ui, ethernet, poe). Every IC/connector/switch is a box with
 its pin numbers and names, and each pin's net name sits at the pin end (same name = connected,
 as with net labels in KiCad). Repeated parts (the 13 hot-swap sockets) are a table. The
 passives of the block are listed on the right with the two nets they join and their note.
@@ -33,13 +33,15 @@ sys.path.insert(0, str(HW / "layout"))
 
 import netlist as nl  # noqa: E402
 
-RAILS = {"GND", "3V3", "VBUS"}
+RAILS = {"GND", "3V3", "VBUS", "V5", "ETH_3V3", "ETH_3V3A", "POE_5V"}
 BLOCKS = [
     ("power", "Power: USB-C (5 V sink + native USB), USB ESD, SGM2212 3.3 V LDO"),
     ("mcu", "MCU: ESP32-S3-WROOM-1U-N16R8, EN reset, RESET and BOOT buttons"),
     ("keys", "Keys and hook: 13 MX hot-swap sockets, one GPIO each (internal pull-ups)"),
     ("audio", "Audio: ES8311 codec + 3.5 mm TRRS handset jack (CTIA)"),
     ("ui", "Display header, piezo ringer, status LED, board marking, mounting holes"),
+    ("ethernet", "Ethernet (v0.901): W5500 on the display SPI, its own 3.3 V LDO, RJ45 magnetics"),
+    ("poe", "PoE (v0.901): two bridges, TVS, isolated 802.3af DP9900LP-5V module, 3 mm isolation"),
 ]
 PAGE = (16.54, 11.69)   # A3 landscape, inches
 REPEATED = {"HOTSWAP"}
@@ -100,7 +102,7 @@ def new_page(title, sub=""):
     ax.text(0.4, PAGE[1] - 0.45, title, fontsize=14, weight="bold", va="top")
     if sub:
         ax.text(0.4, PAGE[1] - 0.8, sub, fontsize=8, va="top", color="#444")
-    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone minimal board (M1) - generated from the "
+    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone minimal board, hw v0.901 (RJ45 + PoE) - generated from the "
             "SKiDL netlist by hardware/schematic/review.py. Blue = signal net, red = supply "
             "rail; same name = connected. CERN-OHL-S-2.0.", fontsize=6.5, ha="right",
             color="#666")
@@ -110,7 +112,11 @@ def new_page(title, sub=""):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(HW / "build" / "review" / "schematic.pdf"))
+    ap.add_argument("--png", metavar="DIR", help="also write each page as DIR/schematic-N.png")
     a = ap.parse_args()
+    png = Path(a.png) if a.png else None
+    if png:
+        png.mkdir(parents=True, exist_ok=True)
     net = nl.read(HW / "build" / "main" / "main.net")
     names = load_pin_names()
     pin_net = net.pin_net()
@@ -131,9 +137,10 @@ def main() -> int:
     with PdfPages(out) as pdf:
         # ---- page 1: overview
         w, h = DESIGN.board_mm
-        fig, ax = new_page("Open Lounge Phone - minimal board, schematic review",
-                           f"{DESIGN.layers}-layer board, proposed {w:.0f} x {h:.0f} mm. Pages "
-                           "2-6: one page per block. Hardware docs: hardware/DESIGN.md.")
+        fig, ax = new_page("Open Lounge Phone - minimal board v0.901 (RJ45 + PoE), schematic review",
+                           f"{DESIGN.layers}-layer board, {w:.0f} x {h:.0f} mm. Pages "
+                           f"2-{len(BLOCKS) + 1}: one page per block. Hardware docs: "
+                           "hardware/DESIGN.md.")
         y = PAGE[1] - 1.3
         ax.text(0.4, y, "Blocks", fontsize=11, weight="bold")
         for i, (key, title) in enumerate(BLOCKS):
@@ -144,12 +151,15 @@ def main() -> int:
         y -= 0.55
         ax.text(0.4, y, "Power tree", fontsize=11, weight="bold")
         for line in [
-            "USB-C J1 VBUS (5 V, 5.1k Rd on CC1/CC2 = USB default power, no PD) -> 10 uF",
-            "  -> SGM2212-3.3 U2 (800 mA LDO) -> 3V3: ESP32 module, ES8311, display module, "
+            "USB-C J1 VBUS (5 V, 5.1k Rd on CC1/CC2 = USB default power, no PD) -> B5819W D3 -> V5",
+            "RJ45 J4 PoE pairs -> MB10S BR1/BR2 -> SMAJ58A D4 -> DP9900LP-5V PS1 (isolated) "
+            "-> POE_5V -> SS34 D5 -> V5",
+            "V5 -> SGM2212-3.3 U2 (800 mA LDO) -> 3V3: ESP32 module, ES8311, display module, "
             "mic bias, pull-ups, LED",
-            "  -> piezo ringer BZ1 (through Q1, from VBUS directly)",
+            "V5 -> SGM2212-3.3 U5 -> ETH_3V3: W5500 digital, RJ45 LEDs; -> ferrite FB1 -> ETH_3V3A",
+            "  -> piezo ringer BZ1 (through Q1, from V5 directly)",
             "USB-C D+/D- -> USBLC6-2SC6 D1 -> ESP32 native USB (IO19/IO20): flashing + console",
-            "No fuse (compliant USB sources current-limit), no battery, one regulator.",
+            "No fuse (compliant USB sources current-limit), no battery. USB and PoE diode-OR'd.",
         ]:
             y -= 0.27
             ax.text(0.5, y, line, fontsize=8)
@@ -164,6 +174,8 @@ def main() -> int:
                     family="monospace")
             yy -= 0.205
         pdf.savefig(fig)
+        if png:
+            fig.savefig(png / "schematic-1.png", dpi=150)
         plt.close(fig)
 
         # ---- one page per block
@@ -198,17 +210,19 @@ def main() -> int:
                             fontsize=8, family="monospace")
                     yy -= 0.24
             if pas:
-                xx, yy = 9.3, PAGE[1] - 1.35
+                xx, yy = 8.8, PAGE[1] - 1.35
                 ax.text(xx, yy, "Passives  (ref, value, nets, note)", fontsize=9, weight="bold")
                 yy -= 0.28
                 for r in pas:
                     c = net.comps[r]
                     ns = " - ".join(pin_net.get((r, p), "nc") for p, _ in pins_of[r])
-                    ax.text(xx, yy, f"{r:<5} {c.value[:14]:<14} {ns[:26]:<26} "
-                                    f"{c.fields.get('Note', '')[:62]}", fontsize=6.6,
+                    ax.text(xx, yy, f"{r:<5} {c.value[:14]:<14} {ns[:30]:<30} "
+                                    f"{c.fields.get('Note', '')[:70]}", fontsize=6.6,
                             family="monospace")
                     yy -= 0.2
             pdf.savefig(fig)
+            if png:
+                fig.savefig(png / f"schematic-{i + 2}.png", dpi=150)
             plt.close(fig)
     print(f"wrote {out}")
     return 0
