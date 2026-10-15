@@ -673,7 +673,7 @@ Server feature `addons`: a key pressed during an answered call with an add-on (`
 
 ### `addon.share.request`
 
-Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("New shared project with…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.
+Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("Ask it for a new share…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|

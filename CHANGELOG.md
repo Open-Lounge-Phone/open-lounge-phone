@@ -14,6 +14,44 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Add-ons are treated as untrusted** ([docs/security-model.md](docs/security-model.md#add-ons),
+  threat by threat, each with a test that fails without its guard). An add-on may send only an
+  explicit allow-list of messages (everything else, including message types added later, is an
+  `error` with no effect) and is closed after 600 messages a minute. Limits (`limits.ts`): one
+  call out at a time, 10 an hour, 6 a day to any one person (so it can't ring all its holders
+  like a broadcast); 30 calls an hour from one person to one add-on; share lists 60 and
+  connections 120 an hour; at most 10 calls at once; calls end after 4 hours. TURN credentials
+  for add-on calls expire with that and are revoked at the end on Cloudflare. Words it chooses
+  (share labels, its summary, a refusal, its `fw`) must be plain text (no control or
+  right-to-left characters). Its owner leaving the space, the space or account going, or a
+  suspension cuts it off at once, live calls included (a suspended owner's add-on can't
+  connect). The holder's own server now rings someone for another server's add-on only within a
+  share it was told they hold, with the label it was told.
+- **Add-ons say what they do**: `addon.about` (additive; device feature `addon-about`) with a
+  summary, what it does with what it hears (`nothing` one-way / `live` / `keeps`), whether it
+  transcribes, takes calls, calls people, offers shares, takes keys, and how many calls at once
+  (`lines`). The server enforces the parts it can; the app shows all of it as the add-on's own
+  words. Add-ons that never say keep the old rules. Migration 0032 (`addons.about`,
+  `addon_mutes`, `addon_contacts`).
+- **An Add-ons tab** in the companion (out of Settings): each add-on's page says what it does
+  and has Call, **Add to contacts** (shown on Home) and **Put on a key** (your own phone and its
+  first free key chosen; right after linking it's ready, so link → talking from a phone is 8
+  steps instead of 14); each share has the same plus **Give to…**, which says what the add-on
+  learns about the person before they get it. **Ask it for a new share…** replaces "New shared
+  project with…". Connections points at the tab.
+- **Holders control add-ons that call them**: **Stop its calls** (enforced by their own server;
+  they can still call it) and **Give it back** (`PUT /api/addons/muted`, `POST /api/addons/leave`;
+  across servers the federation feature `addon-leave`, `POST /fed/v1/addon-shares/leave`).
+- **Reaching an add-on**: its owner may call within any of its shares (`grantId` `owner`);
+  `PUT /api/devices/:id/lines` takes `key`; `config.buttons[].addon` lets phones show a key that
+  calls an add-on as one; `/api/addons/contacts`.
+- **Phones always mark an add-on** (browser phone and firmware strip): a share's label keeps
+  `ADD-ON CALLING` below it; in a call and while waiting a long name is shortened, never shown
+  alone.
+- The Python bridge is 0.3.0: `set_about(...)`, several calls at once, and `examples/radio.py`
+  (one-way, several listeners).
+- The app's badges use the accent's text colour (too little contrast before).
+
 ## 0.7.0 (2026-10-15, `server-v0.7.0`)
 
 Phones: firmware 0.9.4 ([firmware/CHANGELOG.md](firmware/CHANGELOG.md))

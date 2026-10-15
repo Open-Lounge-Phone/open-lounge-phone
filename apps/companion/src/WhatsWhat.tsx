@@ -67,7 +67,7 @@ export const TERMS: { term: string; means: string }[] = [
   {
     term: "Add-on",
     means:
-      "A service you link to your account, like an AI companion. It gets its own address (yourname+name@server), and only you and the people you choose can talk to it.",
+      "A service you call like a person, such as an assistant or a radio. You link it under Add-ons and it gets its own address (yourname+name@server): only you can call it there, and if it offers parts of itself to share, you choose who gets each. Calls with it are marked as an add-on's everywhere.",
   },
   {
     term: "Fair use",

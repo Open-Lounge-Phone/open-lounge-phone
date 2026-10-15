@@ -1,8 +1,8 @@
 # The add-on bridge (Python)
 
 `openloungephone-addon` (import `olp_addon`) lets a service take part in Open Lounge Phone calls
-as an **add-on**: something a person links to their own account, like an AI companion or a notes
-taker. The bridge does the linking, the key and the signed challenge, and the WebRTC call; your
+as an **add-on**: any service that serves live voice over a call (an assistant, a radio, a notes
+taker), linked by a person to their own account. The bridge does the linking, the key and the signed challenge, and the WebRTC call; your
 code gets events and plain PCM audio.
 
 Licensed **Apache-2.0** (see `LICENSE`), so any service can use it. The rest of Open Lounge Phone
@@ -29,7 +29,8 @@ your platform, it needs FFmpeg's development libraries first.
 import asyncio
 from olp_addon import Addon
 
-addon = Addon("https://hub.example", "seat.addon-key")   # makes the key on first use (mode 600)
+addon = Addon("https://hub.example", "echo.addon-key")   # makes the key on first use (mode 600)
+addon.set_about(summary="Plays back what you say.", hears="live", keys=True)   # its page in the app
 
 @addon.on_call
 async def talk(call):
@@ -41,10 +42,44 @@ async def talk(call):
 asyncio.run(addon.run())   # links first (prints a 6-digit code), then takes calls
 ```
 
-The first run prints a code. Its owner types it into the companion app under **Settings →
-Add-ons → Link an add-on** and picks its name (the part after `+`). From then on the add-on
+The first run prints a code. Its owner types it into the companion app under **Add-ons → Link an
+add-on** and picks its name (the part after `+`). From then on the add-on
 answers a signed challenge on every connection; no one's password or session is ever stored in
 it. Only its owner calls it at its own address; others reach it only through a share (below).
+
+## Saying what it does
+
+```python
+addon.set_about(
+    summary="Plays the station.",   # one plain sentence (up to 140 characters)
+    hears="nothing",                # "nothing" (one-way), "live" (keeps nothing) or "keeps"
+    transcribes=False,
+    answers=True,                   # people can call it
+    calls=False,                    # it never calls anyone
+    shares=True,                    # it offers shares (default: whether it set any)
+    keys=False,                     # no keypad
+    lines=10,                       # calls at once (the server allows at most 10)
+)
+```
+
+Its page in the app shows this in plain words. The server holds it to `answers`, `calls`,
+`shares`, `keys` and `lines` (a call beyond `lines` is busy; `addon.call` raises `AddonError`
+when it said `calls=False`); `summary`, `hears` and `transcribes` are shown as its own words. It
+is sent after every connection, only to servers that take it (`addon-about`). An add-on that
+never says keeps the older rules: it can be called, may call, may offer shares, gets keys, one
+call at a time.
+
+**Examples:** `examples/echo.py` (plays back what it hears) and `examples/radio.py` (one-way: it
+plays a tune to several callers at once and never reads what they say).
+
+## Limits
+
+The server treats every add-on as untrusted code ([security-model.md](../../docs/security-model.md#add-ons)).
+By default an add-on places one call at a time, at most 10 an hour and 6 a day to any one person;
+one person calls one add-on at most 30 times an hour; a call with an add-on lasts at most 4
+hours; it may send 600 messages a minute, its share list 60 times an hour, and connect 120 times
+an hour. Over a limit, a call ends `denied` with a plain note (`call.reason`), and too many
+messages close the connection (the bridge reconnects with backoff).
 
 ## Sharing
 
@@ -77,8 +112,8 @@ and only its owner reaches it.
 
 ## API
 
-`Addon(server_url, key_path, *, rate=48000)`
-: One add-on on one server. `key_path` is its Ed25519 key (PEM; made if missing, mode 600). The
+`Addon(server_url, key_path, *, rate=48000, about=None)`
+: One add-on on one server. `about`: the same fields as `set_about`. `key_path` is its Ed25519 key (PEM; made if missing, mode 600). The
   link is kept in `<key_path>.json` (mode 600). `rate` is the PCM sample rate both ways (8000,
   16000, 24000 or 48000 are typical).
 
@@ -111,6 +146,9 @@ and only its owner reaches it.
   (`unavailable` when they may not be called). The add-on sends the WebRTC offer when the call
   connects.
 
+`addon.set_about(hears, *, summary, transcribes, answers, calls, shares, keys, lines)`
+: What it does (above). Sent now if connected, and after every reconnect.
+
 `addon.set_shares([{"id", "label"}])` / `addon.shares`
 : What it offers for sharing. Ids are 1–30 of `a-z`, `0-9` and `-` (the part after the second
   `+` of the share's address); labels 1–40 characters. Replaces the list: a share left out is
@@ -128,7 +166,8 @@ and only its owner reaches it.
 `Call`
 : - `call.caller`: who is calling (`.address`, `.name`), checked by their server.
   - `call.share`: the `Share` (`.id`, `.label`, `.grant_id`) the call came in through, or
-    None when its owner is calling (incoming); the share named in `addon.call` (outgoing).
+    None when its owner calls its own address (incoming; `.grant_id` is `owner` when its owner
+    calls within a share); the share named in `addon.call` (outgoing).
   - `call.callee`: the address it dialled (outgoing calls).
   - `call.direction` (`"in"`/`"out"`), `call.state` (`ringing`, `connecting`, `active`, `ended`),
     `call.reason` once ended.
