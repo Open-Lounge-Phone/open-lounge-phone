@@ -232,7 +232,7 @@ static tone_t tone_for(const phone_state_t *p) {
       if (p->held[0]) return TONE_HOLD;  // a call on hold: a soft reminder
       return !p->last_end[0] || !strcmp(p->last_end, "hangup") ? TONE_DIAL : TONE_BUSY;
     case PH_DIALING: return p->queued ? TONE_HOLD : TONE_RINGBACK;  // waiting in a line's queue
-    case PH_INCALL: return p->held_by_them ? TONE_HOLD : TONE_NONE;
+    case PH_INCALL: return p->waiting_id[0] ? TONE_WAITING : p->held_by_them ? TONE_HOLD : TONE_NONE;
     default: return TONE_NONE;
   }
 }
@@ -773,6 +773,7 @@ static void on_open(void) {
   // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
   cJSON *features = cJSON_AddArrayToObject(hello, "features");
   cJSON_AddItemToArray(features, cJSON_CreateString("missed-calls"));
+  cJSON_AddItemToArray(features, cJSON_CreateString("call-waiting"));
   proto_send(hello);
   s_last_ping = now_ms();
   if (!id[0]) begin_pairing();

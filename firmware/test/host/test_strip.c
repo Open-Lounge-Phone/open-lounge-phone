@@ -261,3 +261,25 @@ TEST(strip_one_missed_call_points_at_menu_5) {
   strip_lines(&in, out);
   CHECK_STR(out[1], "MENU 5: MISSED");
 }
+
+TEST(strip_call_waiting) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_INCALL;
+  ph.connected = true;
+  snprintf(ph.waiting_id, sizeof ph.waiting_id, "c2");
+  snprintf(ph.waiting_from, sizeof ph.waiting_from, "Mom");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .active_label = "Ben",
+                      .call_started_ms = 0, .now_ms = 0, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "WAITING: MOM");
+  CHECK_STR(out[1], "1 TAKE 2 IGNORE");
+  snprintf(ph.waiting_from, sizeof ph.waiting_from, "Grandma Josephine");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "CALL WAITING");
+  CHECK_STR(out[1], "GRANDMA JOSEPHINE");  // scrolls on screen
+  in.now_ms = 6000;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "1 TAKE 2 IGNORE");
+}

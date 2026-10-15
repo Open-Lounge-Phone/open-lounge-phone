@@ -80,6 +80,18 @@ void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit) {
     emit_call(emit, "call.hangup", s->held);  // a held call too
   if (s->kind == PH_INROOM && s->room_id[0]) emit_room_leave(emit, s->room_id);
   emit_hook(emit, false);
+  if (s->kind == PH_INCALL && s->waiting_id[0]) {  // a call was waiting: now it rings
+    char id[65], from[25];
+    bool addon = s->waiting_addon;
+    CPY(id, s->waiting_id);
+    CPY(from, s->waiting_from);
+    phone_init(s);
+    s->kind = PH_INCOMING;
+    CPY(s->call_id, id);
+    CPY(s->from, from);
+    s->addon = addon;
+    return;
+  }
   to_idle(s);
 }
 
@@ -142,6 +154,27 @@ void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
   // …and key 2 asks the line to call back instead (the place in line is kept).
   if (s->kind == PH_DIALING && s->queued && s->queue_cb && s->call_id[0] && index == 1) {
     emit_call(emit, "call.callback", s->call_id);
+    return;
+  }
+  // Call waiting: 1 takes it, 2 ignores it. One call has audio at a time on this phone, so taking
+  // it ends the call you're in (docs/phone-ux.md; the browser phone holds it instead).
+  if (s->kind == PH_INCALL && s->waiting_id[0] && !s->transfer_pending && index <= 1) {
+    if (index == 1) {
+      s->waiting_id[0] = '\0';
+      return;
+    }
+    char id[65], from[25];
+    bool addon = s->waiting_addon;
+    CPY(id, s->waiting_id);
+    CPY(from, s->waiting_from);
+    emit_call(emit, "call.hangup", s->call_id);
+    if (s->held[0]) emit_call(emit, "call.hangup", s->held);
+    emit_call(emit, "call.answer", id);
+    phone_init(s);
+    s->kind = PH_INCALL;
+    CPY(s->call_id, id);
+    CPY(s->from, from);
+    s->addon = addon;
     return;
   }
   if (s->kind == PH_INCALL && s->transfer_pending) {
@@ -256,7 +289,18 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
       s->callback = cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(m, "callback"));
       const char *kind = str(cJSON_GetObjectItemCaseSensitive(m, "from"), "kind");
       s->addon = kind && !strcmp(kind, "addon");
-    } else if (!(s->call_id[0] && !strcmp(s->call_id, id))) {
+    } else if (s->call_id[0] && !strcmp(s->call_id, id)) {
+      // already this call
+    } else if (s->kind == PH_INCALL && s->waiting_id[0] && !strcmp(s->waiting_id, id)) {
+      // already waiting
+    } else if (s->kind == PH_INCALL && s->connected && !s->held[0] && !s->waiting_id[0] &&
+               cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "waiting"))) {
+      // Call waiting: in a call, a second call rings softly (one at a time).
+      CPY(s->waiting_id, id);
+      CPY(s->waiting_from, from);
+      const char *kind = str(cJSON_GetObjectItemCaseSensitive(m, "from"), "kind");
+      s->waiting_addon = kind && !strcmp(kind, "addon");
+    } else {
       // Busy: decline so the caller hears it at once instead of waiting for a timeout.
       emit_call(emit, "call.hangup", id);
     }
@@ -269,6 +313,11 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
   const char *reason = str(m, "reason");
   if (!id || !state) return true;
   bool ended = !strcmp(state, "ended");
+  // The waiting call: it ends when the caller gives up (or it goes to voicemail).
+  if (s->kind == PH_INCALL && s->waiting_id[0] && !strcmp(s->waiting_id, id)) {
+    if (ended) s->waiting_id[0] = '\0';
+    return true;
+  }
   // The call on hold: it can only end (the other person hung up) while we're elsewhere.
   if (s->held[0] && !strcmp(s->held, id)) {
     if (!ended) return true;

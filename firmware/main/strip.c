@@ -115,6 +115,14 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     }
     case PH_INCALL:
       if (s->transfer_pending) return set2(out, "TRANSFER TO?", "PRESS A KEY");
+      if (s->waiting_id[0]) {  // call waiting: who, and the keys (a long name takes turns)
+        char who[STATUS_MAX + 1];
+        if (s->waiting_addon) strip_addon_label(who, s->waiting_from);
+        else clip(who, s->waiting_from);
+        snprintf(buf, sizeof buf, "WAITING: %.24s", who);
+        if (strlen(buf) <= STATUS_WIDTH) return set2(out, buf, "1 TAKE 2 IGNORE");
+        return set2(out, "CALL WAITING", hint_now(in->now_ms) ? "1 TAKE 2 IGNORE" : who);
+      }
       if (s->held_by_them) return *name ? set2(out, "ON HOLD", name) : set1(out, "ON HOLD");
       if (!s->connected || in->call_started_ms < 0)
         return *name ? set2(out, "CONNECTING", name) : set1(out, "CONNECTING");

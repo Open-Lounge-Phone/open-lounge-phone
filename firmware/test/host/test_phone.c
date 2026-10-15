@@ -335,3 +335,45 @@ TEST(phone_calls_back_with_the_handset_up) {
   phone_call_back(&s, "mc_2", emit);  // already dialing: nothing
   CHECK(s_n == 1);
 }
+
+TEST(phone_call_waiting_take_ignore_hang_up) {
+  phone_state_t s;
+  in_call(&s);
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c2\",\"from\":{\"label\":\"Ana\"},\"waiting\":true}");
+  CHECK(s.kind == PH_INCALL && s_n == 0);  // not declined
+  CHECK_STR(s.waiting_id, "c2");
+  CHECK_STR(s.waiting_from, "Ana");
+  // A third call while one waits: declined.
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c3\",\"from\":{\"label\":\"Bo\"},\"waiting\":true}");
+  CHECK(s_n == 1);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.hangup\",\"callId\":\"c3\"}");
+  // 2 ignores it (it goes to voicemail at the usual time).
+  s_n = 0;
+  phone_button(&s, 1, emit);
+  CHECK(!s.waiting_id[0] && s.kind == PH_INCALL && s_n == 0);
+  // It rings again; the caller gives up: gone.
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c4\",\"from\":{\"label\":\"Ana\"},\"waiting\":true}");
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c4\",\"state\":\"ended\",\"reason\":\"hangup\"}");
+  CHECK(!s.waiting_id[0] && s.kind == PH_INCALL);
+  CHECK_STR(s.call_id, "c1");
+  // 1 takes it: one call has audio at a time here, so this call ends.
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c5\",\"from\":{\"label\":\"Ana\"},\"waiting\":true}");
+  s_n = 0;
+  phone_button(&s, 0, emit);
+  CHECK(s.kind == PH_INCALL && !s.connected && !s.held[0] && !s.waiting_id[0]);
+  CHECK_STR(s.call_id, "c5");
+  CHECK(s_n == 2);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.hangup\",\"callId\":\"c1\"}");
+  CHECK_STR(s_sent[1], "{\"t\":\"call.answer\",\"callId\":\"c5\"}");
+  // Hanging up with a call waiting: it rings like any call.
+  in_call(&s);
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c6\",\"from\":{\"label\":\"Ana\"},\"waiting\":true}");
+  phone_hook(&s, false, emit);
+  CHECK(s.kind == PH_INCOMING);
+  CHECK_STR(s.call_id, "c6");
+  CHECK_STR(s.from, "Ana");
+  // A ring without `waiting` (an older server) in a call: declined as before.
+  in_call(&s);
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c7\",\"from\":{\"label\":\"Ana\"}}");
+  CHECK(s_n == 1 && !s.waiting_id[0]);
+}

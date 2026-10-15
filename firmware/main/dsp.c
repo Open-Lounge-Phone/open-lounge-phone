@@ -57,6 +57,7 @@ void tone_start(tone_gen_t *g, tone_t tone, int16_t amp) {
     case TONE_BUSY: f[0] = 480; f[1] = 620; on = 0.5f; off = 0.5f; break;
     case TONE_HOLD: f[0] = 440; on = 0.25f; off = 3.75f; break;
     case TONE_TEST: f[0] = 1000; break;
+    case TONE_WAITING: f[0] = 440; on = 0.3f; off = 4.7f; break;
     case TONE_NONE: return;
   }
   g->nfreq = f[1] > 0 ? 2 : 1;
@@ -88,7 +89,7 @@ bool tone_mix(tone_gen_t *g, int16_t *pcm, size_t n) {
 }
 
 const char *tone_name(tone_t t) {
-  static const char *names[] = {"none", "dialtone", "ringback", "busy", "hold", "test"};
+  static const char *names[] = {"none", "dialtone", "ringback", "busy", "hold", "test", "waiting"};
   return names[t];
 }
 

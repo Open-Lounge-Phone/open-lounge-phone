@@ -22,6 +22,7 @@ typedef enum {
   TONE_BUSY,      // 480 + 620 Hz, 0.5 s on / 0.5 s off
   TONE_HOLD,      // 440 Hz, 0.25 s every 4 s
   TONE_TEST,      // 1 kHz, continuous (bring-up and the simulator's test source)
+  TONE_WAITING,   // 440 Hz, 0.3 s every 5 s: another call is waiting (over the call)
 } tone_t;
 
 typedef struct {

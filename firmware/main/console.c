@@ -132,7 +132,7 @@ static int cmd_screen(int argc, char **argv) {
 }
 
 static tone_t tone_by_name(const char *n) {
-  for (int t = TONE_NONE; t <= TONE_TEST; t++)
+  for (int t = TONE_NONE; t <= TONE_WAITING; t++)
     if (!strcasecmp(n, tone_name((tone_t)t))) return (tone_t)t;
   return TONE_NONE;
 }

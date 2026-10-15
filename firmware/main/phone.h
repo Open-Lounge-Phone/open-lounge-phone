@@ -56,6 +56,11 @@ typedef struct {
   bool lost;
   // incoming: BACK stopped the ringer on this phone (lifting still answers).
   bool silenced;
+  // incall: call waiting, another call ringing softly (call.ringing waiting): 1 takes it, 2
+  // ignores it. One call has audio at a time on this phone, so taking it ends this call.
+  char waiting_id[65];
+  char waiting_from[25];
+  bool waiting_addon;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */
