@@ -21,7 +21,12 @@ the bottom, DRC clean, image in `build/review/placement.png` (`make placement`);
 - [GUIDELINES.md](GUIDELINES.md): the design rules (child-safe, rugged, simple).
 - [ASSEMBLY.md](ASSEMBLY.md): building the board (PCBA or by hand).
 - [sim/](sim/README.md): the regulator simulation (`make sim`).
-- [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the core shell (tray, lid, bezel) for the placed board and what designs built around it must keep.
+- Cases, all code in `enclosure/`:
+  - [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the core shell (tray, lid, bezel, a hinged
+    handset cradle) for the placed board and what designs built around it must keep.
+  - [enclosure/PLUSH.md](enclosure/PLUSH.md): the cushion desk case.
+  - [enclosure/FLATCASE.md](enclosure/FLATCASE.md): the laser-cut sandwich (one sheet of 3 mm
+    acrylic or plywood, M3 standoffs).
 
 ## Building the outputs
 

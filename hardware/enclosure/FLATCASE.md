@@ -16,7 +16,7 @@ script checks the fit and the switchhook every time it runs (see "Checked" below
 
 - **The front plate is the switch plate,** as on a keyboard:
   - each switch (the 12 keys and the hook key) stands in its own 14 mm opening;
-  - the keycaps float above the plate, 15 mm over it;
+  - the keycaps float above the plate, about 17 mm over it;
   - the display module plugs into its socket through a hole and stands 6 mm over the plate on
     two spacers at its far end;
   - the piezo stands up through a round hole, and the status light shows through a small one.
@@ -97,14 +97,15 @@ Every run of `flatcase.py` checks:
 - a pressed keycap clears the plate, and there's room for the jack's plug under the board;
 - the handset touches nothing but the ear, the lips and the rests;
 - the stem rests on the hook key, and the pressed rocker clears everything;
-- the force on the hook key: about 140 gf with a 180 g handset, and about 5 gf with nothing on
+- the force on the hook key: about 130 gf with a 180 g handset, and about 4 gf with nothing on
   the hook (the key needs 30–60, so it comes up when you lift the handset).
 
 ## Measure first
 
-- **Keycap height.** The stem's height follows the keycaps' tops: `KEYCAP_TOP` is 20 mm over the
-  board, about right for 10 mm XDA caps on MX-size switches. Measure yours (board top to cap top,
-  with a cap on a switch) and set it, so the stem meets the hook key's cap.
+- **Keycap height.** The stem's height follows the keycaps' tops, 22 mm over the board: the
+  prototype box's estimate for XDA caps (`CAP_TOP` in `proto_box.py`, 17 mm over the plate line).
+  Measure yours (plate line to cap top, with a cap on a switch) and set `CAP_TOP`, so the stem
+  meets the hook key's cap. Both cases follow it.
 - **Your handset.** It's drawn for an Opis 60s Micro-sized handset (68 mm cups, 210 mm long,
   `handset.py`). Set `HANDSET_G` to its weight. A different cup shape moves the lips (`LIP_Z`);
   the check says if they miss or touch it.

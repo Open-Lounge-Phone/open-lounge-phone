@@ -64,10 +64,10 @@ T = 3.0                    # sheet thickness (3 mm acrylic or plywood)
 PLATE_GAP = 2.0            # M3 spacers, board top to plate (button-head screws fit under it)
 COLUMN = 12.0              # M3 standoffs, back plate to front plate, outside the board
 SWITCH_HOLE = 14.0         # the MX plate opening (Gateron KS-8 and other MX-size switches)
-KEYCAP, KEYCAP_H = 18.0, 10.0      # clear double-layer XDA 1u caps (18 mm square, 10 mm tall)
-KEYCAP_TOP = 20.0          # cap tops over the board: MX stem top 16.6 + ~3.4 (measure yours)
+KEYCAP, KEYCAP_H = P.KEYCAP, P.KEYCAP_H          # clear XDA 1u caps, as the prototype box
 FRONT_Z0 = PLATE_GAP                             # front plate's back face (board top = 0)
 FRONT_Z1 = FRONT_Z0 + T                          # 5.0: the switches' plate line
+KEYCAP_TOP = FRONT_Z1 + P.CAP_TOP                # cap tops over the board (the box's estimate)
 BACK_Z1 = FRONT_Z0 - COLUMN                      # back plate's front face
 BACK_Z0 = BACK_Z1 - T
 UNDER_BOARD = BACK_Z1 + F.BOARD_T                # 8.4 below the board: the jack's plug and leads
