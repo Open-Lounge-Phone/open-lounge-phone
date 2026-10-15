@@ -181,7 +181,9 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     // A public line's call back nobody took: there's no message to play, just its name.
     if (c->missed_count == 1 && c->missed_callback[0]) return set2(out, "MISSED CALL BACK", newest);
     if (c->missed_count == 1) {
-      const char *next = !c->owner_mode[0] || !strcmp(c->owner_mode, "kids") ? "ASK A GROWN-UP"
+      // A missed call (no message): it's on MENU 5. A message: where to listen.
+      const char *next = c->missed_call[0]                                     ? "MENU 5: MISSED"
+                         : !c->owner_mode[0] || !strcmp(c->owner_mode, "kids") ? "ASK A GROWN-UP"
                                                                                : "PLAY IN APP";
       return strlen(single) <= STATUS_WIDTH ? set2(out, single, next)
                                             : set2(out, "MISSED CALL", newest);

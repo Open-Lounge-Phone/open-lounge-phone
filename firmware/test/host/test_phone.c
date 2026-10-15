@@ -320,3 +320,18 @@ TEST(phone_silences_the_ringer_and_drops_repeated_ends) {
   cJSON_Delete(other);
   cJSON_Delete(active);
 }
+
+TEST(phone_calls_back_with_the_handset_up) {
+  phone_state_t s;
+  phone_init(&s);
+  s_n = 0;
+  phone_call_back(&s, "mc_1", emit);  // handset down: nothing
+  CHECK(s.kind == PH_IDLE && s_n == 0);
+  phone_hook(&s, true, emit);
+  s_n = 0;
+  phone_call_back(&s, "mc_1", emit);
+  CHECK(s.kind == PH_DIALING && s.button == -1);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.back\",\"id\":\"mc_1\"}");
+  phone_call_back(&s, "mc_2", emit);  // already dialing: nothing
+  CHECK(s_n == 1);
+}

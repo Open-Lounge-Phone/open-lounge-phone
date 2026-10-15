@@ -123,9 +123,9 @@ class Settings {
   }
 }
 
-/** MENU 5 (the labs screen): the settings PIN. */
+/** MENU 4 (the labs screen): the settings PIN. */
 async function pinOf(phone: QemuPhone): Promise<string> {
-  keys(phone, "menu", "5");
+  keys(phone, "menu", "4");
   const m = await shows(phone, /LABS: [^|]*\|[^|]*\|SETTINGS PIN (\d{4})\|/);
   keys(phone, "back", "back");
   return m[1] ?? "";

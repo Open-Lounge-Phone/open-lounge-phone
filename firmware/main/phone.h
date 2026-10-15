@@ -71,6 +71,9 @@ void phone_button(phone_state_t *s, int index, phone_emit_fn emit);
 void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_fn emit);
 /** MENU → 6: dial an extension (team and organization spaces). Handset up, nothing dialled. */
 void phone_extension(phone_state_t *s, const char *number, phone_emit_fn emit);
+/** MENU → 5 → 1: call a missed caller back (`call.back`, a `config.missed` id). Handset up,
+ * nothing dialled (core input `callBack`). */
+void phone_call_back(phone_state_t *s, const char *id, phone_emit_fn emit);
 /** The phone ends its call itself (e.g. the media failed): hang up, stay off the hook. */
 void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit);
 /** BACK while ringing (core input `silence`): the ringer stops here; the call goes on ringing

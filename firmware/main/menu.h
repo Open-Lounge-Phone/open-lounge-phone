@@ -1,8 +1,9 @@
 // The on-device menu, as docs/phone-ux.md specifies: MENU opens and closes it, a digit picks the
 // item shown for it, BACK goes one level up, 20 s without a key closes it.
 // Items: 1 Volume (earpiece and ringer), 2 Voicemail, 3 Network (Wi-Fi and server; 4 opens it
-// too), 5 Open to chat and 8 Log out (a Lounge phone in use), 6 Dial an extension (team and
-// organization spaces), 7 Phone check (and the self-test), 9 Update now, 0 About. In a call or a
+// too), 5 Missed calls and 8 Redial (on a Lounge phone in use: 5 Open to chat, 8 Log out), 6 Dial
+// an extension (team and organization spaces), 7 Phone check (and the self-test), 9 Update now,
+// 0 About. In a call or a
 // room MENU opens the call screen instead: each action on its digit (1 hold / resume, 2 transfer,
 // 3 mute / unmute: phone_action_digit), and 9 Volume.
 #pragma once
@@ -13,7 +14,7 @@
 
 typedef enum {
   MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME, MENU_SERVER, MENU_VOICEMAIL,
-  MENU_CALL, MENU_CHECK, MENU_EXT, MENU_LABS
+  MENU_CALL, MENU_CHECK, MENU_EXT, MENU_LABS, MENU_MISSED
 } menu_screen_t;
 
 /** Who may open the setup network from MENU 3: anyone, after a second press (kids' phones), or
@@ -24,7 +25,6 @@ typedef struct {
   menu_screen_t screen;
   int64_t last_input_ms;
   int voicemail;  // new messages (senders with unheard voicemail), shown under 2
-  int callbacks;  // public lines' call backs that weren't taken; 3 clears them too
   bool can_play;  // a person's own phone: 1 plays the messages, 3 clears them (vmplay.c)
   bool kids;      // a kids' phone: a grown-up listens in the app
   setup_guard_t setup;
@@ -33,6 +33,13 @@ typedef struct {
   bool lounge_session;  // …in use: 5 open to chat, 8 log out
   bool open_to_chat;
   bool extensions;      // the space has extensions: 6 dials one
+  bool calls;           // not a Lounge phone: 5 Missed calls, 8 Redial
+  // MENU 5: missed calls and call backs, newest first (set by the app like `actions`).
+  int missed_n;
+  char missed_from[8][25];
+  char missed_line[8][25];  // how many and when: "2 CALLS 14:05"
+  char missed_id[8][65];    // what 1 calls back ("" = can't from here)
+  int missed_index;         // the one shown
   char ext[8];          // MENU 6: the digits so far
   bool ext_transfer;    // …to transfer the call there (from the call screen)
   // What the call screen offers now (phone_actions), set by the app before each key and render.

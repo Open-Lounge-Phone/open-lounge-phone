@@ -21,6 +21,10 @@ typedef struct {
   int missed_count;
   char missed[MAX_MISSED][25];  // newest first
   bool missed_callback[MAX_MISSED];  // …a public line's call back that wasn't taken
+  bool missed_call[MAX_MISSED];      // …a call that rang, nobody answered, no message (MENU 5)
+  int missed_n[MAX_MISSED];          // …how many (calls or messages)
+  int64_t missed_at[MAX_MISSED];     // …when the newest was (ms since the epoch, 0 = unknown)
+  char missed_id[MAX_MISSED][65];    // …what MENU 5 → 1 calls back ("" = can't from here)
   char owner_mode[10];        // "kids" | "personal" | "lounge" | ""
   char owner_space[65];
   char owner_person[25];

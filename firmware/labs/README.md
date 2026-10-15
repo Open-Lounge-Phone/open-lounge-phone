@@ -29,7 +29,7 @@ phone has a **mode** that decides its idle screen.
 
 ## Settings
 
-MENU → 5 LABS shows the phone's address (`OLP-KITCHEN.LOCAL`) and a PIN. Open
+MENU → 4 LABS shows the phone's address (`OLP-KITCHEN.LOCAL`) and a PIN. Open
 `http://olp-kitchen.local` on any device on the same Wi-Fi, enter the PIN (so only someone at the
 phone can change it; 5 wrong tries lock it for a minute) and edit the room name, mode, keys, Home
 Assistant, check-in and doorbell. The Home Assistant token is write-only: the page never shows it

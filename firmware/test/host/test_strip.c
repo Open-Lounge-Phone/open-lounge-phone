@@ -244,3 +244,20 @@ TEST(strip_reconnecting_and_connection_lost) {
   CHECK_STR(out[0], "CONNECTION LOST");
   CHECK_STR(out[1], "PRESS A KEY");
 }
+
+TEST(strip_one_missed_call_points_at_menu_5) {
+  phone_state_t ph;
+  phone_init(&ph);
+  phone_config_t cfg = {.present = true, .missed_count = 1};
+  snprintf(cfg.missed[0], sizeof cfg.missed[0], "Mom");
+  snprintf(cfg.owner_mode, sizeof cfg.owner_mode, "kids");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "MISSED MOM");
+  CHECK_STR(out[1], "ASK A GROWN-UP");  // a message
+  cfg.missed_call[0] = true;           // a call that rang, no message
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "MENU 5: MISSED");
+}

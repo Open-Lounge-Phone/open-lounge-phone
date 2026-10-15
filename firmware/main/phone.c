@@ -175,6 +175,19 @@ void phone_extension(phone_state_t *s, const char *number, phone_emit_fn emit) {
   CPY(s->held, held);
 }
 
+void phone_call_back(phone_state_t *s, const char *id, phone_emit_fn emit) {
+  if (s->kind != PH_OFFHOOK || !id || !id[0]) return;  // only with the handset up and idle
+  char held[65];
+  CPY(held, s->held);
+  cJSON *m = msg("call.back");
+  cJSON_AddStringToObject(m, "id", id);
+  emit(m);
+  phone_init(s);
+  s->kind = PH_DIALING;
+  s->button = -1;
+  CPY(s->held, held);
+}
+
 void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_fn emit) {
   if (s->kind != PH_INCALL || !s->connected || s->held[0] || !number) return;
   s->transfer_pending = false;

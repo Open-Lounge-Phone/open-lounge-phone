@@ -36,6 +36,9 @@ typedef enum {
   EV_LOUNGE_CHAT,  // MENU -> 5 on a Lounge phone: a = 1 open to chat
   EV_LOUNGE_LEAVE, // MENU -> 8 on a Lounge phone: log out
   EV_LABS,         // labs build: from the intercom / Home Assistant tasks (data, see labs.h)
+  EV_CALL_BACK,    // MENU -> 5 -> 1: data = the missed call's id (malloc'd)
+  EV_MISSED_CLEAR, // MENU -> 5 -> 3: clear the missed calls (everywhere)
+  EV_REDIAL,       // MENU -> 8: call again what this phone last called
 } ev_type_t;
 
 typedef struct {

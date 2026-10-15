@@ -21,7 +21,7 @@ static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
   static const char *names[] = {"closed",    "root", "about", "wifi", "volume", "server",
-                                "voicemail", "call", "check", "ext",  "labs"};
+                                "voicemail", "call", "check", "ext",  "labs",  "missed"};
   return names[s];
 }
 
@@ -77,6 +77,9 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     } else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 2) m->screen = MENU_VOICEMAIL;
+#if CONFIG_OLP_LABS
+    else if (d == 4 && !m->lounge) m->screen = MENU_LABS;  // labs: the settings page and PIN
+#endif
     else if (d == 3 || d == 4) {  // Wi-Fi and server share one screen (and one setup page)
       m->screen = MENU_WIFI;
       m->confirm = false;
@@ -87,12 +90,14 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     } else if (d == 5 && m->lounge_session) {
       app_post(EV_LOUNGE_CHAT, !m->open_to_chat, NULL);
       m->screen = MENU_CLOSED;
-#if CONFIG_OLP_LABS
-    } else if (d == 5 && !m->lounge) {
-      m->screen = MENU_LABS;                 // labs: the settings page's address and PIN
-#endif
+    } else if (d == 5 && m->calls) {
+      m->screen = MENU_MISSED;  // missed calls, one at a time
+      m->missed_index = 0;
     } else if (d == 8 && m->lounge_session) {
       app_post(EV_LOUNGE_LEAVE, 0, NULL);
+      m->screen = MENU_CLOSED;
+    } else if (d == 8 && m->calls) {
+      app_post(EV_REDIAL, 0, NULL);  // call again what this phone last called
       m->screen = MENU_CLOSED;
     }
   } else if (m->screen == MENU_CALL) {
@@ -108,9 +113,21 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->ext[0] = '\0';
       m->ext_transfer = true;
     }
+  } else if (m->screen == MENU_MISSED) {
+    int d = digit_of(key);
+    int i = m->missed_n ? m->missed_index % m->missed_n : 0;
+    if (d == 1 && m->missed_n && m->missed_id[i][0]) {
+      app_post(EV_CALL_BACK, 0, strdup(m->missed_id[i]));
+      m->screen = MENU_CLOSED;
+    } else if (d == 2 && m->missed_n > 1) {
+      m->missed_index = (i + 1) % m->missed_n;
+    } else if (d == 3 && m->missed_n) {
+      app_post(EV_MISSED_CLEAR, 0, NULL);  // the list empties when the server says so
+      m->missed_index = 0;
+    }
   } else if (m->screen == MENU_VOICEMAIL && m->can_play) {
     int d = digit_of(key);
-    if (d == 1 || (d == 3 && (m->voicemail > 0 || m->callbacks > 0))) {
+    if (d == 1 || (d == 3 && m->voicemail > 0)) {
       app_post(EV_VM_PLAY, d == 3, NULL);
       m->screen = MENU_CLOSED;
     }
@@ -160,7 +177,7 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       int w, h;
       display_size(&w, &h);
       int cap = (w - 8) / 12 > 24 ? 24 : (w - 8) / 12;
-      const char *items[10];
+      const char *items[12];
       int n = 0;
       items[n++] = "1 VOLUME";
       if (m->lounge_session) {
@@ -171,24 +188,26 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       }
       items[n++] = "3 NETWORK";
 #if CONFIG_OLP_LABS
-      if (!m->lounge) items[n++] = "5 LABS";
+      if (!m->lounge) items[n++] = "4 LABS";
 #endif
+      if (m->calls && !m->lounge_session) items[n++] = "5 MISSED";
       if (m->extensions) items[n++] = "6 EXT";
       items[n++] = "7 CHECK";
+      if (m->calls && !m->lounge_session) items[n++] = "8 REDIAL";
       items[n++] = "0 ABOUT";
       if (ota_enabled()) items[n++] = "9 UPDATE";  // last: the one left off when it won't fit
       snprintf(out[0], 25, "MENU");
       int line = 1;
-      out[1][0] = out[2][0] = out[3][0] = '\0';
-      for (int i = 0; i < n && line < 4; i++) {
+      for (int i = 1; i < MENU_LINES; i++) out[i][0] = '\0';
+      for (int i = 0; i < n && line < MENU_LINES; i++) {
         size_t have = strlen(out[line]), add = strlen(items[i]);
         if (have && have + 1 + add > (size_t)cap) {
-          if (++line >= 4) break;
+          if (++line >= MENU_LINES) break;
           have = 0;
         }
         snprintf(out[line] + have, 25 - have, "%s%s", have ? " " : "", items[i]);
       }
-      return line < 4 ? line + 1 : 4;
+      return line < MENU_LINES ? line + 1 : MENU_LINES;
     }
     case MENU_CALL: {
       // One call has audio at a time on this phone, so "hold" doesn't add a caller here (the
@@ -211,6 +230,23 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       snprintf(out[n++], 25, "9 VOLUME");
       return n;
     }
+    case MENU_MISSED: {
+      if (!m->missed_n) {
+        snprintf(out[0], 25, "NO MISSED CALLS");
+        return 1;
+      }
+      int i = m->missed_index % m->missed_n;
+      snprintf(out[0], 25, "MISSED %d OF %d", i + 1, m->missed_n);
+      snprintf(out[1], 25, "%s", m->missed_from[i]);
+      upper(out[1]);
+      snprintf(out[2], 25, "%s", m->missed_line[i]);
+      bool back = m->missed_id[i][0];
+      if (back && m->missed_n > 1) snprintf(out[3], 25, "1 CALL BACK 2 NEXT");
+      else if (back) snprintf(out[3], 25, "1 CALL BACK");
+      else snprintf(out[3], 25, "%s", m->missed_n > 1 ? "2 NEXT" : "CALL BACK IN APP");
+      snprintf(out[4], 25, "3 CLEAR ALL");
+      return 5;
+    }
     case MENU_CHECK:  // drawn as a page (main.c); these lines are the fallback
       snprintf(out[0], 25, "PHONE CHECK");
       snprintf(out[1], 25, "1 SELF-TEST");
@@ -218,14 +254,9 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
     case MENU_VOICEMAIL:
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
       else snprintf(out[0], 25, "NO NEW VOICEMAIL");
-      if (m->can_play) {
-        int n = 1;
-        if (m->callbacks > 0)  // at most MAX_MISSED (8): one digit
-          snprintf(out[n++], 25, "%c MISSED CALL BACK%s", '0' + (m->callbacks > 9 ? 9 : m->callbacks),
-                   m->callbacks > 1 ? "S" : "");
-        snprintf(out[n++], 25, "%s",
-                 m->voicemail > 0 || m->callbacks > 0 ? "1 PLAY 3 CLEAR" : "1 PLAY");
-        return n;
+      if (m->can_play) {  // missed calls and call backs are on 5
+        snprintf(out[1], 25, "%s", m->voicemail > 0 ? "1 PLAY 3 CLEAR" : "1 PLAY");
+        return 2;
       }
       snprintf(out[1], 25, "%s", m->voicemail > 0 ? (m->kids ? "ASK A GROWN-UP" : "PLAY IN APP") : "");
       return m->voicemail > 0 ? 2 : 1;

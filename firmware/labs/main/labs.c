@@ -136,7 +136,7 @@ void labs_start(void) {
   labels_refresh();
   icom_init(&s_ic, s_cfg.name);
   if (s_cfg.mode == LM_MACRO) labs_usb_start();
-  ESP_LOGI(TAG, "LABS %s, mode %s; settings http://%s.local (PIN in MENU 5)", s_cfg.name,
+  ESP_LOGI(TAG, "LABS %s, mode %s; settings http://%s.local (PIN in MENU 4)", s_cfg.name,
            labs_mode_name(s_cfg.mode), s_host);
 }
 

@@ -41,6 +41,8 @@
 #include "marquee.h"
 #include "lounge.h"
 #include "notice.h"
+#include "calls.h"
+#include "nvs.h"
 #if CONFIG_OLP_LABS
 #include "labs.h"   // the labs build (firmware/labs) only
 #endif
@@ -109,6 +111,38 @@ static int64_t s_reconnect_since = -1;
 // RECONNECTING shows only after this long, so a normal end never looks like a failure.
 #define RECONNECT_SHOW_MS 2000
 static phone_ends_t s_ends;  // calls that ended here: a repeated ended is dropped
+static int s_utc_offset_min;  // the space's (config.utcOffsetMin), for when missed calls were
+
+/** Epoch ms now, or 0 if the clock isn't set. */
+static int64_t epoch_now(void) {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  int64_t ms = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  return ms > 1700000000000LL ? ms : 0;
+}
+
+// MENU 8 Redial: what this phone last called, kept in NVS ("olp" / "last_dial").
+static void save_last_dial(const last_dial_t *d) {
+  if (s_lounge.on) return;  // a Lounge phone forgets people
+  char v[80];
+  last_dial_encode(d, v, sizeof v);
+  nvs_handle_t h;
+  if (nvs_open("olp", NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_str(h, "last_dial", v);
+  nvs_commit(h);
+  nvs_close(h);
+}
+
+static bool load_last_dial(last_dial_t *d) {
+  char v[80] = "";
+  size_t len = sizeof v;
+  nvs_handle_t h;
+  if (nvs_open("olp", NVS_READONLY, &h) == ESP_OK) {
+    if (nvs_get_str(h, "last_dial", v, &len) != ESP_OK) v[0] = '\0';
+    nvs_close(h);
+  }
+  return last_dial_decode(v, d);
+}
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
@@ -289,12 +323,25 @@ static void render(void) {
 
   char lines[SCREEN_LINES][25] = {{0}};
   int n_status = 0;  // lines from the status strip (0 = a menu or another screen has them)
+  // MENU 2 counts the messages; MENU 5 lists the missed calls and call backs, newest first.
   s_menu.voicemail = 0;
-  s_menu.callbacks = 0;
+  s_menu.missed_n = 0;
+  int64_t wall = epoch_now();
   for (int i = 0; i < s_cfg.missed_count && i < MAX_MISSED; i++) {
-    if (s_cfg.missed_callback[i]) s_menu.callbacks++;
-    else s_menu.voicemail++;
+    if (!s_cfg.missed_callback[i] && !s_cfg.missed_call[i]) {
+      s_menu.voicemail++;
+      continue;
+    }
+    int k = s_menu.missed_n++;
+    char when[24];
+    if (wall && s_cfg.missed_at[i]) missed_when(when, sizeof when, s_cfg.missed_at[i], wall, s_utc_offset_min);
+    else snprintf(when, sizeof when, "%s", "");
+    missed_count_line(s_menu.missed_line[k], sizeof s_menu.missed_line[k], s_cfg.missed_callback[i],
+                      s_cfg.missed_n[i], when);
+    snprintf(s_menu.missed_from[k], sizeof s_menu.missed_from[k], "%s", s_cfg.missed[i]);
+    snprintf(s_menu.missed_id[k], sizeof s_menu.missed_id[k], "%s", s_cfg.missed_id[i]);
   }
+  s_menu.calls = !s_lounge.on;
   s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
   s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
   s_menu.lounge = s_lounge.on;
@@ -723,6 +770,9 @@ static void on_open(void) {
   cJSON_AddStringToObject(hello, "fw", FW_VERSION);
   cJSON_AddNumberToObject(hello, "buttons", 10);
   cJSON_AddStringToObject(hello, "display", "eink");
+  // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
+  cJSON *features = cJSON_AddArrayToObject(hello, "features");
+  cJSON_AddItemToArray(features, cJSON_CreateString("missed-calls"));
   proto_send(hello);
   s_last_ping = now_ms();
   if (!id[0]) begin_pairing();
@@ -785,9 +835,16 @@ static void on_config(const cJSON *m) {
   const cJSON *x;
   cJSON_ArrayForEach(x, cJSON_GetObjectItemCaseSensitive(m, "missed")) {
     if (s_cfg.missed_count < MAX_MISSED) {
-      copy(s_cfg.missed[s_cfg.missed_count], sizeof s_cfg.missed[0], jstr(x, "from"));
-      s_cfg.missed_callback[s_cfg.missed_count] =
-          cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(x, "callback"));
+      int k = s_cfg.missed_count;
+      copy(s_cfg.missed[k], sizeof s_cfg.missed[0], jstr(x, "from"));
+      s_cfg.missed_callback[k] = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(x, "callback"));
+      const char *kind = jstr(x, "kind");
+      s_cfg.missed_call[k] = kind && !strcmp(kind, "call");
+      const cJSON *n = cJSON_GetObjectItemCaseSensitive(x, "count");
+      const cJSON *at = cJSON_GetObjectItemCaseSensitive(x, "at");
+      s_cfg.missed_n[k] = cJSON_IsNumber(n) ? n->valueint : 1;
+      s_cfg.missed_at[k] = cJSON_IsNumber(at) ? (int64_t)at->valuedouble : 0;
+      copy(s_cfg.missed_id[k], sizeof s_cfg.missed_id[0], jstr(x, "id"));
     }
     s_cfg.missed_count++;
   }
@@ -804,7 +861,10 @@ static void on_config(const cJSON *m) {
   for (char *c = s_lounge.here; *c; c++) *c = (char)toupper((unsigned char)*c);
   s_extensions = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "extensions"));
   const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
-  if (cJSON_IsNumber(off)) ota_set_utc_offset(off->valueint);
+  if (cJSON_IsNumber(off)) {
+    ota_set_utc_offset(off->valueint);
+    s_utc_offset_min = off->valueint;
+  }
   const cJSON *srv_now = cJSON_GetObjectItemCaseSensitive(m, "now");
   if (cJSON_IsNumber(srv_now)) ota_set_time((int64_t)srv_now->valuedouble);
   if (first) {
@@ -1054,8 +1114,10 @@ static void on_key(int index) {
   }
   phone_kind_t before = s_phone.kind;
   phone_button(&s_phone, index, emit);
-  if (before == PH_OFFHOOK && s_phone.kind == PH_DIALING)
+  if (before == PH_OFFHOOK && s_phone.kind == PH_DIALING) {
     copy(s_active_label, sizeof s_active_label, s_cfg.labels[index]);
+    save_last_dial(&(last_dial_t){.kind = DIAL_KEY, .index = index});
+  }
 }
 
 /** Lifting the handset with a recorded notice showing plays it in the earpiece. */
@@ -1271,12 +1333,7 @@ void app_main(void) {
             snprintf(s_ota_msg[1], 25, "THEN MENU 2 1");
             s_ota_msg_until = now_ms() + 4000;
           } else if (s_authed) {
-            // 3 Clear: missed call backs go too (on all the owner's phones).
-            if (ev.a == 1 && s_menu.callbacks > 0) {
-              cJSON *clear = cJSON_CreateObject();
-              cJSON_AddStringToObject(clear, "t", "missed.clear");
-              proto_send(clear);  // sends and frees it
-            }
+            // 3 Clear marks the messages heard (missed calls are cleared on MENU 5).
             if (ev.a == 0 || s_menu.voicemail > 0) vmplay_start(ev.a == 1, now_ms());
           }
           break;
@@ -1294,8 +1351,50 @@ void app_main(void) {
           } else if (ev.data) {
             snprintf(s_active_label, sizeof s_active_label, "EXT %s", ev.data);
             phone_extension(&s_phone, ev.data, emit);
+            last_dial_t d = {.kind = DIAL_EXT};
+            snprintf(d.text, sizeof d.text, "%s", ev.data);
+            save_last_dial(&d);
           }
           free(ev.data);
+          break;
+        case EV_CALL_BACK:
+        case EV_REDIAL: {
+          // Both dial: the handset must be up, with nothing else going on.
+          last_dial_t d = {.kind = DIAL_BACK};
+          if (ev.type == EV_CALL_BACK) snprintf(d.text, sizeof d.text, "%s", ev.data ? ev.data : "");
+          bool have = ev.type == EV_CALL_BACK ? d.text[0] != '\0' : load_last_dial(&d);
+          free(ev.data);
+          if (!have) {
+            snprintf(s_ota_msg[0], 25, "NOTHING TO REDIAL");
+            s_ota_msg[1][0] = '\0';
+            s_ota_msg_until = now_ms() + 4000;
+            break;
+          }
+          if (!s_hook_up || s_phone.kind != PH_OFFHOOK || s_phone.held[0]) {
+            snprintf(s_ota_msg[0], 25, "LIFT THE HANDSET");
+            snprintf(s_ota_msg[1], 25, "THEN MENU %d", ev.type == EV_CALL_BACK ? 5 : 8);
+            s_ota_msg_until = now_ms() + 4000;
+            break;
+          }
+          ESP_LOGI(TAG, "%s %s", ev.type == EV_CALL_BACK ? "CALL BACK" : "REDIAL",
+                   d.kind == DIAL_KEY ? "key" : d.kind == DIAL_EXT ? d.text : "missed call");
+          if (d.kind == DIAL_KEY) {
+            copy(s_active_label, sizeof s_active_label, s_cfg.labels[d.index]);
+            phone_button(&s_phone, d.index, emit);
+          } else if (d.kind == DIAL_EXT) {
+            snprintf(s_active_label, sizeof s_active_label, "EXT %.20s", d.text);
+            phone_extension(&s_phone, d.text, emit);
+          } else {
+            s_active_label[0] = '\0';
+            for (int i = 0; i < s_cfg.missed_count && i < MAX_MISSED; i++)
+              if (!strcmp(s_cfg.missed_id[i], d.text)) copy(s_active_label, sizeof s_active_label, s_cfg.missed[i]);
+            phone_call_back(&s_phone, d.text, emit);
+          }
+          if (s_phone.kind == PH_DIALING) save_last_dial(&d);
+          break;
+        }
+        case EV_MISSED_CLEAR:
+          if (s_authed) emit(msg("missed.clear"));
           break;
         case EV_LOUNGE_CHAT: {
           cJSON *c = msg("lounge.chat");

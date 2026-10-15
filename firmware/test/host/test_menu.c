@@ -131,3 +131,96 @@ TEST(menu_call_screen_while_they_hold_you_is_a_call) {
   menu_key(&m, K_BACK, 2);
   CHECK(m.screen == MENU_CALL);
 }
+
+TEST(menu_root_packs_missed_and_redial_into_five_lines) {
+  menu_t m = {0};
+  m.calls = true;
+  m.extensions = true;
+  menu_key(&m, K_MENU, 0);
+  char out[MENU_LINES][25];
+  int n = menu_lines(&m, out);
+  CHECK(n == 6);
+  CHECK_STR(out[0], "MENU");
+  CHECK_STR(out[1], "1 VOLUME 2 VOICEMAIL");
+  CHECK_STR(out[2], "3 NETWORK 5 MISSED");
+  CHECK_STR(out[3], "6 EXT 7 CHECK");
+  CHECK_STR(out[4], "8 REDIAL 0 ABOUT");
+  CHECK_STR(out[5], "9 UPDATE");
+  for (int i = 0; i < n; i++) CHECK(strlen(out[i]) <= 20);
+  // A Lounge phone in use: 5 and 8 are chat and log out.
+  menu_t l = {0};
+  l.lounge = l.lounge_session = true;
+  menu_key(&l, K_MENU, 0);
+  n = menu_lines(&l, out);
+  CHECK_STR(out[1], "1 VOLUME 5 CHAT");
+  CHECK_STR(out[2], "8 LOG OUT 3 NETWORK");
+  reset_events();
+  menu_key(&l, key(8), 1);
+  CHECK(s_ev_type == EV_LOUNGE_LEAVE);
+  // Redial elsewhere.
+  reset_events();
+  menu_key(&m, key(8), 2);
+  CHECK(s_ev_type == EV_REDIAL && m.screen == MENU_CLOSED);
+}
+
+TEST(menu_missed_calls_one_at_a_time) {
+  menu_t m = {0};
+  m.calls = true;
+  m.missed_n = 2;
+  snprintf(m.missed_from[0], 25, "Mom");
+  snprintf(m.missed_line[0], 25, "2 CALLS 14:05");
+  snprintf(m.missed_id[0], 65, "mc_1");
+  snprintf(m.missed_from[1], 25, "Support");
+  snprintf(m.missed_line[1], 25, "CALLED BACK 09:12");
+  menu_key(&m, K_MENU, 0);
+  menu_key(&m, key(5), 1);
+  CHECK(m.screen == MENU_MISSED);
+  char out[MENU_LINES][25];
+  int n = menu_lines(&m, out);
+  CHECK(n == 5);
+  CHECK_STR(out[0], "MISSED 1 OF 2");
+  CHECK_STR(out[1], "MOM");
+  CHECK_STR(out[2], "2 CALLS 14:05");
+  CHECK_STR(out[3], "1 CALL BACK 2 NEXT");
+  CHECK_STR(out[4], "3 CLEAR ALL");
+  menu_key(&m, key(2), 2);
+  menu_lines(&m, out);
+  CHECK_STR(out[0], "MISSED 2 OF 2");
+  CHECK_STR(out[3], "2 NEXT");  // no id: called back from the app
+  reset_events();
+  menu_key(&m, key(1), 3);
+  CHECK(s_ev_type == -1 && m.screen == MENU_MISSED);
+  menu_key(&m, key(2), 4);  // round to the first
+  reset_events();
+  menu_key(&m, key(1), 5);
+  CHECK(s_ev_type == EV_CALL_BACK && m.screen == MENU_CLOSED);
+  CHECK_STR(s_ev_data, "mc_1");
+  menu_key(&m, K_MENU, 6);
+  menu_key(&m, key(5), 7);
+  reset_events();
+  menu_key(&m, key(3), 8);
+  CHECK(s_ev_type == EV_MISSED_CLEAR);
+  m.missed_n = 0;  // the server cleared them
+  n = menu_lines(&m, out);
+  CHECK(n == 1);
+  CHECK_STR(out[0], "NO MISSED CALLS");
+}
+
+TEST(menu_voicemail_clears_messages_only) {
+  menu_t m = {0};
+  m.can_play = true;
+  menu_key(&m, K_MENU, 0);
+  menu_key(&m, key(2), 1);
+  char out[MENU_LINES][25];
+  menu_lines(&m, out);
+  CHECK_STR(out[0], "NO NEW VOICEMAIL");
+  CHECK_STR(out[1], "1 PLAY");
+  reset_events();
+  menu_key(&m, key(3), 2);
+  CHECK(s_ev_type == -1);  // nothing to clear
+  m.voicemail = 2;
+  menu_lines(&m, out);
+  CHECK_STR(out[1], "1 PLAY 3 CLEAR");
+  menu_key(&m, key(3), 3);
+  CHECK(s_ev_type == EV_VM_PLAY && s_ev_a == 1);
+}
