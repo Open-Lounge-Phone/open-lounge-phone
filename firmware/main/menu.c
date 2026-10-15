@@ -273,7 +273,7 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
           if (++line >= MENU_LINES) break;
           have = 0;
         }
-        snprintf(out[line] + have, 25 - have, "%s%s", have ? " " : "", item);
+        snprintf(out[line] + have, 25 - have, "%s%.20s", have ? " " : "", item);
         upper(out[line]);
       }
       return line < MENU_LINES ? line + 1 : MENU_LINES;
