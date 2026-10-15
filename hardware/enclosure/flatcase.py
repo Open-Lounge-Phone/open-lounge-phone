@@ -1,25 +1,25 @@
-"""The flat-cut case: a laser-cut sandwich for the minimal board, a wall phone on a desk stand.
+"""The flat-cut case: a laser-cut sandwich for the minimal board, a wall phone like the core.
 
 Every part is cut from one sheet of 3 mm acrylic (or plywood) and held with M3 standoffs,
 screws and nuts. Layers, front to back: the front plate, which is the switch plate (each switch
 stands in its own 14 mm opening, the keycaps float above it and the display module stands over
-it on its socket), the board hung 2 mm under it, and the back plate. Standoffs outside the
-board join the front and back plates. The handset hangs on a tower on the left, its centreline straight above the
-hook key:
+it on its socket), the board hung 2 mm under it, and the back plate, which hangs on a wall from
+two keyholes.
 
-- its mouthpiece cup sits on the ledge of one rocker that turns on an M3 screw between two fixed
-  ears, just above the hook key;
-- the handset's weight tips the rocker, and the rocker's tail presses the hook key;
-- the key's own spring lifts the tail back when the handset is picked up;
-- a fixed J-hook at the top keeps the handset upright.
+The switchhook works like the core wall phone's: one rocker, its centreline straight above the
+hook key, on an M3 screw between two lugs at the top of the face.
 
-Two flat legs, slotted into the back plate, stand the phone up tilted back 25 degrees;
-without them, two keyholes in the back plate hang it on a wall.
+- The ear: a wide flat fork standing out from the wall. The earpiece cup sits between its two
+  prongs (the handle hangs down between them), and a post at each prong's tip keeps the cup from
+  sliding off.
+- The stem: a long fin from the ear down the face to the hook key's cap.
+- The handset's weight tips the ear down, and the stem presses the hook key. Lift the handset
+  and the key's own spring pushes the stem back up.
 
     .venv/bin/python flatcase.py            # build/flatcase/: cut files (DXF, SVG) and STL
 
 Coordinates: the board's, x right, y up (the top edge carries USB-C and the handset jack),
-z = 0 the board's top surface, +z toward the user.
+z = 0 the board's top surface, +z out from the wall.
 """
 from __future__ import annotations
 
@@ -76,40 +76,41 @@ PIEZO_HOLE = 13.4          # the piezo (12.2 across, 6.5 tall) stands 1.5 mm out
 M3 = 3.4                   # clearance hole
 M2 = 2.4
 HOOK_KEY = next((x, F.Y(y)) for x, y, lab in F.SWITCHES if lab == "HOOK")
+PIEZO = (P.BZ1_C[0], F.Y(P.BZ1_C[1]))
 
-# --- the hook: one rocker, straight above the hook key -----------------------------------------
-HS_X = HOOK_KEY[0]         # the handset's centreline runs through the hook key
-AXLE_Y = HOOK_KEY[1] + 16.0                      # the rocker's screw, just above the hook key
-AXLE_Z = KEYCAP_TOP + 5.5  # the tail runs out level to the hook key's cap
-LEDGE_TOP = AXLE_Y + 5.0   # the mouthpiece cup sits on the rocker's ledge
-LEDGE_REACH = 26.0         # forward from the screw, under the cup
-CUP_R = HS.CUP_D / 2
-HS_BASE_Z = AXLE_Z + 9.0   # the handset's back: its weight lands well in front of the screw
-HS_LIFT = 0.0              # how far the domed cup rests above a flat rim's bottom (measured)
-CUP_Y = LEDGE_TOP + CUP_R                         # the mouthpiece cup's centre
-CUP_TOP = CUP_Y + HS_LIFT + 2 * (HS.LENGTH / 2 - CUP_R) + CUP_R   # the earpiece's top
-LIP_Z = HS_BASE_Z + HS.CUP_H + 2.6                # in front of the earpiece's dome
-EAR_X = (HS_X - T - 0.5, HS_X + T + 0.5)          # the two fixed ears either side of the rocker
-
-# --- outline --------------------------------------------------------------------------------
+# --- outline: the board and a margin, like the core faceplate --------------------------------
 MARGIN = 10.0              # plate beyond the board
-R_CORNER = 8.0
+R_CORNER = 10.0
 BODY = (-MARGIN, F.BOARD_W + MARGIN, -MARGIN, F.BOARD_H + MARGIN)
-TOWER_TOP = CUP_TOP + 20.0
-TOWER = (HS_X - 40.0, HS_X + 40.0, -MARGIN, TOWER_TOP)   # the handset hangs on it
-J_Y0 = CUP_TOP - 40.0      # the J-hook's foot on the tower
-
-# --- columns: the body's corners and the tower's top -------------------------------------------
 COLUMNS = [(-5.0, -5.0), (F.BOARD_W + 5.0, -5.0), (F.BOARD_W + 5.0, F.BOARD_H + 5.0),
-           (TOWER[0] + 5.0, TOWER_TOP - 5.0), (TOWER[1] - 5.0, TOWER_TOP - 5.0),
-           (TOWER[0] + 5.0, -5.0)]
+           (-5.0, F.BOARD_H + 5.0), (40.0, F.BOARD_H + 5.0)]   # outside the board and the plugs
+KEYHOLES = [(60.0, 47.0), (140.0, 47.0)]   # under the board, clear of the parts on its bottom
 
-# --- stand ----------------------------------------------------------------------------------
-TILT = 25.0                # back from vertical (15 tips forward with the handset on)
-LEG_X = (TOWER[0] + 10.0, F.BOARD_W - 10.0)
-LEG_SPAN = (8.0, 90.0)     # along the back plate (y); both legs fit under the body's top
-TAB = (12.0, T)            # tab length x thickness; slots are cut 0.2 bigger
-CABLE_SLOT = (0.0, 32.0, F.BOARD_H + 2.0, F.BOARD_H + 8.0)   # USB-C and the cord out the back
+# --- the switchhook: one rocker, straight above the hook key -----------------------------------
+HS_X = HOOK_KEY[0]         # the handset's centreline runs through the hook key
+PIVOT = (55.0, KEYCAP_TOP + 5.5)  # (y, z): below the piezo, a short lever to the hook key
+LUG_X = (HS_X - T - 0.5, HS_X + T + 0.5)         # the two fixed lugs either side of the stem
+LUG_Y = (PIVOT[0] - 8.5, PIVOT[0] + 8.5)        # their feet on the front plate
+STEM_W = 9.0               # the stem bar (in z)
+NECK = (PIVOT[1] - 4.0, PIVOT[1] + 4.0)          # the stem's top, through the ear (z)
+SHOULDER = (PIVOT[1] - 5.5, PIVOT[1] + 5.5)      # the stem below the ear: the ear sits on it
+EAR_Y = BODY[3]            # the ear's underside, just over the plates' top edge
+GAP_X = 25.0               # the prongs' inner edges, either side of the centreline: the handle
+PRONG_W = 7.0              # (39-46 mm wide under the cup) passes between them
+EAR_Z0 = 15.0              # the ear's inner edge (the plates' edge is under it)
+BAR_Z1 = 36.0              # the crossbar's outer edge: behind the handset's back
+CUP_R = HS.CUP_D / 2
+FRONT_GAP = 40.0           # the rests: M3 standoffs from the front plate to the handset's back
+HS_BASE_Z = FRONT_Z1 + FRONT_GAP                  # the handset's back (its cups' rims)
+CUP_Y = EAR_Y + T + math.sqrt(CUP_R ** 2 - GAP_X ** 2)   # the earpiece cup's centre, on the prongs
+POST_D = 6.0               # M3 standoffs (5.5 hex), as round posts
+LIP_L = 8.0                # the lips: short standoffs on the prongs' tips, in front of the cup
+LIP_X = GAP_X + PRONG_W / 2                       # from the centreline
+LIP_Z = 70.5               # just in front of the cup (its front rises steeply; checked)
+EAR_Z1 = LIP_Z + 5.0
+RESTS = [(HS_X - 14.0, -5.0), (HS_X + 14.0, -5.0)]   # under the mouthpiece, below the board
+HANDSET_G = 180.0          # MEASURE: your handset's weight
+HOOK_SPRING_GF = (30.0, 60.0)    # a linear MX switch: at the top of travel and at the bottom
 
 
 def rect(x0, x1, y0, y1):
@@ -121,8 +122,8 @@ def rrect(x0, x1, y0, y1, r):
 
 
 def outline():
-    """The plates' shape: the body round the board and the tower the handset hangs on."""
-    return rrect(*BODY, R_CORNER) + rrect(*TOWER, R_CORNER)
+    """The plates' shape: the board and a margin, corners rounded like the core faceplate."""
+    return rrect(*BODY, R_CORNER)
 
 
 def board_y(y):
@@ -137,8 +138,7 @@ def front_plate_2d():
     s = outline()
     for x, y, _ in F.SWITCHES:
         s -= Pos(x, board_y(y)) * RectangleRounded(SWITCH_HOLE, SWITCH_HOLE, 0.3)
-    bx, by = P.BZ1_C[0], board_y(P.BZ1_C[1])
-    s -= Pos(bx, by) * Circle(PIEZO_HOLE / 2)          # the ringer stands through, open to the air
+    s -= Pos(*PIEZO) * Circle(PIEZO_HOLE / 2)          # the ringer stands through, open to the air
     jx, jy = P.J3_CENTRE[0], board_y(P.J3_CENTRE[1])
     s -= Pos(jx, jy) * RectangleRounded(*P.J3_CUT, 0.5)  # the display module plugs in through it
     lx, ly = P.LED[0], board_y(P.LED[1])
@@ -149,11 +149,12 @@ def front_plate_2d():
         s -= Pos(x, y) * Circle(M3 / 2)
     for x, y in P.MODULE_FAR_HOLES:                   # the module's far end stands on the plate
         s -= Pos(x, board_y(y)) * Circle(M2 / 2)
-    for fx, ys in fin_slots_front():
-        for y0, y1 in ys:
-            s -= rect(fx - (T + 0.2) / 2, fx + (T + 0.2) / 2, y0 - 0.1, y1 + 0.1)
-    for fx, y in fin_screws_front():
-        s -= Pos(fx, y) * Circle(M3 / 2)
+    for x, y in RESTS:                                # the mouthpiece's rests
+        s -= Pos(x, y) * Circle(M3 / 2)
+    for lx in LUG_X:                                  # the lugs' tabs and screws
+        y0, y1 = lug_tab()
+        s -= rect(lx - (T + 0.2) / 2, lx + (T + 0.2) / 2, y0 - 0.1, y1 + 0.1)
+        s -= Pos(lx, lug_screw()) * Circle(M3 / 2)
     return s
 
 
@@ -163,40 +164,27 @@ def back_plate_2d():
         s -= Pos(x, y) * Circle(M3 / 2)
     for x, y, _ in P.BUTTONS:                        # pinholes for RESET and BOOT
         s -= Pos(x, board_y(y)) * Circle(1.0)
-    for lx in LEG_X:                                  # the legs' tabs and screws
-        for y0, y1 in leg_tab_spans():
-            s -= rect(lx - (T + 0.2) / 2, lx + (T + 0.2) / 2, y0 - 0.1, y1 + 0.1)
-        s -= Pos(lx, sum(LEG_SPAN) / 2) * Circle(M3 / 2)
-    for x, y in ((HS_X, TOWER_TOP - 25.0), (F.BOARD_W - 20.0, F.BOARD_H - 10.0)):
-        s -= keyhole(x, y)                            # hang it on a wall instead
-    s -= rrect(*CABLE_SLOT, 2.0)                      # USB-C and the handset cord out the back
+    for x, y in KEYHOLES:
+        s -= keyhole(x, y)
     return s
 
 
 def keyhole(x, y):
-    """A keyhole for a wall screw: head through the round part, slide down onto the neck."""
-    return Pos(x, y) * Circle(4.5) + rrect(x - 2.0, x + 2.0, y - 10.0, y, 1.9)
+    """A keyhole for a wall screw: the head goes through the round part, then the phone slides
+    down so the screw sits at the top of the slot."""
+    return Pos(x, y) * Circle(4.5) + rrect(x - 2.0, x + 2.0, y, y + 10.0, 1.9)
 
 
 # ============================================================================== fins (in y-z)
-def fin_slots_front():
-    """(x, [(y0, y1), ...]) of tab slots in the front plate for the fins standing on it."""
-    out = []
-    for ex in EAR_X:
-        out.append((ex, [(AXLE_Y - 3.0, AXLE_Y + 7.0), (AXLE_Y + 14.0, AXLE_Y + 24.0)]))
-    out.append((HS_X, [(J_Y0, J_Y0 + TAB[0]), (J_Y0 + 22.0, J_Y0 + 22.0 + TAB[0])]))
-    return out
+def lug_tab():
+    """(y0, y1) of each lug's tab into the front plate."""
+    return LUG_Y[0] + 9.5, LUG_Y[1] - 0.5
 
 
-def fin_screws_front():
-    out = [(ex, AXLE_Y + 10.5) for ex in EAR_X]
-    out.append((HS_X, J_Y0 + 17.0))
-    return out
-
-
-def leg_tab_spans():
-    a, b = LEG_SPAN
-    return [(a + 5.0, a + 5.0 + TAB[0]), (b - 5.0 - TAB[0], b - 5.0)]
+def lug_screw():
+    """y of each lug's T-slot screw: from under the front plate, its head between the piezo and
+    the board's edge (the plugs come out past it)."""
+    return LUG_Y[0] + 5.6
 
 
 def poly(points):
@@ -219,16 +207,16 @@ def t_slot(u, v, toward=(0.0, -1.0), depth=10.0):
     return shaft + nut
 
 
-def ear_2d():
-    """A fixed bearing fin (u = y, v = z): two tabs into the front plate, the axle hole on top."""
+def lug_2d():
+    """A fixed lug (u = y, v = z): a tab into the front plate and the pivot screw on top."""
     z0 = FRONT_Z1
-    # up to the screw; the handset hangs in front of it (its back is at HS_BASE_Z)
-    body = poly([(AXLE_Y - 3.0, z0), (AXLE_Y + 24.0, z0), (AXLE_Y + 14.0, AXLE_Z + 4.5),
-                 (AXLE_Y - 3.0, AXLE_Z + 4.5)])
-    for y0, y1 in fin_slots_front()[0][1]:
-        body += rect(y0, y1, z0 - T, z0 + 1.0)
-    body -= Pos(AXLE_Y, AXLE_Z) * Circle(M3 / 2)        # the rocker's screw
-    body -= t_slot(AXLE_Y + 10.5, z0, toward=(0.0, 1.0))
+    py, pz = PIVOT
+    body = poly([(LUG_Y[0], z0), (LUG_Y[1], z0), (py + 5.0, pz + 5.0), (py - 5.0, pz + 5.0),
+                 (LUG_Y[0], z0 + 15.0)])
+    body += Pos(py, pz) * Circle(5.0)
+    body += rect(*lug_tab(), z0 - T, z0 + 1.0)
+    body -= Pos(py, pz) * Circle(M3 / 2)
+    body -= t_slot(lug_screw(), z0, toward=(0.0, 1.0))
     return body
 
 
@@ -241,58 +229,40 @@ def bar(p0, p1, w):
     return body + Pos(u0, v0) * Circle(w / 2) + Pos(u1, v1) * Circle(w / 2)
 
 
-def rocker_2d():
-    """The rocker (u = y, v = z), on one screw straight above the hook key: the mouthpiece cup
-    sits on its ledge and its tail rests on the hook key's cap. Lift the handset and the key's
-    spring pushes the tail up to the key's top, which leaves the ledge level."""
-    tip_y, tip_z = HOOK_KEY[1] + 3.0, KEYCAP_TOP + 3.5     # the bar's round end rests on the cap
-    ledge = poly([(AXLE_Y - 6.0, AXLE_Z - 6.0), (AXLE_Y - 6.0, AXLE_Z + LEDGE_REACH),
-                  (LEDGE_TOP, AXLE_Z + LEDGE_REACH), (LEDGE_TOP, AXLE_Z - 6.0)])
-    tail = bar((AXLE_Y, AXLE_Z), (tip_y, tip_z), 7.0)  # a straight bar to a rounded tip
-    body = ledge + tail
-    body -= Pos(AXLE_Y, AXLE_Z) * Circle(1.8)          # turns freely on the screw
+def stem_tip():
+    """(y, z) of the round end that rests on the hook key's cap."""
+    return HOOK_KEY[1], KEYCAP_TOP + STEM_W / 2
+
+
+def stem_2d():
+    """The stem (u = y, v = z): a long bar from the hook key's cap up to the pivot, then on up
+    through the ear, which sits on its shoulder and is held down by a screw across the neck."""
+    py, pz = PIVOT
+    body = bar(stem_tip(), (py, pz), STEM_W)
+    body += Pos(py, pz) * Circle(6.0)                 # the hub round the pivot screw
+    body += rect(py, EAR_Y, *SHOULDER)                # up to the ear
+    top = EAR_Y + T + 7.0
+    body += rect(EAR_Y - 1.0, top, *NECK)             # through the ear's slot
+    body -= Pos(py, pz) * Circle(1.8)                 # turns freely on the screw
+    body -= Pos(lock_y(), pz) * Circle(M3 / 2)        # the screw that holds the ear down
     return body
 
 
-def jhook_2d():
-    """The J-hook at the top: an arm over the earpiece and a short lip in front of its dome, so
-    the handset can't tip forward off the rocker."""
-    z0 = FRONT_Z1
-    arm_y0 = CUP_TOP + 2.0                            # just above the earpiece
-    lip_y0 = CUP_TOP - 16.0                           # the dome is narrow up here (z < 57)
-    lip_z1 = LIP_Z + 6.0
-    foot = HS_BASE_Z - 1.0 - z0                       # the foot stays under the handset's back
-    pts = [(J_Y0, z0), (arm_y0 + 8.0, z0), (arm_y0 + 8.0, lip_z1), (lip_y0, lip_z1),
-           (lip_y0, LIP_Z), (arm_y0, LIP_Z), (arm_y0, z0 + foot), (J_Y0, z0 + foot)]
-    body = poly(pts)
-    for y0, y1 in fin_slots_front()[-1][1]:
-        body += rect(y0, y1, z0 - T, z0 + 1.0)
-    body -= t_slot(J_Y0 + 17.0, z0, toward=(0.0, 1.0))
-    return body
+def lock_y():
+    return EAR_Y + T + 1.7
 
 
-def leg_2d():
-    """A leg (u = y, v = z): a triangle behind the back plate, its foot flat on the desk."""
-    a = math.radians(TILT)
-    zb = BACK_Z0
-    y0, y1 = LEG_SPAN
-    # The phone rests on the back plate's bottom edge and the legs' feet. In the phone's frame
-    # the desk is the line through (y = -MARGIN, z = zb) tilted by TILT: points on it satisfy
-    # (y + MARGIN) * cos(a) + (z - zb) * sin(a) = 0 in world height.
-    def on_desk(z):
-        return -MARGIN - (z - zb) * math.tan(a)
-    zf = zb - 110.0                                    # the foot reaches this far back
-    pts = [(y0, zb), (y1, zb), (on_desk(zf) + 12.0, zf), (on_desk(zf), zf), (on_desk(zb - 20.0), zb - 20.0),
-           (y0 - 2.0, zb - 10.0)]
-    body = poly(pts)
-    # a frame, not a sail: cut the inside out, leaving 10 mm struts
-    inner = offset(body, amount=-10.0)
-    inner -= rect(-500.0, 500.0, zb - 16.0, zb + 50.0)   # a wider top strut round the T-slot
-    if inner.area > 100:
-        body -= inner
-    for t0, t1 in leg_tab_spans():
-        body += rect(t0, t1, zb - 1.0, zb + T)        # overlaps the strut: one piece
-    body -= t_slot(sum(LEG_SPAN) / 2, zb, toward=(0.0, -1.0))
+def ear_2d():
+    """The ear (u = x, v = z): a wide fork standing out from the wall. A crossbar behind the
+    handset carries the stem's slot; two prongs run out under the earpiece cup, with a hole at
+    each tip for its lip."""
+    x0, x1 = HS_X - GAP_X - PRONG_W, HS_X + GAP_X + PRONG_W
+    body = rrect(x0, x1, EAR_Z0, BAR_Z1, 3.0)
+    for sg in (-1, 1):
+        px = HS_X + sg * LIP_X
+        body += rrect(px - PRONG_W / 2, px + PRONG_W / 2, BAR_Z1 - 4.0, EAR_Z1, PRONG_W / 2 - 0.01)
+        body -= Pos(px, LIP_Z) * Circle(M3 / 2)
+    body -= rect(HS_X - (T + 0.2) / 2, HS_X + (T + 0.2) / 2, NECK[0] - 0.1, NECK[1] + 0.1)
     return body
 
 
@@ -308,6 +278,12 @@ def fin3d(face, x):
     return extrude(pl * face, amount=T, dir=(1, 0, 0))
 
 
+def ear3d(face):
+    """The ear drawn in (x, z), lying at EAR_Y, T thick upward."""
+    pl = Plane(origin=(0, EAR_Y, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
+    return extrude(pl * face, amount=T, dir=(0, 1, 0))
+
+
 def parts_2d():
     parts = _parts_2d()
     for name, face in parts.items():                 # every part must cut as one piece
@@ -321,39 +297,53 @@ def _parts_2d():
     return {
         "front-plate": front_plate_2d(),
         "back-plate": back_plate_2d(),
+        "lug": lug_2d(),
+        "stem": stem_2d(),
         "ear": ear_2d(),
-        "rocker": rocker_2d(),
-        "j-hook": jhook_2d(),
-        "leg": leg_2d(),
     }
 
 
-QTY = {"front-plate": 1, "back-plate": 1, "ear": 2, "rocker": 1, "j-hook": 1, "leg": 2}
+QTY = {"front-plate": 1, "back-plate": 1, "lug": 2, "stem": 1, "ear": 1}
 
 
 def assembly(p2):
     a = {
         "front-plate": plate3d(p2["front-plate"], FRONT_Z0),
         "back-plate": plate3d(p2["back-plate"], BACK_Z0),
-        "j-hook": fin3d(p2["j-hook"], HS_X),
-        "rocker": fin3d(p2["rocker"], HS_X),
+        "stem": fin3d(p2["stem"], HS_X),
+        "ear": ear3d(p2["ear"]),
     }
-    for i, ex in enumerate(EAR_X):
-        a[f"ear-{i + 1}"] = fin3d(p2["ear"], ex)
-    for i, lx in enumerate(LEG_X):
-        a[f"leg-{i + 1}"] = fin3d(p2["leg"], lx)
+    for i, lx in enumerate(LUG_X):
+        a[f"lug-{i + 1}"] = fin3d(p2["lug"], lx)
     return a
 
 
+def lips3d():
+    """The two lips on the ear's prong tips (short M3 standoffs), part of the rocker."""
+    return [Pos(HS_X + sg * LIP_X, EAR_Y + T, LIP_Z) * Rot(-90, 0, 0)
+            * Cylinder(POST_D / 2, LIP_L, align=(Align.CENTER, Align.CENTER, Align.MIN)) for sg in (-1, 1)]
+
+
+def rests3d():
+    """The two rests under the mouthpiece (M3 standoffs standing on the front plate)."""
+    return [Pos(x, y, FRONT_Z1) * Cylinder(POST_D / 2, FRONT_GAP, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            for x, y in RESTS]
+
+
 def hardware3d():
-    """Standoffs, the axle and a stand-in board, for checks and renders (not cut)."""
+    """Standoffs, spacers and screws, for checks and renders (not cut)."""
     h = {}
     for x, y in COLUMNS:
         h[f"column {x:.0f},{y:.0f}"] = Pos(x, y, BACK_Z1) * Cylinder(3.0, COLUMN, align=(Align.CENTER, Align.CENTER, Align.MIN))
     for x, y in F.HOLES:
         h[f"spacer {x:.0f}"] = Pos(x, board_y(y), 0) * Cylinder(3.0, PLATE_GAP, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    x0, x1 = min(EAR_X) - 4.0, max(EAR_X) + 4.0
-    h["screw"] = Pos((x0 + x1) / 2, AXLE_Y, AXLE_Z) * Rot(0, 90, 0) * Cylinder(1.5, x1 - x0)
+    x0, x1 = min(LUG_X) - 4.0, max(LUG_X) + 4.0
+    h["pivot screw"] = Pos((x0 + x1) / 2, PIVOT[0], PIVOT[1]) * Rot(0, 90, 0) * Cylinder(1.5, x1 - x0)
+    h["lock screw"] = Pos(HS_X, lock_y(), PIVOT[1]) * Rot(0, 90, 0) * Cylinder(1.5, 8.0)
+    for i, p in enumerate(lips3d()):
+        h[f"lip {i + 1}"] = p
+    for i, p in enumerate(rests3d()):
+        h[f"rest {i + 1}"] = p
     return h
 
 
@@ -372,34 +362,31 @@ def board3d():
 
 
 def handset3d():
-    """The handset hanging: axis along y through the hook key, its mouthpiece on the rocker."""
-    from build123d import Rot as R
+    """The handset hanging earpiece up, its back toward the wall, the cup on the ear's prongs."""
     hs = HS.build()
-    # handset.py builds it lying along y with its cups' rims on z = 0, centred at the origin.
-    return Pos(HS_X, CUP_Y + HS_LIFT + (HS.LENGTH / 2 - CUP_R), HS_BASE_Z) * hs
+    # handset.py builds it lying along y (earpiece at +y) with its cups' rims on z = 0.
+    return Pos(HS_X, CUP_Y - (HS.LENGTH / 2 - CUP_R), HS_BASE_Z) * hs
 
 
-SHEET = (450.0, 300.0)     # one sheet holds every part (checked)
+SHEET = (380.0, 190.0)     # one sheet holds every part (checked)
 GAP = 4.0                  # between parts (the laser's kerf is ~0.2)
 
 
 def sheet_layout(p2):
-    """Every part, in its quantity, on one SHEET: the two plates side by side, a leg in each
-    plate's empty corner (right of the tower, above the key body), the fins in a column."""
+    """Every part, in its quantity, on one SHEET: the two plates side by side, the rocker's parts
+    and the lugs in a row under them."""
     def at(face, x, y):
         b = face.bounding_box()
         return Pos(x - b.min.X, y - b.min.Y) * face
 
-    plate_w = BODY[1] - TOWER[0]
     placed, x = [], 5.0
     for name in ("front-plate", "back-plate"):
         placed.append((name, at(p2[name], x, 5.0)))
-        placed.append(("leg", at(p2["leg"], x + TOWER[1] - TOWER[0] + GAP, 5.0 + BODY[3] - BODY[2] + GAP)))
-        x += plate_w + GAP
-    y = 5.0
-    for n in ("j-hook", "rocker", "ear", "ear"):
+        x += BODY[1] - BODY[0] + GAP
+    x, y = 5.0, 5.0 + BODY[3] - BODY[2] + GAP
+    for n in ("ear", "stem", "lug", "lug"):
         placed.append((n, at(p2[n], x, y)))
-        y += p2[n].bounding_box().size.Y + GAP
+        x += p2[n].bounding_box().size.X + GAP
     return placed
 
 
@@ -449,6 +436,77 @@ def main() -> None:
     print(f"front plate {bb.size.X:.0f} x {bb.size.Y:.0f} mm; stack {FRONT_Z1 - BACK_Z0:.1f} mm deep; "
           f"keycaps {KEYCAP_TOP - FRONT_Z1:.1f} mm over the plate")
     check_stack()
+    check_hook(a)
+
+
+def check_hook(a):
+    """The switchhook: the handset hangs clear of everything, the lips and rests hold it, the
+    stem rests on the hook key, the pressed rocker hits nothing, and the forces on the key."""
+    from build123d import CenterOf
+    board, caps = board3d()
+    hs = handset3d()
+    hook_i = [lab for *_, lab in F.SWITCHES].index("HOOK")
+    lips, rests = lips3d(), rests3d()
+    hw = hardware3d()
+
+    def vol(x, y):
+        try:
+            return (x & y).volume
+        except Exception:
+            return 0.0
+
+    bad = []
+    fixed = {n: p for n, p in a.items() if n not in ("stem", "ear")}
+    for n, p in [*a.items(), *(("lip", p) for p in lips), *(("rest", p) for p in rests),
+                 ("board", board), *(("keycap", c) for c in caps)]:
+        if vol(hs, p) > 0.01:
+            bad.append(f"the handset runs into the {n}")
+    if not all(vol(Pos(0, 0, -1.0) * p, hs) > 0 for p in lips):
+        bad.append("the lips aren't within 1 mm of the earpiece cup")
+    if not all(vol(Pos(0, 0, 0.5) * p, hs) > 0 for p in rests):
+        bad.append("the rests don't reach the mouthpiece cup's back")
+    ty, tz = stem_tip()
+    probe = Pos(HS_X, ty, KEYCAP_TOP + 4.0) * Box(10, 20, 8)
+    tip_low = (a["stem"] & probe).bounding_box().min.Z
+    if abs(tip_low - KEYCAP_TOP) > 0.05:
+        bad.append(f"the stem's tip is {tip_low - KEYCAP_TOP:+.2f} mm off the hook key's cap")
+    rocker = [a["stem"], a["ear"], *lips]
+    lever = PIVOT[0] - ty
+    ang = math.degrees(math.atan2(4.0, lever))     # the key at the bottom of its travel
+    axis = Axis((HS_X, PIVOT[0], PIVOT[1]), (1, 0, 0))
+    pressed = [r.rotate(axis, ang) for r in rocker]
+    if (pressed[0] & probe).bounding_box().min.Z > tip_low:
+        pressed = [r.rotate(axis, -ang) for r in rocker]
+    others = [*fixed.values(), board, *rests, *(c for i, c in enumerate(caps) if i != hook_i),
+              *(h for n, h in hw.items() if n.startswith("column"))]
+    if any(vol(r, o) > 0.01 for r in pressed for o in others):
+        bad.append("the pressed rocker runs into something")
+    # Forces. The cup bears on the prongs; the handset's centre of mass is further out, so its
+    # bottom leans on the rests and its top pushes the lips outward.
+    seat = Pos(0, -0.4, 0) * hs & a["ear"]
+    seat_z = seat.center(CenterOf.MASS).Z if seat.volume > 0 else HS_BASE_Z
+    com = hs.center(CenterOf.MASS)
+    w = HANDSET_G
+    lean = max(0.0, w * (com.Z - seat_z) / ((EAR_Y + T) - RESTS[0][1]))
+    torque = w * (seat_z - PIVOT[1]) + lean * (EAR_Y + T + LIP_L / 2 - PIVOT[0])
+    on = torque / lever
+    acrylic = 1.19e-3                                # g per mm3
+    own = 0.0
+    for r in rocker[:2]:
+        c = r.center(CenterOf.MASS)
+        own += r.volume * acrylic * (c.Z - PIVOT[1])
+    own += 2 * 1.5 * (LIP_Z - PIVOT[1])              # two short steel standoffs
+    own /= lever
+    lo, hi = HOOK_SPRING_GF
+    if on < hi:
+        bad.append(f"the handset presses the hook key with only {on:.0f} gf (want >= {hi:.0f})")
+    if own > lo:
+        bad.append(f"the empty rocker presses the key with {own:.0f} gf: it would stay down")
+    if bad:
+        raise SystemExit("switchhook:\n  " + "\n  ".join(bad))
+    print(f"switchhook: handset ({w:.0f} g) on: {on:.0f} gf on the hook key, empty: {own:.0f} gf "
+          f"(key: {lo:.0f}-{hi:.0f}); pressed rocker clear; the cup sits {seat_z - PIVOT[1]:.0f} mm "
+          f"out from the pivot; handset's back {HS_BASE_Z - KEYCAP_TOP:.0f} mm over the caps")
 
 
 def check_stack():
