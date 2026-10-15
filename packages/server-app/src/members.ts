@@ -4,6 +4,7 @@ import { leaveCheck, mayTransferOwnership } from "@openloungephone/core";
 import { Id } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { unlinkAddonsOf } from "./addons.ts";
 import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -56,6 +57,7 @@ export function memberRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
       await deleteSpace(env, live, me.householdId);
     } else {
       await dropVoicemailBlobs(env, { userId: me.id });
+      await unlinkAddonsOf(env, live, { accountId: account.id, userId: me.id });
       await store.deleteUser(me.id, env.now());
       for (const d of await store.listDevices(me.householdId)) {
         if (d.kind === "lounge") await live.refreshDevice(me.householdId, d.id);

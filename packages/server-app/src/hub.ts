@@ -98,7 +98,18 @@ import {
   toBase64Url,
   type VoicemailOffer,
 } from "@openloungephone/protocol";
-import { addonAccess, addonAddress, answerShareRequest, tellHolder } from "./addons.ts";
+import {
+  ADDON_MESSAGES,
+  addonAccess,
+  addonAddress,
+  addonCallerLimited,
+  addonCallsOutLimited,
+  answerShareRequest,
+  cleanText,
+  rulesOf,
+  selfOf,
+  tellHolder,
+} from "./addons.ts";
 import {
   type AppCloseFilter,
   CloseCode,
@@ -131,6 +142,7 @@ import {
   sendGuestProgress,
 } from "./fedCalls.ts";
 import { ownHost } from "./federation.ts";
+import { limitsOf } from "./limits.ts";
 import { admitLineCall, lineInfo, logLineCaller } from "./lines.ts";
 import { type LiveRoom, LiveRooms, type RoomInbound } from "./liveRooms.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
@@ -359,6 +371,8 @@ interface Room {
    * dropping the share, ends it.
    */
   addonShare?: { id: string; label: string; grantId?: string };
+  /** TURN usernames handed out for this call (revoked when it ends, where the host can). */
+  turnUsers?: string[];
 }
 
 /** A public line calling one of our people back, ringing their apps and phones. */
@@ -381,6 +395,10 @@ type Here = { name: string; where: string };
 const deviceKey = (id: string) => `dev:${id}`;
 const userKey = (id: string) => `usr:${id}`;
 const addonKey = (id: string) => `addon:${id}`;
+const HOUR_MS = 60 * 60 * 1000;
+
+/** Why a call with an add-on ended at its longest (limits.ts `addonCallMinutes`). */
+export const ADDON_CALL_LIMIT_NOTE = "Calls with add-ons end after a few hours.";
 
 /** `handle+name@host` → `handle+name+share@host`. */
 const withShare = (address: string, share: string) => address.replace("@", `+${share}@`);
@@ -561,6 +579,7 @@ export class HouseholdHub {
         ...(r.farLine ? { farLine: true } : {}),
         ...(r.branchLeg ? { branchLeg: true } : {}),
         ...(r.addonShare ? { addonShare: r.addonShare } : {}),
+        ...(r.turnUsers?.length ? { turnUsers: r.turnUsers } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -629,6 +648,7 @@ export class HouseholdHub {
         ...(snap.farLine ? { farLine: true } : {}),
         ...(snap.branchLeg ? { branchLeg: true } : {}),
         ...(snap.addonShare ? { addonShare: snap.addonShare } : {}),
+        ...(snap.turnUsers?.length ? { turnUsers: snap.turnUsers } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -1011,6 +1031,8 @@ export class HouseholdHub {
   /** Re-send config to a device after guardians change settings (incl. quiet hours). */
   refreshDevice(deviceId: string): Promise<void> {
     return this.run(async () => {
+      const addonPeer = this.addonPeers.get(deviceId);
+      if (addonPeer) return this.recheckAddon(addonPeer);
       const peer = this.devices.get(deviceId);
       if (!peer) return;
       // Name or owner may have changed (e.g. "make this my phone").
@@ -1103,6 +1125,8 @@ export class HouseholdHub {
     await this.updateNotices();
     // Daily check-ins: a time passed without I'm OK.
     await this.checkCheckins();
+    // Calls with add-ons that reached their longest length.
+    await this.endLongAddonCalls();
     // Party lines with hours: opening, closing soon, closed.
     await this.checkRoomHours();
     await this.scheduleWake();
@@ -1191,6 +1215,13 @@ export class HouseholdHub {
 
   /** May this party place a call now: nothing else going on, or a consult while holding one. */
   private canDial(peer: Peer): boolean {
+    if (peer.kind === "addon") {
+      // An add-on places one call at a time, within its calls at once.
+      const mine = [...this.rooms.values()].filter(
+        (r) => r.caller === peer || r.calleePeer === peer,
+      );
+      return !mine.some((r) => r.caller === peer) && mine.length < this.rulesFor(peer).lines;
+    }
     if (this.conf.inRoom(peer.key)) return false;
     for (const l of this.legs.values()) if (l.peer === peer) return false;
     // Another session of the same person in a call counts too (one person, one call).
@@ -1727,9 +1758,11 @@ export class HouseholdHub {
 
     if (msg.t === "call.answer") {
       if (party !== "callee" || room.state.phase !== "ringing") return;
-      // Call waiting: the call they're in goes on hold first (or the answer is refused).
+      // Call waiting: the call they're in goes on hold first (or the answer is refused). An
+      // add-on takes calls side by side instead (up to its calls at once).
       const current = [...this.rooms.values()].find(
         (r) =>
+          peer.kind !== "addon" &&
           r !== room &&
           (r.caller === peer || r.calleePeer === peer) &&
           (r.state.phase === "active" || r.state.phase === "connecting"),
@@ -1802,7 +1835,16 @@ export class HouseholdHub {
           () => void this.run(() => this.apply(room, { type: "timeout" })),
           CONNECT_TIMEOUT_MS,
         );
-        const iceServers = await this.env.iceServers();
+        // A call with an add-on: TURN credentials last no longer than its longest call, and are
+        // revoked when it ends where the host can.
+        const addonCall = this.isAddonRoom(room);
+        const iceServers = await this.env.iceServers(
+          addonCall ? { ttlSeconds: limitsOf(this.env).addonCallMinutes * 60 + 120 } : undefined,
+        );
+        if (addonCall && this.env.revokeIce) {
+          const users = iceServers.flatMap((x) => (x.username ? [x.username] : []));
+          if (users.length) room.turnUsers = [...new Set(users)];
+        }
         for (const p of both) {
           p.conn.send({ t: "rtc.config", callId: room.id, iceServers });
           p.conn.send({ t: "call.state", callId: room.id, state: "connecting" });
@@ -1815,11 +1857,23 @@ export class HouseholdHub {
         room.activeAt = this.env.now();
         for (const p of both) p.conn.send({ t: "call.state", callId: room.id, state: "active" });
         await this.announceRecording(room);
+        // Its longest length is watched by the hub's alarm.
+        if (this.isAddonRoom(room)) await this.scheduleWake();
         return;
       case "ended": {
         room.cancelTimer?.();
         room.cancelWait?.();
         this.rooms.delete(room.id);
+        if (room.turnUsers?.length && this.env.revokeIce) {
+          const users = room.turnUsers;
+          this.env.defer(
+            this.env
+              .revokeIce(users)
+              .catch((e) =>
+                this.env.log("warn", "TURN credentials not revoked", { error: String(e) }),
+              ),
+          );
+        }
         for (const [k, v] of this.handoffs) if (v === room.id) this.handoffs.delete(k);
         await this.logCall(room, r.state.reason ?? "hangup").catch((e) =>
           this.env.log("warn", "call log failed", { error: String(e) }),
@@ -2494,6 +2548,9 @@ export class HouseholdHub {
     // Daily check-ins: the next time one could be due.
     const checkinDue = await this.nextCheckin();
     if (checkinDue !== undefined) at = at === undefined ? checkinDue : Math.min(at, checkinDue);
+    // Calls with add-ons: the first to reach its longest length.
+    const addonDue = this.addonCallsDue();
+    if (addonDue !== undefined) at = at === undefined ? addonDue : Math.min(at, addonDue);
     this.cancelWakeTimer?.();
     this.cancelWakeTimer = undefined;
     if (at === undefined) {
@@ -3126,6 +3183,7 @@ export class HouseholdHub {
           address: addonAddress(this.env, handle, addon.name),
           accountId: addon.accountId,
           ownerUserId: addon.userId,
+          rules: rulesOf(this.env, addon.about),
         },
       };
       this.addonPeers.set(addon.id, peer);
@@ -3149,9 +3207,24 @@ export class HouseholdHub {
     });
   }
 
-  /** What an add-on may send: call control for its own calls, and `call.address`. */
+  /**
+   * What an add-on may send (`ADDON_MESSAGES`, an allow-list): call control for its own calls,
+   * `call.address`, what it says about itself and its shares. Anything else is refused with an
+   * `error` and does nothing; so is everything past its per-minute message limit, which also
+   * closes the socket.
+   */
   private async handleAddon(peer: Peer, msg: DeviceToServer): Promise<void> {
     if (this.addonPeers.get(peer.id) !== peer) return;
+    if (!this.addonWithinMessages(peer)) return;
+    if (!ADDON_MESSAGES.has(msg.t)) {
+      peer.conn.send({
+        t: "error",
+        code: "bad_message",
+        message: `not for add-ons: ${msg.t}`,
+        ...(msg.id ? { ref: msg.id } : {}),
+      });
+      return;
+    }
     switch (msg.t) {
       case "ping":
         peer.conn.send({ t: "pong" });
@@ -3170,8 +3243,8 @@ export class HouseholdHub {
       case "addon.share.created":
       case "addon.share.refused":
         return this.addonShareAnswer(peer, msg);
-      case "status":
-        return;
+      case "addon.about":
+        return this.addonAbout(peer, msg);
       default:
         break;
     }
@@ -3196,6 +3269,64 @@ export class HouseholdHub {
     return undefined;
   }
 
+  /** Messages counted per add-on connection (in a one-minute window). */
+  private readonly addonMessages = new WeakMap<Peer, { since: number; count: number }>();
+
+  /** Within its per-minute message limit; over it, it's told once and its socket closes. */
+  private addonWithinMessages(peer: Peer): boolean {
+    const now = this.env.now();
+    const w = this.addonMessages.get(peer);
+    if (!w || now - w.since >= 60_000) {
+      this.addonMessages.set(peer, { since: now, count: 1 });
+      return true;
+    }
+    w.count += 1;
+    if (w.count <= limitsOf(this.env).addonMessagesPerMinute) return true;
+    if (this.addonPeers.get(peer.id) === peer) {
+      peer.conn.send({ t: "error", code: "rate_limited", message: "too many messages" });
+      this.dropPeer(peer);
+      peer.conn.close(CloseCode.tooMuch, "too many messages");
+    }
+    return false;
+  }
+
+  /** What the server lets this add-on do now. */
+  private rulesFor(peer: Peer) {
+    return peer.addon?.rules ?? rulesOf(this.env, null);
+  }
+
+  /**
+   * The add-on says what it does (`addon.about`): kept for its page in the app, and the rules
+   * the server enforces follow it at once (calls, shares, keys, calls at once).
+   */
+  private async addonAbout(
+    peer: Peer,
+    msg: Extract<DeviceToServer, { t: "addon.about" }>,
+  ): Promise<void> {
+    const addon = await this.addonStillLinked(peer);
+    if (!addon || !peer.addon) return;
+    const self = selfOf(msg);
+    if (typeof self === "string") {
+      peer.conn.send({
+        t: "error",
+        code: "bad_message",
+        message: self,
+        ...(msg.id ? { ref: msg.id } : {}),
+      });
+      return;
+    }
+    await this.env.store.addons.setAbout(addon.id, self);
+    peer.addon.rules = rulesOf(this.env, self);
+    this.remember(peer);
+    // It says it offers no shares: those it offered go (with their grants and calls).
+    if (!self.shares && (await this.env.store.addons.shares(addon.id)).length) {
+      await this.applyShares(peer, addon, []);
+    }
+    void this.env.calls
+      ?.notifyAccount(addon.accountId, { t: "connections.changed" })
+      .catch(() => {});
+  }
+
   /**
    * The add-on says what it offers for sharing (`addon.shares`). A share it dropped goes with its
    * grants: calls into it end now, and the people who held it are told.
@@ -3203,6 +3334,35 @@ export class HouseholdHub {
   private async addonShares(peer: Peer, shares: { id: string; label: string }[]): Promise<void> {
     const addon = await this.addonStillLinked(peer);
     if (!addon) return;
+    const refuse = (message: string) =>
+      peer.conn.send({ t: "error", code: "bad_message", message });
+    if (shares.length && !this.rulesFor(peer).shares) {
+      return refuse("it said it offers no shares (addon.about)");
+    }
+    const clean: { id: string; label: string }[] = [];
+    for (const x of shares) {
+      const label = cleanText(x.label, 40);
+      if (label === null) return refuse(`share ${x.id}: use plain words for its label`);
+      clean.push({ id: x.id, label });
+    }
+    const ok = await this.env.store.connections.hit(
+      `addon-shares:${addon.id}`,
+      HOUR_MS,
+      limitsOf(this.env).addonShareUpdatesPerHour,
+      this.env.now(),
+    );
+    if (!ok) {
+      peer.conn.send({ t: "error", code: "rate_limited", message: "too many share updates" });
+      return;
+    }
+    await this.applyShares(peer, addon, clean);
+  }
+
+  private async applyShares(
+    _peer: Peer,
+    addon: Addon,
+    shares: { id: string; label: string }[],
+  ): Promise<void> {
     const { revoked, removed } = await this.env.store.addons.setShares(addon.id, shares);
     if (removed.length) await this.endShareCalls(addon.id, { shareIds: removed });
     const told = new Set<string>();
@@ -3237,10 +3397,16 @@ export class HouseholdHub {
   ): Promise<void> {
     const addon = await this.addonStillLinked(peer);
     if (!addon) return;
-    const answer =
-      msg.t === "addon.share.created"
-        ? { requestId: msg.requestId, id: msg.id }
-        : { requestId: msg.requestId, reason: msg.reason };
+    let answer: { requestId: string } & ({ id: string } | { reason: string });
+    if (msg.t === "addon.share.created") answer = { requestId: msg.requestId, id: msg.id };
+    else {
+      const reason = cleanText(msg.reason, 200);
+      if (reason === null) {
+        peer.conn.send({ t: "error", code: "bad_message", message: "reason: use plain words" });
+        return;
+      }
+      answer = { requestId: msg.requestId, reason };
+    }
     // Granting tells other servers: not inside this hub's queue.
     this.env.defer(
       answerShareRequest(
@@ -3353,8 +3519,11 @@ export class HouseholdHub {
     const access = await addonAccess(this.env, addon, who, share);
     if (!access) return this.refuse(peer, "unavailable");
     const target = this.addonPeers.get(addon.id);
+    if (target && !this.rulesFor(target).answers) return this.refuse(peer, "unavailable");
+    const limited = await addonCallerLimited(this.env, addon, who);
+    if (limited) return this.refuse(peer, "denied", limited);
     if (!target) return this.refuse(peer, "unreachable");
-    if (this.busy(target.key)) return this.refuse(peer, "busy");
+    if (this.addonFull(target)) return this.refuse(peer, "busy");
     const note = await fairUseProblem(this.env, addon.accountId, "call");
     if (note) return this.refuse(peer, "denied", note);
     const room = this.openRoom(peer, target.key);
@@ -3390,7 +3559,8 @@ export class HouseholdHub {
     if (!peer || !(await this.addonStillLinked(peer))) {
       return { state: "ended", reason: "unreachable" };
     }
-    if (this.busy(peer.key)) return { state: "ended", reason: "busy" };
+    if (!this.rulesFor(peer).answers) return { state: "ended", reason: "unavailable" };
+    if (this.addonFull(peer)) return { state: "ended", reason: "busy" };
     const note = await fairUseProblem(this.env, target.accountId, "call");
     if (note) return { state: "ended", reason: "denied", note };
     const room = this.openRoom(remote, peer.key, callId);
@@ -3418,28 +3588,40 @@ export class HouseholdHub {
     if (!addon) return;
     const addr = parseAddress(address);
     const account = await store.getAccount(addon.accountId);
-    if (!addr || !account) return this.refuse(peer, "unavailable");
+    if (!addr || !account || !this.rulesFor(peer).calls) return this.refuse(peer, "unavailable");
+    // Its owner must still be in good standing for it to call anyone (even them).
+    const ownerHere = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+    if (!(await addonAccess(this.env, addon, ownerHere))) return this.refuse(peer, "unavailable");
     const share = shareId ? await store.addons.share(addon.id, shareId) : undefined;
     if (shareId && !share) return this.refuse(peer, "unavailable");
     const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
     const as = { id: addon.userId, label: peer.label };
     const opts = share ? { addonShare: { id: share.id, label: share.label } } : {};
+    /** One call at a time, and its hourly and per-person limits (refusals say why). */
+    const limited = async (callee: { host: string; accountId: string }) => {
+      if (!this.canDial(peer)) return this.refuse(peer, "busy").then(() => true);
+      const note = await addonCallsOutLimited(this.env, addon, callee);
+      return note ? this.refuse(peer, "denied", note).then(() => true) : false;
+    };
     if (host === LOCAL_HOST && addr.handle === account.handle) {
       // Its owner: wherever they can be rung, like any call to them.
-      if (!this.canDial(peer)) return this.refuse(peer, "busy");
+      if (await limited(ownerHere)) return;
       return this.userDial(peer, addon.userId, { id: addonKey(addon.id), label: peer.label }, opts);
     }
     if (!share) return this.refuse(peer, "unavailable");
     if (host === LOCAL_HOST) {
-      // Someone here who holds the share (a connection, or someone in one of the owner's spaces).
+      // Someone here who holds the share (a connection, or someone in one of the owner's spaces),
+      // unless they stopped its calls.
       const holder = await store.accountByHandle(addr.handle);
       const who = holder && { host, accountId: holder.id, handle: holder.handle };
       const access = who && (await addonAccess(this.env, addon, who, share.id));
       if (!holder || !access?.share) return this.refuse(peer, "unavailable");
+      const mute = { host: LOCAL_HOST, ownerAccount: addon.accountId, name: addon.name };
+      if (await store.addons.muted(holder.id, mute)) return this.refuse(peer, "unavailable");
+      if (await limited({ host, accountId: holder.id })) return;
       const held = { addonShare: access.share };
       const here = await store.membership(holder.id, this.householdId);
       if (here) {
-        if (!this.canDial(peer)) return this.refuse(peer, "busy");
         return this.userDial(peer, here.id, { id: addonKey(addon.id), label: peer.label }, held);
       }
       const home = await primaryHousehold(this.env, holder.id);
@@ -3459,8 +3641,63 @@ export class HouseholdHub {
       ? { host, accountId: conn.peerAccount, handle: conn.peerHandle }
       : undefined;
     const access = who && (await addonAccess(this.env, addon, who, share.id));
-    if (!conn || !access?.share) return this.refuse(peer, "unavailable");
+    if (!conn || !who || !access?.share) return this.refuse(peer, "unavailable");
+    if (await limited(who)) return;
     return this.connectionDial(peer, conn.id, as, { addonShare: access.share });
+  }
+
+  /** A call with an add-on (ours, or one elsewhere). */
+  private isAddonRoom(room: Room): boolean {
+    return isAddonParty(room.caller) || isAddonParty(room.calleePeer);
+  }
+
+  /** It is taking as many calls as it may at once (`lines`). */
+  private addonFull(peer: Peer): boolean {
+    let n = 0;
+    for (const r of this.rooms.values()) {
+      if (r.caller === peer || r.calleePeer === peer || r.state.callee === peer.key) n++;
+    }
+    return n >= this.rulesFor(peer).lines;
+  }
+
+  /** When the first live call with an add-on reaches its longest length. */
+  private addonCallsDue(): number | undefined {
+    const max = limitsOf(this.env).addonCallMinutes * 60_000;
+    let due: number | undefined;
+    for (const r of this.rooms.values()) {
+      if (r.activeAt === undefined || !this.isAddonRoom(r)) continue;
+      const at = r.activeAt + max;
+      due = due === undefined ? at : Math.min(due, at);
+    }
+    return due;
+  }
+
+  private async endLongAddonCalls(): Promise<void> {
+    const max = limitsOf(this.env).addonCallMinutes * 60_000;
+    const now = this.env.now();
+    for (const r of [...this.rooms.values()]) {
+      if (r.activeAt === undefined || !this.isAddonRoom(r) || now < r.activeAt + max) continue;
+      r.endNote = ADDON_CALL_LIMIT_NOTE;
+      await this.apply(r, { type: "end", reason: "hangup" });
+    }
+  }
+
+  /**
+   * One of our add-ons may have lost its standing (its owner suspended or gone, the link removed,
+   * add-ons turned off): it's cut off now, with its calls. Removed: told to forget its link.
+   */
+  private async recheckAddon(peer: Peer): Promise<void> {
+    const addon = await this.addonStillLinked(peer);
+    if (!addon) return;
+    const owner = { host: LOCAL_HOST, accountId: addon.accountId, handle: "" };
+    if (await addonAccess(this.env, addon, owner)) return;
+    peer.conn.send({
+      t: "error",
+      code: "unauthorized",
+      message: "its owner's account can't use it now",
+    });
+    this.dropPeer(peer);
+    peer.conn.close(CloseCode.unauthorized, "owner suspended");
   }
 
   /** A key pressed during a call: passed on only to an add-on (here, or through its server). */
@@ -3469,7 +3706,7 @@ export class HouseholdHub {
     const party = room && this.partyOf(room, peer);
     if (!room || !party || room.state.phase !== "active") return;
     const other = party === "caller" ? room.calleePeer : room.caller;
-    if (other && isAddonParty(other)) {
+    if (other && isAddonParty(other) && (other.kind !== "addon" || this.rulesFor(other).keys)) {
       other.conn.send({ t: "call.key", callId: room.id, key: msg.key });
     }
   }
@@ -3677,7 +3914,8 @@ export class HouseholdHub {
         : undefined;
     if (!calls) return this.refuse(caller, "unreachable");
     if (!this.canDial(caller)) return this.refuse(caller, "busy");
-    if (this.busy(target.key)) return this.refuse(caller, "busy", undefined, vm);
+    // An add-on's own server says when it's busy (it may take several calls at once).
+    if (!target.addon && this.busy(target.key)) return this.refuse(caller, "busy", undefined, vm);
     const allowance = target.free
       ? { payer: undefined, note: undefined }
       : await this.allowance(caller, target.as);

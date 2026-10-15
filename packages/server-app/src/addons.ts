@@ -9,19 +9,26 @@ import {
   type Account,
   type Addon,
   type AddonGrant,
+  type AddonSelf,
   LOCAL_HOST,
   type ShareHolder,
   type ShareRequest,
 } from "@openloungephone/db";
-import { ADDON_NAME_RE } from "@openloungephone/federation";
-import type { ServerToApp, ServerToDevice } from "@openloungephone/protocol";
+import { ADDON_NAME_RE, parseAddonAddress } from "@openloungephone/federation";
+import type {
+  AddonAbout,
+  DeviceToServer,
+  ServerToApp,
+  ServerToDevice,
+} from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { audit } from "./audit.ts";
-import type { ServerEnv } from "./env.ts";
+import type { AddonRules, ServerEnv } from "./env.ts";
 import { fedFetch, ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
+import { limitsOf } from "./limits.ts";
 import { federates } from "./ownKey.ts";
 import { peerSupports, UNAVAILABLE } from "./peers.ts";
 
@@ -37,6 +44,149 @@ export const MAX_ADDONS_PER_ACCOUNT = 10;
 export const SHARE_REQUEST_MS = 60_000;
 /** How many people one share may be given to. */
 export const MAX_HOLDERS_PER_SHARE = 50;
+
+/**
+ * Everything an add-on may send once it is signed in (docs/security-model.md, Add-ons). This is
+ * an allow-list: any other message, including every message type added to the device protocol
+ * later, is answered with an `error` and has no effect. Before signing in it may send only
+ * `hello`, `pair.begin` and `auth.proof` (the gateway's handshake).
+ */
+export const ADDON_MESSAGES: ReadonlySet<DeviceToServer["t"]> = new Set<DeviceToServer["t"]>([
+  "ping",
+  "addon.about",
+  "addon.shares",
+  "addon.share.created",
+  "addon.share.refused",
+  "call.address",
+  "call.answer",
+  "call.hangup",
+  "rtc.sdp",
+  "rtc.ice",
+]);
+
+/** The rules for an add-on that never said what it does: as server 0.7.0 had them. */
+export const LEGACY_RULES: AddonRules = {
+  answers: true,
+  calls: true,
+  shares: true,
+  keys: true,
+  lines: 1,
+};
+
+/** What the server lets an add-on do, from what it said about itself. */
+export function rulesOf(env: ServerEnv, about: AddonSelf | null | undefined): AddonRules {
+  if (!about) return LEGACY_RULES;
+  return {
+    answers: about.answers,
+    calls: about.calls,
+    shares: about.shares,
+    keys: about.keys,
+    lines: Math.max(1, Math.min(about.lines, limitsOf(env).addonCallsAtOnce)),
+  };
+}
+
+/** `addon.about` with its defaults filled in, its words cleaned (undefined: unusable words). */
+export function selfOf(msg: AddonAbout): AddonSelf | string {
+  const summary = msg.summary === undefined ? undefined : cleanText(msg.summary, 140);
+  if (summary === null) return "summary: use plain words (no control characters)";
+  return {
+    ...(summary ? { summary } : {}),
+    hears: msg.hears,
+    transcribes: msg.transcribes ?? false,
+    answers: msg.answers ?? true,
+    calls: msg.calls ?? false,
+    shares: msg.shares ?? false,
+    keys: msg.keys ?? false,
+    lines: msg.lines ?? 1,
+  };
+}
+
+/**
+ * Text an add-on chose that people will read (a share's label, its summary, a refusal): no
+ * control, format (e.g. right-to-left overrides), private-use or line-break characters, spaces
+ * collapsed, and at least one letter or digit. Answers the cleaned text, or null if it can't be
+ * shown as it is. The apps and phones mark every add-on as one wherever this text appears.
+ */
+export function cleanText(text: string, max: number): string | null {
+  if (/[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Zl}\p{Zp}]/u.test(text)) return null;
+  const t = text.replace(/\s+/gu, " ").trim();
+  if (!t || t.length > max || !/[\p{L}\p{N}]/u.test(t)) return null;
+  return t;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/** A caller over their limit of calls to one add-on. */
+export const TOO_MANY_CALLS_TO = "Too many calls to this add-on. Try again later.";
+/** An add-on over its limit of calls out. */
+export const TOO_MANY_CALLS_FROM = "This add-on has made too many calls. It can call again later.";
+
+/** Counts one event; over the limit, audits the first refusal of the window (no content). */
+async function counted(
+  env: ServerEnv,
+  addon: Addon,
+  bucket: string,
+  windowMs: number,
+  limit: number,
+  what: string,
+): Promise<boolean> {
+  const now = env.now();
+  if (await env.store.connections.hit(bucket, windowMs, limit, now)) return true;
+  if ((await env.store.connections.counted(bucket, windowMs, now)) === limit + 1) {
+    await auditAddon(env, addon, "addon.limit", { what });
+  }
+  return false;
+}
+
+/**
+ * Someone allowed to call an add-on, over their hourly limit of calls to it: the words to say
+ * (undefined: within it).
+ */
+export async function addonCallerLimited(
+  env: ServerEnv,
+  addon: Addon,
+  who: { host: string; accountId: string },
+): Promise<string | undefined> {
+  const ok = await env.store.connections.hit(
+    `addon-in:${addon.id}:${who.host}:${who.accountId}`,
+    HOUR_MS,
+    limitsOf(env).addonCallsInPerCallerPerHour,
+    env.now(),
+  );
+  return ok ? undefined : TOO_MANY_CALLS_TO;
+}
+
+/**
+ * An add-on about to call someone it may call: over its hourly limit, or its daily limit for that
+ * person? The words to say (undefined: within them). So it can't ring all its holders at once
+ * like a broadcast.
+ */
+export async function addonCallsOutLimited(
+  env: ServerEnv,
+  addon: Addon,
+  callee: { host: string; accountId: string },
+): Promise<string | undefined> {
+  const limits = limitsOf(env);
+  const hour = await counted(
+    env,
+    addon,
+    `addon-out:${addon.id}`,
+    HOUR_MS,
+    limits.addonCallsOutPerHour,
+    "calls per hour",
+  );
+  if (!hour) return TOO_MANY_CALLS_FROM;
+  const person = await counted(
+    env,
+    addon,
+    `addon-out:${addon.id}:${callee.host}:${callee.accountId}`,
+    DAY_MS,
+    limits.addonCallsOutPerPersonPerDay,
+    "calls to one person per day",
+  );
+  return person ? undefined : TOO_MANY_CALLS_FROM;
+}
 
 /** `handle+name@host`. */
 export const addonAddress = (env: ServerEnv, handle: string, name: string) =>
@@ -103,6 +253,16 @@ async function stillReachable(env: ServerEnv, ownerAccountId: string, who: Who):
 
 const partyOf = (a: Account) => ({ handle: a.handle, id: a.id, name: a.name });
 
+/** What people other than its owner see of what an add-on said about itself. */
+export const publicAbout = (a: AddonSelf) => ({
+  ...(a.summary ? { summary: a.summary } : {}),
+  hears: a.hears,
+  transcribes: a.transcribes,
+  answers: a.answers,
+  calls: a.calls,
+  keys: a.keys,
+});
+
 /** A holder's address as their owner sees it (`handle@host`). */
 export const holderAddress = (env: ServerEnv, h: { host: string; handle: string }) =>
   `${h.handle}@${h.host || ownHost(env)}`;
@@ -140,6 +300,57 @@ export async function tellHolder(
     });
   } catch (e) {
     env.log("warn", "add-on shares: holder not told", { host: holder.host, error: String(e) });
+  }
+}
+
+/**
+ * Unlinks an add-on (its owner removed it, left the space it was linked in, or the space or their
+ * account went): the row goes with its shares and grants, its socket closes with its calls, it
+ * is told to forget its link (now, or when it next connects and proves its key), and the people
+ * who held its shares see them go.
+ */
+export async function unlinkAddon(env: ServerEnv, live: Coordinator, addon: Addon): Promise<void> {
+  const { store } = env;
+  const grants = await store.addons.grants(addon.id);
+  await store.addons.delete(addon.id);
+  await store.recordRemovedDevices(
+    [{ id: addon.id, publicKey: addon.publicKey, keyAlg: addon.keyAlg }],
+    env.now(),
+  );
+  await live.forgetDevice(addon.householdId, addon.id);
+  const notify = (accountId: string, msg: ServerToApp) => live.notifyAccount(accountId, msg);
+  for (const g of grants) await tellHolder(env, notify, addon.accountId, g);
+}
+
+/**
+ * A holder gave a share back (here, or their server told us): their calls within it end, its
+ * owner's apps reload, and it goes in the audit trail.
+ */
+export async function holderLeft(
+  env: ServerEnv,
+  live: Coordinator,
+  addon: Addon,
+  grant: AddonGrant,
+): Promise<void> {
+  await live.endAddonShareCalls(addon.householdId, addon.id, { grantIds: [grant.id] });
+  await live.notifyAccount(addon.accountId, { t: "connections.changed" });
+  await auditAddon(env, addon, "addon.leave", {
+    share: grant.shareId,
+    grantId: grant.id,
+    from: holderAddress(env, grant),
+  });
+}
+
+/** Unlinks the add-ons a membership, a space or an account takes with it when it goes. */
+export async function unlinkAddonsOf(
+  env: ServerEnv,
+  live: Coordinator,
+  which: { accountId: string; userId?: string; householdId?: string },
+): Promise<void> {
+  for (const addon of await env.store.addons.list(which.accountId)) {
+    if (which.userId && addon.userId !== which.userId) continue;
+    if (which.householdId && addon.householdId !== which.householdId) continue;
+    await unlinkAddon(env, live, addon);
   }
 }
 
@@ -276,6 +487,9 @@ const LinkBody = z.object({
 /** Someone to give a share to: one of your connections, or a member of one of your spaces. */
 const PersonRef = z.string().regex(/^(conn|user):[A-Za-z0-9_-]{1,64}$/);
 const GrantBody = z.object({ to: PersonRef });
+const AddonAddressText = z.string().trim().min(5).max(300);
+const MutedBody = z.object({ address: AddonAddressText, muted: z.boolean() });
+const LeaveBody = z.object({ address: AddonAddressText });
 const RequestBody = z.object({
   label: z.string().trim().min(1, "Give it a name.").max(40),
   with: z.array(PersonRef).max(MAX_HOLDERS_PER_SHARE),
@@ -355,6 +569,9 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
           .map((g) => ({ grantId: g.id, name: g.name, address: holderAddress(env, g) })),
       })),
       allowNote: await store.addons.allowNote(addon.id),
+      // What it said it does (null: it never said), and what the server lets it do.
+      about: addon.about,
+      rules: rulesOf(env, addon.about),
     };
   };
 
@@ -421,15 +638,90 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
         h.shareId,
       );
       if (!may) continue;
+      const mute = { host: LOCAL_HOST, ownerAccount: addon.accountId, name: addon.name };
       held.push({
         grantId: h.id,
         owner: { name: h.ownerName, address: `${h.ownerHandle}@${ownHost(env)}` },
         addon: h.addonName,
         share: { id: h.shareId, label: h.label },
         address: shareAddress(env, h.ownerHandle, h.addonName, h.shareId),
+        muted: await store.addons.muted(account.id, mute),
+        ...(addon.about ? { about: publicAbout(addon.about) } : {}),
       });
     }
     return c.json({ held });
+  });
+
+  /**
+   * An add-on someone holds a share of, by address (`handle+name[+share]@host`): its owner's
+   * server and stable account there, and, for one elsewhere, the connection it came through.
+   */
+  const heldAddon = async (account: Account, address: string) => {
+    const a = parseAddonAddress(address);
+    if (!a) return undefined;
+    const host = a.host === ownHost(env) ? LOCAL_HOST : a.host;
+    if (host === LOCAL_HOST) {
+      const addon = await store.addons.byAddress(a.handle, a.name);
+      return addon ? { a, host, ownerAccount: addon.accountId, addon } : undefined;
+    }
+    const conn = await store.connections.find(account.id, host, a.handle);
+    if (conn?.state !== "active" || !conn.peerAccount) return undefined;
+    return { a, host, ownerAccount: conn.peerAccount, conn };
+  };
+
+  /**
+   * "Stop its calls" (or let them through again): a holder's own choice, kept and enforced by
+   * their own server. They can still call it.
+   */
+  api.put("/addons/muted", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, MutedBody);
+    if (b instanceof Response) return b;
+    const held = await heldAddon(account, b.address);
+    if (!held || held.ownerAccount === account.id) return c.json({ error: "not found" }, 404);
+    const who = { host: held.host, ownerAccount: held.ownerAccount, name: held.a.name };
+    await store.addons.setMuted(account.id, who, b.muted, env.now());
+    await notify(account.id, { t: "connections.changed" });
+    return c.body(null, 204);
+  });
+
+  /** A holder gives a share back: they lose it, and their calls within it end. */
+  api.post("/addons/leave", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, LeaveBody);
+    if (b instanceof Response) return b;
+    const held = await heldAddon(account, b.address);
+    const share = held?.a.share;
+    if (!held || !share) return c.json({ error: "not found" }, 404);
+    if (held.addon) {
+      const grant = await store.addons.grantFor(held.addon.id, share, LOCAL_HOST, account.id);
+      if (!grant || !(await store.addons.leave(grant.id, account.id))) {
+        return c.json({ error: "not found" }, 404);
+      }
+      await holderLeft(env, live, held.addon, grant);
+    } else if (held.conn) {
+      const had = (await store.addons.received(held.conn.id)).some(
+        (x) => x.addon === held.a.name && x.share === share,
+      );
+      if (!had) return c.json({ error: "not found" }, 404);
+      // Forgotten here at once (its calls to us within it are refused from now on); its
+      // server is told, if it can be.
+      await store.addons.dropReceived(held.conn.id, held.a.name, share);
+      if (federates(env) && (await peerSupports(env, held.host, "addon-leave"))) {
+        try {
+          await fedFetch(env, held.host, "/addon-shares/leave", {
+            json: { from: partyOf(account), to: held.a.handle, addon: held.a.name, share },
+          });
+        } catch (e) {
+          env.log("warn", "add-on share leave not delivered", {
+            host: held.host,
+            error: String(e),
+          });
+        }
+      }
+    }
+    await notify(account.id, { t: "connections.changed" });
+    return c.body(null, 204);
   });
 
   api.post("/addons/link", async (c) => {
@@ -565,17 +857,8 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     const account = c.get("account");
     const addon = await own(account.id, c.req.param("id"));
     if (!addon) return c.json({ error: "not found" }, 404);
-    const grants = await store.addons.grants(addon.id);
-    await store.addons.delete(addon.id);
-    // If it's offline now, it's told to forget its link the next time it connects.
-    await store.recordRemovedDevices(
-      [{ id: addon.id, publicKey: addon.publicKey, keyAlg: addon.keyAlg }],
-      env.now(),
-    );
-    await live.forgetDevice(addon.householdId, addon.id);
-    // The people who held its shares see them go.
-    for (const g of grants) await tellHolder(env, notify, addon.accountId, g);
     await auditAddon(env, addon, "addon.remove", {});
+    await unlinkAddon(env, live, addon);
     return c.body(null, 204);
   });
 }

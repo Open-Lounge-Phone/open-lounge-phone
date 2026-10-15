@@ -143,8 +143,16 @@ export interface ServerEnv {
    */
   addons?: boolean;
   now(): number;
-  /** ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). */
-  iceServers(): Promise<IceServer[]>;
+  /**
+   * ICE servers handed to both peers of a call (STUN, and TURN with fresh credentials). `ttlSeconds`:
+   * how long TURN credentials last (the host's default when unset).
+   */
+  iceServers(opts?: { ttlSeconds?: number }): Promise<IceServer[]>;
+  /**
+   * Hosts whose TURN service can revoke credentials (Cloudflare) provide this: the call they were
+   * made for ended, so these usernames stop working now. Without it they expire on their own.
+   */
+  revokeIce?(usernames: string[]): Promise<void>;
   /** Schedules `fn` after `ms`; returns a cancel function. */
   setTimer(fn: () => void, ms: number): () => void;
   log(level: "info" | "warn" | "error", msg: string, extra?: Record<string, unknown>): void;
@@ -274,6 +282,8 @@ export interface PeerInfo {
     ownerUserId?: string;
     /** An add-on elsewhere calling within one of its shares: the share's label. */
     share?: string;
+    /** Our own add-ons: what the server lets it do, from what it said (`addon.about`). */
+    rules?: AddonRules;
   };
   /** A phone whose client can record calls (the browser phone; not yet firmware). */
   canRecord?: boolean;
@@ -284,6 +294,20 @@ export interface PeerInfo {
    * (`call.state ringing` + `queue`) and its voicemail offer, through their server.
    */
   line?: boolean;
+}
+
+/** What an add-on may do here, from `addon.about` (or server 0.7.0's rules if it never said). */
+export interface AddonRules {
+  /** People may call it. */
+  answers: boolean;
+  /** It may call people (its owner, holders within a share). */
+  calls: boolean;
+  /** It may offer shares. */
+  shares: boolean;
+  /** Keys pressed in its calls reach it. */
+  keys: boolean;
+  /** Calls it takes at once (already capped by the server's limit). */
+  lines: number;
 }
 
 /** Which of a member's companion sockets to close (see `Coordinator.closeApps`). */
@@ -332,6 +356,8 @@ export interface RoomSnapshot {
   recording?: { by: string; ours: boolean };
   /** Never recorded (e.g. we called a kids' phone elsewhere). */
   noRecording?: boolean;
+  /** TURN usernames handed out for the call (revoked when it ends, where the host can). */
+  turnUsers?: string[];
   /** A call to one of our public lines: its place in the line's queue. */
   line?: LineCallState;
   /** A call to a public line elsewhere: its queue updates and voicemail offer pass through. */
@@ -414,6 +440,8 @@ export const CloseCode = {
   /** The person left or was removed from this space; their session (and other spaces) remain. */
   removed: 4403,
   timeout: 4408,
+  /** Sent too much (an add-on over its message limit). */
+  tooMuch: 4429,
 } as const;
 
 export const HELLO_TIMEOUT_MS = 10_000;

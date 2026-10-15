@@ -19,7 +19,7 @@ import {
   RoomJoinResult,
 } from "@openloungephone/federation";
 import type { ServerToApp } from "@openloungephone/protocol";
-import { addonAccess } from "./addons.ts";
+import { addonAccess, addonCallerLimited } from "./addons.ts";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -176,6 +176,8 @@ export class FedCalls implements CallLinks {
       const who = { host, accountId: from.id, handle: from.handle };
       const access = await addonAccess(this.env, addon, who, body.to.share);
       if (!access) return unavailable;
+      const limited = await addonCallerLimited(this.env, addon, who);
+      if (limited) return { state: "ended", reason: "denied", note: limited };
       await this.register(host, body.callId, addon.householdId);
       return this.live.ringRemote(addon.householdId, {
         callId: body.callId,
@@ -198,13 +200,31 @@ export class FedCalls implements CallLinks {
       if (host === LOCAL_HOST && account.id === from.id) return deny;
       const conn = await store.connections.findPeer(account.id, host, from);
       const connected = conn?.state === "active" && conn.peerAccount === from.id;
+      let share = body.addonShare;
+      if (body.addon !== undefined) {
+        // An add-on calls someone here only within a share they hold, and never once they
+        // stopped its calls. Checked by their own server: here, by the grant itself; for
+        // another server's add-on, by what that server told us they hold (it can't call them
+        // as an add-on without having said so). Its owner is never on another server.
+        const unavailable = { state: "ended", reason: "unavailable" } as const;
+        if (!share) return unavailable;
+        const mute = { host, ownerAccount: from.id, name: body.addon };
+        if (await store.addons.muted(account.id, mute)) return unavailable;
+        if (host === LOCAL_HOST) {
+          if (!(await this.holdsShare(from, body.addon, share.id, account))) return unavailable;
+        } else {
+          const held = connected
+            ? (await store.addons.received(conn.id)).find(
+                (x) => x.addon === body.addon && x.share === share?.id,
+              )
+            : undefined;
+          if (!held) return unavailable;
+          share = { id: held.share, label: held.label };
+        }
+      }
       // An add-on here calling within a share someone here holds needs no connection between
-      // them (they may share a space instead): the share's grant decides.
-      const holdsShare =
-        !connected && host === LOCAL_HOST && body.addon && body.addonShare
-          ? await this.holdsShare(from, body.addon, body.addonShare.id, account)
-          : false;
-      if (!connected && !holdsShare) return deny;
+      // them (they may share a space instead): the share's grant decided above.
+      if (!connected && !(body.addon !== undefined && host === LOCAL_HOST)) return deny;
       if (await store.connections.blocked(account.id, host, from)) return deny;
       const home = await primaryHousehold(this.env, account.id);
       if (!home) return { state: "ended", reason: "unreachable" };
@@ -212,7 +232,6 @@ export class FedCalls implements CallLinks {
       const label = body.addon ?? (body.viaPhone ? `${body.viaPhone.label} (${who})` : who);
       const fromHost = host || ownHost(this.env);
       await this.register(host, body.callId, home.household.id);
-      const share = body.addonShare;
       return this.live.ringRemote(home.household.id, {
         callId: body.callId,
         host,

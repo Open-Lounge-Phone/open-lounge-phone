@@ -33,6 +33,28 @@ export interface Limits {
   lineCallsPerCallerPerHour: number;
   /** Calls any one other server's people may place to one public line per hour. */
   lineCallsPerServerPerHour: number;
+  /**
+   * Calls one add-on takes at once, at most (it asks for up to this with `addon.about.lines`;
+   * default 1). Enough for a small radio's listeners; beyond it callers hear busy.
+   */
+  addonCallsAtOnce: number;
+  /**
+   * The longest call with an add-on, in minutes: a forgotten open line (or an endless stream)
+   * stops counting against its owner, and the call's TURN credentials expire with it.
+   */
+  addonCallMinutes: number;
+  /** Calls one add-on may place per hour (to its owner and holders together). */
+  addonCallsOutPerHour: number;
+  /** Calls one add-on may place to one person per day: no ringing everyone as a broadcast. */
+  addonCallsOutPerPersonPerDay: number;
+  /** Calls one person may place to one add-on per hour. */
+  addonCallsInPerCallerPerHour: number;
+  /** Share lists (`addon.shares`) one add-on may send per hour. */
+  addonShareUpdatesPerHour: number;
+  /** Times one add-on may connect (and sign in) per hour: a reconnect storm is cut off. */
+  addonConnectsPerHour: number;
+  /** Messages one add-on connection may send per minute (more closes it). */
+  addonMessagesPerMinute: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -49,6 +71,14 @@ export const DEFAULT_LIMITS: Limits = {
   writesPerAccountPerMinute: 120,
   lineCallsPerCallerPerHour: 10,
   lineCallsPerServerPerHour: 300,
+  addonCallsAtOnce: 10,
+  addonCallMinutes: 240,
+  addonCallsOutPerHour: 10,
+  addonCallsOutPerPersonPerDay: 6,
+  addonCallsInPerCallerPerHour: 30,
+  addonShareUpdatesPerHour: 60,
+  addonConnectsPerHour: 120,
+  addonMessagesPerMinute: 600,
 };
 
 export const limitsOf = (env: ServerEnv): Limits => ({ ...DEFAULT_LIMITS, ...env.limits });

@@ -89,7 +89,7 @@ describe("rotating this server's key", () => {
       software: expect.stringMatching(/^openloungephone\//),
       versions: [1],
       // Add-ons are off on a (its operator didn't turn them on).
-      missing: ["addons", "addon-shares"],
+      missing: ["addons", "addon-shares", "addon-leave"],
     });
   });
 

@@ -4,6 +4,7 @@ import { ownedSpacesBlockingDelete } from "@openloungephone/core";
 import type { Account } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
+import { unlinkAddon, unlinkAddonsOf } from "./addons.ts";
 import { Connections } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
@@ -174,6 +175,9 @@ export async function deleteSpace(env: ServerEnv, live: Coordinator, householdId
   const now = env.now();
   await dropVoicemailBlobs(env, { householdId });
   const devices = await env.store.listDevices(householdId);
+  for (const addon of await env.store.addons.inHousehold(householdId)) {
+    await unlinkAddon(env, live, addon);
+  }
   await env.store.recordRemovedDevices(devices, now);
   await env.store.deleteHousehold(householdId);
   for (const d of devices) await live.forgetDevice(householdId, d.id);
@@ -197,8 +201,9 @@ export async function deleteAccountEverywhere(
       await service.remove(account, conn);
     }
   }
-  // Nothing keeps working on an open socket.
+  // Nothing keeps working on an open socket (its add-ons included).
   await closeAccountApps(env, live, account.id);
+  await unlinkAddonsOf(env, live, { accountId: account.id });
   await store.auth.endSessions(account.id);
   for (const { user, household } of await store.listMemberships(account.id)) {
     const alone = (await store.memberCount(household.id)) === 1;

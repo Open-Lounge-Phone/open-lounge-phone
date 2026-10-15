@@ -831,8 +831,14 @@ export async function addonsAcross(jesse: Person, bob: Person) {
         addonShares?: { address: string; label: string }[];
       }
     ).addonShares;
+  // (servers from 0.8.0 on also say whether he stopped its calls)
   expect(await bobsShares()).toEqual([
-    { addon: "seat", share: "bookclub", label: "Book club", address: shareAddress },
+    expect.objectContaining({
+      addon: "seat",
+      share: "bookclub",
+      label: "Book club",
+      address: shareAddress,
+    }),
   ]);
 
   bApp.send({ t: "call.address", address: shareAddress });

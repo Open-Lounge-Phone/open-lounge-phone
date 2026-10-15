@@ -16,7 +16,7 @@ import {
   type ServerToDevice,
   toBase64Url,
 } from "@openloungephone/protocol";
-import { ADDONS_OFF } from "./addons.ts";
+import { ADDONS_OFF, cleanText } from "./addons.ts";
 import { verifyDeviceSignature } from "./deviceAuth.ts";
 import {
   type AppCloseFilter,
@@ -38,6 +38,7 @@ import type {
   RemoteRoomJoin,
 } from "./fedCalls.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
+import { limitsOf } from "./limits.ts";
 import { SERVER_INFO } from "./version.ts";
 
 /** What a phone shows when its protocol is older than this server accepts. */
@@ -90,6 +91,9 @@ export function protocolAccepted(
   });
   return false;
 }
+
+/** What an add-on says it runs (its `hello.fw`), as its page shows it: plain words only. */
+const cleanFw = (fw: string) => cleanText(fw, 64) ?? "unknown";
 
 /** What a transport (Node `ws`, Workers WebSocket) drives for each socket. */
 export interface ConnectionHandler {
@@ -534,7 +538,28 @@ export class Gateway implements Coordinator {
             return fail(CloseCode.unauthorized, "bad signature");
           }
           cancelHello();
-          await this.env.store.addons.touch(addon.id, this.env.now(), fw);
+          // A reconnect storm is cut off (counted only once it proved its key, so nobody else
+          // can use up its allowance), and an add-on whose owner is suspended can't connect.
+          const fresh = await this.env.store.connections.hit(
+            `addon-connect:${addon.id}`,
+            60 * 60 * 1000,
+            limitsOf(this.env).addonConnectsPerHour,
+            this.env.now(),
+          );
+          if (!fresh) {
+            conn.send({ t: "error", code: "rate_limited", message: "too many connections" });
+            return fail(CloseCode.tooMuch, "too many connections");
+          }
+          const owner = await this.env.store.getAccount(addon.accountId);
+          if (!owner || owner.suspendedAt !== null) {
+            conn.send({
+              t: "error",
+              code: "unauthorized",
+              message: "its owner's account can't use it now",
+            });
+            return fail(CloseCode.unauthorized, "owner suspended");
+          }
+          await this.env.store.addons.touch(addon.id, this.env.now(), cleanFw(fw));
           const hub = this.hub(addon.householdId);
           const peer = await hub.connectAddon(addon, conn);
           if (closed()) {

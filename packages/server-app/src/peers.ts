@@ -104,6 +104,7 @@ export const UNAVAILABLE: Record<Feature, string> = {
   "line-callback": "That server can't call you back yet",
   addons: "That server doesn't take add-on calls",
   "addon-shares": "That server doesn't take shared add-ons yet",
+  "addon-leave": "That server can't be told you gave the share back yet",
 };
 
 /** Every peer's last known offer (for the operator's view), without fetching anything. */

@@ -17,7 +17,7 @@ export const SOFTWARE = `openloungephone/${SERVER_VERSION}`;
 export const OWN_FEATURES: readonly Feature[] = FEATURE_NAMES;
 
 /** Features that exist only while the operator has add-ons on. */
-const ADDON_FEATURES: readonly string[] = ["addons", "addon-shares"];
+const ADDON_FEATURES: readonly string[] = ["addons", "addon-shares", "addon-about", "addon-leave"];
 
 /**
  * What this server advertises in `.well-known`: everything it implements, but `addons` and

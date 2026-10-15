@@ -15,6 +15,7 @@ import {
 } from "@openloungephone/db";
 import {
   AcceptBody,
+  AddonLeaveBody,
   AddonSharesBody,
   CallBody,
   GreetingBody,
@@ -37,6 +38,7 @@ import {
 } from "@openloungephone/federation";
 import { Hono } from "hono";
 import { z } from "zod";
+import { holderLeft } from "./addons.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import { primaryHousehold, receiveGuestDial } from "./fedCalls.ts";
@@ -511,12 +513,21 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
             // Shares of their add-ons they gave you (another server; it decides every call).
             ...(env.addons && r.state === "active" && r.peerHost !== LOCAL_HOST
               ? {
-                  addonShares: (await store.addons.received(r.id)).map((x) => ({
-                    addon: x.addon,
-                    share: x.share,
-                    label: x.label,
-                    address: `${r.peerHandle}+${x.addon}+${x.share}@${r.peerHost}`,
-                  })),
+                  addonShares: await Promise.all(
+                    (await store.addons.received(r.id)).map(async (x) => ({
+                      addon: x.addon,
+                      share: x.share,
+                      label: x.label,
+                      address: `${r.peerHandle}+${x.addon}+${x.share}@${r.peerHost}`,
+                      muted: r.peerAccount
+                        ? await store.addons.muted(account.id, {
+                            host: r.peerHost,
+                            ownerAccount: r.peerAccount,
+                            name: x.addon,
+                          })
+                        : false,
+                    })),
+                  ),
                 }
               : {}),
           })),
@@ -747,6 +758,18 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (!account || row?.state !== "active" || row.peerAccount !== from.id) return accepted();
     await env.store.addons.setReceived(row.id, shares);
     await live.notifyAccount(account.id, { t: "connections.changed" });
+    return accepted();
+  });
+
+  /** Feature `addon-leave`: someone there gives back a share of one of our add-ons. */
+  app.post("/fed/v1/addon-shares/leave", async (c) => {
+    const r = await signed(c.req.raw, AddonLeaveBody);
+    if (r instanceof Response) return r;
+    if (!env.addons) return accepted();
+    const { from, to, addon: name, share } = r.body;
+    const addon = await env.store.addons.byAddress(to, name);
+    const grant = addon && (await env.store.addons.leaveFrom(addon.id, share, r.host, from.id));
+    if (addon && grant) await holderLeft(env, live, addon, grant);
     return accepted();
   });
 

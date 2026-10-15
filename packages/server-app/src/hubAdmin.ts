@@ -101,6 +101,12 @@ export function hubRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): v
     await store.setSuspended(target.id, b.suspended ? env.now() : null);
     // A suspended account's open apps close now (its sessions stop working at once).
     if (b.suspended) await closeAccountApps(env, live, target.id);
+    // …and so do its add-ons, with their calls (they can't connect while it lasts).
+    if (b.suspended) {
+      for (const addon of await store.addons.list(target.id)) {
+        await live.refreshDevice(addon.householdId, addon.id);
+      }
+    }
     await operatorAudit(
       env,
       c.get("account"),

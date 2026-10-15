@@ -54,7 +54,9 @@ describe("what this server advertises", () => {
       software: `openloungephone/${rootPackage.version}`,
       versions: { "1": "/fed/v1" },
       // `addons` only when the operator turns add-ons on.
-      features: FEATURE_NAMES.filter((f) => f !== "addons" && f !== "addon-shares"),
+      features: FEATURE_NAMES.filter(
+        (f) => f !== "addons" && f !== "addon-shares" && f !== "addon-leave",
+      ),
     });
     expect(res.headers.get("cache-control")).toBe("public, max-age=300");
     expect((await a.http("/health")).json.software).toBe(SOFTWARE);

@@ -1,102 +1,27 @@
 import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  addonCode,
+  addonHello,
+  BOOK_CLUB,
+  connect,
+  declare,
+  give,
+  type Linked,
+  linkAddon,
+  type Person,
+  talk,
+} from "./addonHarness.ts";
 import { ADDON_CODE, ADDONS_OFF, PHONE_CODE } from "./addons.ts";
 import { fedFetch } from "./federation.ts";
 import {
   expectStatus,
-  type FakeConn,
   hello,
   type Network as Net,
   Network,
   newKey,
   type TestServer,
 } from "./testkit.ts";
-
-type Person = Awaited<ReturnType<TestServer["person"]>>;
-type Key = Awaited<ReturnType<typeof newKey>>;
-
-const addonHello = (deviceId?: string) => ({
-  ...hello(deviceId),
-  model: "addon",
-  fw: "olp-addon/test",
-  buttons: 1,
-  display: "none",
-});
-
-/** An add-on asks for a code: answers the code (and its socket, waiting for `pair.done`). */
-async function addonCode(s: TestServer, key: Key) {
-  const conn = s.openDevice();
-  conn.write(addonHello());
-  conn.write({ t: "pair.begin", kind: "addon", publicKey: key.publicKey });
-  const { code } = await conn.next("pair.code");
-  return { conn, code };
-}
-
-/** Connects a linked add-on (the signed challenge); answers its socket after `config`. */
-async function connectAddon(s: TestServer, id: string, key: Key) {
-  const conn = s.openDevice();
-  conn.write(addonHello(id));
-  const { nonce } = await conn.next("auth.challenge");
-  const sig = await crypto.subtle.sign("Ed25519", key.pair.privateKey, fromBase64Url(nonce));
-  conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });
-  await conn.next("config");
-  return conn;
-}
-
-/** Links an add-on `name` to `owner`'s account and connects it. */
-async function linkAddon(s: TestServer, owner: Person, name = "seat", allow: string[] = []) {
-  const key = await newKey();
-  const { conn: waiting, code } = await addonCode(s, key);
-  const res = await s.http("/addons/link", { token: owner.token, body: { code, name, allow } });
-  expectStatus(res, 201);
-  const done = await waiting.next("pair.done");
-  expect(done.deviceId).toBe(res.json.id);
-  const conn = await connectAddon(s, res.json.id, key);
-  return { id: res.json.id as string, key, conn, address: res.json.address as string };
-}
-
-/** `a` knocks on `b`, `b` accepts; returns both sides' connection ids. */
-async function connect(sa: TestServer, a: Person, sb: TestServer, b: Person) {
-  expectStatus(await sa.http("/connections", { token: a.token, body: { to: b.address } }), 202);
-  const inbox = await sb.http("/connections", { token: b.token });
-  const req = inbox.json.connections.find((c: { address: string }) => c.address === a.address);
-  expectStatus(
-    await sb.http(`/connections/${req.id}/accept`, { method: "POST", token: b.token }),
-    200,
-  );
-  const mine = (await sa.http("/connections", { token: a.token })).json.connections.find(
-    (c: { address: string }) => c.address === b.address,
-  );
-  return { aSide: mine.id as string, bSide: req.id as string };
-}
-
-/** Answers and runs offer/answer, so both sides see `active`. */
-async function talk(caller: FakeConn, callee: FakeConn, callerCall: string, calleeCall: string) {
-  callee.write({ t: "call.answer", callId: calleeCall });
-  await caller.nextState("connecting");
-  caller.write({ t: "rtc.sdp", callId: callerCall, type: "offer", sdp: "v=0 offer" });
-  expect(await callee.next("rtc.sdp")).toMatchObject({ type: "offer" });
-  callee.write({ t: "rtc.sdp", callId: calleeCall, type: "answer", sdp: "v=0 answer" });
-  await caller.nextState("active");
-  await callee.nextState("active");
-}
-
-const BOOK_CLUB = { id: "bookclub", label: "Book club" };
-type Linked = Awaited<ReturnType<typeof linkAddon>>;
-
-/** The add-on says what it offers for sharing; resolves once the server has it. */
-async function declare(s: TestServer, seat: Linked, shares: { id: string; label: string }[]) {
-  seat.conn.write({ t: "addon.shares", shares });
-  await vi.waitFor(async () =>
-    expect(await s.store.addons.shares(seat.id)).toEqual(
-      shares.filter((x, i) => shares.findIndex((y) => y.id === x.id) === i),
-    ),
-  );
-}
-
-/** The owner gives a share to someone (`conn:<id>` or `user:<id>`). */
-const give = (s: TestServer, owner: Person, addonId: string, share: string, to: string) =>
-  s.http(`/addons/${addonId}/shares/${share}/grants`, { token: owner.token, body: { to } });
 
 describe("add-ons on one server", () => {
   let net: Net;
@@ -709,6 +634,7 @@ describe("sharing add-ons on one server", () => {
         addon: "seat",
         share: BOOK_CLUB,
         address: "jesse+seat+bookclub@a.test",
+        muted: false,
       },
     ]);
     // Someone else in Jesse's own home (a guardian, even) sees nothing of it.
@@ -889,6 +815,7 @@ describe("sharing add-ons across servers", () => {
         share: "bookclub",
         label: "Book club",
         address: "jesse+seat+bookclub@a.test",
+        muted: false,
       },
     ]);
     const bobApp = await b.connectApp(bob.token);
@@ -1005,6 +932,8 @@ describe("sharing add-ons across servers", () => {
     expect(await b.store.addons.received(knock.id)).toEqual([]);
     // From her own server, about their connection: kept.
     await fedFetch(a.env, "b.test", "/addon-shares", { json: { from: party, to: "bob", shares } });
-    expect(await bobsShares()).toEqual([{ ...shares[0], address: "jesse+seat+x@a.test" }]);
+    expect(await bobsShares()).toEqual([
+      { ...shares[0], address: "jesse+seat+x@a.test", muted: false },
+    ]);
   });
 });

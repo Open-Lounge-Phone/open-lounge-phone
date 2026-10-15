@@ -10,6 +10,7 @@ import {
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import { accountView, resolveSession, serverHost } from "./accounts.ts";
+import { unlinkAddonsOf } from "./addons.ts";
 import { audit, auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -355,6 +356,7 @@ export function peopleRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     }
     await live.closeApps(me.householdId, target.id, { removed: true });
     await dropVoicemailBlobs(env, { userId: target.id });
+    await unlinkAddonsOf(env, live, { accountId: target.accountId, userId: target.id });
     await store.deleteUser(target.id, env.now());
     // A Lounge phone they were using forgets them now.
     for (const d of await store.listDevices(me.householdId)) {
