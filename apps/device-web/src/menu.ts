@@ -23,7 +23,9 @@ export type MenuScreen =
   /** During a call or in a room: hold / add caller, merge, transfer, mute. */
   | "call"
   /** Team/org spaces: the digits of an extension; MENU dials, BACK deletes one. */
-  | "extension";
+  | "extension"
+  /** MENU 5: missed calls and call backs, one at a time (1 call back, 2 next, 3 clear all). */
+  | "missed";
 
 export interface MenuState {
   screen: MenuScreen;
@@ -31,6 +33,8 @@ export interface MenuState {
   recording?: "name" | "custom";
   /** On the `extension` screen: the digits so far. */
   digits?: string;
+  /** On the `missed` screen: which one is shown. */
+  index?: number;
   /** Epoch ms of the last key press, for the inactivity timeout. */
   lastInput: number;
 }
@@ -55,11 +59,20 @@ export type MenuEvent =
   /** Handset lifted or a call arrived: leave immediately. */
   | { type: "exit" };
 
+/** One entry of the Missed screen (a missed call, or a line's call back nobody took). */
+export interface MissedEntry {
+  /** What MENU 5 → 1 calls back (absent: the server can't call it back from here). */
+  id?: string;
+  from: string;
+  /** How many and when, ready to show (`2 CALLS 14:05`, `CALLED BACK 09:12`). */
+  line: string;
+}
+
 export interface MenuContext {
   /** Callers with unheard voicemail. */
   missedCount: number;
-  /** Public lines whose call back was missed (a person's own phone): 3 clears them. */
-  missedCallbacks?: number;
+  /** Not a Lounge phone: MENU 5 Missed calls and 8 Redial. */
+  calls?: { missed: readonly MissedEntry[] };
   /** Who plays voicemail here: a person's own phone plays it ("play"); a kids' phone asks a
    * grown-up; others play it in the app. */
   play?: "play" | "kids" | "app";
@@ -90,8 +103,14 @@ export type MenuAction =
   | { type: "greeting-reset" }
   /** MENU 2 → 1: play the unheard messages. */
   | { type: "vm-play" }
-  /** MENU 2 → 3: mark every message heard and forget the missed call backs. */
-  | { type: "vm-clear"; voicemail: boolean; callbacks: boolean }
+  /** MENU 2 → 3: mark every message heard. */
+  | { type: "vm-clear" }
+  /** MENU 5 → 1: call this missed caller back (needs the handset up). */
+  | { type: "call-back"; id: string }
+  /** MENU 5 → 3: clear the missed calls (seen, everywhere). */
+  | { type: "missed-clear" }
+  /** MENU 8: call again what this phone last called (needs the handset up). */
+  | { type: "redial" }
   /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
   | { type: "call"; action: CallAction }
   /** Dial this extension (the phone lifts the handset if it's down). */
@@ -130,9 +149,12 @@ const ROOT_OPTIONS: { digit: number; label: string; screen: MenuScreen; spoken: 
   { digit: 0, label: "About", screen: "about", spoken: "about this phone" },
 ];
 
-/** Lounge-session items on the top menu: 5 toggles "open to chat", 9 logs out. */
+/** Lounge-session items on the top menu: 5 toggles "open to chat", 8 logs out. Elsewhere 5 is
+ * Missed calls and 8 Redial. */
 const CHAT_DIGIT = 5;
 const LOGOUT_DIGIT = 8;
+const MISSED_DIGIT = 5;
+const REDIAL_DIGIT = 8;
 /** Team/org spaces: 6 dials an extension. */
 const EXTENSION_DIGIT = 6;
 const EXTENSION_MAX = 6;
@@ -144,6 +166,9 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
   if (ctx.lounge) {
     labels[CHAT_DIGIT] = ctx.lounge.openToChat ? "Chat off" : "Chat on";
     labels[LOGOUT_DIGIT] = "Log out";
+  } else if (ctx.calls) {
+    labels[MISSED_DIGIT] = "Missed";
+    labels[REDIAL_DIGIT] = "Redial";
   }
   if (ctx.extensions) labels[EXTENSION_DIGIT] = "Dial ext";
   return labels;
@@ -195,14 +220,19 @@ export const GREETING_DIGIT = 4;
 /** Greeting screen: 1 records your name, 2 a whole greeting, 3 goes back to the standard one. */
 const GREETING_LABELS = { 1: "Name", 2: "Greeting", 3: "Default" } as const;
 
-/** The voicemail screen's lines under the title: missed call backs, where to listen. */
+/** The voicemail screen's lines under the title: where to listen. */
 function voicemailDetail(ctx: MenuContext): string[] {
-  const cb = ctx.missedCallbacks ?? 0;
-  const lines = cb ? [`${Math.min(cb, 9)} MISSED CALL BACK${cb > 1 ? "S" : ""}`] : [];
   if (ctx.missedCount && ctx.play !== "play") {
-    lines.push(ctx.play === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP");
+    return [ctx.play === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP"];
   }
-  return lines;
+  return [];
+}
+
+/** The Missed screen: the shown one (wrapping), with what it shows. */
+function missedShown(state: MenuState, ctx: MenuContext) {
+  const list = ctx.calls?.missed ?? [];
+  const index = list.length ? (state.index ?? 0) % list.length : 0;
+  return { list, index, entry: list[index] };
 }
 const GREETING_TEXT = { default: "standard", name: "your name", custom: "your own" } as const;
 const GREETING_NAME = { default: "STANDARD", name: "YOUR NAME", custom: "YOUR OWN" } as const;
@@ -231,10 +261,24 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         title: ctx.missedCount ? `${ctx.missedCount} NEW VOICEMAIL` : "NO NEW VOICEMAIL",
         labels: {
           ...(play ? { [PLAY_DIGIT]: "Play" } : {}),
-          ...(play && (ctx.missedCount || ctx.missedCallbacks) ? { [CLEAR_DIGIT]: "Clear" } : {}),
+          ...(play && ctx.missedCount ? { [CLEAR_DIGIT]: "Clear" } : {}),
           ...(ctx.greeting?.canRecord ? { [GREETING_DIGIT]: "Greeting" } : {}),
         },
         ...(detail.length ? { detail } : {}),
+      };
+    }
+    case "missed": {
+      const { list, index, entry } = missedShown(state, ctx);
+      if (!entry) return { ...base, title: "NO MISSED CALLS", labels: {} };
+      return {
+        ...base,
+        title: `MISSED ${index + 1} OF ${list.length}`,
+        labels: {
+          ...(entry.id ? { 1: "Call back" } : {}),
+          ...(list.length > 1 ? { 2: "Next" } : {}),
+          3: "Clear all",
+        },
+        detail: [entry.from.toUpperCase(), entry.line],
       };
     }
     case "greetings":
@@ -288,7 +332,11 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
         ? ` Press ${CHAT_DIGIT} to ${ctx.lounge.openToChat ? "stop being" : "be"} open to chat. Press ${LOGOUT_DIGIT} to log out.`
         : "";
       const ext = ctx.extensions ? ` Press ${EXTENSION_DIGIT} to dial an extension.` : "";
-      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")}${lounge}${ext} Press back to leave.`;
+      const calls =
+        !ctx.lounge && ctx.calls
+          ? ` Press ${MISSED_DIGIT} for missed calls. Press ${REDIAL_DIGIT} to redial.`
+          : "";
+      return `Menu. ${ROOT_OPTIONS.map((o) => `Press ${o.digit} for ${o.spoken}.`).join(" ")}${lounge}${calls}${ext} Press back to leave.`;
     }
     case "volume":
       return `Volume ${settings.volume}. Press 1 for quieter, 2 for louder.`;
@@ -304,12 +352,16 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
                 : " Play them in the app."
           }`
         : "You have no new voicemail.";
-      const callbacks = ctx.missedCallbacks
-        ? ` You missed ${ctx.missedCallbacks === 1 ? "a call back" : `${ctx.missedCallbacks} call backs`} from a public line.`
-        : "";
-      const clear = play && (n || ctx.missedCallbacks) ? ` Press ${CLEAR_DIGIT} to clear.` : "";
+      const clear = play && n ? ` Press ${CLEAR_DIGIT} to clear.` : "";
       const greeting = ctx.greeting?.canRecord ? ` Press ${GREETING_DIGIT} for your greeting.` : "";
-      return `${messages}${callbacks}${clear}${greeting}`;
+      return `${messages}${clear}${greeting}`;
+    }
+    case "missed": {
+      const { list, index, entry } = missedShown(state, ctx);
+      if (!entry) return "No missed calls.";
+      const back = entry.id ? " Press 1 to call back." : "";
+      const next = list.length > 1 ? " Press 2 for the next one." : "";
+      return `Missed call ${index + 1} of ${list.length}: ${entry.from}, ${entry.line.toLowerCase()}.${back}${next} Press 3 to clear them all.`;
     }
     case "greetings": {
       const g = ctx.greeting;
@@ -436,6 +488,13 @@ export function menuStep(
       if (ctx.lounge && d === LOGOUT_DIGIT) {
         return { state: undefined, settings, say: "Logged out.", action: { type: "logout" } };
       }
+      if (!ctx.lounge && ctx.calls && d === MISSED_DIGIT) {
+        const next: MenuState = { screen: "missed", index: 0, lastInput: event.now };
+        return { state: next, settings, say: menuPrompt(next, settings, ctx) };
+      }
+      if (!ctx.lounge && ctx.calls && d === REDIAL_DIGIT) {
+        return { state: undefined, settings, action: { type: "redial" } };
+      }
       if (ctx.extensions && d === EXTENSION_DIGIT) {
         const next: MenuState = { screen: "extension", digits: "", lastInput: event.now };
         return { state: next, settings, say: menuPrompt(next, settings, ctx) };
@@ -453,19 +512,29 @@ export function menuStep(
       if (d === PLAY_DIGIT && play) {
         return { state: undefined, settings, action: { type: "vm-play" } };
       }
-      if (d === CLEAR_DIGIT && play && (ctx.missedCount || ctx.missedCallbacks)) {
-        return {
-          state: touched,
-          settings,
-          say: "Cleared.",
-          action: {
-            type: "vm-clear",
-            voicemail: ctx.missedCount > 0,
-            callbacks: (ctx.missedCallbacks ?? 0) > 0,
-          },
-        };
+      if (d === CLEAR_DIGIT && play && ctx.missedCount) {
+        return { state: touched, settings, say: "Cleared.", action: { type: "vm-clear" } };
       }
       if (d === GREETING_DIGIT && ctx.greeting?.canRecord) return enter("greetings");
+      return { state: touched, settings };
+    }
+    case "missed": {
+      const { list, index, entry } = missedShown(state, ctx);
+      if (d === 1 && entry?.id) {
+        return { state: undefined, settings, action: { type: "call-back", id: entry.id } };
+      }
+      if (d === 2 && list.length > 1) {
+        const next: MenuState = { ...touched, index: (index + 1) % list.length };
+        return { state: next, settings, say: menuPrompt(next, settings, ctx) };
+      }
+      if (d === 3 && entry) {
+        return {
+          state: { ...touched, index: 0 },
+          settings,
+          say: "Cleared.",
+          action: { type: "missed-clear" },
+        };
+      }
       return { state: touched, settings };
     }
     case "greetings": {

@@ -487,3 +487,22 @@ describe("how-to hints in turn on the second line", () => {
     ]);
   });
 });
+
+describe("one missed call (no message)", () => {
+  it("points at MENU 5", async () => {
+    const { statusLines } = await import("./strip.ts");
+    const config = {
+      buttons: [],
+      quiet: false,
+      owner: { mode: "kids" as const, space: "Smiths" },
+      missed: [{ from: "Mom", kind: "call" as const, count: 1, id: "mc_1" }],
+    };
+    expect(
+      statusLines({ connection: "online", deviceState: { kind: "idle" }, config, now: 0 }),
+    ).toEqual(["MISSED MOM", "MENU 5: MISSED"]);
+    const message = { ...config, missed: [{ from: "Mom", kind: "voicemail" as const }] };
+    expect(
+      statusLines({ connection: "online", deviceState: { kind: "idle" }, config: message, now: 0 }),
+    ).toEqual(["MISSED MOM", "ASK A GROWN-UP"]);
+  });
+});

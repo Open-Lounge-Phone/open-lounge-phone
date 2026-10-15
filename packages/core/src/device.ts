@@ -93,6 +93,8 @@ export type DeviceInput =
   | { type: "lost" }
   /** BACK while ringing: this phone's ringer stops (the call goes on ringing elsewhere). */
   | { type: "silence" }
+  /** MENU → Missed → 1: call this missed caller back (`config.missed` item id). Handset up. */
+  | { type: "callBack"; id: string }
   | {
       type: "server";
       msg: Extract<
@@ -226,6 +228,13 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     return stay(
       { kind: "dialing", button: -1, ...(s.held ? { held: s.held } : {}) },
       { t: "call.extension", number: input.number },
+    );
+  }
+  if (input.type === "callBack") {
+    if (s.kind !== "offhook") return stay(s);
+    return stay(
+      { kind: "dialing", button: -1, ...(s.held ? { held: s.held } : {}) },
+      { t: "call.back", id: input.id },
     );
   }
 
@@ -365,6 +374,33 @@ function action(s: DeviceState, a: CallAction): DeviceStep {
       const muted = a === "mute";
       return stay({ ...s, muted }, { t: "room.mute", roomId: s.roomId, muted });
     }
+  }
+}
+
+/** What a phone last called, for MENU → Redial (kept by the phone across restarts). */
+export type LastDial =
+  | { kind: "button"; index: number }
+  | { kind: "extension"; number: string }
+  | { kind: "back"; id: string };
+
+/** The call this input starts from `s` (handset up, nothing dialled), if it starts one. */
+export function dialOf(s: DeviceState, input: DeviceInput): LastDial | undefined {
+  if (s.kind !== "offhook") return undefined;
+  if (input.type === "button") return { kind: "button", index: input.index };
+  if (input.type === "extension") return { kind: "extension", number: input.number };
+  if (input.type === "callBack") return { kind: "back", id: input.id };
+  return undefined;
+}
+
+/** MENU → Redial: the same call again. */
+export function redialInput(last: LastDial): DeviceInput {
+  switch (last.kind) {
+    case "button":
+      return { type: "button", index: last.index };
+    case "extension":
+      return { type: "extension", number: last.number };
+    case "back":
+      return { type: "callBack", id: last.id };
   }
 }
 

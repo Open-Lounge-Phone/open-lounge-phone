@@ -21,10 +21,12 @@ import {
   type DeviceState,
   deviceFingerprint,
   deviceStep,
+  dialOf,
   initialDeviceState,
   NO_EXTENSION_NOTE,
   PROMPT_TEXT,
   RECORDING_MAX_MS,
+  redialInput,
   repeatedEnd,
   soundFor,
   WORKPLACE_PROMPT_TEXT,
@@ -45,6 +47,7 @@ import {
   parseAutopair,
   shouldAutopair,
 } from "./autopair.ts";
+import { forgetLastDial, isVoicemail, loadLastDial, missedEntries, saveLastDial } from "./calls.ts";
 import { playChime, unlockChime } from "./chime.ts";
 import {
   lines as epdLines,
@@ -217,6 +220,8 @@ let unauthorizedStreak = 0;
 let announceTimer: ReturnType<typeof setInterval> | undefined;
 let lastStatusText = "";
 let callStartedAt: number | undefined;
+/** The space's UTC offset (`config.utcOffsetMin`), for when missed calls were. */
+let utcOffsetMin = -new Date().getTimezoneOffset();
 /** The last few calls that ended here (a repeated ended for one of them is dropped). */
 let endedCalls: string[] = [];
 let callTicker: ReturnType<typeof setInterval> | undefined;
@@ -302,6 +307,8 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
       buttons: SLOT_COUNT,
       display: displayMode === "segments" ? "seg14" : displayMode,
       ...(deviceId ? { deviceId } : {}),
+      // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
+      features: ["missed-calls"],
     };
     raw(hello);
     log("→", hello);
@@ -384,6 +391,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
         ...(msg.owner ? { owner: msg.owner } : {}),
         ...(msg.extensions ? { extensions: true } : {}),
       };
+      if (msg.utcOffsetMin !== undefined) utcOffsetMin = msg.utcOffsetMin;
       // The mode is decided when the phone is claimed; it may differ from the first-run choice.
       if (msg.owner && msg.owner.mode !== variant) {
         variant = msg.owner.mode;
@@ -583,6 +591,7 @@ async function wipe(): Promise<void> {
   socket.close();
   await forgetIdentity(profile);
   forgetKind(storage, profile);
+  forgetLastDial(storage, profile);
   logEl.replaceChildren();
   location.reload();
 }
@@ -628,6 +637,9 @@ function labelFor(index: number): string | undefined {
 
 function step(input: DeviceInput): void {
   const prev = deviceState;
+  // What this phone last called, for MENU 8 Redial (not on a Lounge phone: it forgets people).
+  const dialled = variant === "lounge" ? undefined : dialOf(prev, input);
+  if (dialled) saveLastDial(storage, profile, dialled);
   const r = deviceStep(prev, input);
   deviceState = r.state;
   if (authed) for (const m of r.send) send(m);
@@ -1066,8 +1078,10 @@ function dismissNotice(): void {
 
 function menuContext() {
   return {
-    missedCount: config?.missed?.filter((m) => !m.callback).length ?? 0,
-    missedCallbacks: config?.missed?.filter((m) => m.callback).length ?? 0,
+    missedCount: config?.missed?.filter(isVoicemail).length ?? 0,
+    ...(variant !== "lounge"
+      ? { calls: { missed: missedEntries(config, Date.now(), utcOffsetMin) } }
+      : {}),
     play:
       variant === "personal"
         ? ("play" as const)
@@ -1142,11 +1156,22 @@ function applyMenu(event: MenuEvent): void {
     send({ t: "voicemail.fetch" });
   }
   if (r.action?.type === "vm-clear") {
-    // Clear: missed call backs go too (on all the owner's phones), and every message is heard.
-    if (r.action.callbacks) send({ t: "missed.clear" });
-    if (r.action.voicemail) {
-      vm = vmStart(true, Date.now());
-      send({ t: "voicemail.fetch" });
+    // Clear: every message is heard (missed calls are cleared on MENU 5).
+    vm = vmStart(true, Date.now());
+    send({ t: "voicemail.fetch" });
+  }
+  if (r.action?.type === "missed-clear") send({ t: "missed.clear" });
+  if (r.action?.type === "call-back") {
+    // Calling back needs the handset up (the browser phone lifts it, as for an extension).
+    if (!hookUp) toggleHook();
+    step({ type: "callBack", id: r.action.id });
+  }
+  if (r.action?.type === "redial") {
+    const last = loadLastDial(storage, profile);
+    if (!last) speak("Nothing to redial yet.");
+    else {
+      if (!hookUp) toggleHook();
+      step(redialInput(last));
     }
   }
   if (r.action?.type === "extension") {

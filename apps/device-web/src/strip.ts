@@ -214,8 +214,13 @@ export function statusLines(input: StatusInput): StatusLines {
     // A public line's call back nobody took: there's no message to play, just its name.
     if (missed.length === 1 && missedItems[0]?.callback) return ["MISSED CALL BACK", clip(newest)];
     if (missed.length === 1) {
+      // A missed call (no message): it's on MENU 5. A message: where to listen.
       const next =
-        !config?.owner || config.owner.mode === "kids" ? "ASK A GROWN-UP" : "PLAY IN APP";
+        missedItems[0]?.kind === "call"
+          ? "MENU 5: MISSED"
+          : !config?.owner || config.owner.mode === "kids"
+            ? "ASK A GROWN-UP"
+            : "PLAY IN APP";
       const lines: StatusLines =
         single.length <= STATUS_WIDTH ? [clip(single), next] : ["MISSED CALL", clip(newest)];
       return lowLine && lines[1] === next ? [lines[0], lowLine] : lines;

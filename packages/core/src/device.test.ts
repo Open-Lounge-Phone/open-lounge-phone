@@ -6,7 +6,9 @@ import {
   type DeviceInput,
   type DeviceState,
   deviceStep,
+  dialOf,
   initialDeviceState,
+  redialInput,
   repeatedEnd,
   soundFor,
 } from "./device.ts";
@@ -591,5 +593,41 @@ describe("silencing the ringer and repeated ends", () => {
     for (const id of ["a", "b", "c", "d", "e"])
       recent = repeatedEnd(recent, { ...end, callId: id }).recent;
     expect(recent).toEqual(["e", "d", "c", "b"]);
+  });
+});
+
+describe("calling back and redial", () => {
+  it("MENU → Missed → 1 calls back with the handset up, like a key", () => {
+    const up = run([hook("up")]).state;
+    const r = deviceStep(up, { type: "callBack", id: "mc_1" });
+    expect(r.send).toEqual([{ t: "call.back", id: "mc_1" }]);
+    expect(r.state).toEqual({ kind: "dialing", button: -1 });
+    // Not with the handset down, nor in a call.
+    expect(deviceStep(initialDeviceState, { type: "callBack", id: "mc_1" }).send).toEqual([]);
+    const ringing = deviceStep(r.state, callState("c1", "ringing")).state;
+    expect(ringing).toMatchObject({ kind: "dialing", callId: "c1" });
+    expect(deviceStep(ringing, { type: "callBack", id: "mc_2" }).send).toEqual([]);
+  });
+
+  it("remembers what was called, and redial calls it again", () => {
+    const up = run([hook("up")]).state;
+    expect(dialOf(up, button(3))).toEqual({ kind: "button", index: 3 });
+    expect(dialOf(up, { type: "extension", number: "204" })).toEqual({
+      kind: "extension",
+      number: "204",
+    });
+    expect(dialOf(up, { type: "callBack", id: "mc_1" })).toEqual({ kind: "back", id: "mc_1" });
+    // Keys in a call aren't dialing.
+    const inCall = run([button(0), callState("c1", "active")], up).state;
+    expect(dialOf(inCall, button(3))).toBeUndefined();
+    for (const last of [
+      { kind: "button", index: 3 },
+      { kind: "extension", number: "204" },
+      { kind: "back", id: "mc_1" },
+    ] as const) {
+      const r = deviceStep(up, redialInput(last));
+      expect(r.state.kind).toBe("dialing");
+      expect(dialOf(up, redialInput(last))).toEqual(last);
+    }
   });
 });

@@ -62,7 +62,7 @@ Highest priority first: the first row that applies is shown.
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
 | Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording over and over until the handset goes down or a key clears the notice (that key doesn't dial) ([notices.md](notices.md)) |
-| Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app). A public line's call back that nobody took (a person's own phone): `MISSED CALL BACK` / the line's name, or among the names; it goes with `3 CLEAR`, by calling the line, or by taking its next call back |
+| Ready, missed calls | one message: `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`; one missed call: `MISSED MOM` / `MENU 5: MISSED`; several: `3 MISSED CALLS` / each name in turn (3 s). Messages go once heard (played on the phone, MENU 2 `3 CLEAR`, or opened in the app), missed calls once cleared (MENU 5 `3 CLEAR`, or in the app). A public line's call back that nobody took (a person's own phone): `MISSED CALL BACK` / the line's name, or among the names; it goes with MENU 5 `3 CLEAR`, by calling the line, or by taking its next call back |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
 | Ready | `READY 14:05` (local time, once the server has sent its clock; `READY` before) / the owner line: `KIDS: SMITHS`, `LOUNGE: STUDIO`, `ANA'S PHONE` |
@@ -94,20 +94,47 @@ The menu closes by itself after 20 s without a key.
 | Key | Item | On the phone |
 |---|---|---|
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
-| 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard and clears missed call backs (`1 MISSED CALL BACK` shows under the count; they aren't voicemail); a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). `4 GREETING`: 1 record your name, 2 a whole greeting, 3 back to the standard one (the browser phone; planned on hardware) | yes |
+| 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard (missed calls and call backs are on 5, not here); a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). `4 GREETING`: 1 record your name, 2 a whole greeting, 3 back to the standard one (the browser phone; planned on hardware) | yes |
 | 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on) | yes |
 | 4 | The same screen as 3 | yes |
-| 5 | Lounge phone in use: open to chat on / off | yes |
+| 5 | Missed calls (not on a Lounge phone; a Lounge phone in use: open to chat on / off): see "Missed calls" below | yes |
 | 6 | Dial an extension (team and organization spaces; shown when the space has extensions): `EXT 204_`, digits, BACK deletes, MENU dials (handset up) | yes |
 | 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, the mic level, time running and clock, memory; 1 starts the self-test. With the handset up the page switches the handset's mic on and shows its live level (`MIC -38 DBFS PEAK -21`, every second; speak into it) until the page closes, for setting the mic gain (`audio gain` on the console, [BRINGUP.md](../hardware/BRINGUP.md)); handset down: `LIFT TO TEST` | yes |
-| 8 | Lounge phone in use: log out (the phone forgets the person) | yes |
+| 8 | Redial (not on a Lounge phone; a Lounge phone in use: log out, the phone forgets the person): with the handset up, calls again what this phone last called (a key, an extension or a call back); handset down: `LIFT THE HANDSET` / `THEN MENU 8`; nothing called yet: `NOTHING TO REDIAL`. The phone remembers it across restarts until it's removed | yes |
 | 9 | Update now (official firmware with updates on) | yes |
 | 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |
 
-Root screen: `MENU`, then the items that apply, packed into three lines that fit (20 characters
-on the 2.13-inch): `1 VOLUME 2 VOICEMAIL` / `3 NETWORK 6 EXT` / `7 CHECK 0 ABOUT`; a Lounge
-phone in use: `1 VOLUME 5 CHAT` / `8 LOG OUT 3 NETWORK` / `7 CHECK 0 ABOUT`. `9 UPDATE` comes
-last and is left off when it doesn't fit (9 works either way).
+Root screen: `MENU`, then the items that apply, packed into up to five lines that fit (20
+characters at 2x on the 2.13-inch; six lines of 20 px fill its 122 px): `1 VOLUME 2 VOICEMAIL` /
+`3 NETWORK 5 MISSED` / `6 EXT 7 CHECK` / `8 REDIAL 0 ABOUT` / `9 UPDATE` (no `6 EXT` outside team
+and organization spaces); a Lounge phone in use: `1 VOLUME 5 CHAT` / `8 LOG OUT 3 NETWORK` /
+`7 CHECK 0 ABOUT` / `9 UPDATE`. `9 UPDATE` comes last and is left off when it doesn't fit (9 works
+either way). The browser phone has no Network, Check or Update items.
+
+### Missed calls
+
+A **missed call** rang this phone (or, on a person's own phone, any of the person's phones and
+apps, in any of their spaces) and nobody answered, and the caller left no message: no answer in
+time, or the caller gave up while it rang. Declining a call isn't missing it. A message left
+after it makes it voicemail instead (MENU 2). A public line's **call back** that nobody took is
+listed here too. Lounge phones keep none.
+
+`MENU 5`: `MISSED 1 OF 3` / who (scrolls when long) / how many and when (`2 CALLS 14:05`,
+`YESTERDAY 09:12`, `12 OCT 18:30`; a line: `CALLED BACK 14:05`) / `1 CALL BACK 2 NEXT` /
+`3 CLEAR ALL`, newest first; with none: `NO MISSED CALLS`.
+
+- **1 calls the shown one back** (handset up; handset down: `LIFT THE HANDSET` / `THEN MENU 5`),
+  like pressing a key: a kids' phone only calls people on its allow-list it may call, within its
+  quiet hours, so anyone else is refused (`NOT ALLOWED - PRESS A KEY`); a person's own phone
+  calls as its owner would from their app. Someone the phone can't reach from its space (a
+  member of the owner's other space) is `UNAVAILABLE`: call them back from the app there.
+- **2** shows the next one; **3 clears them all**: marked seen on this phone and, for a person,
+  on all their phones and apps (the app's Missed calls clears them the same way).
+- The ready screen shows them with the voicemail: `MISSED MOM` / `MENU 5: MISSED` for one missed
+  call, `MISSED MOM` / `PLAY IN APP` (or `ASK A GROWN-UP`) for one message, `3 MISSED CALLS` /
+  each name in turn for several, and the light breathes until they're cleared or heard.
+- On a server older than 0.7.0 (no `missed-calls`) the phone lists only missed call backs here,
+  as before.
 
 ### Lounge phone
 

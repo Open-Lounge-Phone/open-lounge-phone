@@ -85,32 +85,23 @@ describe("voicemail screen (MENU → 2), as on hardware", () => {
   const open = (c: MenuContext) =>
     step(step(undefined, menu(), c).state, digit(2), c).state as MenuState;
 
-  it("a person's own phone: 1 plays, 3 clears messages and missed call backs", () => {
-    const c = { ...own, missedCallbacks: 1 };
-    const vm = open(c);
-    const view = menuView(vm, DEFAULT_SETTINGS, c);
+  it("a person's own phone: 1 plays, 3 clears the messages (call backs are on MENU 5)", () => {
+    const vm = open(own);
+    const view = menuView(vm, DEFAULT_SETTINGS, own);
     expect(view.title).toBe("2 NEW VOICEMAIL");
-    expect(view.detail).toEqual(["1 MISSED CALL BACK"]);
+    expect(view.detail).toBeUndefined();
     expect(view.labels).toEqual({ 1: "Play", 3: "Clear" });
-    expect(menuPrompt(vm, DEFAULT_SETTINGS, c)).toMatch(
-      /2 new voicemail messages\. Press 1 to play them\. You missed a call back.*Press 3 to clear/,
+    expect(menuPrompt(vm, DEFAULT_SETTINGS, own)).toMatch(
+      /2 new voicemail messages\. Press 1 to play them\. Press 3 to clear/,
     );
-    expect(step(vm, digit(1), c)).toMatchObject({ state: undefined, action: { type: "vm-play" } });
-    expect(step(vm, digit(3), c).action).toEqual({
-      type: "vm-clear",
-      voicemail: true,
-      callbacks: true,
+    expect(step(vm, digit(1), own)).toMatchObject({
+      state: undefined,
+      action: { type: "vm-play" },
     });
+    expect(step(vm, digit(3), own).action).toEqual({ type: "vm-clear" });
   });
 
-  it("only call backs: 3 clears them; nothing at all: no Clear", () => {
-    const c = { ...own, missedCount: 0, missedCallbacks: 2 };
-    expect(menuView(open(c), DEFAULT_SETTINGS, c).detail).toEqual(["2 MISSED CALL BACKS"]);
-    expect(step(open(c), digit(3), c).action).toEqual({
-      type: "vm-clear",
-      voicemail: false,
-      callbacks: true,
-    });
+  it("nothing new: no Clear", () => {
     const none = { ...own, missedCount: 0 };
     expect(menuView(open(none), DEFAULT_SETTINGS, none).labels).toEqual({ 1: "Play" });
     expect(step(open(none), digit(3), none).action).toBeUndefined();
@@ -399,5 +390,58 @@ describe("MENU → Dial extension (team/org spaces)", () => {
     let t = step(step(undefined, menu()).state, digit(6));
     for (let i = 0; i < 8; i++) t = step(t.state, digit(1));
     expect(t.state?.digits).toBe("111111");
+  });
+});
+
+describe("MENU 5 Missed calls and 8 Redial (not on a Lounge phone)", () => {
+  const missed = [
+    { id: "mc_1", from: "Mom", line: "2 CALLS 14:05" },
+    { from: "Support", line: "CALLED BACK 09:12" },
+  ];
+  const c: MenuContext = { ...ctx, calls: { missed } };
+  const step = (state: MenuState | undefined, e: MenuEvent, cx: MenuContext = c) =>
+    menuStep(state, DEFAULT_SETTINGS, e, cx);
+
+  it("the root menu offers them; a Lounge phone in use has chat and log out there", () => {
+    const root = step(undefined, menu()).state as MenuState;
+    expect(menuView(root, DEFAULT_SETTINGS, c).labels).toMatchObject({ 5: "Missed", 8: "Redial" });
+    const lounge = { ...c, lounge: { openToChat: false } };
+    expect(menuView(root, DEFAULT_SETTINGS, lounge).labels).toMatchObject({
+      5: "Chat on",
+      8: "Log out",
+    });
+    expect(step(root, digit(8)).action).toEqual({ type: "redial" });
+    expect(step(root, digit(8), lounge).action).toEqual({ type: "logout" });
+  });
+
+  it("one at a time: 1 calls back, 2 next, 3 clears them all", () => {
+    const root = step(undefined, menu()).state as MenuState;
+    const first = step(root, digit(5)).state as MenuState;
+    expect(menuView(first, DEFAULT_SETTINGS, c)).toMatchObject({
+      title: "MISSED 1 OF 2",
+      detail: ["MOM", "2 CALLS 14:05"],
+      labels: { 1: "Call back", 2: "Next", 3: "Clear all" },
+    });
+    expect(step(first, digit(1))).toMatchObject({
+      state: undefined,
+      action: { type: "call-back", id: "mc_1" },
+    });
+    const second = step(first, digit(2)).state as MenuState;
+    // No id (an older server): nothing to call back with from here.
+    expect(menuView(second, DEFAULT_SETTINGS, c)).toMatchObject({
+      title: "MISSED 2 OF 2",
+      detail: ["SUPPORT", "CALLED BACK 09:12"],
+      labels: { 2: "Next", 3: "Clear all" },
+    });
+    expect(step(second, digit(1)).action).toBeUndefined();
+    expect(step(second, digit(2)).state?.index).toBe(0);
+    expect(step(second, digit(3)).action).toEqual({ type: "missed-clear" });
+    const none = { ...ctx, calls: { missed: [] } };
+    const empty = step(root, digit(5), none).state as MenuState;
+    expect(menuView(empty, DEFAULT_SETTINGS, none)).toMatchObject({
+      title: "NO MISSED CALLS",
+      labels: {},
+    });
+    expect(step(empty, digit(3), none).action).toBeUndefined();
   });
 });
