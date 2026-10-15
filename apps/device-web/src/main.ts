@@ -220,6 +220,9 @@ let unauthorizedStreak = 0;
 let announceTimer: ReturnType<typeof setInterval> | undefined;
 let lastStatusText = "";
 let callStartedAt: number | undefined;
+/** The daily check-in: I'm OK was sent, waiting for the server's config to say done. */
+let checkinSent = false;
+let checkedInUntil = 0;
 /** The space's UTC offset (`config.utcOffsetMin`), for when missed calls were. */
 let utcOffsetMin = -new Date().getTimezoneOffset();
 /** The last few calls that ended here (a repeated ended for one of them is dropped). */
@@ -390,8 +393,16 @@ async function handle(msg: ServerToDevice): Promise<void> {
         ...(msg.greeting ? { greeting: msg.greeting } : {}),
         ...(msg.owner ? { owner: msg.owner } : {}),
         ...(msg.extensions ? { extensions: true } : {}),
+        ...(msg.checkin ? { checkin: msg.checkin } : {}),
+        ...(msg.chime ? { chime: msg.chime } : {}),
       };
       if (msg.utcOffsetMin !== undefined) utcOffsetMin = msg.utcOffsetMin;
+      // I'm OK was pressed and the server has it now: thank them for a moment.
+      if (checkinSent && next.checkin?.done) {
+        checkinSent = false;
+        checkedInUntil = Date.now() + 4000;
+        setTimeout(render, 4100);
+      }
       // The mode is decided when the phone is claimed; it may differ from the first-run choice.
       if (msg.owner && msg.owner.mode !== variant) {
         variant = msg.owner.mode;
@@ -1074,6 +1085,18 @@ function pressKey(key: KeyId): void {
     dismissNotice();
     return;
   }
+  // The daily check-in due: 1 (handset down) is I'm OK.
+  if (
+    digit === 1 &&
+    !hookUp &&
+    deviceState.kind === "idle" &&
+    config?.checkin &&
+    !config.checkin.done
+  ) {
+    send({ t: "checkin.ok" });
+    checkinSent = true;
+    return;
+  }
   // In a room any key answers "still there?".
   if (deviceState.kind === "inroom" && room?.idleWarning) room = { ...room, idleWarning: false };
   // Speed dial: digit 1–9 → slot 0–8, digit 0 → slot 9.
@@ -1094,6 +1117,7 @@ function menuContext() {
     ...(variant !== "lounge"
       ? { calls: { missed: missedEntries(config, Date.now(), utcOffsetMin) } }
       : {}),
+    ...(config?.chime ? { chime: config.chime.text } : {}),
     play:
       variant === "personal"
         ? ("play" as const)
@@ -1173,6 +1197,7 @@ function applyMenu(event: MenuEvent): void {
     send({ t: "voicemail.fetch" });
   }
   if (r.action?.type === "missed-clear") send({ t: "missed.clear" });
+  if (r.action?.type === "chime") send({ t: "notice.chime" });
   if (r.action?.type === "call-back") {
     // Calling back needs the handset up (the browser phone lifts it, as for an extension).
     if (!hookUp) toggleHook();
@@ -1522,6 +1547,9 @@ function renderDisplay(): void {
             power: powerStatus(variant, powerSource),
             clock: new Date().toTimeString().slice(0, 5),
             ...(notice && deviceState.kind === "idle" ? { notice } : {}),
+            ...(Date.now() < checkedInUntil && deviceState.kind === "idle"
+              ? { checkedIn: true }
+              : {}),
             now: Date.now(),
           });
   // The key map needs a signed-in phone; while pairing or offline the status says it all.

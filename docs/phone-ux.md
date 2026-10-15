@@ -63,6 +63,8 @@ Highest priority first: the first row that applies is shown.
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
 | Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording over and over until the handset goes down or a key clears the notice (that key doesn't dial) ([notices.md](notices.md)) |
+| Ready, daily check-in due | `CHECK IN BY 10:00` / `PRESS 1: I'M OK` until someone presses 1 (handset down); once the time passed without it (the guardians were told): `CHECK-IN MISSED` / `PRESS 1: I'M OK`; after 1, once the server has it: `THANK YOU` / `CHECKED IN` (4 s), then the usual ready screen. See "Daily check-in" |
+| House intercom ringing | `KITCHEN CALLING` / `LIFT TO ANSWER` (another room calling), `RINGING DEN` while you call one, `ALL ROOMS` for every room, `TALKING: DEN` in an intercom call; see "House intercom" |
 | Ready, missed calls | one message: `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`; one missed call: `MISSED MOM` / `MENU 5: MISSED`; several: `3 MISSED CALLS` / each name in turn (3 s). Messages go once heard (played on the phone, MENU 2 `3 CLEAR`, or opened in the app), missed calls once cleared (MENU 5 `3 CLEAR`, or in the app). A public line's call back that nobody took (a person's own phone): `MISSED CALL BACK` / the line's name, or among the names; it goes with MENU 5 `3 CLEAR`, by calling the line, or by taking its next call back |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
@@ -75,7 +77,7 @@ leave the phone.
 
 | State | Digits | MENU | BACK | Hook |
 |---|---|---|---|---|
-| Ready (handset down) | nothing (a click); with a notice showing: clear it | open the menu | with a notice showing: clear it | lift: dial tone (and a notice's recording) |
+| Ready (handset down) | nothing (a click); with a notice showing: clear it; with a daily check-in due: 1 is I'm OK | open the menu | with a notice showing: clear it | lift: dial tone (and a notice's recording) |
 | Handset up | call that key's person (while a notice's recording plays: stop it and clear the notice) | open the menu | nothing (while a notice's recording plays: stop it and clear the notice) | down: back to ready |
 | Calling | nothing | open the menu | nothing | down: cancel |
 | Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
@@ -98,7 +100,7 @@ The menu closes by itself after 20 s without a key.
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
 | 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard (missed calls and call backs are on 5, not here); a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). `4 GREETING`: 1 record your name, 2 a whole greeting, 3 back to the standard one (the browser phone; planned on hardware) | yes |
 | 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on) | yes |
-| 4 | The same screen as 3 | yes |
+| 4 | House intercom, when it's on for this phone (the rooms to call, see "House intercom"); else the chime, when the phone has one (`CHIME` / its words / `1 SEND TO ALL PHONES`); else the same screen as 3 | yes (the intercom: hardware only) |
 | 5 | Missed calls (not on a Lounge phone; a Lounge phone in use: open to chat on / off): see "Missed calls" below | yes |
 | 6 | Dial an extension (team and organization spaces; shown when the space has extensions): `EXT 204_`, digits, BACK deletes, MENU dials (handset up) | yes |
 | 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, the mic level, time running and clock, memory; 1 starts the self-test. With the handset up the page switches the handset's mic on and shows its live level (`MIC -38 DBFS PEAK -21`, every second; speak into it) until the page closes, for setting the mic gain (`audio gain` on the console, [BRINGUP.md](../hardware/BRINGUP.md)); handset down: `LIFT TO TEST` | yes |
@@ -108,8 +110,9 @@ The menu closes by itself after 20 s without a key.
 
 Root screen: `MENU`, then the items that apply, packed into up to five lines that fit (20
 characters at 2x on the 2.13-inch; six lines of 20 px fill its 122 px): `1 VOLUME 2 VOICEMAIL` /
-`3 NETWORK 5 MISSED` / `6 EXT 7 CHECK` / `8 REDIAL 0 ABOUT` / `9 UPDATE` (no `6 EXT` outside team
-and organization spaces); a Lounge phone in use: `1 VOLUME 5 CHAT` / `8 LOG OUT 3 NETWORK` /
+`3 NETWORK 4 INTERCOM` / `5 MISSED 6 EXT` / `7 CHECK 8 REDIAL` / `0 ABOUT 9 UPDATE` (`4 CHIME` with a
+chime and no intercom, nothing on 4 with neither; no `6 EXT` outside team and organization
+spaces); a Lounge phone in use: `1 VOLUME 5 CHAT` / `8 LOG OUT 3 NETWORK` /
 `7 CHECK 0 ABOUT` / `9 UPDATE`. `9 UPDATE` comes last and is left off when it doesn't fit (9 works
 either way). The browser phone has no Network, Check or Update items.
 
@@ -137,6 +140,54 @@ listed here too. Lounge phones keep none.
   each name in turn for several, and the light breathes until they're cleared or heard.
 - On a server older than 0.7.0 (no `missed-calls`) the phone lists only missed call backs here,
   as before.
+
+### Daily check-in
+
+For someone living alone (a grandparent): their guardians set a time in the app (Manage phone →
+Home features → Daily check-in, e.g. 10:00, the space's time zone). Each day until then the ready
+screen asks `CHECK IN BY 10:00` / `PRESS 1: I'M OK`; pressing 1 (handset down) tells the server,
+and the phone says `THANK YOU` / `CHECKED IN` once the server has it. If nobody has pressed it by
+the time, the server tells every guardian of the space (an alert in their voicemail inbox:
+"Gran didn't check in by 10:00.", with a chime), once that day, and the phone shows
+`CHECK-IN MISSED` until someone presses 1. The server watches the time itself, so an unplugged or
+offline phone is noticed too. A time set after today's has passed starts tomorrow. Off unless
+set; not on Lounge phones. The browser phone has it too.
+
+### Chime
+
+"Dinner's ready": a phone the guardians gave a chime (Manage phone → Home features → Chime, the
+words, at most two lines of 16 characters) posts them as a notice to every phone of the space:
+MENU 4 (`CHIME` / `DINNER'S READY` / `1 SEND TO ALL PHONES`), then 1. The other phones show it and
+chime like any notice (see [notices.md](notices.md)); it lasts 15 minutes, and a phone sends at
+most one a minute. Notices from the app work as before; the chime is the phone's way to send one.
+The browser phone has it too (with the house intercom on, it's `9 CHIME` on the intercom screen).
+
+### House intercom
+
+Phones of one space on the same local network (the house Wi-Fi) call each other room to room,
+with no server and no internet in between: lift the handset, MENU 4, and the room's digit
+(`INTERCOM` / `1 KITCHEN 2 DEN` / `3 GARAGE` / `0 ALL ROOMS` / `9 CHIME`, the rooms other phones
+announced in the last 90 s; `NO OTHER ROOMS YET` with none). The other phone rings (`KITCHEN
+CALLING` / `LIFT TO ANSWER`, the ringer and the fast-flashing LED); lifting it talks. `0` rings every
+room and the first to lift answers (the others show `ANSWERED ELSEWHERE`). Hanging up either side
+ends it; BACK stops a call you're making. A phone in an intercom call is busy for server calls and
+the other way round.
+
+- **Off by default**, on per phone (Manage phone → Home features → House intercom). The room's
+  name is the phone's name.
+- **Only the space's phones, only on the local network.** Control messages are UDP broadcasts on
+  port 47100 that never leave the network, each signed with the space's intercom key (an
+  HMAC-SHA256, with the time and a one-time number, so a neighbour on the same Wi-Fi can't ring a
+  room or replay a message); the audio (G.711 on UDP 47101, straight between the two phones) is
+  encrypted with AES-128 under a key made from the space's key for that call, and each packet is
+  checked (a truncated HMAC). The key comes from the server when the intercom is turned on and the
+  phone keeps it, so the intercom works while the internet is down. A phone whose intercom is
+  turned off (or that is removed) forgets the key.
+- Hardware only: the browser phone has no intercom (a browser can't talk UDP on the local
+  network).
+- Messages older than a minute are refused when the phone knows the time (it learns it from the
+  server); a phone restarted with no internet can't check that until it's back, so for that time
+  only the one-time numbers it has seen stop replays.
 
 ### Lounge phone
 
@@ -200,7 +251,7 @@ jack is optional), with a long beep after 30 s without input, or when a call rin
 | Dim (8 %) | ready |
 | Slow breathe (4 s) | ready, with missed calls or new voicemail |
 | Pulse (1 s) | pairing, or connecting to the server |
-| Fast flash (4 per second) | ringing, or a Lounge phone waiting for its `PRESS KEY` proof |
+| Fast flash (4 per second) | ringing (a call, or another room on the house intercom), or a Lounge phone waiting for its `PRESS KEY` proof |
 | Short blink every 2 s | offline: no Wi-Fi or no server |
 | On | calling, in a call or in a room |
 | Slow double blink (two 0.25 s blinks every 2 s) | in a call or a room with the mic muted (MENU 3) |

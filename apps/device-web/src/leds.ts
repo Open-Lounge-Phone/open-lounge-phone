@@ -42,6 +42,10 @@ export interface DeviceConfig {
   owner?: { mode: "kids" | "personal" | "lounge"; space: string; person?: string };
   /** A team/org space with extensions: MENU → 6 dials one. */
   extensions?: boolean;
+  /** Daily check-in (the ready screen asks for I'm OK until `done`). */
+  checkin?: { by: string; done: boolean; alerted?: true };
+  /** This phone may post a chime (MENU 4). */
+  chime?: { text: string };
 }
 
 export interface LedInput {

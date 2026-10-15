@@ -445,3 +445,23 @@ describe("MENU 5 Missed calls and 8 Redial (not on a Lounge phone)", () => {
     expect(step(empty, digit(3), none).action).toBeUndefined();
   });
 });
+
+describe("MENU 4 Chime", () => {
+  it("shows the words; 1 sends them to every phone; no chime, no 4", () => {
+    const c: MenuContext = { ...ctx, chime: "DINNER'S READY" };
+    const root = menuStep(undefined, DEFAULT_SETTINGS, menu(), c).state as MenuState;
+    expect(menuView(root, DEFAULT_SETTINGS, c).labels[4]).toBe("Chime");
+    expect(menuView(root, DEFAULT_SETTINGS, ctx).labels[4]).toBeUndefined();
+    const chime = menuStep(root, DEFAULT_SETTINGS, digit(4), c).state as MenuState;
+    expect(menuView(chime, DEFAULT_SETTINGS, c)).toMatchObject({
+      title: "CHIME",
+      detail: ["DINNER'S READY"],
+      labels: { 1: "Send to all phones" },
+    });
+    expect(menuStep(chime, DEFAULT_SETTINGS, digit(1), c)).toMatchObject({
+      state: undefined,
+      action: { type: "chime" },
+    });
+    expect(menuStep(root, DEFAULT_SETTINGS, digit(4), ctx).state?.screen).toBe("root");
+  });
+});

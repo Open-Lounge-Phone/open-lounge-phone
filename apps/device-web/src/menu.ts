@@ -25,7 +25,9 @@ export type MenuScreen =
   /** Team/org spaces: the digits of an extension; MENU dials, BACK deletes one. */
   | "extension"
   /** MENU 5: missed calls and call backs, one at a time (1 call back, 2 next, 3 clear all). */
-  | "missed";
+  | "missed"
+  /** MENU 4: the chime (1 posts its words to every phone of the space). */
+  | "chime";
 
 export interface MenuState {
   screen: MenuScreen;
@@ -73,6 +75,8 @@ export interface MenuContext {
   missedCount: number;
   /** Not a Lounge phone: MENU 5 Missed calls and 8 Redial. */
   calls?: { missed: readonly MissedEntry[] };
+  /** This phone may post a chime: MENU 4 (its words). */
+  chime?: string;
   /** Who plays voicemail here: a person's own phone plays it ("play"); a kids' phone asks a
    * grown-up; others play it in the app. */
   play?: "play" | "kids" | "app";
@@ -111,6 +115,8 @@ export type MenuAction =
   | { type: "missed-clear" }
   /** MENU 8: call again what this phone last called (needs the handset up). */
   | { type: "redial" }
+  /** MENU 4 → 1: post the chime to every phone of the space. */
+  | { type: "chime" }
   /** A call or room action (hold/add caller, resume, merge, transfer, mute). */
   | { type: "call"; action: CallAction }
   /** Dial this extension (the phone lifts the handset if it's down). */
@@ -155,6 +161,8 @@ const CHAT_DIGIT = 5;
 const LOGOUT_DIGIT = 8;
 const MISSED_DIGIT = 5;
 const REDIAL_DIGIT = 8;
+/** MENU 4: the chime (the hardware phone's house intercom also lives on 4). */
+const CHIME_DIGIT = 4;
 /** Team/org spaces: 6 dials an extension. */
 const EXTENSION_DIGIT = 6;
 const EXTENSION_MAX = 6;
@@ -170,6 +178,7 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
     labels[MISSED_DIGIT] = "Missed";
     labels[REDIAL_DIGIT] = "Redial";
   }
+  if (ctx.chime) labels[CHIME_DIGIT] = "Chime";
   if (ctx.extensions) labels[EXTENSION_DIGIT] = "Dial ext";
   return labels;
 }
@@ -267,6 +276,13 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
         ...(detail.length ? { detail } : {}),
       };
     }
+    case "chime":
+      return {
+        ...base,
+        title: "CHIME",
+        labels: ctx.chime ? { 1: "Send to all phones" } : {},
+        detail: (ctx.chime ?? "").split("\n").filter(Boolean),
+      };
     case "missed": {
       const { list, index, entry } = missedShown(state, ctx);
       if (!entry) return { ...base, title: "NO MISSED CALLS", labels: {} };
@@ -356,6 +372,8 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
       const greeting = ctx.greeting?.canRecord ? ` Press ${GREETING_DIGIT} for your greeting.` : "";
       return `${messages}${clear}${greeting}`;
     }
+    case "chime":
+      return `Chime: ${(ctx.chime ?? "").replace(/\n/g, " ").toLowerCase()}. Press 1 to send it to every phone.`;
     case "missed": {
       const { list, index, entry } = missedShown(state, ctx);
       if (!entry) return "No missed calls.";
@@ -488,6 +506,7 @@ export function menuStep(
       if (ctx.lounge && d === LOGOUT_DIGIT) {
         return { state: undefined, settings, say: "Logged out.", action: { type: "logout" } };
       }
+      if (ctx.chime && d === CHIME_DIGIT) return enter("chime");
       if (!ctx.lounge && ctx.calls && d === MISSED_DIGIT) {
         const next: MenuState = { screen: "missed", index: 0, lastInput: event.now };
         return { state: next, settings, say: menuPrompt(next, settings, ctx) };
@@ -518,6 +537,11 @@ export function menuStep(
       if (d === GREETING_DIGIT && ctx.greeting?.canRecord) return enter("greetings");
       return { state: touched, settings };
     }
+    case "chime":
+      if (d === 1 && ctx.chime) {
+        return { state: undefined, settings, say: "Sent.", action: { type: "chime" } };
+      }
+      return { state: touched, settings };
     case "missed": {
       const { list, index, entry } = missedShown(state, ctx);
       if (d === 1 && entry?.id) {

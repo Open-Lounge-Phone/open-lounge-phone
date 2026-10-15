@@ -527,3 +527,30 @@ describe("call waiting", () => {
     ]);
   });
 });
+
+describe("the daily check-in on the ready screen", () => {
+  it("asks until done, says when it was missed, thanks once counted", async () => {
+    const { statusLines } = await import("./strip.ts");
+    const base = { connection: "online" as const, deviceState: { kind: "idle" as const }, now: 0 };
+    const cfg = (checkin: { by: string; done: boolean; alerted?: true }) => ({
+      buttons: [],
+      quiet: false,
+      checkin,
+      missed: [{ from: "Mom", kind: "call" as const }],
+    });
+    expect(statusLines({ ...base, config: cfg({ by: "10:00", done: false }) })).toEqual([
+      "CHECK IN BY 10:00",
+      "PRESS 1: I'M OK",
+    ]);
+    expect(
+      statusLines({ ...base, config: cfg({ by: "10:00", done: false, alerted: true }) }),
+    ).toEqual(["CHECK-IN MISSED", "PRESS 1: I'M OK"]);
+    expect(
+      statusLines({ ...base, config: cfg({ by: "10:00", done: true }), checkedIn: true }),
+    ).toEqual(["THANK YOU", "CHECKED IN"]);
+    // Done: the usual ready screen (here: the missed call).
+    expect(statusLines({ ...base, config: cfg({ by: "10:00", done: true }) })[0]).toBe(
+      "MISSED MOM",
+    );
+  });
+});

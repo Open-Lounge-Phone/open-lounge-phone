@@ -39,6 +39,8 @@ export interface StatusInput {
   clock?: string;
   /** A notice from the space (docs/notices.md): shown on the ready screen until dismissed. */
   notice?: { lines: string[] };
+  /** I'm OK was just counted (the server's config says done): thank them for a moment. */
+  checkedIn?: boolean;
   now: number;
 }
 
@@ -197,6 +199,12 @@ export function statusLines(input: StatusInput): StatusLines {
   const notice = input.notice?.lines.filter(Boolean).map(clip);
   if (notice?.length)
     return notice.length > 1 ? [notice[0] ?? "", notice[1] ?? ""] : [notice[0] ?? ""];
+  // The daily check-in: asked until I'm OK (1, handset down); thanked once the server has it.
+  if (input.checkedIn) return ["THANK YOU", "CHECKED IN"];
+  const checkin = config?.checkin;
+  if (checkin && !checkin.done) {
+    return [checkin.alerted ? "CHECK-IN MISSED" : `CHECK IN BY ${checkin.by}`, "PRESS 1: I'M OK"];
+  }
 
   const low = battery && !battery.charging && battery.pct < 20;
   const lowLine = low ? `LOW BATTERY ${battery.pct}%` : undefined;
