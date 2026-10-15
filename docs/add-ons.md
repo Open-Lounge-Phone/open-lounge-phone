@@ -330,7 +330,7 @@ Code written before shares keeps working: it sends no shares, and only its owner
 
 1. Server, apps and phones: device mode `addon`, sub-addresses, `call.address`,
    labels, the federation flag and feature, `ADDONS`, fair use, audit; companion
-   **Settings → Add-ons**. **Done** (server 0.6.0, unreleased; firmware 0.9.3 shows the label).
+   **Settings → Add-ons**. **Done** (server 0.6.0; firmware 0.9.3 shows the label).
 2. The bridge (Python) with the echo demo and an end-to-end test. **Done.**
 3. Thinking Room's Seat on the bridge (in its own repository).
 4. **Sharing** (above): add-on-defined shares, one address per share, grants, share requests,
