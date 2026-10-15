@@ -525,6 +525,56 @@ details summary {
   color: #1d2321;
 }
 
+/* Mic check: the microphone's level, and a warning when it sends nothing. */
+.mic-check {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+}
+.mic-meter {
+  width: 60%;
+  height: 6px;
+  border: none;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 18%);
+  appearance: none;
+}
+.mic-meter::-webkit-meter-bar {
+  background: rgb(255 255 255 / 18%);
+  border: none;
+  border-radius: 3px;
+  height: 6px;
+}
+.mic-meter::-webkit-meter-optimum-value {
+  background: #fff;
+  border-radius: 3px;
+}
+.mic-meter::-moz-meter-bar {
+  background: #fff;
+  border-radius: 3px;
+}
+.mic-silent {
+  font-size: 0.85rem;
+  background: rgb(0 0 0 / 25%);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+.audio-choices {
+  width: 100%;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.audio-choices .row {
+  justify-content: space-between;
+  align-items: center;
+}
+.audio-choices select,
+.audio-choices input[type="range"] {
+  max-width: 60%;
+}
+
 @keyframes pulse {
   50% {
     transform: scale(1.08);

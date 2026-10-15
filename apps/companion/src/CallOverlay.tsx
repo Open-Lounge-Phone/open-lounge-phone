@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Api, ConnectionView, User } from "./api.ts";
+import { AudioChoices, MicMeter, useCallAudioPrefs } from "./CallAudio.tsx";
 import { canLeaveVoicemail } from "./calls.ts";
 import type { Connection, Snapshot } from "./connection.ts";
 import { extensionDigits, extensionProblem } from "./fields.ts";
 import { LeaveVoicemail } from "./LeaveVoicemail.tsx";
+import { isMuteShortcut } from "./shortcuts.ts";
 import { endReasonText, formatDuration } from "./text.ts";
 import { queueText } from "./workplaceText.ts";
 
@@ -128,10 +130,26 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
   const held = snap.held;
   const [picking, setPicking] = useState<"add" | "transfer">();
   const [keypad, setKeypad] = useState(false);
+  const [audioPanel, setAudioPanel] = useState(false);
+  useCallAudioPrefs(audio);
 
   useEffect(() => {
     if (audio.current) audio.current.srcObject = snap.remote ?? null;
   }, [snap.remote]);
+
+  // M mutes and unmutes during a call (not while typing).
+  const inCall =
+    call.phase === "outgoing" || call.phase === "connecting" || call.phase === "active";
+  useEffect(() => {
+    if (!inCall) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isMuteShortcut(e)) return;
+      e.preventDefault();
+      conn.toggleMute();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inCall, conn]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -269,6 +287,14 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                   ? `${call.label} will call you back. You keep your place in line.`
                   : (call.note ?? endReasonText(call.reason, call.person)))}
             </div>
+            {(call.phase === "connecting" || call.phase === "active") && (
+              <MicMeter
+                conn={conn}
+                muted={snap.muted}
+                {...(snap.micSeq ? { micSeq: snap.micSeq } : {})}
+              />
+            )}
+            {audioPanel && inCall && <AudioChoices conn={conn} audio={audio} />}
             {canLeaveVoicemail(call) && (
               <LeaveVoicemail
                 offer={call.voicemail}
@@ -322,9 +348,19 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                     type="button"
                     className={`round mute ${snap.muted ? "on" : ""}`}
                     aria-pressed={snap.muted}
+                    aria-keyshortcuts="M"
+                    title={snap.muted ? "Unmute (M)" : "Mute (M)"}
                     onClick={() => conn.toggleMute()}
                   >
                     {snap.muted ? "Unmute" : "Mute"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`round ${audioPanel ? "on" : ""}`}
+                    aria-pressed={audioPanel}
+                    onClick={() => setAudioPanel(!audioPanel)}
+                  >
+                    Audio
                   </button>
                   {call.phase === "active" && call.addon && (
                     <button

@@ -1,5 +1,7 @@
+export * from "./audioPrefs.ts";
 export * from "./callRecorder.ts";
 export * from "./media.ts";
+export * from "./micCheck.ts";
 export * from "./recorder.ts";
 export * from "./room.ts";
 export * from "./socket.ts";

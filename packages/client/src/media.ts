@@ -112,10 +112,18 @@ export class CallMedia {
   }
 }
 
-/** Microphone with the browser's echo cancellation and noise suppression on. */
-export function getMicrophone(): Promise<MediaStream> {
+/**
+ * Microphone with the browser's echo cancellation and noise suppression on: the one chosen on
+ * this device (`deviceId`, see audioPrefs.ts) if it's still there, else the system default.
+ */
+export function getMicrophone(deviceId?: string): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),
+    },
     video: false,
   });
 }

@@ -2,6 +2,7 @@ import {
   CallMedia,
   CallRecorder,
   getMicrophone,
+  loadAudioPrefs,
   ProtocolSocket,
   RoomAudio,
   type SocketStatus,
@@ -97,6 +98,8 @@ export interface Snapshot {
   members: Record<string, MemberLive>;
   remote?: MediaStream;
   muted: boolean;
+  /** Bumped when the microphone changes (the level meter reads the new one). */
+  micSeq?: number;
   error?: string;
   /** Your latest Lounge takeover / session event. */
   lounge?: LoungeClaim;
@@ -498,12 +501,53 @@ export class Connection {
   private async acquireMic(): Promise<boolean> {
     if (this.mic) return true;
     try {
-      this.mic = await getMicrophone();
+      // The microphone chosen on this device (call screen → Audio), if it's still there.
+      this.mic = await getMicrophone(loadAudioPrefs(storage()).input);
       return true;
     } catch (e) {
       this.set({ error: `Microphone unavailable: ${(e as Error).message}` });
       return false;
     }
+  }
+
+  /** The microphone as it is (never muted), for the call screen's level meter. */
+  micStream(): MediaStream | undefined {
+    return this.mic;
+  }
+
+  /**
+   * Switches the microphone during a call (call screen → Audio): every call's copy is replaced on
+   * its connection, so the other side hears the new one at once. The choice is remembered by the
+   * caller (audioPrefs.ts).
+   */
+  async setInput(deviceId: string | undefined): Promise<boolean> {
+    if (!this.mic) return true; // nothing open: the next call picks it up
+    let next: MediaStream;
+    try {
+      next = await getMicrophone(deviceId);
+    } catch (e) {
+      this.set({ error: `Microphone unavailable: ${(e as Error).message}` });
+      return false;
+    }
+    const old = this.mic;
+    this.mic = next;
+    const track = next.getAudioTracks()[0];
+    for (const audio of this.calls.values()) {
+      const sender = audio.media?.pc.getSenders().find((x) => x.track?.kind === "audio");
+      const before = audio.mic.getAudioTracks()[0];
+      if (!track || !sender) continue;
+      const copy = track.clone();
+      copy.enabled = before?.enabled ?? !this.snap.muted;
+      await sender.replaceTrack(copy).catch(() => {});
+      for (const t of audio.mic.getAudioTracks()) {
+        audio.mic.removeTrack(t);
+        t.stop();
+      }
+      audio.mic.addTrack(copy);
+    }
+    for (const t of old.getTracks()) t.stop();
+    this.set({ micSeq: (this.snap.micSeq ?? 0) + 1 });
+    return true;
   }
 
   /** A copy of the microphone for one call or room. */
@@ -955,6 +999,15 @@ export function roomEndText(reason: RoomEndReason): string {
       return "Something went wrong with the room's audio.";
     default:
       return "You left the room.";
+  }
+}
+
+/** Browser storage, if this page may use it. */
+function storage(): Storage | undefined {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
   }
 }
 
