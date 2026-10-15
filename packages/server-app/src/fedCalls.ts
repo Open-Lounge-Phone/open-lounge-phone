@@ -19,7 +19,7 @@ import {
   RoomJoinResult,
 } from "@openloungephone/federation";
 import type { ServerToApp } from "@openloungephone/protocol";
-import { mayTalk } from "./addons.ts";
+import { addonAccess } from "./addons.ts";
 import type { CallLinks, RingResult, ServerEnv } from "./env.ts";
 import { FederationError, fedFetch, ownHost, versionNote } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
@@ -44,8 +44,16 @@ export interface RemoteRing {
      * `callbackSince`: the caller answered the line's call back; their place in line.
      */
     | { kind: "line"; groupId: string; callbackSince?: number }
-    /** One of our add-ons, already authorized (`mayTalk`); its owner's account pays. */
-    | { kind: "addon"; addonId: string; accountId: string };
+    /**
+     * One of our add-ons, already authorized (`addonAccess`); its owner's account pays. `share`:
+     * the call came in through one of its shares, held by the caller.
+     */
+    | {
+        kind: "addon";
+        addonId: string;
+        accountId: string;
+        share?: { id: string; label: string; grantId: string };
+      };
   /** Ring only here: a branch of a call another household here owns (no further fan-out). */
   noBranches?: boolean;
   /** The caller, for the call log: `handle@host`. */
@@ -54,8 +62,11 @@ export interface RemoteRing {
   peerHousehold?: string;
   /** A kids' phone is calling (through its guardian's connection): never recorded. */
   fromKidsPhone?: boolean;
-  /** The caller is an add-on: its name and address (`handle+name@host`), for the label. */
-  addon?: { name: string; address: string };
+  /**
+   * The caller is an add-on: its name and address (`handle+name@host`, or its share's), for the
+   * label; `share`: the label of the share it calls within.
+   */
+  addon?: { name: string; address: string; share?: string };
   /** The caller's account on their server (for a public line's call back). */
   from?: { id: string; handle: string };
 }
@@ -154,14 +165,17 @@ export class FedCalls implements CallLinks {
         return { state: "ended", reason: "unavailable" };
       }
     }
+    if (body.addonShare && body.addon === undefined)
+      return { state: "ended", reason: "unavailable" };
     if (body.to.kind === "addon") {
-      // Its owner, or a connection its owner allowed; everything else looks the same.
+      // Its owner at its own address; at a share's, only someone holding that share. Everything
+      // else looks the same.
       const unavailable = { state: "ended", reason: "unavailable" } as const;
       const addon = await store.addons.byAddress(body.to.handle, body.to.name);
       if (!addon) return unavailable;
-      if (!(await mayTalk(this.env, addon, { host, accountId: from.id, handle: from.handle }))) {
-        return unavailable;
-      }
+      const who = { host, accountId: from.id, handle: from.handle };
+      const access = await addonAccess(this.env, addon, who, body.to.share);
+      if (!access) return unavailable;
       await this.register(host, body.callId, addon.householdId);
       return this.live.ringRemote(addon.householdId, {
         callId: body.callId,
@@ -169,7 +183,12 @@ export class FedCalls implements CallLinks {
         key,
         address: `${from.handle}@${host || ownHost(this.env)}`,
         label: from.name.slice(0, 24),
-        target: { kind: "addon", addonId: addon.id, accountId: addon.accountId },
+        target: {
+          kind: "addon",
+          addonId: addon.id,
+          accountId: addon.accountId,
+          ...(access.share ? { share: access.share } : {}),
+        },
         ...(peerHousehold ? { peerHousehold } : {}),
       });
     }
@@ -178,14 +197,22 @@ export class FedCalls implements CallLinks {
       if (!account || account.suspendedAt !== null) return deny;
       if (host === LOCAL_HOST && account.id === from.id) return deny;
       const conn = await store.connections.findPeer(account.id, host, from);
-      if (conn?.state !== "active" || conn.peerAccount !== from.id) return deny;
+      const connected = conn?.state === "active" && conn.peerAccount === from.id;
+      // An add-on here calling within a share someone here holds needs no connection between
+      // them (they may share a space instead): the share's grant decides.
+      const holdsShare =
+        !connected && host === LOCAL_HOST && body.addon && body.addonShare
+          ? await this.holdsShare(from, body.addon, body.addonShare.id, account)
+          : false;
+      if (!connected && !holdsShare) return deny;
       if (await store.connections.blocked(account.id, host, from)) return deny;
       const home = await primaryHousehold(this.env, account.id);
       if (!home) return { state: "ended", reason: "unreachable" };
-      const who = conn.peerName || from.name;
+      const who = conn?.peerName || from.name;
       const label = body.addon ?? (body.viaPhone ? `${body.viaPhone.label} (${who})` : who);
       const fromHost = host || ownHost(this.env);
       await this.register(host, body.callId, home.household.id);
+      const share = body.addonShare;
       return this.live.ringRemote(home.household.id, {
         callId: body.callId,
         host,
@@ -197,7 +224,13 @@ export class FedCalls implements CallLinks {
         ...(peerHousehold ? { peerHousehold } : {}),
         ...(body.viaPhone ? { fromKidsPhone: true } : {}),
         ...(body.addon
-          ? { addon: { name: body.addon, address: `${from.handle}+${body.addon}@${fromHost}` } }
+          ? {
+              addon: {
+                name: body.addon,
+                address: `${from.handle}+${body.addon}${share ? `+${share.id}` : ""}@${fromHost}`,
+                ...(share ? { share: share.label } : {}),
+              },
+            }
           : {}),
       });
     }
@@ -294,6 +327,9 @@ export class FedCalls implements CallLinks {
       ...(body.to.kind === "line" ? (["public-lines"] as const) : []),
       ...(body.to.kind === "line" && body.to.callback ? (["line-callback"] as const) : []),
       ...(body.to.kind === "addon" || body.addon ? (["addons"] as const) : []),
+      ...((body.to.kind === "addon" && body.to.share) || body.addonShare
+        ? (["addon-shares"] as const)
+        : []),
     ];
     for (const feature of needs) {
       if (!(await peerSupports(this.env, host, feature))) {
@@ -310,6 +346,19 @@ export class FedCalls implements CallLinks {
       const note = versionNote(e);
       return { state: "ended", reason, ...(note ? { note } : {}) };
     }
+  }
+
+  /** Whether `account` here holds a share of `from`'s add-on `name` (both on this server). */
+  private async holdsShare(
+    from: Party,
+    name: string,
+    shareId: string,
+    account: { id: string; handle: string },
+  ): Promise<boolean> {
+    const addon = await this.env.store.addons.byAddress(from.handle, name);
+    if (addon?.accountId !== from.id) return false;
+    const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+    return !!(await addonAccess(this.env, addon, who, shareId));
   }
 
   refreshDevice(householdId: string, deviceId: string): Promise<void> {

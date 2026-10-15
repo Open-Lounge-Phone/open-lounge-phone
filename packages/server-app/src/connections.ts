@@ -15,6 +15,7 @@ import {
 } from "@openloungephone/db";
 import {
   AcceptBody,
+  AddonSharesBody,
   CallBody,
   GreetingBody,
   HOST_RE,
@@ -507,6 +508,17 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
             ...connectionView(r, host, now),
             // Their household phones you may call.
             phones: r.state === "active" ? await store.connections.phones(r.id) : [],
+            // Shares of their add-ons they gave you (another server; it decides every call).
+            ...(env.addons && r.state === "active" && r.peerHost !== LOCAL_HOST
+              ? {
+                  addonShares: (await store.addons.received(r.id)).map((x) => ({
+                    addon: x.addon,
+                    share: x.share,
+                    label: x.label,
+                    address: `${r.peerHandle}+${x.addon}+${x.share}@${r.peerHost}`,
+                  })),
+                }
+              : {}),
           })),
       ),
       sharePresence: account.sharePresence,
@@ -721,6 +733,20 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     const r = await signed(c.req.raw, PhonesBody);
     if (r instanceof Response) return r;
     await service.receivePhones({ ...r.body.from, host: r.host }, r.body.to, r.body.phones);
+    return accepted();
+  });
+
+  /** Feature `addon-shares`: which shares of their add-ons someone there gave one of ours. */
+  app.post("/fed/v1/addon-shares", async (c) => {
+    const r = await signed(c.req.raw, AddonSharesBody);
+    if (r instanceof Response) return r;
+    if (!env.addons) return accepted();
+    const { from, to, shares } = r.body;
+    const account = await env.store.accountByHandle(to);
+    const row = account && (await env.store.connections.findPeer(account.id, r.host, from));
+    if (!account || row?.state !== "active" || row.peerAccount !== from.id) return accepted();
+    await env.store.addons.setReceived(row.id, shares);
+    await live.notifyAccount(account.id, { t: "connections.changed" });
     return accepted();
   });
 

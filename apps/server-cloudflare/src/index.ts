@@ -7,7 +7,13 @@ import {
   type LineCallbackMissedResult,
   type RoomJoinResult,
 } from "@openloungephone/federation";
-import { encode, type IceServer, Id, type ServerToApp } from "@openloungephone/protocol";
+import {
+  encode,
+  type IceServer,
+  Id,
+  type ServerToApp,
+  type ServerToDevice,
+} from "@openloungephone/protocol";
 import {
   type AppCloseFilter,
   type BlobStore,
@@ -457,6 +463,17 @@ export class HouseholdObject extends GatewayObject {
   closeRoom(roomId: string): Promise<void> {
     return this.gateway.closeRoom(this.householdId, roomId);
   }
+
+  addonShareRequest(addonId: string, msg: ServerToDevice): Promise<boolean> {
+    return this.gateway.addonShareRequest(this.householdId, addonId, msg);
+  }
+
+  endAddonShareCalls(
+    addonId: string,
+    which: { grantIds?: string[]; shareIds?: string[] },
+  ): Promise<void> {
+    return this.gateway.endAddonShareCalls(this.householdId, addonId, which);
+  }
 }
 
 /**
@@ -608,6 +625,10 @@ function coordinator(env: Env): Coordinator {
     spaceChanged: (hh) => env.HOUSEHOLD.getByName(hh).spaceChanged(),
     roomHoursChanged: (hh) => env.HOUSEHOLD.getByName(hh).roomHoursChanged(),
     lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
+    addonShareRequest: (hh, addonId, msg) =>
+      env.HOUSEHOLD.getByName(hh).addonShareRequest(addonId, msg),
+    endAddonShareCalls: (hh, addonId, which) =>
+      env.HOUSEHOLD.getByName(hh).endAddonShareCalls(addonId, which),
     closeApps: (hh, userId, filter) => env.HOUSEHOLD.getByName(hh).closeApps(userId, filter),
     notifyAccount: async (accountId, msg) => {
       const store = new Store(d1Sql(env.DB));

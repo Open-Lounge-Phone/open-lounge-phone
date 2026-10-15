@@ -1192,6 +1192,8 @@ export class Store {
         params: [id],
       },
       { query: "DELETE FROM users WHERE account_id = ?", params: [id] },
+      // Shares of others' add-ons they held here.
+      { query: "DELETE FROM addon_grants WHERE host = '' AND account_id = ?", params: [id] },
       { query: "DELETE FROM accounts WHERE id = ?", params: [id] },
     ]);
   }

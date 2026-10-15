@@ -267,7 +267,14 @@ export interface PeerInfo {
    * An add-on: its name and address (`handle+name@host`). For our own add-ons (`kind` `addon`)
    * also its owner's account and membership here; for a remote peer, the far end is an add-on.
    */
-  addon?: { name: string; address: string; accountId?: string; ownerUserId?: string };
+  addon?: {
+    name: string;
+    address: string;
+    accountId?: string;
+    ownerUserId?: string;
+    /** An add-on elsewhere calling within one of its shares: the share's label. */
+    share?: string;
+  };
   /** A phone whose client can record calls (the browser phone; not yet firmware). */
   canRecord?: boolean;
   /** What a phone said it handles beyond the base protocol (`hello.features`). */
@@ -331,6 +338,8 @@ export interface RoomSnapshot {
   farLine?: boolean;
   /** Rings a person here for a call another household here owns: its missed call is theirs. */
   branchLeg?: boolean;
+  /** A call with one of our add-ons within one of its shares (`grantId`: the holder's grant). */
+  addonShare?: { id: string; label: string; grantId?: string };
 }
 
 /** A call to a public line, waiting in its queue or ringing its members (see the hub). */

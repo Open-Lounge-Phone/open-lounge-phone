@@ -147,6 +147,14 @@ export interface Coordinator {
   callbackRing(householdId: string, req: CallbackRing): Promise<void>;
   /** Someone didn't take a call back from one of the household's public lines. */
   lineCallbackMissed(householdId: string, req: CallbackMissed): Promise<LineCallbackMissedResult>;
+  /** Sends one of the household's add-ons its owner's share request; false if it's offline. */
+  addonShareRequest(householdId: string, addonId: string, msg: ServerToDevice): Promise<boolean>;
+  /** Ends calls with one of the household's add-ons through these grants or within these shares. */
+  endAddonShareCalls(
+    householdId: string,
+    addonId: string,
+    which: { grantIds?: string[]; shareIds?: string[] },
+  ): Promise<void>;
 }
 
 export type GuestClaimResult =
@@ -313,6 +321,22 @@ export class Gateway implements Coordinator {
   lineCallbackMissed(householdId: string, req: CallbackMissed): Promise<LineCallbackMissedResult> {
     if (!this.allowed(householdId)) return Promise.resolve({ retry: false });
     return this.hub(householdId).lineCallbackMissed(req);
+  }
+
+  async addonShareRequest(
+    householdId: string,
+    addonId: string,
+    msg: ServerToDevice,
+  ): Promise<boolean> {
+    return (await this.hubs.get(householdId)?.addonShareRequest(addonId, msg)) ?? false;
+  }
+
+  async endAddonShareCalls(
+    householdId: string,
+    addonId: string,
+    which: { grantIds?: string[]; shareIds?: string[] },
+  ): Promise<void> {
+    await this.hubs.get(householdId)?.endAddonShareCalls(addonId, which);
   }
 
   /** Tells a device waiting on `code` that a guardian claimed it. */

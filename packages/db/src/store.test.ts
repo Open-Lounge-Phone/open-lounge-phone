@@ -1390,11 +1390,6 @@ describe("0028 add-ons", () => {
     const { code: code2 } = await s.createPairing("b".repeat(43), T0, "ed25519", "addon");
     expect(await s.addons.link({ ...who, code: code2, name: "seat" }, T0)).toBe("name_taken");
     expect(await s.addons.link({ ...who, code, name: "other" }, T0)).toBe("no_code");
-    // Only the owner's own connections can be on its list; they go when the connection goes.
-    await s.addons.setAllowed(addon.id, ["con_1", "con_nope"]);
-    expect(await s.addons.allowed(addon.id)).toEqual(["con_1"]);
-    await s.connections.delete("con_1");
-    expect(await s.addons.allowed(addon.id)).toEqual([]);
     // The owner leaving the space it was linked in removes it.
     old.db.exec(`DELETE FROM users WHERE id = '${guardian.id}'`);
     expect(await s.addons.get(addon.id)).toBeUndefined();
@@ -1484,7 +1479,7 @@ describe("0030 home features", () => {
     const { code } = await s.createPairing(KEY, T0);
     const kid = await s.claimPairing({ code, householdId: hh.id, name: "Gran" }, T0);
     if (!kid) throw new Error("no phone");
-    expect(migrate(old.db)).toEqual(["0030_home_features.sql"]);
+    expect(migrate(old.db)).toContain("0030_home_features.sql");
     expect(await s.getDevice(kid.id)).toMatchObject({ name: "Gran", kind: "kids" });
     expect(await s.home.get(kid.id)).toEqual({
       checkinBy: null,
@@ -1509,6 +1504,125 @@ describe("0030 home features", () => {
     const key = await s.home.intercomKey(hh.id);
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(await s.home.intercomKey(hh.id)).toBe(key);
+    old.db.close();
+  });
+});
+
+describe("0031 add-on shares", () => {
+  it("drops the old allow-list (with a note for its owners); shares, grants and requests", async () => {
+    const old = openBefore("0031");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const bob = await s.createAccount({ name: "Bob", handle: "bob" }, T0);
+    if (!bob) throw new Error("no bob");
+    old.db.exec(`
+      INSERT INTO connections (id, account_id, peer_host, peer_handle, peer_account, peer_name,
+        state, direction, created_at, updated_at) VALUES ('con_1', '${guardian.accountId}',
+        'b.test', 'bob', 'acc_remote', 'Bob', 'active', 'none', 1, 1);
+    `);
+    const who = { accountId: guardian.accountId, householdId: hh.id, userId: guardian.id };
+    const link = async (key: string, name: string) => {
+      const { code } = await s.createPairing(key.repeat(43), T0, "ed25519", "addon");
+      const a = await s.addons.link({ ...who, code, name }, T0);
+      if (typeof a === "string") throw new Error(a);
+      return a;
+    };
+    const seat = await link("a", "seat");
+    const notes = await link("b", "notes");
+    old.db.exec(`INSERT INTO addon_allow (addon_id, connection_id) VALUES ('${seat.id}', 'con_1')`);
+    expect(migrate(old.db)).toEqual(["0031_addon_shares.sql"]);
+    // The allow-list is gone; the add-on that had one carries the note, the other doesn't.
+    expect(old.db.prepare("SELECT COUNT(*) AS n FROM addon_allow").get()).toEqual({ n: 0 });
+    expect(await s.addons.allowNote(seat.id)).toBe(true);
+    expect(await s.addons.allowNote(notes.id)).toBe(false);
+    await s.addons.dismissAllowNote(seat.id);
+    expect(await s.addons.allowNote(seat.id)).toBe(false);
+    expect(await s.addons.get(seat.id)).toMatchObject({ name: "seat", accountId: who.accountId });
+    // Shares start empty; the add-on's list is taken as it is, duplicates once.
+    expect(await s.addons.shares(seat.id)).toEqual([]);
+    await s.addons.setShares(seat.id, [
+      { id: "bookclub", label: "Book club" },
+      { id: "garden", label: "Garden" },
+      { id: "bookclub", label: "Again" },
+    ]);
+    expect(await s.addons.shares(seat.id)).toEqual([
+      { id: "bookclub", label: "Book club" },
+      { id: "garden", label: "Garden" },
+    ]);
+    // Grants: only to a share it offers; giving twice keeps the first.
+    const local = { host: "", accountId: bob.id, handle: "bob", name: "Bob", connectionId: null };
+    const remote = {
+      host: "b.test",
+      accountId: "acc_remote",
+      handle: "bob",
+      name: "Bob",
+      connectionId: "con_1",
+    };
+    expect(await s.addons.grant(seat.id, "nope", local, T0)).toBeUndefined();
+    const g1 = await s.addons.grant(seat.id, "bookclub", local, T0);
+    expect(g1).toMatchObject({ shareId: "bookclub", host: "", accountId: bob.id });
+    expect((await s.addons.grant(seat.id, "bookclub", local, T0 + 1))?.id).toBe(g1?.id);
+    const g2 = await s.addons.grant(seat.id, "garden", local, T0);
+    const g3 = await s.addons.grant(seat.id, "bookclub", remote, T0);
+    expect(await s.addons.heldBy(bob.id)).toEqual([
+      expect.objectContaining({ id: g1?.id, label: "Book club", addonName: "seat" }),
+      expect.objectContaining({ id: g2?.id, label: "Garden", ownerAccountId: who.accountId }),
+    ]);
+    expect(await s.addons.givenTo(who.accountId, "b.test", "acc_remote")).toEqual([
+      { addon: "seat", share: "bookclub", label: "Book club" },
+    ]);
+    // A label changes in place; a share it drops takes its grants.
+    const dropped = await s.addons.setShares(seat.id, [{ id: "bookclub", label: "Book Club" }]);
+    expect(dropped).toEqual({
+      removed: ["garden"],
+      revoked: [expect.objectContaining({ id: g2?.id })],
+    });
+    expect((await s.addons.heldBy(bob.id)).map((h) => h.label)).toEqual(["Book Club"]);
+    // Sent again, it starts with nobody.
+    await s.addons.setShares(seat.id, [
+      { id: "bookclub", label: "Book Club" },
+      { id: "garden", label: "Garden" },
+    ]);
+    expect(await s.addons.grantFor(seat.id, "garden", "", bob.id)).toBeUndefined();
+    // Revoking, and a connection that goes, take grants.
+    expect(await s.addons.revoke(g1?.id ?? "")).toBe(true);
+    expect(await s.addons.revoke(g1?.id ?? "")).toBe(false);
+    expect(await s.addons.getGrant(g3?.id ?? "")).toBeDefined();
+    await s.connections.delete("con_1");
+    expect(await s.addons.getGrant(g3?.id ?? "")).toBeUndefined();
+    // Shares another server told us about, per connection.
+    old.db.exec(`
+      INSERT INTO connections (id, account_id, peer_host, peer_handle, peer_account, peer_name,
+        state, direction, created_at, updated_at) VALUES ('con_2', '${guardian.accountId}',
+        'c.test', 'cy', 'acc_cy', 'Cy', 'active', 'none', 1, 1);
+    `);
+    await s.addons.setReceived("con_2", [{ addon: "seat", share: "x", label: "X" }]);
+    expect(await s.addons.received("con_2")).toEqual([{ addon: "seat", share: "x", label: "X" }]);
+    await s.addons.setReceived("con_2", []);
+    expect(await s.addons.received("con_2")).toEqual([]);
+    // Requests settle once.
+    const req = await s.addons.createRequest(
+      { addonId: seat.id, label: "Garden", holders: [local], state: "waiting" },
+      T0,
+    );
+    expect(req).toMatchObject({ state: "waiting", holders: [local], answeredAt: null });
+    expect(
+      await s.addons.settleRequest(req.id, { state: "created", shareId: "garden" }, T0 + 1),
+    ).toBe(true);
+    expect(await s.addons.settleRequest(req.id, { state: "timeout" }, T0 + 2)).toBe(false);
+    expect(await s.addons.getRequest(req.id)).toMatchObject({
+      state: "created",
+      shareId: "garden",
+    });
+    // Removing the add-on takes its shares, grants and requests.
+    await s.addons.grant(seat.id, "garden", local, T0);
+    await s.addons.delete(seat.id);
+    expect(await s.addons.heldBy(bob.id)).toEqual([]);
+    expect(await s.addons.shares(seat.id)).toEqual([]);
+    expect(await s.addons.getRequest(req.id)).toBeUndefined();
     old.db.close();
   });
 });

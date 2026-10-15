@@ -117,7 +117,7 @@ it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timel
   const bob = await signUp(b, "bob", "Bob");
   await knockAndAccept(jesse, bob);
   await callAcross(jesse, bob);
-  // Jesse's add-on on A: Bob (allowed) calls it from B, and it calls him.
+  // Jesse's add-on on A: Bob holds one of its shares, calls it from B, and it calls him.
   await addonsAcross(jesse, bob);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);

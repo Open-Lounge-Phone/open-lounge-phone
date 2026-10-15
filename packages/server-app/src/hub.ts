@@ -79,6 +79,7 @@ import {
   type AddonAddress,
   type CallBody,
   type FedSignal,
+  formatAddonAddress,
   type LineCallbackMissedResult,
   type Party,
   parseAddonAddress,
@@ -97,7 +98,7 @@ import {
   toBase64Url,
   type VoicemailOffer,
 } from "@openloungephone/protocol";
-import { addonAddress, mayTalk } from "./addons.ts";
+import { addonAccess, addonAddress, answerShareRequest, tellHolder } from "./addons.ts";
 import {
   type AppCloseFilter,
   CloseCode,
@@ -352,6 +353,12 @@ interface Room {
   callbackUntil?: number;
   /** Rings a person here for a call another household here owns: its missed call is theirs. */
   branchLeg?: boolean;
+  /**
+   * A call with one of our add-ons within one of its shares: into it (`grantId`: the caller's
+   * grant), or from it to someone holding it (or its owner). Revoking the grant, or the add-on
+   * dropping the share, ends it.
+   */
+  addonShare?: { id: string; label: string; grantId?: string };
 }
 
 /** A public line calling one of our people back, ringing their apps and phones. */
@@ -374,6 +381,30 @@ type Here = { name: string; where: string };
 const deviceKey = (id: string) => `dev:${id}`;
 const userKey = (id: string) => `usr:${id}`;
 const addonKey = (id: string) => `addon:${id}`;
+
+/** `handle+name@host` → `handle+name+share@host`. */
+const withShare = (address: string, share: string) => address.replace("@", `+${share}@`);
+
+/** An add-on calling, as another hub here is told (its share's address and label, if any). */
+function addonOf(room: Room): { name: string; address: string; share?: string } {
+  const addon = room.caller.addon as NonNullable<Peer["addon"]>;
+  const share = room.addonShare;
+  if (share && room.caller.kind === "addon") {
+    return { name: addon.name, address: withShare(addon.address, share.id), share: share.label };
+  }
+  return {
+    name: addon.name,
+    address: addon.address,
+    ...(addon.share ? { share: addon.share } : {}),
+  };
+}
+
+/** `call.ringing.from` for a call from an add-on (with its share), or nothing. */
+function addonFrom(room: Room): { address?: string; kind?: "addon"; share?: string } {
+  if (!room.caller.addon) return {};
+  const a = addonOf(room);
+  return { address: a.address, kind: "addon", ...(a.share ? { share: a.share } : {}) };
+}
 
 /** An add-on of ours, or the far end of a call that is someone's add-on elsewhere. */
 const isAddonParty = (p: Peer | undefined): boolean => p?.kind === "addon" || !!p?.addon;
@@ -529,6 +560,7 @@ export class HouseholdHub {
         ...(r.line ? { line: r.line } : {}),
         ...(r.farLine ? { farLine: true } : {}),
         ...(r.branchLeg ? { branchLeg: true } : {}),
+        ...(r.addonShare ? { addonShare: r.addonShare } : {}),
         caller: r.caller.session,
         ...(r.calleePeer ? { callee: r.calleePeer.session } : {}),
         ...(remotes.length ? { remotes: remotes.map(infoOf) } : {}),
@@ -596,6 +628,7 @@ export class HouseholdHub {
         ...(snap.line ? { line: snap.line } : {}),
         ...(snap.farLine ? { farLine: true } : {}),
         ...(snap.branchLeg ? { branchLeg: true } : {}),
+        ...(snap.addonShare ? { addonShare: snap.addonShare } : {}),
         caller,
         ...(calleePeer ? { calleePeer } : {}),
       });
@@ -1130,12 +1163,11 @@ export class HouseholdHub {
 
   /** Rings a call-waiting call where the callee is talking: softly (`waiting`). */
   private ringWaiting(room: Room, peers: Peer[], label: string): void {
-    const addon = room.caller.addon;
     for (const p of peers) {
       p.conn.send({
         t: "call.ringing",
         callId: room.id,
-        from: { label, ...(addon ? { address: addon.address, kind: "addon" as const } : {}) },
+        from: { label, ...addonFrom(room) },
         waiting: true,
       });
     }
@@ -1417,6 +1449,7 @@ export class HouseholdHub {
     caller: Peer,
     userId: string,
     as: { id: string; label: string } = caller,
+    opts: { addonShare?: { id: string; label: string; grantId?: string } } = {},
   ): Promise<void> {
     if (userId === as.id) {
       caller.conn.send({ t: "error", code: "bad_message", message: "you can't call yourself" });
@@ -1448,6 +1481,7 @@ export class HouseholdHub {
     const room = this.openRoom(caller, userKey(userId), undefined, await this.personRingMs(userId));
     room.payer = allowance.payer;
     if (vm) room.vm = vm;
+    if (opts.addonShare) room.addonShare = opts.addonShare;
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     if (waiting.length) this.ringWaiting(room, waiting, as.label);
     else this.ringAll(room, targets, plans, as.label);
@@ -1488,14 +1522,7 @@ export class HouseholdHub {
       t.conn.send({
         t: "call.ringing",
         callId: room.id,
-        from: {
-          label,
-          ...(line
-            ? { address: line.address }
-            : addon
-              ? { address: addon.address, kind: "addon" as const }
-              : {}),
-        },
+        from: { label, ...(line ? { address: line.address } : addonFrom(room)) },
         ...(line ? { line: line.info } : {}),
       });
     }
@@ -1526,7 +1553,7 @@ export class HouseholdHub {
               target: { kind: "person", userId: plan.userId },
               peerHousehold: this.householdId,
               noBranches: true,
-              ...(addon ? { addon: { name: addon.name, address: addon.address } } : {}),
+              ...(addon ? { addon: addonOf(room) } : {}),
             })
           : calls.register(plan.host, leg, this.householdId).then(() =>
               calls.place(
@@ -3130,7 +3157,7 @@ export class HouseholdHub {
         peer.conn.send({ t: "pong" });
         return;
       case "call.address":
-        return this.addonCall(peer, msg.address);
+        return this.addonCall(peer, msg.address, msg.share);
       case "call.answer":
       case "call.hangup":
         return this.callMessage(peer, msg);
@@ -3138,6 +3165,11 @@ export class HouseholdHub {
       case "rtc.ice":
         if (msg.peer) break;
         return this.callMessage(peer, msg);
+      case "addon.shares":
+        return this.addonShares(peer, msg.shares);
+      case "addon.share.created":
+      case "addon.share.refused":
+        return this.addonShareAnswer(peer, msg);
       case "status":
         return;
       default:
@@ -3164,6 +3196,97 @@ export class HouseholdHub {
     return undefined;
   }
 
+  /**
+   * The add-on says what it offers for sharing (`addon.shares`). A share it dropped goes with its
+   * grants: calls into it end now, and the people who held it are told.
+   */
+  private async addonShares(peer: Peer, shares: { id: string; label: string }[]): Promise<void> {
+    const addon = await this.addonStillLinked(peer);
+    if (!addon) return;
+    const { revoked, removed } = await this.env.store.addons.setShares(addon.id, shares);
+    if (removed.length) await this.endShareCalls(addon.id, { shareIds: removed });
+    const told = new Set<string>();
+    for (const g of revoked) {
+      const key = `${g.host}|${g.accountId}`;
+      if (told.has(key)) continue;
+      told.add(key);
+      this.env.defer(
+        tellHolder(
+          this.env,
+          (id, m) => this.env.calls?.notifyAccount(id, m) ?? Promise.resolve(),
+          addon.accountId,
+          g,
+        ),
+      );
+    }
+    // A share whose label changed: its holders here see the new one.
+    for (const g of await this.env.store.addons.grants(addon.id)) {
+      const key = `${g.host}|${g.accountId}`;
+      if (told.has(key) || g.host !== LOCAL_HOST) continue;
+      told.add(key);
+      void this.env.calls?.notifyAccount(g.accountId, { t: "connections.changed" }).catch(() => {});
+    }
+  }
+
+  /** The add-on answers its owner's "New shared project with…". */
+  private async addonShareAnswer(
+    peer: Peer,
+    msg:
+      | { t: "addon.share.created"; requestId: string; id: string }
+      | { t: "addon.share.refused"; requestId: string; reason: string },
+  ): Promise<void> {
+    const addon = await this.addonStillLinked(peer);
+    if (!addon) return;
+    const answer =
+      msg.t === "addon.share.created"
+        ? { requestId: msg.requestId, id: msg.id }
+        : { requestId: msg.requestId, reason: msg.reason };
+    // Granting tells other servers: not inside this hub's queue.
+    this.env.defer(
+      answerShareRequest(
+        this.env,
+        (id, m) => this.env.calls?.notifyAccount(id, m) ?? Promise.resolve(),
+        addon,
+        answer,
+      ).then((problem) => {
+        if (problem) peer.conn.send({ t: "error", code: "bad_message", message: problem });
+      }),
+    );
+  }
+
+  /** Sends one of our add-ons its owner's share request; false when it isn't connected. */
+  addonShareRequest(addonId: string, msg: ServerToDevice): Promise<boolean> {
+    return this.run(() => {
+      const peer = this.addonPeers.get(addonId);
+      if (!peer) return false;
+      peer.conn.send(msg);
+      return true;
+    });
+  }
+
+  /** Ends calls with one of our add-ons through these grants, or within these shares. */
+  endAddonShareCalls(
+    addonId: string,
+    which: { grantIds?: string[]; shareIds?: string[] },
+  ): Promise<void> {
+    return this.run(() => this.endShareCalls(addonId, which));
+  }
+
+  private async endShareCalls(
+    addonId: string,
+    which: { grantIds?: string[]; shareIds?: string[] },
+  ): Promise<void> {
+    const key = addonKey(addonId);
+    for (const room of [...this.rooms.values()]) {
+      const s = room.addonShare;
+      if (!s || (room.caller.key !== key && room.state.callee !== key)) continue;
+      const hit =
+        (s.grantId !== undefined && which.grantIds?.includes(s.grantId)) ||
+        which.shareIds?.includes(s.id);
+      if (hit) await this.apply(room, { type: "end", reason: "unavailable" });
+    }
+  }
+
   /** A phone's address key (or a Lounge session's): an add-on, else a public line. */
   private async addressDial(peer: Peer, address: string): Promise<void> {
     const addon = parseAddonAddress(address);
@@ -3185,12 +3308,21 @@ export class HouseholdHub {
     if (!as || !account) return this.refuse(peer, "denied");
     if (!this.canDial(peer)) return this.refuse(peer, "busy");
     const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
+    const share = addr.share;
     const body = {
       from: partyOf(account),
-      to: { kind: "addon" as const, handle: addr.handle, name: addr.name },
+      to: {
+        kind: "addon" as const,
+        handle: addr.handle,
+        name: addr.name,
+        ...(share ? { share } : {}),
+      },
     };
     const label = addr.name.slice(0, 24);
-    const callee = { name: addr.name, address: `${addr.handle}+${addr.name}@${ownHost(this.env)}` };
+    const callee = {
+      name: addr.name,
+      address: formatAddonAddress({ ...addr, host: ownHost(this.env) }),
+    };
     if (host !== LOCAL_HOST) {
       return this.dialRemote(peer, {
         as,
@@ -3199,7 +3331,7 @@ export class HouseholdHub {
         label,
         peerHousehold: undefined,
         body,
-        addon: { name: addr.name, address: `${addr.handle}+${addr.name}@${host}` },
+        addon: { name: addr.name, address: formatAddonAddress(addr) },
       });
     }
     const addon = await store.addons.byAddress(addr.handle, addr.name);
@@ -3218,7 +3350,8 @@ export class HouseholdHub {
       });
     }
     const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
-    if (!(await mayTalk(this.env, addon, who))) return this.refuse(peer, "unavailable");
+    const access = await addonAccess(this.env, addon, who, share);
+    if (!access) return this.refuse(peer, "unavailable");
     const target = this.addonPeers.get(addon.id);
     if (!target) return this.refuse(peer, "unreachable");
     if (this.busy(target.key)) return this.refuse(peer, "busy");
@@ -3227,12 +3360,14 @@ export class HouseholdHub {
     const room = this.openRoom(peer, target.key);
     room.payer = addon.accountId;
     room.calleePeer = target;
+    if (access.share) room.addonShare = access.share;
     this.roomsDirty = true;
     peer.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
     target.conn.send({
       t: "call.ringing",
       callId: room.id,
       from: { label: as.label.slice(0, 24), address: `${account.handle}@${ownHost(this.env)}` },
+      ...(access.share ? { share: access.share } : {}),
     });
   }
 
@@ -3243,7 +3378,11 @@ export class HouseholdHub {
   private async ringAddon(
     remote: Peer,
     callId: string,
-    target: { addonId: string; accountId: string },
+    target: {
+      addonId: string;
+      accountId: string;
+      share?: { id: string; label: string; grantId: string };
+    },
     label: string,
     address: string,
   ): Promise<RingResult> {
@@ -3257,43 +3396,71 @@ export class HouseholdHub {
     const room = this.openRoom(remote, peer.key, callId);
     room.payer = target.accountId;
     room.calleePeer = peer;
+    if (target.share) room.addonShare = target.share;
     this.roomsDirty = true;
     peer.conn.send({
       t: "call.ringing",
       callId: room.id,
       from: { label: label.slice(0, 24), ...(address ? { address } : {}) },
+      ...(target.share ? { share: target.share } : {}),
     });
     return { state: "ringing" };
   }
 
   /**
-   * An add-on calls by address (`call.address`): its owner, or one of the owner's connections
-   * on its allow-list. People only (apps, own phones, Lounge sessions): never a phone of a space,
-   * so never a kids' phone.
+   * An add-on calls by address (`call.address`): its owner, or, within one of its shares
+   * (`share`), someone who holds that share. People only (apps, own phones, Lounge sessions):
+   * never a phone of a space, so never a kids' phone. Everything else ends `unavailable`.
    */
-  private async addonCall(peer: Peer, address: string): Promise<void> {
+  private async addonCall(peer: Peer, address: string, shareId?: string): Promise<void> {
     const { store } = this.env;
     const addon = await this.addonStillLinked(peer);
     if (!addon) return;
     const addr = parseAddress(address);
     const account = await store.getAccount(addon.accountId);
     if (!addr || !account) return this.refuse(peer, "unavailable");
+    const share = shareId ? await store.addons.share(addon.id, shareId) : undefined;
+    if (shareId && !share) return this.refuse(peer, "unavailable");
     const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
     const as = { id: addon.userId, label: peer.label };
+    const opts = share ? { addonShare: { id: share.id, label: share.label } } : {};
     if (host === LOCAL_HOST && addr.handle === account.handle) {
       // Its owner: wherever they can be rung, like any call to them.
       if (!this.canDial(peer)) return this.refuse(peer, "busy");
-      return this.userDial(peer, addon.userId, { id: addonKey(addon.id), label: peer.label });
+      return this.userDial(peer, addon.userId, { id: addonKey(addon.id), label: peer.label }, opts);
+    }
+    if (!share) return this.refuse(peer, "unavailable");
+    if (host === LOCAL_HOST) {
+      // Someone here who holds the share (a connection, or someone in one of the owner's spaces).
+      const holder = await store.accountByHandle(addr.handle);
+      const who = holder && { host, accountId: holder.id, handle: holder.handle };
+      const access = who && (await addonAccess(this.env, addon, who, share.id));
+      if (!holder || !access?.share) return this.refuse(peer, "unavailable");
+      const held = { addonShare: access.share };
+      const here = await store.membership(holder.id, this.householdId);
+      if (here) {
+        if (!this.canDial(peer)) return this.refuse(peer, "busy");
+        return this.userDial(peer, here.id, { id: addonKey(addon.id), label: peer.label }, held);
+      }
+      const home = await primaryHousehold(this.env, holder.id);
+      if (!home) return this.refuse(peer, "unreachable");
+      return this.dialRemote(peer, {
+        as,
+        host: LOCAL_HOST,
+        key: `fed::${holder.id}`,
+        label: (holder.name || holder.handle).slice(0, 24),
+        peerHousehold: home.household.id,
+        body: { from: partyOf(account), to: { kind: "person", handle: holder.handle } },
+        ...held,
+      });
     }
     const conn = await store.connections.find(addon.accountId, host, addr.handle);
-    if (
-      conn?.state !== "active" ||
-      !conn.peerAccount ||
-      !(await store.addons.isAllowed(addon.id, conn.id))
-    ) {
-      return this.refuse(peer, "unavailable");
-    }
-    return this.connectionDial(peer, conn.id, as);
+    const who = conn?.peerAccount
+      ? { host, accountId: conn.peerAccount, handle: conn.peerHandle }
+      : undefined;
+    const access = who && (await addonAccess(this.env, addon, who, share.id));
+    if (!conn || !access?.share) return this.refuse(peer, "unavailable");
+    return this.connectionDial(peer, conn.id, as, { addonShare: access.share });
   }
 
   /** A key pressed during a call: passed on only to an add-on (here, or through its server). */
@@ -3364,6 +3531,7 @@ export class HouseholdHub {
     caller: Peer,
     connectionId: string,
     as: { id: string; label: string } = caller,
+    opts: { addonShare?: { id: string; label: string; grantId?: string } } = {},
   ): Promise<void> {
     const { store } = this.env;
     const user = await store.getUser(as.id);
@@ -3381,7 +3549,7 @@ export class HouseholdHub {
     if (conn.peerHost === LOCAL_HOST) {
       // In this household too: an ordinary call between members.
       const here = await store.membership(conn.peerAccount, this.householdId);
-      if (here) return this.userDial(caller, here.id, as);
+      if (here) return this.userDial(caller, here.id, as, opts);
       peerHousehold = (await primaryHousehold(this.env, conn.peerAccount))?.household.id;
       if (!peerHousehold) return this.refuse(caller, "unreachable");
     }
@@ -3398,6 +3566,7 @@ export class HouseholdHub {
         to: { kind: "person", handle: conn.peerHandle },
       },
       vmTarget: { kind: "connection", connectionId: conn.id, name: label },
+      ...opts,
     });
   }
 
@@ -3486,6 +3655,8 @@ export class HouseholdHub {
       callId?: string;
       /** Calling an add-on: its name and address (the far end is labelled as one). */
       addon?: { name: string; address: string };
+      /** Our add-on calls within one of its shares (the far end shows its label). */
+      addonShare?: { id: string; label: string; grantId?: string };
       /**
        * Not metered here: an add-on's calls count against its owner, on the add-on's side (a
        * call to an add-on in another household on this server).
@@ -3517,8 +3688,9 @@ export class HouseholdHub {
     if (caller.kind === "addon" && (to.kind !== "person" || !fromAddon)) {
       return this.refuse(caller, "unavailable");
     }
+    if (target.addonShare && !fromAddon) return this.refuse(caller, "unavailable");
     const host = target.host || ownHost(this.env);
-    const { line: _line, callId: _id, free: _free, ...peerInfo } = target;
+    const { line: _line, callId: _id, free: _free, addonShare, ...peerInfo } = target;
     const remote = this.remotePeer({
       ...peerInfo,
       address:
@@ -3540,6 +3712,7 @@ export class HouseholdHub {
     if (vm) room.vm = vm;
     if (target.kidsPhone) room.noRecording = true;
     if (target.line) room.farLine = true;
+    if (addonShare) room.addonShare = addonShare;
     this.roomsDirty = true;
     await calls.register(target.host, room.id, this.householdId);
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
@@ -3551,6 +3724,9 @@ export class HouseholdHub {
       callId: room.id,
       ...(recording ? { recording: true } : {}),
       ...(fromAddon ? { addon: fromAddon } : {}),
+      ...(fromAddon && addonShare
+        ? { addonShare: { id: addonShare.id, label: addonShare.label } }
+        : {}),
     };
     void calls.place(target.host, body, this.householdId).then(
       (r) =>

@@ -772,9 +772,11 @@ async function untilState(app: Sock, state: string) {
 
 /**
  * Add-ons across servers (both servers run with ADDONS=on): Jesse links an add-on on A (a pairing
- * code, then the signed challenge) and lets Bob talk to it. Bob, on B, calls it by its address;
- * it is told who is calling, the call connects and a key reaches it. It calls Bob back, labelled
- * as an add-on. Off Jesse's list, Bob is refused; removed, it is told to forget its link.
+ * code, then the signed challenge). Its own address is hers alone: Bob, on B, is refused. The
+ * add-on offers a share ("Book club"); Jesse gives it to Bob, and B lists it on their connection.
+ * Bob calls the share's address; the add-on is told who is calling and through which share, the
+ * call connects and a key reaches it. It calls Bob back within the share, labelled with it.
+ * Revoked, Bob is refused and B forgets it; removed, the add-on is told to forget its link.
  */
 export async function addonsAcross(jesse: Person, bob: Person) {
   const ws = jesse.server.base.replace(/^http/, "ws");
@@ -791,12 +793,10 @@ export async function addonsAcross(jesse: Person, bob: Person) {
   pairing.send({ t: "pair.begin", kind: "addon", publicKey });
   const { code } = await pairing.next("pair.code");
   const toBob = (await connections(jesse)).find((c) => c.address === bob.address);
-  const linked = await api(jesse, "/addons/link", {
-    body: { code, name: "seat", allow: [toBob?.id] },
-  });
+  const linked = await api(jesse, "/addons/link", { body: { code, name: "seat" } });
   expect(linked.status, JSON.stringify(linked.json)).toBe(201);
   const host = new URL(jesse.server.origin).host;
-  expect(linked.json).toMatchObject({ address: `jesse+seat@${host}`, allow: [toBob?.id] });
+  expect(linked.json).toMatchObject({ address: `jesse+seat@${host}`, shares: [] });
   const { deviceId } = await pairing.next("pair.done");
   pairing.ws.close();
   const addon = await socket(`${ws}/ws/device?device=${deviceId}`);
@@ -809,11 +809,36 @@ export async function addonsAcross(jesse: Person, bob: Person) {
     address: linked.json.address,
     owner: { address: jesse.address },
   });
+  expect((config.server as { features: string[] }).features).toContain("addon-shares");
 
   const bApp = await appSocket(bob);
   bApp.send({ t: "call.address", address: linked.json.address });
+  expect(await untilState(bApp, "ended")).toMatchObject({ reason: "unavailable" });
+
+  addon.send({ t: "addon.shares", shares: [{ id: "bookclub", label: "Book club" }] });
+  const shareAddress = `jesse+seat+bookclub@${host}`;
+  let grant: { status: number; json: { grantId: string } } | undefined;
+  for (let i = 0; i < 50 && grant?.status !== 201; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 100));
+    grant = await api(jesse, `/addons/${deviceId}/shares/bookclub/grants`, {
+      body: { to: `conn:${toBob?.id}` },
+    });
+  }
+  expect(grant?.status, JSON.stringify(grant?.json)).toBe(201);
+  const bobsShares = async () =>
+    (
+      (await connections(bob)).find((c) => c.address === jesse.address) as {
+        addonShares?: { address: string; label: string }[];
+      }
+    ).addonShares;
+  expect(await bobsShares()).toEqual([
+    { addon: "seat", share: "bookclub", label: "Book club", address: shareAddress },
+  ]);
+
+  bApp.send({ t: "call.address", address: shareAddress });
   const ring = await addon.next("call.ringing");
   expect(ring.from).toEqual({ label: bob.name ?? "Bob", address: bob.address });
+  expect(ring.share).toEqual({ id: "bookclub", label: "Book club", grantId: grant?.json.grantId });
   const callId = ring.callId as string;
   const bobsCall = (await untilState(bApp, "ringing")).callId as string;
   addon.send({ t: "call.answer", callId });
@@ -828,21 +853,30 @@ export async function addonsAcross(jesse: Person, bob: Person) {
   expect(await addon.next("call.key")).toMatchObject({ callId, key: "5" });
   bApp.send({ t: "call.hangup", callId: bobsCall });
   await untilState(addon as Sock, "ended");
+  await untilState(bApp, "ended");
 
-  addon.send({ t: "call.address", address: bob.address });
+  addon.send({ t: "call.address", address: bob.address, share: "bookclub" });
   const back = await bApp.next("call.ringing");
-  expect(back.from).toEqual({ label: "seat", address: linked.json.address, kind: "addon" });
+  expect(back.from).toEqual({
+    label: "seat",
+    address: shareAddress,
+    kind: "addon",
+    share: "Book club",
+  });
   bApp.send({ t: "call.hangup", callId: back.callId as string });
   await untilState(addon as Sock, "ended");
   await untilState(bApp, "ended");
 
-  const off = await api(jesse, `/addons/${deviceId}/allow`, {
-    method: "PUT",
-    body: { connections: [] },
+  const off = await api(jesse, `/addons/${deviceId}/grants/${grant?.json.grantId}`, {
+    method: "DELETE",
   });
-  expect(off.status).toBe(200);
-  bApp.send({ t: "call.address", address: linked.json.address });
+  expect(off.status).toBe(204);
+  bApp.send({ t: "call.address", address: shareAddress });
   expect(await untilState(bApp, "ended")).toMatchObject({ reason: "unavailable" });
+  for (let i = 0; i < 50 && (await bobsShares())?.length; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  expect(await bobsShares()).toEqual([]);
 
   expect((await api(jesse, `/addons/${deviceId}`, { method: "DELETE" })).status).toBe(204);
   expect(await addon.next("wipe")).toMatchObject({ reason: "removed" });
