@@ -388,7 +388,8 @@ function LinkForm({
         </span>
       </label>
       <p className="muted small">
-        Only you can talk to it at first. To let others, use Who may talk to it on its card after linking.
+        Only you can talk to it at first. To let others, use Who may talk to it on its card after
+        linking.
       </p>
       {error && (
         <p className="error" role="alert">
