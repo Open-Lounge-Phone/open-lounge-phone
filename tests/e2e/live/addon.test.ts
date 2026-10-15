@@ -1,7 +1,10 @@
 // The add-on bridge end to end, entirely on this machine: a self-hosted server with add-ons on,
 // the Python echo add-on (sdk/python/examples/echo.py) linked through the companion app in
 // headless Chromium (fake microphone), a call from the app to the add-on with real WebRTC audio
-// both ways, and a call from the add-on to its owner.
+// both ways, and a call from the add-on to its owner. Then sharing: the add-on offers a share,
+// its owner gives it to a connection in the app, she calls the share's address from her
+// Connections tab (the add-on is told the share), someone else sees nothing of it, and "New
+// shared project with…" makes a second share that the add-on creates.
 //
 //   OLP_ADDON_E2E=1 PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core [CHROME=/path/to/chrome] \
 //     npx vitest run tests/e2e/live/addon.test.ts
@@ -17,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright-core";
 import { afterAll, beforeAll, expect, it, onTestFailed } from "vitest";
 import { freePort, ProcLog, reportLogs } from "../procs.ts";
-import { type ServerTarget, signUp } from "../twoServers.ts";
+import { api, type Person, type ServerTarget, signUp } from "../twoServers.ts";
 import { CHROMIUM_ARGS, Companion, pcConnected, until } from "./browser.ts";
 
 const ON = process.env.OLP_ADDON_E2E === "1";
@@ -211,6 +214,129 @@ it.skipIf(!ON)(
     );
     await app.hangUp();
     await app.ended();
+    rmSync(keyDir, { recursive: true, force: true });
+  },
+  240_000,
+);
+
+/** `a` knocks on `b` (same server) and `b` accepts. */
+async function befriend(a: Person, b: Person): Promise<void> {
+  expect((await api(a, "/connections", { body: { to: b.address } })).status).toBe(202);
+  const knock = (await api(b, "/connections")).json.connections.find(
+    (c: { address: string }) => c.address === a.address,
+  );
+  expect((await api(b, `/connections/${knock.id}/accept`, { method: "POST" })).status).toBe(200);
+}
+
+it.skipIf(!ON)(
+  "sharing: the echo add-on offers a share, its owner gives it, the holder calls it",
+  async () => {
+    onTestFailed(() => reportLogs(logs, "the add-on sharing scenario failed"));
+    const host = new URL(server.origin).host;
+    const jo = await signUp(server, "jo", "Jo");
+    const ana = await signUp(server, "ana", "Ana");
+    const cy = await signUp(server, "cy", "Cy");
+    await befriend(jo, ana);
+    await befriend(jo, cy);
+
+    // The add-on, linked to Jo (through the API; the first test links one in the app), offering
+    // one share.
+    const keyDir = mkdtempSync(join(tmpdir(), "olp-addon-key-"));
+    const keyFile = join(keyDir, "seat.addon-key");
+    const seat = startEcho("echo-shares", keyFile, ["--share", "bookclub:Book club"]);
+    const code = await until(
+      "its link code",
+      () => /Link code: (\d{6})/.exec(seat.text)?.[1],
+      30_000,
+    );
+    const linked = await api(jo, "/addons/link", { body: { code, name: "seat" } });
+    expect(linked.status).toBe(201);
+    await until("connected", () => seat.text.includes(`ready jo+seat@${host}`), 20_000);
+    await until(
+      "its share at the server",
+      async () => (await api(jo, "/addons")).json.addons[0]?.shares.length === 1,
+      10_000,
+      200,
+    );
+
+    // Jo gives it to Ana on the add-on's card.
+    const joApp = new Companion(server.origin, "jo");
+    await joApp.open(browser);
+    await joApp.resume(jo.token);
+    joApp.page.on("dialog", (d: { accept(): Promise<void> }) => void d.accept());
+    await joApp.tab("Settings");
+    const card = joApp.page.locator("li.addon", { hasText: `jo+seat@${host}` });
+    await card.getByText(`jo+seat+bookclub@${host}`).waitFor({ timeout: 20_000 });
+    await card.getByRole("button", { name: "Give to…" }).click();
+    await card.locator("select").selectOption({ label: `Ana (ana@${host})` });
+    await card.getByRole("button", { name: "Give", exact: true }).click();
+    await joApp.page.getByText("Book club is shared with Ana.").waitFor({ timeout: 10_000 });
+    await shot(joApp.page, "4-owner-gave-share");
+
+    // Ana sees it in Connections and calls it; the add-on is told who and through which share.
+    const anaApp = new Companion(server.origin, "ana");
+    await anaApp.open(browser);
+    await anaApp.resume(ana.token);
+    await anaApp.tab("Connect");
+    const entry = anaApp.page.locator("li", { hasText: "Jo's seat · Book club" }).last();
+    await entry.waitFor({ timeout: 20_000 });
+    await shot(anaApp.page, "5-holder-connections");
+    const before = await anaApp.pcCount();
+    await entry.getByRole("button", { name: "Call" }).click();
+    await until(
+      "the call through the share",
+      () => seat.text.includes("through share bookclub"),
+      20_000,
+    );
+    expect(seat.text).toContain(`call from Ana <ana@${host}>`);
+    await pcConnected(anaApp.page, before, 30_000);
+    await expect
+      .poll(() => anaApp.overlay().innerText(), { timeout: 10_000 })
+      .toMatch(/seat · Book club/);
+    await anaApp.hangUp();
+    await anaApp.ended();
+
+    // Cy, connected with Jo but given nothing, sees nothing of it.
+    const cyApp = new Companion(server.origin, "cy");
+    await cyApp.open(browser);
+    await cyApp.resume(cy.token);
+    await cyApp.tab("Connect");
+    await cyApp.page.getByText("Connected").first().waitFor({ timeout: 20_000 });
+    const cyText = await cyApp.page.locator("section.connections").innerText();
+    expect(cyText).not.toContain("Jo's seat");
+    expect(cyText).not.toContain("Book club");
+    expect((await api(cy, "/addons/shared")).json.held).toEqual([]);
+    await shot(cyApp.page, "6-neither-connections");
+
+    // Jo sees her add-on and who has its share.
+    await joApp.tab("Connect");
+    await joApp.page.getByText("Book club: shared with Ana").waitFor({ timeout: 20_000 });
+    await shot(joApp.page, "7-owner-connections");
+
+    // New shared project with…: the add-on makes it, and Ana gets it.
+    await joApp.tab("Settings");
+    await card.getByRole("button", { name: "New shared project with…" }).click();
+    const form = card.locator("form", { hasText: "New shared project with…" });
+    await form.getByLabel("Name").fill("Garden");
+    await form.getByLabel(/Ana/).check();
+    await form.getByRole("button", { name: "Ask" }).click();
+    await form.getByText("Done. Garden is shared with Ana.").waitFor({ timeout: 20_000 });
+    expect(seat.text).toContain("share request 'Garden'");
+    await shot(joApp.page, "8-new-shared-project");
+    await form.getByRole("button", { name: "Done" }).click();
+    await card.getByText(`jo+seat+garden@${host}`).waitFor({ timeout: 20_000 });
+
+    // Revoked: Ana keeps only Garden.
+    await card
+      .locator("li", { hasText: `jo+seat+bookclub@${host}` })
+      .getByRole("button", { name: "Revoke" })
+      .click();
+    await joApp.page.getByText("Ana no longer has Book club.").waitFor({ timeout: 10_000 });
+    expect(
+      (await api(ana, "/addons/shared")).json.held.map(
+        (h: { share: { id: string } }) => h.share.id,
+      ),
+    ).toEqual(["garden"]);
     rmSync(keyDir, { recursive: true, force: true });
   },
   240_000,

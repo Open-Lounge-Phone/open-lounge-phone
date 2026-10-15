@@ -452,7 +452,7 @@ function NewShareForm({
         />
         {problem && <span className="hint error">{problem}</span>}
       </label>
-      <fieldset className="stack">
+      <fieldset className="choice">
         <legend>With</legend>
         {people.length === 0 && (
           <p className="muted small">
@@ -461,7 +461,7 @@ function NewShareForm({
           </p>
         )}
         {people.map((p) => (
-          <label key={p.ref} className="row">
+          <label key={p.ref} className="check">
             <input
               type="checkbox"
               disabled={waiting}
