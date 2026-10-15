@@ -1078,6 +1078,60 @@ export class HouseholdHub {
     return false;
   }
 
+  /**
+   * Call waiting (docs/phone-ux.md): where a busy callee may be rung softly instead of refused as
+   * busy. Only the session in their one answered call (an app, or a phone that lists
+   * `call-waiting`), when that call isn't on hold, nothing else rings for them, they're in no
+   * room, and their setting is on (a person's own, or a household phone's guardians'). Quiet
+   * hours and allow-lists were checked before, exactly as for a first call.
+   */
+  private async waitingRing(calleeKey: string): Promise<Peer[]> {
+    if (this.conf.inRoom(calleeKey)) return [];
+    for (const l of this.legs.values()) if (l.peer.key === calleeKey) return [];
+    const theirs = [...this.rooms.values()].filter(
+      (r) => r.state.caller === calleeKey || r.state.callee === calleeKey,
+    );
+    const r = theirs.length === 1 ? theirs[0] : undefined;
+    if (!r || r.state.phase !== "active" || r.heldBy) return [];
+    const peer = r.state.caller === calleeKey ? r.caller : r.calleePeer;
+    if (!peer) return [];
+    const can =
+      peer.kind === "user" || (peer.kind === "device" && !!peer.features?.includes("call-waiting"));
+    if (!can) return [];
+    const owner = await this.waitingOwner(calleeKey, peer);
+    if (!owner || !(await this.env.store.callWaiting(owner))) return [];
+    return [peer];
+  }
+
+  /** Whose call-waiting setting applies: the person's, or a household phone's own. */
+  private async waitingOwner(calleeKey: string, peer: Peer): Promise<VoicemailOwner | undefined> {
+    const { store } = this.env;
+    const userId = calleeKey.startsWith("usr:")
+      ? idOf(calleeKey)
+      : peer.kind === "device"
+        ? personOf(peer)
+        : undefined;
+    if (userId && !userId.startsWith("guest:")) {
+      const user = await store.getUser(userId);
+      return user ? { accountId: user.accountId } : undefined;
+    }
+    if (peer.kind === "device" && !(peer as DevicePeer).lounge) return { deviceId: peer.id };
+    return undefined;
+  }
+
+  /** Rings a call-waiting call where the callee is talking: softly (`waiting`). */
+  private ringWaiting(room: Room, peers: Peer[], label: string): void {
+    const addon = room.caller.addon;
+    for (const p of peers) {
+      p.conn.send({
+        t: "call.ringing",
+        callId: room.id,
+        from: { label, ...(addon ? { address: addon.address, kind: "addon" as const } : {}) },
+        waiting: true,
+      });
+    }
+  }
+
   /** A party's calls as they see them (for hold, consult, merge and transfer rules). */
   private partyCalls(peer: Peer): PartyCall[] {
     const out: PartyCall[] = [];
@@ -1253,7 +1307,12 @@ export class HouseholdHub {
     const targets = this.reachable(contact.id, device);
     const plans = await this.branchesFor(contact.id);
     if (!targets.length && !plans.length) return this.refuse(device, "unreachable", undefined, vm);
-    if (this.busy(userKey(contact.id))) return this.refuse(device, "busy", undefined, vm);
+    const waiting = this.busy(userKey(contact.id))
+      ? await this.waitingRing(userKey(contact.id))
+      : [];
+    if (this.busy(userKey(contact.id)) && !waiting.length) {
+      return this.refuse(device, "busy", undefined, vm);
+    }
 
     const room = this.openRoom(
       device,
@@ -1264,7 +1323,8 @@ export class HouseholdHub {
     room.payer = allowance.payer;
     if (vm) room.vm = vm;
     device.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
-    this.ringAll(room, targets, plans, device.label);
+    if (waiting.length) this.ringWaiting(room, waiting, device.label);
+    else this.ringAll(room, targets, plans, device.label);
   }
 
   /**
@@ -1309,7 +1369,9 @@ export class HouseholdHub {
     const peer = this.devices.get(deviceId);
     if (!peer) return this.refuse(user, "unreachable", undefined, vm);
     if (!this.canDial(user)) return this.refuse(user, "busy");
-    if (this.busy(peer.key) || peer.hook === "up") {
+    // In a call: call waiting (if it may ring softly there), else busy. Handset up: busy.
+    const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
+    if ((this.busy(peer.key) && !waiting) || (peer.hook === "up" && !waiting)) {
       return this.refuse(user, "busy", undefined, vm);
     }
     const allowance = await this.allowance(user, as);
@@ -1330,7 +1392,12 @@ export class HouseholdHub {
     room.calleePeer = peer;
     this.roomsDirty = true;
     user.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
-    peer.conn.send({ t: "call.ringing", callId: room.id, from: { label: contact.label } });
+    peer.conn.send({
+      t: "call.ringing",
+      callId: room.id,
+      from: { label: contact.label },
+      ...(waiting ? { waiting: true as const } : {}),
+    });
   }
 
   /**
@@ -1362,7 +1429,10 @@ export class HouseholdHub {
     if (!targets.length && !plans.length) return this.refuse(caller, "unreachable", undefined, vm);
     const available = (await this.env.store.availability(this.householdId)).get(userId) ?? true;
     if (!available) return this.refuse(caller, "unavailable", undefined, vm);
-    if (this.busy(userKey(userId))) return this.refuse(caller, "busy", undefined, vm);
+    const waiting = this.busy(userKey(userId)) ? await this.waitingRing(userKey(userId)) : [];
+    if (this.busy(userKey(userId)) && !waiting.length) {
+      return this.refuse(caller, "busy", undefined, vm);
+    }
     const allowance = await this.allowance(caller, as);
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
 
@@ -1370,7 +1440,8 @@ export class HouseholdHub {
     room.payer = allowance.payer;
     if (vm) room.vm = vm;
     caller.conn.send({ t: "call.state", callId: room.id, state: "ringing" });
-    this.ringAll(room, targets, plans, as.label);
+    if (waiting.length) this.ringWaiting(room, waiting, as.label);
+    else this.ringAll(room, targets, plans, as.label);
   }
 
   /**
@@ -1620,6 +1691,21 @@ export class HouseholdHub {
 
     if (msg.t === "call.answer") {
       if (party !== "callee" || room.state.phase !== "ringing") return;
+      // Call waiting: the call they're in goes on hold first (or the answer is refused).
+      const current = [...this.rooms.values()].find(
+        (r) =>
+          r !== room &&
+          (r.caller === peer || r.calleePeer === peer) &&
+          (r.state.phase === "active" || r.state.phase === "connecting"),
+      );
+      if (current && current.heldBy !== peer.key) {
+        const check = controlCheck(
+          this.partyCalls(peer).filter((c) => c.callId !== room.id),
+          { type: "hold", callId: current.id, hold: true },
+        );
+        if (!check.ok) return this.refuseControl(peer, check.error);
+        await this.hold(peer, current.id, true, room.id);
+      }
       // Everything else that was ringing for the callee (other sessions, own phones) stops.
       for (const other of this.ringTargets(room)) {
         if (other !== peer) {
@@ -3360,7 +3446,8 @@ export class HouseholdHub {
         if (!targets.length && !plans.length) return end("unreachable");
         const available = (await store.availability(this.householdId)).get(userId) ?? true;
         if (!available) return end("unavailable");
-        if (this.busy(userKey(userId))) return end("busy");
+        const waiting = this.busy(userKey(userId)) ? await this.waitingRing(userKey(userId)) : [];
+        if (this.busy(userKey(userId)) && !waiting.length) return end("busy");
         const room = this.openRoom(
           remote,
           userKey(userId),
@@ -3368,7 +3455,8 @@ export class HouseholdHub {
           await this.personRingMs(userId),
         );
         if (req.noBranches) room.branchLeg = true;
-        this.ringAll(room, targets, plans, req.label);
+        if (waiting.length) this.ringWaiting(room, waiting, req.label);
+        else this.ringAll(room, targets, plans, req.label);
         return { state: "ringing" };
       }
       if (req.target.kind === "line") {
@@ -3415,7 +3503,8 @@ export class HouseholdHub {
       if (decision.decision === "voicemail") return end("voicemail");
       const peer = this.devices.get(device.id);
       if (!peer) return end("unreachable");
-      if (this.busy(peer.key) || peer.hook === "up") return end("busy");
+      const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
+      if ((this.busy(peer.key) || peer.hook === "up") && !waiting) return end("busy");
       const room = this.openRoom(
         remote,
         peer.key,
@@ -3424,7 +3513,12 @@ export class HouseholdHub {
       );
       room.calleePeer = peer;
       this.roomsDirty = true;
-      peer.conn.send({ t: "call.ringing", callId: room.id, from: { label: contact.label } });
+      peer.conn.send({
+        t: "call.ringing",
+        callId: room.id,
+        from: { label: contact.label },
+        ...(waiting ? { waiting: true as const } : {}),
+      });
       return { state: "ringing" };
     });
   }
@@ -5283,11 +5377,13 @@ export class HouseholdHub {
   }
 
   /** On hold: the holder's audio stops and the other side hears a soft tone (played locally). */
-  private async hold(peer: Peer, callId: string, hold: boolean): Promise<void> {
+  private async hold(peer: Peer, callId: string, hold: boolean, except?: string): Promise<void> {
     const room = this.rooms.get(callId);
     const other = room && this.otherParty(room, peer);
     if (!room || !other) return this.refuseControl(peer, "no such call");
-    const check = controlCheck(this.partyCalls(peer), { type: "hold", callId, hold });
+    // `except`: a waiting call being answered (it doesn't count as another call yet).
+    const calls = this.partyCalls(peer).filter((c) => c.callId !== except);
+    const check = controlCheck(calls, { type: "hold", callId, hold });
     if (!check.ok) return this.refuseControl(peer, check.error);
     const was = room.heldBy;
     room.heldBy = hold ? peer.key : undefined;

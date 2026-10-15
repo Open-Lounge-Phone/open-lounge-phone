@@ -32,6 +32,7 @@ import {
 } from "./accounts.ts";
 import { ADDON_CODE, addonRoutes } from "./addons.ts";
 import { auditFrom, auditPhone, auditRoutes } from "./audit.ts";
+import { callWaitingRoutes } from "./callWaiting.ts";
 import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { capReached } from "./fairUse.ts";
@@ -908,6 +909,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   peopleRoutes(api, env, live);
   voicemailRoutes(api, env, live);
   missedRoutes(api, env, live);
+  callWaitingRoutes(api, env);
   roomRoutes(api, env, live);
 
   return api;
