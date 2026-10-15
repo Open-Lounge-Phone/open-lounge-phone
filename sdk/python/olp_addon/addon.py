@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import json
 import logging
 import os
@@ -25,6 +26,15 @@ CallHandler = Callable[[Call], Awaitable[Any]]
 PING_EVERY_S = 25.0
 #: Reconnect backoff: first wait and the longest.
 BACKOFF_S = (1.0, 30.0)
+
+
+def _accepts_two(fn: Callable[..., Any]) -> bool:
+    """Whether `fn` can take two positional arguments (code, expires_at)."""
+    try:
+        inspect.signature(fn).bind("123456", None)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 class AddonError(Exception):
@@ -59,6 +69,7 @@ class Addon:
         #: Who it is and whose (from the server's `config`), once connected.
         self.identity: p.Identity | None = None
         self._handler: CallHandler | None = None
+        self._on_status: Callable[[bool], Any] | None = None
         self._ws: Any = None
         self._calls: dict[str, Call] = {}
         self._placing: Call | None = None
@@ -74,11 +85,14 @@ class Addon:
     def linked(self) -> bool:
         return self.device_id is not None
 
-    async def link(self, on_code: Callable[[str], Any] | None = None) -> str:
+    async def link(self, on_code: Callable[..., Any] | None = None) -> str:
         """Asks the server for a 6-digit code and waits until its owner enters it in the app
-        (Settings → Add-ons → Link an add-on). `on_code` gets the code (default: printed).
-        Answers the add-on's id on the server, which is saved next to the key."""
+        (Settings → Add-ons → Link an add-on). `on_code(code)` or `on_code(code, expires_at)`
+        gets it (default: printed); `expires_at` is when the code stops working, in ms since the
+        Unix epoch (or None). Answers the add-on's id on the server, which is saved next to
+        the key."""
         show = on_code or (lambda code: print(f"Link code: {code}", flush=True))
+        takes_expiry = _accepts_two(show)
         async with websockets.connect(p.ws_url(self.server_url)) as ws:
             await ws.send(p.encode(p.hello(fw=self.fw)))
             await ws.send(p.encode(p.pair_begin(self.key.public_key)))
@@ -87,7 +101,10 @@ class Addon:
                 if not msg:
                     continue
                 if msg["t"] == "pair.code":
-                    result = show(str(msg["code"]))
+                    expires = msg.get("expiresAt")
+                    expires_at = int(expires) if isinstance(expires, (int, float)) else None
+                    code = str(msg["code"])
+                    result = show(code, expires_at) if takes_expiry else show(code)
                     if asyncio.iscoroutine(result):
                         await result
                 elif msg["t"] == "pair.done":
@@ -103,6 +120,29 @@ class Addon:
         self.device_id = None
         with contextlib.suppress(FileNotFoundError):
             self._state_path.unlink()
+
+    # --- status ----------------------------------------------------------------------------
+
+    @property
+    def online(self) -> bool:
+        """True while connected to the server and signed in (calls can come in)."""
+        return self._ready.is_set()
+
+    def on_status(self, handler: Callable[[bool], Any]) -> Callable[[bool], Any]:
+        """Sets a handler (usable as a decorator) called with True when the add-on is connected
+        and signed in, and False when the connection drops."""
+        self._on_status = handler
+        return handler
+
+    async def _status(self, online: bool) -> None:
+        if self._on_status is None:
+            return
+        try:
+            result = self._on_status(online)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:  # a broken status handler must not take the add-on down
+            log.exception("status handler failed")
 
     # --- calls -----------------------------------------------------------------------------
 
@@ -186,7 +226,10 @@ class Addon:
             finally:
                 pinger.cancel()
                 self._ws = None
+                was_online = self._ready.is_set()
                 self._ready.clear()
+                if was_online:
+                    await self._status(False)
                 # The socket is gone: so are its calls (the server ends them too).
                 for call in list(self._calls.values()):
                     await call._end("error")
@@ -208,7 +251,10 @@ class Addon:
             await self._send(p.auth_proof(self.key.sign(str(msg["nonce"]))))
         elif t == "config":
             self.identity = p.identity_of(msg)
+            first = not self._ready.is_set()
             self._ready.set()
+            if first:
+                await self._status(True)
         elif t == "wipe":
             self.forget()
             self._stopped = True

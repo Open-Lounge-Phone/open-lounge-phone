@@ -54,8 +54,9 @@ session is ever stored in it.
   16000, 24000 or 48000 are typical).
 
 `await addon.link(on_code=print) -> str`
-: Asks for a code, gives it to `on_code`, waits until the owner enters it, saves the link and
-  answers the add-on's id. `addon.linked` says whether it's linked.
+: Asks for a code, gives it to `on_code(code)` or `on_code(code, expires_at)` (`expires_at`: when
+  the code stops working, in ms since the Unix epoch, for a countdown), waits until the owner
+  enters it, saves the link and answers the add-on's id. `addon.linked` says whether it's linked.
 
 `@addon.on_call` / `addon.on_call(handler)`
 : `handler(call)` runs for every incoming call (ringing). Without one, calls are declined.
@@ -70,6 +71,10 @@ session is ever stored in it.
 
 `addon.identity`
 : Once connected: `.name`, `.address` (`handle+name@host`) and `.owner` (`.name`, `.address`).
+
+`addon.online` / `@addon.on_status`
+: `online` is True while it's connected and signed in. `handler(online)` runs with True when it
+  signs in and False when the connection drops (it then reconnects by itself).
 
 `await addon.call(address) -> Call`
 : Calls its owner (`handle@host`) or a connection its owner allowed. Returns once the server

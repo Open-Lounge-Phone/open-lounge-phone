@@ -87,7 +87,9 @@ asyncio.run(addon.run())   # prints the link code the first time, then takes cal
 
 - `Addon(server_url, key_path, *, rate=48000)`: the key file is made with mode 600; the link is
   kept next to it (`<key_path>.json`). `rate` is the PCM rate both ways.
-- `await addon.link(on_code=print)`: shows the code, waits for its owner, saves the link.
+- `await addon.link(on_code=print)`: shows the code (`on_code(code, expires_at)` also gets when
+  it stops working), waits for its owner, saves the link.
+- `addon.online` and `@addon.on_status`: whether it's connected now, and a handler for changes.
 - `@addon.on_call`: gets each ringing `Call`. `await addon.run()` (or `start()`/`stop()`) stays
   connected; it raises `AddonRemoved` when its owner removes it.
 - `await addon.call(address) -> Call`: calls its owner or an allowed connection (`call.state` is

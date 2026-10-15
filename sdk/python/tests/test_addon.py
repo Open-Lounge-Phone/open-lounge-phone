@@ -108,6 +108,36 @@ class AddonTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(Addon("https://elsewhere.example", self.key).device_id)
         self.assertTrue(addon.linked)
 
+    async def test_tells_the_code_with_its_expiry_and_reports_online_status(self) -> None:
+        addon = Addon(self.url, self.key)
+        got: list[tuple[str, int | None]] = []
+
+        def show(code: str, expires_at: int | None) -> None:
+            got.append((code, expires_at))
+
+        link = asyncio.ensure_future(addon.link(on_code=show))
+        await self.fake.next("pair.begin")
+        await asyncio.sleep(0.05)
+        self.assertEqual(got, [("123456", 1)])  # the fake server's expiresAt
+        await self.fake.send({"t": "pair.done", "deviceId": self.fake.device_id, "householdId": "hh"})
+        await link
+
+        status: list[bool] = []
+        addon.on_status(status.append)
+        self.assertFalse(addon.online)
+        await addon.start(timeout=5)
+        self.assertTrue(addon.online)
+        self.assertEqual(status, [True])
+        # The server drops the connection: offline (then it reconnects by itself).
+        assert self.fake.ws is not None
+        await self.fake.ws.close()
+        for _ in range(100):
+            if status[-1] is False:
+                break
+            await asyncio.sleep(0.02)
+        self.assertEqual(status[:2], [True, False])
+        await addon.stop()
+
     async def test_answers_the_challenge_and_takes_a_call(self) -> None:
         addon = await self.linked()
         calls: list[Call] = []
