@@ -9,6 +9,7 @@ import {
   type SessionSummary,
   type User,
 } from "./api.ts";
+import { CallWaitingToggle } from "./CallWaiting.tsx";
 import { AvailabilityToggle } from "./GrownUps.tsx";
 import { YourHouseholds } from "./Households.tsx";
 import { Credit, FairUseCard, FundingCard } from "./HubCards.tsx";
@@ -87,6 +88,7 @@ export function Account({
       </button>
       <h2>{me ? me.name : (account?.name ?? "Account")}</h2>
       {me && <AvailabilityToggle available={available} onChange={onAvailable} />}
+      {me && <CallWaitingToggle api={api} />}
       {role && <p className="muted">{role}</p>}
 
       {account && <AddressCard api={api} account={account} onChanged={onAccountChanged} />}

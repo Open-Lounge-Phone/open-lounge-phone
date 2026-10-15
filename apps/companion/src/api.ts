@@ -1040,6 +1040,21 @@ export function createApi(opts: ApiOptions) {
       (await send("GET", `/recordings/${enc(id)}/audio`)).blob(),
     deleteRecording: (id: string) => request<void>("DELETE", `/recordings/${enc(id)}`),
 
+    // Call waiting: yours, or a household phone's (guardians)
+    callWaiting: async (deviceId?: string) =>
+      (
+        await request<{ on: boolean }>(
+          "GET",
+          deviceId ? `/devices/${enc(deviceId)}/call-waiting` : "/call-waiting",
+        )
+      ).on,
+    setCallWaiting: (on: boolean, deviceId?: string) =>
+      request<{ on: boolean }>(
+        "PUT",
+        deviceId ? `/devices/${enc(deviceId)}/call-waiting` : "/call-waiting",
+        { on },
+      ),
+
     // Missed calls (all your spaces) and missed call backs
     missed: async () => (await request<{ missed: MissedCall[] }>("GET", "/missed")).missed,
     clearMissed: () => request<{ cleared: number }>("POST", "/missed/clear"),

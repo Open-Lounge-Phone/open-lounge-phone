@@ -81,6 +81,21 @@ describe("incoming", () => {
     expect(declined).toEqual(["c2"]);
   });
 
+  it("call waiting: offered while talking, never while ringing or calling", () => {
+    const talking = run([ringing("c1"), { type: "answer" }, state("c1", "active")]).view;
+    const waiting: CallEvent = {
+      type: "server",
+      now: 1000,
+      msg: { t: "call.ringing", callId: "c2", from: { label: "Ana" }, waiting: true },
+    };
+    expect(callStep(talking, waiting)).toEqual({
+      view: talking,
+      waiting: { callId: "c2", label: "Ana" },
+    });
+    // Still ringing ourselves: a second call is declined, as before.
+    expect(callStep(run([ringing("c1")]).view, waiting).decline).toBe("c2");
+  });
+
   it("does not decline a duplicate ringing for the same call", () => {
     expect(run([ringing("c1"), ringing("c1")]).declined).toEqual([]);
   });

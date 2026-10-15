@@ -104,6 +104,8 @@ export interface Snapshot {
   reconnecting?: boolean;
   /** The current call's incoming audio is poor (packet loss or jitter). */
   poor?: boolean;
+  /** Call waiting: another call ringing softly while you're in this one. */
+  waiting?: { callId: string; label: string; addon?: boolean };
   error?: string;
   /** Your latest Lounge takeover / session event. */
   lounge?: LoungeClaim;
@@ -375,6 +377,44 @@ export class Connection {
     this.hangup();
   }
 
+  /**
+   * Call waiting: take the waiting call. The server puts the call you're in on hold first (the
+   * other person hears the hold tone); you're then in the new call, and Resume brings the first
+   * one back when it's over.
+   */
+  async answerWaiting(): Promise<void> {
+    const w = this.snap.waiting;
+    const call = this.snap.call;
+    if (!w || call.phase !== "active" || call.hold || this.snap.held) return;
+    if (!(await this.acquireMic())) return;
+    const audio = this.calls.get(call.callId);
+    for (const t of audio?.mic.getAudioTracks() ?? []) t.enabled = false;
+    const { hold: _h, ...rest } = call;
+    this.tones.play("none");
+    this.set({
+      held: { callId: call.callId, label: call.label, view: rest },
+      call: {
+        phase: "connecting",
+        callId: w.callId,
+        label: w.label,
+        offerer: false,
+        ...(w.addon ? { addon: true } : {}),
+      },
+      waiting: undefined,
+      remote: undefined,
+    });
+    this.socket.send({ t: "call.answer", callId: w.callId });
+  }
+
+  /** Call waiting: decline it (the caller may leave a message). */
+  declineWaiting(): void {
+    const w = this.snap.waiting;
+    if (!w) return;
+    this.socket.send({ t: "call.hangup", callId: w.callId });
+    this.set({ waiting: undefined });
+    this.tones.play(toneFor(this.snap.call));
+  }
+
   hangup(): void {
     const call = this.snap.call;
     if ("callId" in call && call.callId)
@@ -601,8 +641,28 @@ export class Connection {
   private apply(event: CallEvent): void {
     const before = this.snap.call;
     const beforeId = "callId" in before ? before.callId : undefined;
-    const { view, decline, merged, transferred } = callStep(before, event);
+    const { view: next, decline, merged, transferred, waiting } = callStep(before, event);
     if (decline) this.socket.send({ t: "call.hangup", callId: decline });
+    if (waiting && !this.snap.waiting) {
+      this.set({ waiting });
+      this.tones.play("waiting");
+    } else if (waiting) {
+      // One call waits at a time: a third is busy.
+      this.socket.send({ t: "call.hangup", callId: waiting.callId });
+    }
+    let view = next;
+    // The call you were in ended while another waited: it rings like any call now.
+    const w = this.snap.waiting;
+    if (w && (view.phase === "ended" || view.phase === "idle") && beforeId !== w.callId) {
+      if (beforeId) this.closeCall(beforeId);
+      view = {
+        phase: "incoming",
+        callId: w.callId,
+        label: w.label,
+        ...(w.addon ? { addon: true } : {}),
+      };
+      this.set({ waiting: undefined });
+    }
     if (view === before) return;
     // You held this call: it moves aside, and you may call someone else.
     if (view.phase === "active" && view.hold === "you") {
@@ -901,6 +961,14 @@ export class Connection {
       case "call.state":
         if (msg.t === "call.state" && msg.callId === this.snap.held?.callId) {
           this.heldState(msg);
+          return;
+        }
+        // The waiting call ended (the caller gave up, or it went to voicemail).
+        if (msg.t === "call.state" && msg.callId === this.snap.waiting?.callId) {
+          if (msg.state === "ended") {
+            this.set({ waiting: undefined });
+            this.tones.play(toneFor(this.snap.call));
+          }
           return;
         }
         this.apply({ type: "server", msg, now: Date.now() });

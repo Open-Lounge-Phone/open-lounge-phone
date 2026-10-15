@@ -236,6 +236,21 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
         <div className={`overlay overlay-${call.phase}`} role="dialog" aria-live="polite">
           <div className="overlay-inner">
             {heldBar}
+            {snap.waiting && call.phase === "active" && (
+              <div className="held-bar waiting-bar" role="alert">
+                <span>
+                  <strong>{snap.waiting.label}</strong> is calling
+                </span>
+                {!call.hold && !held && (
+                  <button type="button" onClick={() => void conn.answerWaiting()}>
+                    Answer &amp; hold this call
+                  </button>
+                )}
+                <button type="button" className="link" onClick={() => conn.declineWaiting()}>
+                  Decline
+                </button>
+              </div>
+            )}
             <div className="avatar" aria-hidden>
               {call.label.slice(0, 1).toUpperCase()}
             </div>

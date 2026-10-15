@@ -98,6 +98,8 @@ export interface CallStep {
   view: CallView;
   /** A second incoming call while busy should be declined with this callId. */
   decline?: string;
+  /** Call waiting: a second call rings softly while you're in this one (the server offered it). */
+  waiting?: { callId: string; label: string; addon?: boolean };
   /** The call became part of this room (3-way): keep its audio until the room's is up. */
   merged?: string;
   /** The call was transferred: it goes on as `view`'s new call; drop the old audio. */
@@ -174,6 +176,17 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
       };
     }
     if (callIdOf(view) === msg.callId) return { view };
+    // Call waiting: offered only while you're talking in a call; anything else is busy.
+    if (msg.waiting && view.phase === "active") {
+      return {
+        view,
+        waiting: {
+          callId: msg.callId,
+          label: msg.from.label,
+          ...(msg.from.kind === "addon" ? { addon: true } : {}),
+        },
+      };
+    }
     return { view, decline: msg.callId };
   }
 

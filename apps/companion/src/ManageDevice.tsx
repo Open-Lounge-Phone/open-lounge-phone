@@ -9,6 +9,7 @@ import type {
   RoomSummary,
   User,
 } from "./api.ts";
+import { CallWaitingToggle } from "./CallWaiting.tsx";
 import { hostBadge } from "./connectionGroups.ts";
 import { addressProblem, requiredProblem } from "./fields.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
@@ -140,6 +141,8 @@ export function ManageDevice({
         <>
           <h3>Voicemail</h3>
           <GreetingEditor api={api} deviceId={device.id} />
+          <h3>Calls</h3>
+          <CallWaitingToggle api={api} deviceId={device.id} />
         </>
       )}
 
