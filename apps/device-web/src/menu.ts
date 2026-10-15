@@ -89,7 +89,8 @@ export interface MenuContext {
   fingerprint?: readonly string[];
   /** In a call or a room: what MENU offers there (see `callActions`), each on its digit
    * (`callActionDigit`: 1 hold / resume / merge, 2 transfer, 3 mute), plus 9 volume. */
-  call?: { actions: readonly CallAction[] };
+  /** In a call or a room (`room`): the call screen's actions. */
+  call?: { actions: readonly CallAction[]; room?: boolean };
   /** A team/org space with extensions: 6 → Dial extension. */
   extensions?: boolean;
 }
@@ -314,7 +315,7 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
     case "call":
       return {
         ...base,
-        title: ctx.call?.actions.some((a) => a === "mute" || a === "unmute") ? "ROOM" : "CALL",
+        title: ctx.call?.room ? "ROOM" : "CALL",
         labels: {
           ...Object.fromEntries(
             (ctx.call?.actions ?? []).map((a) => [callActionDigit(a), CALL_LABEL[a]]),

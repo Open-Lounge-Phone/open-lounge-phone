@@ -1128,7 +1128,9 @@ function menuContext() {
     fingerprint,
     ...(lounge.session ? { lounge: { openToChat: lounge.session.openToChat } } : {}),
     ...(config?.greeting && variant !== "lounge" ? { greeting: config.greeting } : {}),
-    ...(callActions(deviceState).length ? { call: { actions: callActions(deviceState) } } : {}),
+    ...(callActions(deviceState).length
+      ? { call: { actions: callActions(deviceState), room: deviceState.kind === "inroom" } }
+      : {}),
     ...(config?.extensions ? { extensions: true } : {}),
   };
 }

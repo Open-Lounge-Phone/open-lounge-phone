@@ -1441,3 +1441,19 @@ dl.phone-facts {
   justify-content: space-between;
   gap: 0.75rem;
 }
+
+/* On the call screen (white text on the accent): light buttons that stay readable. */
+.overlay .held-bar button {
+  background: rgb(255 255 255 / 18%);
+  border-color: rgb(255 255 255 / 35%);
+  color: #fff;
+}
+.overlay .held-bar button.link {
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+.overlay .waiting-bar {
+  justify-content: center;
+  background: rgb(255 255 255 / 14%);
+}

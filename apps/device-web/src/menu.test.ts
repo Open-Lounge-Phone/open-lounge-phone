@@ -257,10 +257,13 @@ describe("About", () => {
 });
 
 describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
-  const ctx = (actions: ("hold" | "resume" | "merge" | "transfer" | "mute" | "unmute")[]) => ({
+  const ctx = (
+    actions: ("hold" | "resume" | "merge" | "transfer" | "mute" | "unmute")[],
+    room = false,
+  ) => ({
     missedCount: 0,
     fw: "t",
-    call: { actions },
+    call: { actions, room },
   });
 
   it("MENU during a call opens the call screen; 1 adds a caller", () => {
@@ -306,7 +309,13 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
     const c = ctx(["hold", "transfer", "mute"]);
     const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
     const view = menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, c);
+    expect(view.title).toBe("CALL");
     expect(view.labels).toEqual({ 1: "Add caller", 2: "Transfer", 3: "Mute", 9: "Volume" });
+    // On hold by them, only mute is offered: still a call, not a room.
+    const held = ctx(["mute"]);
+    expect(
+      menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, held).title,
+    ).toBe("CALL");
     expect(
       menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 3, now: 1 }, c),
     ).toMatchObject({ state: undefined, action: { type: "call", action: "mute" }, say: "Muted." });
@@ -322,7 +331,7 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
   });
 
   it("in a room: MENU 3 mutes; BACK closes", () => {
-    const c = ctx(["mute"]);
+    const c = ctx(["mute"], true);
     const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
     expect(menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, c).title).toBe(
       "ROOM",
