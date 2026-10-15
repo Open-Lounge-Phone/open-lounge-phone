@@ -64,6 +64,7 @@ class Addon:
         *,
         rate: int = 48_000,
         fw: str = p.FW,
+        about: dict[str, Any] | None = None,
     ) -> None:
         self.server_url = server_url
         self.key = AddonKey.load_or_create(key_path)
@@ -77,6 +78,10 @@ class Addon:
         self._share_handler: ShareRequestHandler | None = None
         #: What it offers for sharing (None: never said, so nothing is sent).
         self._shares: list[dict[str, str]] | None = None
+        #: What it says it does (`addon.about`; None: never said).
+        self._about: p.Message | None = p.addon_about(**about) if about else None
+        #: What the server it's connected to handles (`config.server.features`).
+        self.server_features: set[str] = set()
         self._on_status: Callable[[bool], Any] | None = None
         self._ws: Any = None
         self._calls: dict[str, Call] = {}
@@ -166,6 +171,8 @@ class Addon:
         answers (`call.state`): `call.state` is then `ringing`, or `ended` with a `reason` if it
         was refused (`unavailable` when they may not be called)."""
         msg = p.call_address(address, share)
+        if self._about is not None and not self._about.get("calls"):
+            raise AddonError("it said it doesn't call people: set_about(..., calls=True)")
         await self._ready.wait()
         async with self._place_lock:
             label = next((s["label"] for s in self._shares or [] if s["id"] == share), share or "")
@@ -184,6 +191,28 @@ class Addon:
             finally:
                 self._placing = None
             return call
+
+    # --- what it does (docs/add-ons.md, "Saying what it does") ------------------------------
+
+    def set_about(self, **fields: Any) -> None:
+        """Says what it does, for its page in the app: `hears` ("nothing", "live" or "keeps"),
+        and optionally `summary`, `transcribes`, `answers`, `calls`, `shares`, `keys`, `lines`
+        (see `protocol.addon_about`). The server enforces what it says it does and doesn't do.
+        Sent now if connected, and again after every reconnect."""
+        if "shares" not in fields:
+            # Offering shares (or making them on request) means it does.
+            fields["shares"] = bool(self._shares) or self._share_handler is not None
+        self._about = p.addon_about(**fields)
+        if self._ready.is_set() and self._ws is not None:
+            self._spawn(self._send_about())
+
+    async def _send_about(self) -> None:
+        if self._about is None or "addon-about" not in self.server_features:
+            return  # a server that doesn't take it: it keeps the rules it always had
+        try:
+            await self._send(self._about)
+        except ConnectionError:
+            pass
 
     # --- sharing (docs/add-ons.md, Sharing) -------------------------------------------------
 
@@ -331,10 +360,12 @@ class Addon:
             await self._send(p.auth_proof(self.key.sign(str(msg["nonce"]))))
         elif t == "config":
             self.identity = p.identity_of(msg)
+            self.server_features = p.server_features(msg)
             first = not self._ready.is_set()
             self._ready.set()
             if first:
-                # A new connection: say again what it offers for sharing.
+                # A new connection: say again what it does and what it offers for sharing.
+                await self._send_about()
                 await self._send_shares()
                 await self._status(True)
         elif t == "addon.share.request":

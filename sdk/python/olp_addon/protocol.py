@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 PROTOCOL_VERSION = 1
-FW = "olp-addon/0.2.0"
+FW = "olp-addon/0.3.0"
 
 Message = dict[str, Any]
 
@@ -116,6 +116,55 @@ def normalize_shares(shares: list[Any]) -> list[dict[str, str]]:
     if len(out) > MAX_SHARES:
         raise ValueError(f"an add-on offers at most {MAX_SHARES} shares")
     return out
+
+
+#: What it does with what people say to it (`addon.about.hears`).
+HEARS = ("nothing", "live", "keeps")
+
+
+def addon_about(
+    *,
+    hears: str,
+    summary: str | None = None,
+    transcribes: bool = False,
+    answers: bool = True,
+    calls: bool = False,
+    shares: bool = False,
+    keys: bool = False,
+    lines: int = 1,
+) -> Message:
+    """What the add-on does, for its page in the app (`addon.about`). The server enforces
+    `answers`, `calls`, `shares`, `keys` and `lines` (calls at once, capped by the server);
+    `summary`, `hears` and `transcribes` are shown as the add-on's own words.
+
+    `hears`: "nothing" (it only plays sound, one-way), "live" (it listens during the call and
+    keeps nothing), or "keeps" (it keeps what it hears: recordings, transcripts or notes)."""
+    if hears not in HEARS:
+        raise ValueError(f"hears is one of {', '.join(HEARS)}: {hears!r}")
+    if not isinstance(lines, int) or not 1 <= lines <= 100:
+        raise ValueError(f"lines is 1-100: {lines!r}")
+    msg: Message = {
+        "t": "addon.about",
+        "hears": hears,
+        "transcribes": bool(transcribes),
+        "answers": bool(answers),
+        "calls": bool(calls),
+        "shares": bool(shares),
+        "keys": bool(keys),
+        "lines": lines,
+    }
+    if summary is not None:
+        text = " ".join(str(summary).split())
+        if not 1 <= len(text) <= 140 or not text.isprintable():
+            raise ValueError("summary is 1-140 printable characters")
+        msg["summary"] = text
+    return msg
+
+
+def server_features(config: Message) -> set[str]:
+    """What the server says it handles (`config.server.features`)."""
+    server = config.get("server") or {}
+    return {str(f) for f in server.get("features") or []}
 
 
 def rtc_sdp(call_id: str, kind: str, sdp: str) -> Message:

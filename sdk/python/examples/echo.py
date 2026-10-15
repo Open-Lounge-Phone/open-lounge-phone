@@ -93,6 +93,15 @@ async def main() -> None:
         await call.answer()
         await echo(call, args.rate)
 
+    # What it does, for its page in the app (the server holds it to what it says).
+    addon.set_about(
+        summary="Plays back what you say, half a second later.",
+        hears="live",
+        calls=bool(args.call),
+        shares=True,
+        keys=True,
+    )
+
     if not addon.linked:
         await addon.link()
         print("linked", flush=True)

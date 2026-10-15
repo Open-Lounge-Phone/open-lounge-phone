@@ -11,7 +11,7 @@ from pathlib import Path
 import websockets
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from olp_addon import Addon, AddonRemoved, Call, Share, ShareRefused, ShareRequest
+from olp_addon import Addon, AddonError, AddonRemoved, Call, Share, ShareRefused, ShareRequest
 from olp_addon.keys import b64url, from_b64url
 
 
@@ -25,6 +25,8 @@ class FakeServer:
         self.device_id = "ao_test1"
         self.verified = asyncio.Event()
         self.path: list[str] = []
+        #: What it says it handles (`config.server.features`).
+        self.features = ["addons", "addon-shares", "addon-about"]
 
     async def handler(self, ws) -> None:
         self.ws = ws
@@ -48,6 +50,7 @@ class FakeServer:
                             "t": "config",
                             "buttons": [],
                             "quiet": False,
+                            "server": {"software": "fake", "features": self.features},
                             "addon": {
                                 "name": "seat",
                                 "address": "jo+seat@x.example",
@@ -210,6 +213,41 @@ class AddonTest(unittest.IsolatedAsyncioTestCase):
             addon.set_shares([{"id": "Book Club", "label": "Book club"}])
         with self.assertRaises(ValueError):
             addon.set_shares([{"id": "x", "label": ""}])
+        await addon.stop()
+
+    async def test_says_what_it_does_first_and_only_to_a_server_that_takes_it(self) -> None:
+        addon = await self.linked()
+        addon.set_shares([{"id": "listen", "label": "Listen"}])
+        addon.set_about(hears="nothing", summary="Plays  the station.", lines=5)
+        await addon.start(timeout=5)
+        about = await self.fake.next("addon.about")
+        self.assertEqual(
+            about,
+            {
+                "t": "addon.about",
+                "hears": "nothing",
+                "summary": "Plays the station.",
+                "transcribes": False,
+                "answers": True,
+                "calls": False,
+                "shares": True,  # it offers shares, so it says so
+                "keys": False,
+                "lines": 5,
+            },
+        )
+        await self.fake.next("addon.shares")  # after what it does
+        # It said it doesn't call people: the bridge says so before the server would.
+        with self.assertRaises(AddonError):
+            await addon.call("jo@x.example")
+        with self.assertRaises(ValueError):
+            addon.set_about(hears="everything")
+        # A server that doesn't take it: not sent (its old rules apply there).
+        self.fake.features = ["addons", "addon-shares"]
+        assert self.fake.ws is not None
+        await self.fake.ws.close()
+        await self.fake.next("hello")
+        await self.fake.next("addon.shares")
+        self.assertTrue(all(t != "addon.about" for t, _ in list(self.fake.inbox._queue)))  # type: ignore[attr-defined]
         await addon.stop()
 
     async def test_without_shares_it_never_says_any(self) -> None:

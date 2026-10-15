@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openloungephone-addon"
-version = "0.2.0"
+version = "0.3.0"
 description = "The add-on bridge for Open Lounge Phone: link a service to someone's account and take calls as PCM audio."
 readme = "README.md"
 license = "Apache-2.0"
