@@ -29,3 +29,19 @@ typedef enum {
  */
 int ice_pick(const cJSON *ice_servers, ice_mode_t mode, bool prefer_tls, ice_server_t *out, int max);
 const char *ice_mode_name(ice_mode_t m);
+
+/** The most remote candidates esp_peer keeps (media.c `max_candidates`): the rest are dropped. */
+#define ICE_REMOTE_MAX 8
+
+/**
+ * How useful another side's candidate (`candidate:… 1 udp … 203.0.113.5 52834 typ srflx …`) is to
+ * this phone, which speaks IPv4 over UDP only: 3 host, 2 server- or peer-reflexive, 1 relay,
+ * 0 a host hidden behind an mDNS name (`….local`, which the phone can't look up); -1 unusable
+ * (IPv6, TCP, not component 1, or not a candidate at all).
+ */
+int ice_cand_rank(const char *cand);
+/**
+ * The best `max` of `n` candidates: unusable ones never, then by rank, in their order within a
+ * rank. Writes their indexes (in `cands`) to `out`, best first; returns how many.
+ */
+int ice_cand_pick(const char *const *cands, int n, int *out, int max);

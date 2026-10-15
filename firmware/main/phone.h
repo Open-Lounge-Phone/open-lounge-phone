@@ -54,6 +54,8 @@ typedef struct {
   bool addon;
   // offhook: the last call's audio connection dropped and couldn't be restored (CONNECTION LOST).
   bool lost;
+  // incoming: BACK stopped the ringer on this phone (lifting still answers).
+  bool silenced;
 } phone_state_t;
 
 /** What MENU offers in a call or a room (core `CallAction`). */
@@ -71,6 +73,18 @@ void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_f
 void phone_extension(phone_state_t *s, const char *number, phone_emit_fn emit);
 /** The phone ends its call itself (e.g. the media failed): hang up, stay off the hook. */
 void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit);
+/** BACK while ringing (core input `silence`): the ringer stops here; the call goes on ringing
+ * elsewhere and lifting still answers. */
+void phone_silence(phone_state_t *s);
+
+/** The last few calls that ended here (core `repeatedEnd`). */
+typedef struct {
+  char ids[4][65];
+} phone_ends_t;
+/** A `call.state ended` for a call that already ended here (a server repeating itself): true =
+ * drop it, so it can't end the next call. Otherwise remembers an ended call's id. */
+bool phone_repeated_end(phone_ends_t *t, const cJSON *msg);
+
 /** The call's audio connection dropped and didn't come back (core input `lost`): hang up with
  * `lost`, so the other side is told why, and show CONNECTION LOST. */
 void phone_lost(phone_state_t *s, phone_emit_fn emit);

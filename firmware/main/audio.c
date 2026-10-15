@@ -1,5 +1,6 @@
 #include "audio.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -24,7 +25,7 @@ static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static int16_t s_ring[RING];
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
-static bool s_offhook, s_call, s_held, s_muted;
+static bool s_offhook, s_call, s_held, s_muted, s_listen;
 static int16_t *s_rec_buf;  // leaving a voicemail: the mic goes here (no call needed)
 static const int16_t *s_play_buf;  // playing a voicemail to the earpiece
 static size_t s_play_len, s_play_pos;
@@ -35,12 +36,13 @@ static int s_volume = VOLUME_DEFAULT;
 static bool s_volume_dirty = true;
 static int s_loop_ms;
 static tone_t s_forced_tone;  // bring-up: `audio tone` (plays even on the hook)
-static audio_stats_t s_stats = {.mic_dbfs = -100, .rx_dbfs = -100, .rx_tone_dbfs = -100,
-                                .watch_hz = 440};
+static audio_stats_t s_stats = {.mic_dbfs = -100, .mic_peak_dbfs = -100, .rx_dbfs = -100,
+                                .rx_tone_dbfs = -100, .watch_hz = 440};
 
 // Task-only state.
 static tone_gen_t s_tone;
 static dsp_meter_t s_rx_meter, s_mic_meter;  // one-second windows
+static int s_mic_peak;                          // the loudest mic sample in the current window
 
 const char *audio_device_name(void) { return s_dev ? s_dev->name : "none"; }
 
@@ -118,13 +120,22 @@ static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   float hz = s_stats.watch_hz;
   taskEXIT_CRITICAL(&s_lock);
   if (m->hz != hz) dsp_meter_init(m, hz, DSP_RATE);
+  if (!rx) {
+    for (size_t i = 0; i < n; i++) {
+      int a = pcm[i] < 0 ? -(int)pcm[i] : pcm[i];
+      if (a > s_mic_peak) s_mic_peak = a;
+    }
+  }
   if (!dsp_meter_feed(m, pcm, n)) return;
+  float peak = s_mic_peak > 0 ? 20.0f * log10f((float)s_mic_peak / 32768.0f) : -100.0f;
+  if (!rx) s_mic_peak = 0;
   taskENTER_CRITICAL(&s_lock);
   if (rx) {
     s_stats.rx_dbfs = m->rms_dbfs;
     s_stats.rx_tone_dbfs = m->tone_dbfs;
   } else {
     s_stats.mic_dbfs = m->rms_dbfs;
+    s_stats.mic_peak_dbfs = peak;
   }
   taskEXIT_CRITICAL(&s_lock);
 }
@@ -180,6 +191,13 @@ void audio_mute(bool muted) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+void audio_listen(bool on) {
+  taskENTER_CRITICAL(&s_lock);
+  if (on && !s_listen) s_stats.mic_dbfs = s_stats.mic_peak_dbfs = -100;  // a fresh reading
+  s_listen = on;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
 static void task(void *arg) {
   int16_t mic[DSP_FRAME], out[DSP_FRAME];
   uint8_t ulaw[DSP_FRAME];
@@ -190,7 +208,7 @@ static void task(void *arg) {
   for (;;) {
     taskENTER_CRITICAL(&s_lock);
     bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
-    bool muted = s_muted;
+    bool muted = s_muted, listen = s_listen;
     bool rec = s_rec_buf != NULL;
     bool play = s_play_buf != NULL;
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
@@ -202,7 +220,7 @@ static void task(void *arg) {
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
     // Muted (MENU 3): the codec's mic is switched off too, not just left out.
-    bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec;
+    bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec || listen;
     if (mic_want != mic_now) {
       s_dev->mic(mic_want);
       mic_now = mic_want;

@@ -39,6 +39,9 @@ size_t audio_played(void);
 void audio_hold(bool held);
 /** MENU 3 in a call: the mic is muted (silence is sent); the other side is still heard. */
 void audio_mute(bool muted);
+/** The phone check (MENU 7) with the handset up: the mic is on only to measure its level
+ * (audio_stats mic_dbfs / mic_peak_dbfs); nothing is sent or kept. */
+void audio_listen(bool on);
 /** A received mu-law frame (any length) from the call. Safe from any task. */
 void audio_rx_ulaw(const uint8_t *data, size_t n);
 
@@ -55,6 +58,7 @@ void audio_loopback(int delay_ms);
 typedef struct {
   uint32_t tx_frames, rx_frames, rx_bytes, underruns, drops;
   float mic_dbfs;       // last second of mic audio
+  float mic_peak_dbfs;  // …its loudest sample
   float rx_dbfs;        // last second of received (decoded) audio
   float rx_tone_dbfs;   // received audio at the watched frequency
   float watch_hz;

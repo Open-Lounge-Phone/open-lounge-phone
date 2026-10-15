@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 typedef enum { K_NONE, K_STUN, K_TURN_UDP, K_TURN_TCP, K_TURNS } kind_t;
 
@@ -92,4 +93,43 @@ int ice_pick(const cJSON *ice_servers, ice_mode_t mode, bool prefer_tls, ice_ser
 const char *ice_mode_name(ice_mode_t m) {
   static const char *names[] = {"all", "udp", "tcp", "tls"};
   return names[m];
+}
+
+int ice_cand_rank(const char *cand) {
+  if (!cand) return -1;
+  if (!strncmp(cand, "a=", 2)) cand += 2;
+  if (strncmp(cand, "candidate:", 10)) return -1;
+  // candidate:<foundation> <component> <transport> <priority> <address> <port> typ <type> ...
+  char tok[8][64];
+  int n = 0;
+  const char *p = cand;
+  while (*p && n < 8) {
+    while (*p == ' ') p++;
+    if (!*p) break;
+    size_t len = strcspn(p, " ");
+    snprintf(tok[n], sizeof tok[n], "%.*s", (int)(len < 63 ? len : 63), p);
+    n++;
+    p += len;
+  }
+  if (n < 8 || strcmp(tok[1], "1") || strcmp(tok[6], "typ")) return -1;
+  if (strcasecmp(tok[2], "udp")) return -1;   // TCP (and TLS) candidates: the phone can't use them
+  if (strchr(tok[4], ':')) return -1;          // IPv6: the phone is IPv4 only
+  const char *type = tok[7];
+  if (!strcmp(type, "host")) {
+    size_t a = strlen(tok[4]);
+    return a > 6 && !strcasecmp(tok[4] + a - 6, ".local") ? 0 : 3;
+  }
+  if (!strcmp(type, "srflx") || !strcmp(type, "prflx")) return 2;
+  if (!strcmp(type, "relay")) return 1;
+  return -1;
+}
+
+int ice_cand_pick(const char *const *cands, int n, int *out, int max) {
+  int k = 0;
+  for (int rank = 3; rank >= 0 && k < max; rank--) {
+    for (int i = 0; i < n && k < max; i++) {
+      if (ice_cand_rank(cands[i]) == rank) out[k++] = i;
+    }
+  }
+  return k;
 }

@@ -5,6 +5,10 @@
 #include <string.h>
 
 #define MISSED_CYCLE_MS 3000
+// A how-to hint (BACK: SILENCE, MENU 3: MUTE) takes the second line every third turn of this long.
+#define HINT_CYCLE_MS 3000
+
+static bool hint_now(int64_t now) { return (now / HINT_CYCLE_MS) % 3 == 2; }
 
 static void clip(char *dst, const char *src) {
   int i = 0;
@@ -105,7 +109,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
         return set2(out, label, strcmp(label, name_only) ? "LIFT TO ANSWER" : "ADD-ON CALLING");
       }
       int n = with_name(out, "", s->from, "CALLING");
-      if (n == 1) clip(out[1], "LIFT TO ANSWER");
+      // In turn on the second line: BACK silences the ringer here (until it's silenced).
+      if (n == 1) clip(out[1], !s->silenced && hint_now(in->now_ms) ? "BACK: SILENCE" : "LIFT TO ANSWER");
       return 2;
     }
     case PH_INCALL:
@@ -121,6 +126,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
         const char *what = s->muted ? (s->recorded ? "REC MUTED" : "MUTED")
                                     : (s->recorded ? "REC" : "IN CALL");
         snprintf(buf, sizeof buf, "%s %s", what, t);
+        // In turn with the name: how to mute or unmute (MENU 3, docs/phone-ux.md).
+        if (hint_now(in->now_ms)) return set2(out, buf, s->muted ? "MENU 3: UNMUTE" : "MENU 3: MUTE");
         return *name ? set2(out, buf, name) : set1(out, buf);
       }
     case PH_INROOM:

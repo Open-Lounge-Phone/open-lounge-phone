@@ -12,6 +12,11 @@ static cJSON *msg(const char *t) {
   return m;
 }
 
+static const char *str(const cJSON *o, const char *key) {
+  const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
+  return cJSON_IsString(v) ? v->valuestring : NULL;
+}
+
 static void emit_hook(phone_emit_fn emit, bool up) {
   cJSON *m = msg("hook");
   cJSON_AddStringToObject(m, "state", up ? "up" : "down");
@@ -86,6 +91,21 @@ void phone_hangup(phone_state_t *s, const char *reason, phone_emit_fn emit) {
     to_offhook(s, reason);
     CPY(s->held, held);
   }
+}
+
+void phone_silence(phone_state_t *s) {
+  if (s->kind == PH_INCOMING) s->silenced = true;
+}
+
+bool phone_repeated_end(phone_ends_t *t, const cJSON *m) {
+  const char *type = str(m, "t"), *state = str(m, "state"), *id = str(m, "callId");
+  if (!type || strcmp(type, "call.state") || !state || strcmp(state, "ended") || !id || !id[0])
+    return false;
+  for (int i = 0; i < 4; i++)
+    if (!strcmp(t->ids[i], id)) return true;
+  memmove(t->ids[1], t->ids[0], sizeof t->ids[0] * 3);
+  CPY(t->ids[0], id);
+  return false;
 }
 
 void phone_lost(phone_state_t *s, phone_emit_fn emit) {
@@ -163,11 +183,6 @@ void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_f
   cJSON *to = cJSON_AddObjectToObject(m, "to");
   cJSON_AddStringToObject(to, "extension", number);
   emit(m);
-}
-
-static const char *str(const cJSON *o, const char *key) {
-  const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
-  return cJSON_IsString(v) ? v->valuestring : NULL;
 }
 
 /** Room end reason → how it sounds on the handset (roomEndToCall). */

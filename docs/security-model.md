@@ -34,7 +34,9 @@ Nothing depends on the project. Every key belongs to whoever runs that part:
 **The board has no microphone of its own.** The phone's only microphone is the one in the
 handset, on the 3.5 mm jack (no base microphone, no speakerphone). So the hardware guarantee is
 simple: **unplug the handset and there is no microphone connected at all.** With the handset
-plugged in, the software mutes its mic while it is hung up and captures audio only in a call.
+plugged in, the software mutes its mic while it is hung up and captures audio only in a call,
+while you leave a message, or while you check the mic's level yourself (MENU 7 with the handset
+up; nothing is sent or kept).
 The minimal board (`hardware/DESIGN.md`) is deliberately simple: an ESP32-S3, a codec, keys, a
 hook switch, a display module, a piezo ringer and one status LED. That means:
 

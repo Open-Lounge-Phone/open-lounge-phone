@@ -38,6 +38,7 @@ typedef struct {
 static vmplay_send_fn s_send;
 static vp_stage_t s_stage = VP_IDLE;
 static bool s_clear;
+static bool s_loop;  // a notice's recording: over and over until stopped
 static item_t s_items[MAX_ITEMS];
 static int s_n, s_cur;
 static int64_t s_at;
@@ -51,6 +52,7 @@ void vmplay_init(vmplay_send_fn send) { s_send = send; }
 bool vmplay_active(void) { return s_stage != VP_IDLE; }
 
 static void note(const char *a, const char *b, int64_t now_ms) {
+  s_loop = false;
   snprintf(s_note[0], 25, "%s", a);
   snprintf(s_note[1], 25, "%s", b ? b : "");
   s_stage = VP_NOTE;
@@ -150,6 +152,13 @@ static void play_current(int64_t now_ms) {
   }
 }
 
+void vmplay_loop_url(const char *url, const char *title, int64_t now_ms) {
+  vmplay_play_url(url, title, now_ms);
+  s_loop = s_stage != VP_IDLE && s_stage != VP_NOTE;
+}
+
+bool vmplay_looping(void) { return s_loop && s_stage != VP_IDLE; }
+
 void vmplay_play_url(const char *url, const char *title, int64_t now_ms) {
   if (s_downloading || !url) return;
   vmplay_stop();
@@ -240,6 +249,7 @@ bool vmplay_key(int key, int64_t now_ms) {
 }
 
 void vmplay_stop(void) {
+  s_loop = false;
   if (s_downloading) {
     // The download task still writes into the buffer: vmplay_loaded drops it.
     s_stage = VP_IDLE;
@@ -256,7 +266,10 @@ void vmplay_tick(int64_t now_ms) {
       if (now_ms - s_at > FETCH_TIMEOUT_MS) note("COULDN'T GET", "VOICEMAIL", now_ms);
       break;
     case VP_PLAYING:
-      if (audio_played() >= s_wav.count) {
+      if (audio_played() >= s_wav.count && s_loop) {
+        audio_play(s_wav.samples, s_wav.count);  // a notice: again, until the handset goes down
+        s_at = now_ms;
+      } else if (audio_played() >= s_wav.count) {
         ESP_LOGI(TAG, "played %u samples", (unsigned)s_wav.count);
         if (s_items[s_cur].id[0]) send_simple("voicemail.heard", s_items[s_cur].id);  // heard
         next(now_ms);
@@ -293,6 +306,12 @@ int vmplay_lines(char out[6][25], int64_t now_ms) {
     case VP_PLAYING:
     case VP_CANT_PLAY: {
       item_t *it = &s_items[s_cur];
+      if (s_loop) {  // a notice's recording, over and over
+        snprintf(out[0], 25, "NOTICE");
+        snprintf(out[1], 25, "%.20s", it->from);
+        snprintf(out[2], 25, "%s", s_stage == VP_LOADING ? "LOADING" : "ANY KEY CLEARS");
+        return 3;
+      }
       if (it->id[0]) snprintf(out[0], 25, "MESSAGE %d OF %d", s_cur + 1, s_n);
       else snprintf(out[0], 25, "NOW PLAYING");     // a story (labs)
       snprintf(out[1], 25, "%.20s", it->from[0] ? it->from : "SOMEONE");

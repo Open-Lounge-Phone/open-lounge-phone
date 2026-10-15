@@ -292,3 +292,31 @@ TEST(phone_lost_connection_ends_the_call_saying_why) {
   phone_lost(&s, emit);
   CHECK(s.kind == PH_IDLE && s_n == 0);
 }
+
+TEST(phone_silences_the_ringer_and_drops_repeated_ends) {
+  phone_state_t s;
+  phone_init(&s);
+  server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c1\",\"from\":{\"label\":\"Mom\"}}");
+  CHECK(s.kind == PH_INCOMING && !s.silenced);
+  phone_silence(&s);
+  CHECK(s.kind == PH_INCOMING && s.silenced);
+  s_n = 0;
+  phone_hook(&s, true, emit);  // lifting still answers
+  CHECK(s.kind == PH_INCALL && !s.silenced);
+  CHECK_STR(s_sent[1], "{\"t\":\"call.answer\",\"callId\":\"c1\"}");
+  phone_silence(&s);  // nothing to silence in a call
+  CHECK(!s.silenced);
+
+  phone_ends_t ends = {0};
+  cJSON *end = cJSON_Parse("{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\"}");
+  cJSON *other = cJSON_Parse("{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"ended\"}");
+  cJSON *active = cJSON_Parse("{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"active\"}");
+  CHECK(!phone_repeated_end(&ends, end));
+  CHECK(phone_repeated_end(&ends, end));
+  CHECK(!phone_repeated_end(&ends, active));
+  CHECK(!phone_repeated_end(&ends, other));
+  CHECK(phone_repeated_end(&ends, other));
+  cJSON_Delete(end);
+  cJSON_Delete(other);
+  cJSON_Delete(active);
+}

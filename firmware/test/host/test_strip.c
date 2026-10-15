@@ -193,6 +193,34 @@ TEST(strip_says_muted_in_a_call) {
   ph.recorded = true;
   strip_lines(&in, out);
   CHECK_STR(out[0], "REC MUTED 01:05");
+  // Every third turn of 3 s the second line says how to unmute (or to mute).
+  in.now_ms = 6000;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "MENU 3: UNMUTE");
+  ph.muted = false;
+  ph.recorded = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "IN CALL 00:06");
+  CHECK_STR(out[1], "MENU 3: MUTE");
+}
+
+TEST(strip_ringing_says_back_silences) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_INCOMING;
+  snprintf(ph.from, sizeof ph.from, "Mom");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1, .now_ms = 0};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "MOM CALLING");
+  CHECK_STR(out[1], "LIFT TO ANSWER");
+  in.now_ms = 6000;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "BACK: SILENCE");
+  ph.silenced = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[1], "LIFT TO ANSWER");
 }
 
 TEST(strip_reconnecting_and_connection_lost) {

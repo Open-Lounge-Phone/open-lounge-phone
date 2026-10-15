@@ -109,6 +109,7 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `audio tone <dialtone\|ringback\|busy\|hold\|test\|none>` | play a tone in the earpiece, even on the hook (bring-up) |
 | `audio loop <ms>\|off` | mic → earpiece after a delay: an echo test for bring-up (the mic is on only while it runs) |
 | `audio watch <hz>` | which frequency the received-audio meter watches (default 440 Hz) |
+| `audio gain <pga 0-30> [scale-up 0-42]` | the ES8311 mic gain in dB, live and not saved (tuning on a board: watch `miclevel`, or MENU 7's `MIC` row with the handset up; then set `CONFIG_OLP_MIC_PGA_DB`, see hardware/BRINGUP.md) |
 | `volume [0-10]` | earpiece volume (10 = the cap, 3 dB steps; also MENU → 1) |
 | `rtc [log on\|off]` | the call's media state: ICE servers in use, connected, setup time |
 | `ice <all\|udp\|tcp\|tls>` | which ICE servers the next call uses (`tcp`/`tls` = TURN over TCP/TLS only: experimental, see Call audio) |
@@ -300,8 +301,10 @@ on its own task; `main/audio.c` moves 20 ms frames between it and the audio devi
   Hz 0.5 s/0.5 s, hold beep) are mixed in locally. **Volume** 0-10 (MENU → 1, `volume`), 3 dB steps
   below a **cap of -6 dBFS** (`CONFIG_OLP_EARPIECE_MAX_DB`; hardware owner question 8: full scale
   may reach ~98 dB SPL until the receiver is measured).
-- **Mic:** captured only while a call's media is connected (or during the `audio loop` bring-up
-  test); otherwise the ADC is muted and I2S RX is off.
+- **Mic:** captured only while a call's media is connected and not muted (MENU 3), while leaving a
+  message, while the phone check (MENU 7) is open with the handset up (to show its level; nothing
+  is sent or kept), or during the `audio loop` bring-up test; otherwise the ADC is muted and I2S
+  RX is off.
 - A small jitter buffer (starts at 60 ms, capped at 300 ms) sits behind `esp_peer`'s own (NACK,
   reordering).
 

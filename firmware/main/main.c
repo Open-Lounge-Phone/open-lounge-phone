@@ -105,6 +105,10 @@ static bool s_rtc_offerer;  // this phone placed the call: it sends the offer
 // RECONNECTING is shown meanwhile; after RECONNECT_GIVE_UP_MS the call ends as lost.
 static int64_t s_reconnect_since = -1;
 #define RECONNECT_GIVE_UP_MS 15000
+// The other side hanging up drops the connection a moment before the server says the call ended:
+// RECONNECTING shows only after this long, so a normal end never looks like a failure.
+#define RECONNECT_SHOW_MS 2000
+static phone_ends_t s_ends;  // calls that ended here: a repeated ended is dropped
 static char *s_local_sdp;  // our SDP from esp_peer, until the call is connecting (then sent)
 
 static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
@@ -231,9 +235,12 @@ static void sync_media(void) {
   send_local_sdp();
   audio_hold(s_phone.kind == PH_OFFHOOK && s_phone.held[0]);
   audio_mute(s_phone.kind == PH_INCALL && s_phone.muted);  // MENU 3: the mic sends silence
+  // The phone check with the handset up measures the mic (no dial tone over it meanwhile).
+  bool listening = s_menu.screen == MENU_CHECK && s_hook_up && s_phone.kind == PH_OFFHOOK;
+  audio_listen(listening);
   audio_set_offhook(s_hook_up);
   // No call tone over a message playing (the handset is up for it) or the self-test's tone.
-  bool quiet = selftest_active() || vmplay_active();
+  bool quiet = selftest_active() || vmplay_active() || listening;
 #if CONFIG_OLP_LABS
   quiet = quiet || labs_busy();
 #endif
@@ -343,7 +350,8 @@ static void render(void) {
         .config = &s_cfg,
         .active_label = s_active_label,
         .call_started_ms = s_call_started,
-        .reconnecting = s_reconnect_since >= 0 && s_phone.kind == PH_INCALL,
+        .reconnecting = s_reconnect_since >= 0 && s_phone.kind == PH_INCALL &&
+                        now - s_reconnect_since >= RECONNECT_SHOW_MS,
         .now_ms = now,
         .local_minute = ota_local_minute(),
         .vm_stage = vm_leave_stage(),
@@ -484,7 +492,9 @@ static void render(void) {
 
   // MENU → 7: the phone check page, redrawn every 10 s while open (signal, uptime, memory).
   bool check = s_menu.screen == MENU_CHECK;
-  if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= 10000)) {
+  // Every 10 s; every second while it shows the mic's live level (the handset is up).
+  int64_t every = s_hook_up ? 1000 : 10000;
+  if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= every)) {
     draw_check(w, h, now);
     s_check_px = true;
     s_check_drawn = now;
@@ -545,9 +555,9 @@ static void render(void) {
   if (labs_ringing()) led = LED_RINGING;
   else if (labs_busy()) led = LED_ON;
   signals_led(led);
-  signals_ring(s_phone.kind == PH_INCOMING || labs_ringing());
+  signals_ring((s_phone.kind == PH_INCOMING && !s_phone.silenced) || labs_ringing());
 #else
-  signals_ring(s_phone.kind == PH_INCOMING);
+  signals_ring(s_phone.kind == PH_INCOMING && !s_phone.silenced);  // BACK silences it
 #endif
 }
 
@@ -565,7 +575,7 @@ static void draw_check(int w, int h, int64_t now) {
   int rssi;
   net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
   net_server_url(url, sizeof url);
-  char wifi[48], server[48], issue[40], handset[32], up[40], mem[40], t[16];
+  char wifi[48], server[48], issue[40], handset[32], up[40], mem[40], t[16], mic[40];
   if (!ssid[0]) snprintf(wifi, sizeof wifi, "NOT SET");
   else if (!net_wifi_up()) snprintf(wifi, sizeof wifi, "%.14s, NOT JOINED", ssid);
   else snprintf(wifi, sizeof wifi, "%.12s %d DBM CH %d", ssid, rssi, net_wifi_channel());
@@ -585,15 +595,21 @@ static void draw_check(int w, int h, int64_t now) {
   else snprintf(up, sizeof up, "%s, CLOCK NOT SET", t);
   snprintf(mem, sizeof mem, "%u KB FREE, LOW %u KB", (unsigned)(esp_get_free_heap_size() / 1024),
            (unsigned)(esp_get_minimum_free_heap_size() / 1024));
+  // The handset's mic, live while the handset is up (speak into it): for `audio gain`.
+  audio_stats_t st = audio_stats();
+  if (!s_hook_up) snprintf(mic, sizeof mic, "LIFT TO TEST");
+  else if (st.mic_dbfs <= -99) snprintf(mic, sizeof mic, "LISTENING...");
+  else snprintf(mic, sizeof mic, "%.0f DBFS PEAK %.0f", st.mic_dbfs, st.mic_peak_dbfs);
   const char *rows[][2] = {
-      {"WI-FI", wifi},   {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server}, {"LAST ISSUE", issue},
-      {"HANDSET", handset}, {"RUNNING", up},          {"MEMORY", mem},
+      {"WI-FI", wifi},       {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server},
+      {"LAST ISSUE", issue}, {"HANDSET", handset},          {"MIC", mic},
+      {"RUNNING", up},       {"MEMORY", mem},
   };
-  screen_page(fb, w, h, "PHONE CHECK", rows, 7, "1 SELF-TEST      BACK: MENU");
+  screen_page(fb, w, h, "PHONE CHECK", rows, 8, "1 SELF-TEST      BACK: MENU");
   display_pixels(fb);
   free(fb);
-  ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] up=[%s] mem=[%s]", wifi,
-           ip[0] ? ip : "-", server, issue, handset, up, mem);
+  ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] mic=[%s] up=[%s] mem=[%s]",
+           wifi, ip[0] ? ip : "-", server, issue, handset, mic, up, mem);
 }
 
 void app_print_lounge(void) {
@@ -933,6 +949,9 @@ static void on_message(char *text) {
     if (call && cand && !cJSON_HasObjectItem(m, "peer")) media_remote_candidate(call, cand);
   } else if (!strcmp(t, "room.media")) {
     // TODO: rooms (mesh or relay) need more than one peer connection; not in this firmware yet.
+  } else if (phone_repeated_end(&s_ends, m)) {
+    // A second ended for a call that already ended here can't end the next one.
+    ESP_LOGI(TAG, "repeated end of %s ignored", or_q(jstr(m, "callId")));
   } else {
     phone_kind_t before = s_phone.kind;
     if (phone_server(&s_phone, m, emit)) {
@@ -958,9 +977,24 @@ done:
 
 // --- inputs ------------------------------------------------------------------------------
 
+/** Clears the notice on this phone (a key while it shows, or while its recording plays). */
+static void dismiss_notice(void) {
+  cJSON *d = msg("notice.dismiss");
+  cJSON_AddStringToObject(d, "id", s_notice.id);
+  emit(d);
+  ESP_LOGI(TAG, "NOTICE %s dismissed", s_notice.id);
+  notice_init(&s_notice);
+}
+
 static void on_key(int index) {
   int64_t now = now_ms();
   signals_beep(BEEP_KEY);
+  // A notice's recording playing over and over: any key stops it and clears the notice.
+  if (vmplay_looping()) {
+    vmplay_stop();
+    if (s_notice.active) dismiss_notice();
+    return;
+  }
   if (vmplay_key(index, now)) return;  // listening to voicemail: 1 again, 2 next, BACK stop
   if (selftest_active()) {  // the self-test takes every key, MENU and BACK too
     selftest_key(index, now);
@@ -985,11 +1019,13 @@ static void on_key(int index) {
   }
   // A notice on the ready screen: any key (BACK too) dismisses it on this phone.
   if (s_notice.active && s_phone.kind == PH_IDLE && !s_hook_up && index != KEY_MENU_INDEX) {
-    cJSON *d = msg("notice.dismiss");
-    cJSON_AddStringToObject(d, "id", s_notice.id);
-    emit(d);
-    ESP_LOGI(TAG, "NOTICE %s dismissed", s_notice.id);
-    notice_init(&s_notice);
+    dismiss_notice();
+    return;
+  }
+  // Ringing: BACK silences the ringer on this phone (lifting still answers).
+  if (index == KEY_BACK_INDEX && s_phone.kind == PH_INCOMING) {
+    phone_silence(&s_phone);
+    ESP_LOGI(TAG, "RING silenced on this phone");
     return;
   }
 #if CONFIG_OLP_LABS
@@ -1033,8 +1069,11 @@ static void play_notice(void) {
   size_t bl = strlen(base);
   if (bl && base[bl - 1] == '/') base[bl - 1] = '\0';
   snprintf(url, sizeof url, "%s%s", base, path);
-  ESP_LOGI(TAG, "NOTICE %s playing", s_notice.id);
-  vmplay_play_url(url, "NOTICE", now_ms());
+  ESP_LOGI(TAG, "NOTICE %s playing (until the handset goes down or a key)", s_notice.id);
+  char text[50];
+  snprintf(text, sizeof text, "%s%s%s", s_notice.lines[0], s_notice.lines[1][0] ? " " : "",
+           s_notice.lines[1]);
+  vmplay_loop_url(url, text, now_ms());
 }
 
 static void on_hook(bool up) {

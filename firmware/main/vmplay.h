@@ -15,6 +15,11 @@ void vmplay_init(vmplay_send_fn send);
 void vmplay_start(bool clear, int64_t now_ms);
 /** Labs (dial-a-story): play one WAV (8 kHz 16-bit mono) from an http(s) URL, titled. */
 void vmplay_play_url(const char *url, const char *title, int64_t now_ms);
+/** A notice's recording (docs/phone-ux.md): plays over and over until vmplay_stop (the handset
+ * goes down, or a key clears the notice: main.c). `title` is the notice's text. */
+void vmplay_loop_url(const char *url, const char *title, int64_t now_ms);
+/** A notice's recording is playing (any key clears the notice). */
+bool vmplay_looping(void);
 /** The server's `voicemail.items`. */
 void vmplay_items(const cJSON *msg, int64_t now_ms);
 /** The download task finished (EV_VM_LOADED). */

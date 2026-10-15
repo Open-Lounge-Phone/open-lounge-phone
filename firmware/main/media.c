@@ -17,7 +17,11 @@
 #include "sdkconfig.h"
 
 static const char *TAG = "media";
-#define MAX_PENDING_CANDIDATES 16
+// The other side's candidates are pooled for a moment after its SDP (they arrive in a burst) and
+// the best ICE_REMOTE_MAX go to esp_peer, which drops the rest (ice_cand_pick: IPv4/UDP only,
+// host before srflx before relay).
+#define MAX_PENDING_CANDIDATES 24
+#define CANDIDATE_SETTLE_MS 400
 
 typedef enum { CMD_START, CMD_SDP, CMD_CANDIDATE, CMD_STOP } cmd_type_t;
 typedef struct {
@@ -33,6 +37,8 @@ static volatile bool s_connected;
 static bool s_have_remote;
 static char *s_pending[MAX_PENDING_CANDIDATES];
 static int s_npending;
+static int s_fed;              // remote candidates given to esp_peer in this call
+static int64_t s_settle_at;    // when the pooled candidates go in (after the remote SDP)
 static ice_mode_t s_ice_mode = ICE_ALL;
 #if CONFIG_OLP_ICE_PREFER_TLS
 #define PREFER_TLS true
@@ -128,6 +134,7 @@ static void close_peer(void) {
   xSemaphoreGive(s_peer_lock);
   for (int i = 0; i < s_npending; i++) free(s_pending[i]);
   s_npending = 0;
+  s_fed = 0;
   s_have_remote = false;
 }
 
@@ -135,6 +142,20 @@ static void send_candidate(const char *c) {
   esp_peer_msg_t m = {.type = ESP_PEER_MSG_TYPE_CANDIDATE, .data = (uint8_t *)c, .size = (int)strlen(c)};
   int r = esp_peer_send_msg(s_peer, &m);
   if (r) ESP_LOGW(TAG, "remote candidate rejected (%d)", r);
+  s_fed++;
+}
+
+/** The pooled candidates: the best that still fit go to esp_peer, the rest are dropped. */
+static void feed_pool(void) {
+  int pick[ICE_REMOTE_MAX];
+  int room = ICE_REMOTE_MAX - s_fed;
+  int n = room > 0 ? ice_cand_pick((const char *const *)s_pending, s_npending, pick, room) : 0;
+  for (int i = 0; i < n; i++) send_candidate(s_pending[pick[i]]);
+  if (s_npending > n)
+    ESP_LOGI(TAG, "remote candidates: %d used, %d left out (IPv6, TCP, or past %d)", n,
+             s_npending - n, ICE_REMOTE_MAX);
+  for (int i = 0; i < s_npending; i++) free(s_pending[i]);
+  s_npending = 0;
 }
 
 static void start_peer(const char *ice_json, bool offerer) {
@@ -172,7 +193,7 @@ static void start_peer(const char *ice_json, bool offerer) {
               .send_pool_size = 8 * 1024,
               .send_queue_num = 32,
           },
-      .max_candidates = 8,
+      .max_candidates = ICE_REMOTE_MAX,  // the other side's: media.c feeds the best (ice_cand_pick)
       // TURN over TCP/TLS needs this, but in esp_peer 1.5.6 it doesn't work (README "Call audio":
       // TLS gives up before connecting, TCP pairs but DTLS reads fail) and a TCP/TLS server in the
       // list stalls gathering for the whole call. Off unless asked for.
@@ -236,19 +257,18 @@ static void handle(cmd_t *c) {
         int r = esp_peer_send_msg(s_peer, &m);
         ESP_LOGI(TAG, "remote SDP applied (%d)", r);
         s_have_remote = true;
-        for (int i = 0; i < s_npending; i++) {
-          send_candidate(s_pending[i]);
-          free(s_pending[i]);
-        }
-        s_npending = 0;
+        s_settle_at = now_ms() + CANDIDATE_SETTLE_MS;  // the trickled burst, then the best go in
       }
       break;
     case CMD_CANDIDATE:
       if (!s_peer) break;
-      if (s_have_remote) {
-        send_candidate(c->text);
+      if (ice_cand_rank(c->text) < 0) {
+        ESP_LOGD(TAG, "remote candidate left out (IPv6 or TCP)");
+      } else if (s_have_remote && now_ms() >= s_settle_at && !s_npending) {
+        if (s_fed < ICE_REMOTE_MAX) send_candidate(c->text);  // late ones, while there's room
+        else ESP_LOGI(TAG, "remote candidate left out: %d already", ICE_REMOTE_MAX);
       } else if (s_npending < MAX_PENDING_CANDIDATES) {
-        s_pending[s_npending++] = c->text;  // until the remote description is set
+        s_pending[s_npending++] = c->text;  // pooled until the remote SDP and a moment after
         c->text = NULL;
       }
       break;
@@ -267,6 +287,7 @@ static void task(void *arg) {
   for (;;) {
     cmd_t c;
     while (xQueueReceive(s_cmds, &c, s_peer ? 0 : pdMS_TO_TICKS(100)) == pdTRUE) handle(&c);
+    if (s_peer && s_have_remote && s_npending && now_ms() >= s_settle_at) feed_pool();
     if (s_peer) {
       esp_peer_main_loop(s_peer);
       vTaskDelay(pdMS_TO_TICKS(5));

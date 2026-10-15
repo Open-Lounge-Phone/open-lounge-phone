@@ -52,8 +52,13 @@ The earpiece plays only with the handset lifted; `audio tone` overrides that for
 1. `audio loop 300`: the mic plays back in the earpiece 300 ms later (an echo test; the delay
    keeps it from howling). The mic is on only while the loopback runs.
 2. Speak normally into the handset: `audio` shows `miclevel=` about -30 to -20 dBFS; silence
-   below -55 dBFS. If speech is below -35 dBFS raise `CONFIG_OLP_MIC_PGA_DB` (3 dB steps); if it
-   clips (near 0 dBFS) lower it.
+   below -55 dBFS. The phone check shows the same without a console: MENU 7 with the handset up
+   switches the mic on and its `MIC` row reads the live level every second (`-27 DBFS PEAK -9`).
+   If speech is below -35 dBFS (a first board read speech peaks around -38 dBFS at PGA 18 dB,
+   about 25 dB too quiet), try more gain live with `audio gain <pga 0-30 dB> [scale-up 0-42 dB]`
+   (for example `audio gain 30`, then `audio gain 30 12`) while watching the level, and once a
+   setting sounds right put it in `CONFIG_OLP_MIC_PGA_DB` (3 dB steps; `audio gain` isn't saved);
+   if it clips (near 0 dBFS) lower it.
 3. You hear yourself 0.3 s later, clearly, with no hum or buzz. A 50/60 Hz hum points at the mic
    bias filter (1 kΩ / 10 µF) or a ground loop through the USB supply.
 4. Tap the handset's button (if it has one): note whether the log shows a level spike (the board
