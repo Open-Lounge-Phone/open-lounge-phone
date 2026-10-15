@@ -13,7 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "labs_cfg.h"
-#include "labs_ic.h"
+#include "lan.h"
 #include "mdns.h"
 
 static const char *TAG = "labs_web";
@@ -21,7 +21,6 @@ static const char *TAG = "labs_web";
 const labs_cfg_t *labs_cfg(void);
 bool labs_cfg_set(const labs_cfg_t *c);
 bool labs_pin_ok(int pin);
-const ic_t *labs_ic(void);
 
 static httpd_handle_t s_srv;
 static char s_session[33];      // the cookie after the PIN ("" = nobody signed in)
@@ -145,11 +144,9 @@ static esp_err_t h_get(httpd_req_t *req) {
   cJSON *j = cJSON_Parse(cfg ? cfg : "{}");
   free(cfg);
   cJSON *peers = cJSON_AddArrayToObject(j, "peers");
-  const ic_t *ic = labs_ic();
-  int64_t now = esp_timer_get_time() / 1000;
-  for (int i = 0; i < IC_PEERS; i++)
-    if (ic->peers[i].name[0] && now - ic->peers[i].seen < IC_PEER_MS)
-      cJSON_AddItemToArray(peers, cJSON_CreateString(ic->peers[i].name));
+  char rooms[8][25];
+  int n = lan_rooms(rooms, 8, esp_timer_get_time() / 1000);
+  for (int i = 0; i < n; i++) cJSON_AddItemToArray(peers, cJSON_CreateString(rooms[i]));
   char *out = cJSON_PrintUnformatted(j);
   cJSON_Delete(j);
   esp_err_t e = json_reply(req, "200 OK", out ? out : "{}");

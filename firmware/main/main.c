@@ -42,6 +42,7 @@
 #include "lounge.h"
 #include "notice.h"
 #include "calls.h"
+#include "lan.h"
 #include "nvs.h"
 #if CONFIG_OLP_LABS
 #include "labs.h"   // the labs build (firmware/labs) only
@@ -112,6 +113,10 @@ static int64_t s_reconnect_since = -1;
 #define RECONNECT_SHOW_MS 2000
 static phone_ends_t s_ends;  // calls that ended here: a repeated ended is dropped
 static int s_utc_offset_min;  // the space's (config.utcOffsetMin), for when missed calls were
+// The daily check-in: I'm OK was sent and the server hasn't confirmed yet; then THANK YOU until.
+static bool s_checkin_sent;
+static int64_t s_checked_in_until;
+static char s_chime[41];  // config.chime: this phone may post a chime ("" = no)
 
 /** Epoch ms now, or 0 if the clock isn't set. */
 static int64_t epoch_now(void) {
@@ -274,10 +279,7 @@ static void sync_media(void) {
   audio_listen(listening);
   audio_set_offhook(s_hook_up);
   // No call tone over a message playing (the handset is up for it) or the self-test's tone.
-  bool quiet = selftest_active() || vmplay_active() || listening;
-#if CONFIG_OLP_LABS
-  quiet = quiet || labs_busy();
-#endif
+  bool quiet = selftest_active() || vmplay_active() || listening || lan_busy();
   if (!quiet) audio_set_tone(s_hook_up ? tone_for(&s_phone) : TONE_NONE);
   else if (!selftest_active()) audio_set_tone(TONE_NONE);
 }
@@ -342,6 +344,10 @@ static void render(void) {
     snprintf(s_menu.missed_id[k], sizeof s_menu.missed_id[k], "%s", s_cfg.missed_id[i]);
   }
   s_menu.calls = !s_lounge.on;
+  // MENU 4: the house intercom's rooms, or the chime.
+  s_menu.intercom = lan_enabled() && !s_lounge.on;
+  s_menu.n_rooms = s_menu.intercom ? lan_rooms(s_menu.rooms, 8, now) : 0;
+  snprintf(s_menu.chime, sizeof s_menu.chime, "%s", s_lounge.on ? "" : s_chime);
   s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
   s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
   s_menu.lounge = s_lounge.on;
@@ -403,6 +409,7 @@ static void render(void) {
         .local_minute = ota_local_minute(),
         .vm_stage = vm_leave_stage(),
         .vm_remaining_ms = vm_leave_remaining_ms(now),
+        .checked_in = now < s_checked_in_until,
     };
     char ssid[33], ip[16];
     int rssi;
@@ -420,6 +427,9 @@ static void render(void) {
     if (!ln && net_wifi_up() && !s_code[0])
       ln = labs_lines(ll, idle, s_phone.kind == PH_OFFHOOK, now);
 #endif
+    // The house intercom ringing, calling or talking (or its note) over the rest.
+    int lnn = lan_lines(ll, now);
+    if (lnn) ln = lnn;
     if (ln) {
       for (int i = 0; i < ln; i++) snprintf(strip[i], sizeof strip[i], "%.40s", ll[i]);
       n = ln;
@@ -598,14 +608,12 @@ static void render(void) {
   else if (s_phone.kind == PH_IDLE && s_cfg.missed_count > 0) led = LED_BREATHE;
   else led = LED_DIM;
   signals_led(led);
-#if CONFIG_OLP_LABS
-  if (labs_ringing()) led = LED_RINGING;
-  else if (labs_busy()) led = LED_ON;
+  // The house intercom: ringing here, or a call on it.
+  if (lan_ringing()) led = LED_RINGING;
+  else if (lan_busy()) led = LED_ON;
   signals_led(led);
-  signals_ring((s_phone.kind == PH_INCOMING && !s_phone.silenced) || labs_ringing());
-#else
-  signals_ring(s_phone.kind == PH_INCOMING && !s_phone.silenced);  // BACK silences it
-#endif
+  // BACK silences a ringing call here.
+  signals_ring((s_phone.kind == PH_INCOMING && !s_phone.silenced) || lan_ringing());
 }
 
 /** "2H05" or "14 MIN" for durations on the check page. */
@@ -861,6 +869,23 @@ static void on_config(const cJSON *m) {
   copy(s_lounge.here, sizeof s_lounge.here, here ? jstr(here, "name") : "");
   for (char *c = s_lounge.here; *c; c++) *c = (char)toupper((unsigned char)*c);
   s_extensions = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "extensions"));
+  // Home features (each only when on for this phone).
+  const cJSON *checkin = cJSON_GetObjectItemCaseSensitive(m, "checkin");
+  if (cJSON_IsObject(checkin)) {
+    copy(s_cfg.checkin_by, sizeof s_cfg.checkin_by, jstr(checkin, "by"));
+    s_cfg.checkin_done = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(checkin, "done"));
+    s_cfg.checkin_alerted = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(checkin, "alerted"));
+    if (s_checkin_sent && s_cfg.checkin_done) {
+      s_checkin_sent = false;
+      s_checked_in_until = now_ms() + 4000;  // THANK YOU / CHECKED IN, now the server has it
+      ESP_LOGI(TAG, "CHECK-IN counted");
+    }
+  }
+  const cJSON *chime = cJSON_GetObjectItemCaseSensitive(m, "chime");
+  copy(s_chime, sizeof s_chime, cJSON_IsObject(chime) ? jstr(chime, "text") : "");
+  const cJSON *ic = cJSON_GetObjectItemCaseSensitive(m, "intercom");
+  if (cJSON_IsObject(ic)) lan_config(jstr(ic, "room"), jstr(ic, "key"));
+  else lan_config(NULL, NULL);
   const cJSON *off = cJSON_GetObjectItemCaseSensitive(m, "utcOffsetMin");
   if (cJSON_IsNumber(off)) {
     ota_set_utc_offset(off->valueint);
@@ -1010,6 +1035,15 @@ static void on_message(char *text) {
     if (call && cand && !cJSON_HasObjectItem(m, "peer")) media_remote_candidate(call, cand);
   } else if (!strcmp(t, "room.media")) {
     // TODO: rooms (mesh or relay) need more than one peer connection; not in this firmware yet.
+  } else if (!strcmp(t, "call.ringing") && lan_busy() && s_phone.kind == PH_IDLE) {
+    // On the house intercom: a call through the server is busy meanwhile.
+    const char *call = jstr(m, "callId");
+    ESP_LOGI(TAG, "call %s while on the intercom: busy", or_q(call));
+    if (call) {
+      cJSON *h = msg("call.hangup");
+      cJSON_AddStringToObject(h, "callId", call);
+      emit(h);
+    }
   } else if (phone_repeated_end(&s_ends, m)) {
     // A second ended for a call that already ended here can't end the next one.
     ESP_LOGI(TAG, "repeated end of %s ignored", or_q(jstr(m, "callId")));
@@ -1083,6 +1117,19 @@ static void on_key(int index) {
     dismiss_notice();
     return;
   }
+  // The house intercom: BACK stops a call on it; other keys wait while it's busy.
+  if (lan_busy()) {
+    if (index == KEY_BACK_INDEX) lan_cancel();
+    return;
+  }
+  // The daily check-in due: 1 (handset down) is I'm OK.
+  if (index == 0 && s_phone.kind == PH_IDLE && !s_hook_up && s_cfg.checkin_by[0] &&
+      !s_cfg.checkin_done && s_authed) {
+    emit(msg("checkin.ok"));
+    s_checkin_sent = true;
+    ESP_LOGI(TAG, "CHECK-IN: I'm OK sent");
+    return;
+  }
   // Ringing: BACK silences the ringer on this phone (lifting still answers).
   if (index == KEY_BACK_INDEX && s_phone.kind == PH_INCOMING) {
     phone_silence(&s_phone);
@@ -1148,10 +1195,11 @@ static void on_hook(bool up) {
   selftest_hook(up, now_ms());
   snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
-#if CONFIG_OLP_LABS
   // The intercom answered: the phone's own call logic leaves the lift alone. Hanging up always
   // reaches it too, so a phone lifted to call a room isn't left off the hook.
-  if (labs_hook(up, now_ms()) && up) return;
+  if (lan_hook(up, now_ms()) && up) return;
+#if CONFIG_OLP_LABS
+  if (labs_hook(up, now_ms()) && up) return;  // a story pressed before lifting
 #endif
   phone_hook(&s_phone, up, emit);
   if (notice_audio) play_notice();
@@ -1210,6 +1258,9 @@ static void tick(void) {
     finish_selftest();
   }
   vm_leave_tick(now);
+  lan_tick(now);
+  // In a call through the server: a ring on the house intercom gets busy.
+  lan_set_engaged(s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK);
   if (s_reconnect_since >= 0 && (s_phone.kind != PH_INCALL || !media_active())) s_reconnect_since = -1;
   if (s_reconnect_since >= 0 && now - s_reconnect_since >= RECONNECT_GIVE_UP_MS) {
     ESP_LOGW(TAG, "call media didn't come back: CONNECTION LOST");
@@ -1303,6 +1354,7 @@ void app_main(void) {
   labs_start();
 #endif
   vmplay_init(emit);
+  lan_init();  // the house intercom, if it's on (its key is kept for days without internet)
   input_start();
   console_start();
   prov_init(&s_prov);
@@ -1394,6 +1446,29 @@ void app_main(void) {
           if (s_phone.kind == PH_DIALING) save_last_dial(&d);
           break;
         }
+        case EV_LAN:
+          lan_event(ev.data, now_ms());
+          break;
+        case EV_INTERCOM: {
+          // Calling a room needs the handset up and nothing else going on.
+          if (!s_hook_up || s_phone.kind != PH_OFFHOOK || s_phone.held[0]) {
+            snprintf(s_ota_msg[0], 25, "LIFT THE HANDSET");
+            snprintf(s_ota_msg[1], 25, "THEN MENU 4");
+            s_ota_msg_until = now_ms() + 4000;
+            break;
+          }
+          char rooms[8][25];
+          int n = lan_rooms(rooms, 8, now_ms());
+          const char *to = ev.a < 0 ? "*" : ev.a < n ? rooms[ev.a] : NULL;
+          if (to && lan_call(to, false, now_ms())) ESP_LOGI(TAG, "INTERCOM calling %s", to);
+          break;
+        }
+        case EV_CHIME:
+          if (s_authed && s_chime[0]) {
+            emit(msg("notice.chime"));
+            ESP_LOGI(TAG, "CHIME sent");
+          }
+          break;
         case EV_MISSED_CLEAR:
           if (s_authed) emit(msg("missed.clear"));
           break;
@@ -1423,6 +1498,7 @@ void app_main(void) {
           break;
         case EV_WIFI_UP:
           prov_event(PROV_EV_STA_UP, false);
+          lan_net_up();
 #if CONFIG_OLP_LABS
           labs_net_up();
 #endif

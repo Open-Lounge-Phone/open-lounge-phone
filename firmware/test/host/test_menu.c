@@ -224,3 +224,66 @@ TEST(menu_voicemail_clears_messages_only) {
   menu_key(&m, key(3), 3);
   CHECK(s_ev_type == EV_VM_PLAY && s_ev_a == 1);
 }
+
+TEST(menu_4_is_the_intercom_or_the_chime) {
+  menu_t m = {0};
+  m.calls = true;
+  m.intercom = true;
+  m.n_rooms = 3;
+  snprintf(m.rooms[0], 25, "Kitchen");
+  snprintf(m.rooms[1], 25, "Den");
+  snprintf(m.rooms[2], 25, "Garage");
+  snprintf(m.chime, sizeof m.chime, "DINNER'S READY");
+  menu_key(&m, K_MENU, 0);
+  char out[MENU_LINES][25];
+  int n = menu_lines(&m, out);
+  CHECK_STR(out[2], "3 NETWORK 4 INTERCOM");
+  for (int i = 0; i < n; i++) CHECK(strlen(out[i]) <= 20);
+  menu_key(&m, key(4), 1);
+  CHECK(m.screen == MENU_INTERCOM);
+  n = menu_lines(&m, out);
+  CHECK_STR(out[0], "INTERCOM");
+  CHECK_STR(out[1], "1 KITCHEN 2 DEN");
+  CHECK_STR(out[2], "3 GARAGE");
+  CHECK_STR(out[3], "0 ALL 9 CHIME");
+  reset_events();
+  menu_key(&m, key(2), 2);
+  CHECK(s_ev_type == EV_INTERCOM && s_ev_a == 1 && m.screen == MENU_CLOSED);
+  menu_key(&m, K_MENU, 3);
+  menu_key(&m, key(4), 4);
+  reset_events();
+  menu_key(&m, key(0), 5);
+  CHECK(s_ev_type == EV_INTERCOM && s_ev_a == -1);
+  menu_key(&m, K_MENU, 6);
+  menu_key(&m, key(4), 7);
+  menu_key(&m, key(9), 8);
+  CHECK(m.screen == MENU_CHIME);
+  n = menu_lines(&m, out);
+  CHECK_STR(out[1], "DINNER'S READY");
+  CHECK_STR(out[2], "1 SEND TO ALL PHONES");
+  reset_events();
+  menu_key(&m, key(1), 9);
+  CHECK(s_ev_type == EV_CHIME && m.screen == MENU_CLOSED);
+  // Without the intercom: 4 is the chime; with neither: the network screen, as before.
+  m.intercom = false;
+  menu_key(&m, K_MENU, 10);
+  menu_lines(&m, out);
+  CHECK_STR(out[2], "3 NETWORK 4 CHIME");
+  menu_key(&m, key(4), 11);
+  CHECK(m.screen == MENU_CHIME);
+  m.chime[0] = '\0';
+  menu_key(&m, K_MENU, 12);
+  menu_key(&m, K_MENU, 13);
+  menu_key(&m, key(4), 14);
+  CHECK(m.screen == MENU_WIFI);
+  // No rooms heard yet.
+  menu_t q = {0};
+  q.intercom = true;
+  menu_key(&q, K_MENU, 0);
+  menu_key(&q, key(4), 1);
+  CHECK(menu_lines(&q, out) == 2);
+  CHECK_STR(out[1], "NO OTHER ROOMS YET");
+  reset_events();
+  menu_key(&q, key(0), 2);
+  CHECK(s_ev_type == -1);
+}

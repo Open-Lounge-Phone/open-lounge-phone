@@ -1,5 +1,7 @@
-// The house intercom (labs): phones on one Wi-Fi find each other and call room to room with no
-// server. Every message is a UDP broadcast line "OLP1|<TYPE>|..." that every phone hears:
+// The house intercom (docs/phone-ux.md "House intercom"): phones of one space on the same local
+// network find each other and call room to room with no server. Every message is a UDP broadcast
+// line "OLP1|<TYPE>|..." that every phone hears (sealed with the space's key on the wire, see
+// lan_crypto.h and lan.c):
 //   HELLO|room                      who is here (every 20 s; peers drop after 90 s silent)
 //   RING|id|to|from|kind            to = a room or "*" (all); kind = call | door
 //   ANSWER|id|from                  the first to lift; the others stop ringing
@@ -42,6 +44,7 @@ typedef struct {
   char note[2][41];    // "BUSY", "NO ANSWER", a chime's words
   int64_t note_until;
   bool chimed;         // a chime just arrived (the glue beeps, then clears it)
+  bool engaged;        // the phone is in a call through the server: a ring here is busy
 } ic_t;
 
 typedef struct {
@@ -62,5 +65,7 @@ void icom_msg(ic_t *ic, uint32_t ip, const char *line, int64_t now, ic_out_t *ou
 void icom_tick(ic_t *ic, int64_t now, ic_out_t *out);
 /** Peers heard in the last IC_PEER_MS. */
 int icom_peer_count(const ic_t *ic, int64_t now);
+/** Their names (at most `max`), in the order they were first heard. */
+int icom_rooms(const ic_t *ic, int64_t now, char names[][25], int max);
 /** Status lines (0 when idle and nothing to say). */
 int icom_lines(const ic_t *ic, int64_t now, char out[2][41]);

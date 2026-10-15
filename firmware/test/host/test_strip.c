@@ -283,3 +283,26 @@ TEST(strip_call_waiting) {
   strip_lines(&in, out);
   CHECK_STR(out[1], "1 TAKE 2 IGNORE");
 }
+
+TEST(strip_daily_check_in) {
+  phone_state_t ph;
+  phone_init(&ph);
+  phone_config_t cfg = {.present = true};
+  snprintf(cfg.checkin_by, sizeof cfg.checkin_by, "10:00");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "CHECK IN BY 10:00");
+  CHECK_STR(out[1], "PRESS 1: I'M OK");
+  cfg.checkin_alerted = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "CHECK-IN MISSED");
+  cfg.checkin_done = true;
+  in.checked_in = true;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "THANK YOU");
+  in.checked_in = false;
+  CHECK(strip_lines(&in, out) == 1);
+  CHECK_STR(out[0], "READY");
+}

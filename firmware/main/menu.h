@@ -14,7 +14,7 @@
 
 typedef enum {
   MENU_CLOSED, MENU_ROOT, MENU_ABOUT, MENU_WIFI, MENU_VOLUME, MENU_SERVER, MENU_VOICEMAIL,
-  MENU_CALL, MENU_CHECK, MENU_EXT, MENU_LABS, MENU_MISSED
+  MENU_CALL, MENU_CHECK, MENU_EXT, MENU_LABS, MENU_MISSED, MENU_INTERCOM, MENU_CHIME
 } menu_screen_t;
 
 /** Who may open the setup network from MENU 3: anyone, after a second press (kids' phones), or
@@ -40,6 +40,11 @@ typedef struct {
   char missed_line[8][25];  // how many and when: "2 CALLS 14:05"
   char missed_id[8][65];    // what 1 calls back ("" = can't from here)
   int missed_index;         // the one shown
+  // MENU 4: the house intercom (when on: the rooms heard lately), else the chime (its words).
+  bool intercom;
+  int n_rooms;
+  char rooms[8][25];
+  char chime[41];           // "" = no chime; two lines are split by '\n'
   char ext[8];          // MENU 6: the digits so far
   bool ext_transfer;    // …to transfer the call there (from the call screen)
   // What the call screen offers now (phone_actions), set by the app before each key and render.

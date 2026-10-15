@@ -21,7 +21,8 @@ static int digit_of(int key) { return key == 9 ? 0 : key + 1; }
 
 const char *menu_screen_name(menu_screen_t s) {
   static const char *names[] = {"closed",    "root", "about", "wifi", "volume", "server",
-                                "voicemail", "call", "check", "ext",  "labs",  "missed"};
+                                "voicemail", "call", "check", "ext",  "labs",  "missed",
+                                "intercom",  "chime"};
   return names[s];
 }
 
@@ -77,6 +78,8 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     } else if (d == 1) m->screen = MENU_VOLUME;
     else if (d == 2) m->screen = MENU_VOICEMAIL;
+    else if (d == 4 && m->intercom) m->screen = MENU_INTERCOM;  // the rooms to call
+    else if (d == 4 && m->chime[0]) m->screen = MENU_CHIME;
 #if CONFIG_OLP_LABS
     else if (d == 4 && !m->lounge) m->screen = MENU_LABS;  // labs: the settings page and PIN
 #endif
@@ -112,6 +115,22 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_EXT;  // transfer to an extension
       m->ext[0] = '\0';
       m->ext_transfer = true;
+    }
+  } else if (m->screen == MENU_INTERCOM) {
+    int d = digit_of(key);
+    if (d >= 1 && d <= m->n_rooms && d <= 8) {
+      app_post(EV_INTERCOM, d - 1, NULL);  // that room
+      m->screen = MENU_CLOSED;
+    } else if (d == 0 && m->n_rooms) {
+      app_post(EV_INTERCOM, -1, NULL);  // every room
+      m->screen = MENU_CLOSED;
+    } else if (d == 9 && m->chime[0]) {
+      m->screen = MENU_CHIME;
+    }
+  } else if (m->screen == MENU_CHIME) {
+    if (digit_of(key) == 1 && m->chime[0]) {
+      app_post(EV_CHIME, 0, NULL);
+      m->screen = MENU_CLOSED;
     }
   } else if (m->screen == MENU_MISSED) {
     int d = digit_of(key);
@@ -187,8 +206,10 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
         items[n++] = "2 VOICEMAIL";
       }
       items[n++] = "3 NETWORK";
+      if (m->intercom) items[n++] = "4 INTERCOM";
+      else if (m->chime[0]) items[n++] = "4 CHIME";
 #if CONFIG_OLP_LABS
-      if (!m->lounge) items[n++] = "4 LABS";
+      else if (!m->lounge) items[n++] = "4 LABS";
 #endif
       if (m->calls && !m->lounge_session) items[n++] = "5 MISSED";
       if (m->extensions) items[n++] = "6 EXT";
@@ -228,6 +249,39 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
                  a == ACT_TRANSFER && m->extensions && call_can_transfer(m) ? " 6 EXT" : "");
       }
       snprintf(out[n++], 25, "9 VOLUME");
+      return n;
+    }
+    case MENU_INTERCOM: {
+      snprintf(out[0], 25, "INTERCOM");
+      if (!m->n_rooms) {
+        snprintf(out[1], 25, "NO OTHER ROOMS YET");
+        if (m->chime[0]) snprintf(out[2], 25, "9 CHIME");
+        return m->chime[0] ? 3 : 2;
+      }
+      // The rooms on their digits, packed into lines that fit; 0 every room; 9 the chime.
+      int line = 1, cap = 20;
+      for (int i = 1; i < MENU_LINES; i++) out[i][0] = '\0';
+      char item[32];
+      for (int i = 0; i <= m->n_rooms && i <= 8 && line < MENU_LINES; i++) {
+        if (i < m->n_rooms && i < 8) snprintf(item, sizeof item, "%d %.16s", i + 1, m->rooms[i]);
+        else snprintf(item, sizeof item, "%s", m->chime[0] ? "0 ALL 9 CHIME" : "0 ALL ROOMS");
+        size_t have = strlen(out[line]), add = strlen(item);
+        if (have && have + 1 + add > (size_t)cap) {
+          if (++line >= MENU_LINES) break;
+          have = 0;
+        }
+        snprintf(out[line] + have, 25 - have, "%s%s", have ? " " : "", item);
+        upper(out[line]);
+      }
+      return line < MENU_LINES ? line + 1 : MENU_LINES;
+    }
+    case MENU_CHIME: {
+      snprintf(out[0], 25, "CHIME");
+      int n = 1;
+      const char *nl = strchr(m->chime, '\n');
+      snprintf(out[n++], 25, "%.*s", nl ? (int)(nl - m->chime) : 24, m->chime);
+      if (nl) snprintf(out[n++], 25, "%.24s", nl + 1);
+      snprintf(out[n++], 25, "1 SEND TO ALL PHONES");
       return n;
     }
     case MENU_MISSED: {

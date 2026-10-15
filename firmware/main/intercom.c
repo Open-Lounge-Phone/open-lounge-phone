@@ -1,4 +1,4 @@
-#include "labs_ic.h"
+#include "intercom.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -130,7 +130,7 @@ void icom_msg(ic_t *ic, uint32_t ip, const char *line, int64_t now, ic_out_t *ou
     if (!strcmp(from, ic->me)) return;                       // our own broadcast
     bool mine = !strcmp(to, "*") || !strcmp(to, ic->me);
     if (!mine) return;
-    if (ic->st != IC_IDLE) {
+    if (ic->st != IC_IDLE || ic->engaged) {
       if (strcmp(to, "*")) emit(out, "OLP1|BUSY|%s|%s", f[2], ic->me, "", "");
       return;
     }
@@ -203,6 +203,14 @@ int icom_peer_count(const ic_t *ic, int64_t now) {
   return n;
 }
 
+int icom_rooms(const ic_t *ic, int64_t now, char names[][25], int max) {
+  int n = 0;
+  for (int i = 0; i < IC_PEERS && n < max; i++)
+    if (ic->peers[i].name[0] && now - ic->peers[i].seen < IC_PEER_MS)
+      snprintf(names[n++], 25, "%s", ic->peers[i].name);
+  return n;
+}
+
 int icom_lines(const ic_t *ic, int64_t now, char out[2][41]) {
   switch (ic->st) {
     case IC_CALLING:
@@ -210,7 +218,7 @@ int icom_lines(const ic_t *ic, int64_t now, char out[2][41]) {
       snprintf(out[1], 41, "%s", ic->door ? "LIFT THE HANDSET TO TALK" : ic->peer);
       return 2;
     case IC_RINGING:
-      snprintf(out[0], 41, "%s", ic->peer);
+      snprintf(out[0], 41, "%.24s CALLING", ic->peer);
       snprintf(out[1], 41, "%s", "LIFT TO ANSWER");
       return 2;
     case IC_TALK:

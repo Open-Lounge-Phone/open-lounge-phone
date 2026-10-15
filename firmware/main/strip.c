@@ -171,6 +171,12 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
   if (in->vm_stage == VM_FAILED) return set1(out, "MESSAGE NOT SENT");
 
   const phone_config_t *c = in->config;
+  // The daily check-in: asked until I'm OK (1, handset down); thanked once the server has it.
+  if (in->checked_in) return set2(out, "THANK YOU", "CHECKED IN");
+  if (c && c->checkin_by[0] && !c->checkin_done) {
+    snprintf(buf, sizeof buf, "CHECK IN BY %s", c->checkin_by);
+    return set2(out, c->checkin_alerted ? "CHECK-IN MISSED" : buf, "PRESS 1: I'M OK");
+  }
   char quiet[STATUS_MAX + 1] = "";
   if (c && c->quiet) {
     if (c->quiet_until[0]) snprintf(buf, sizeof buf, "QUIET TIL %s", c->quiet_until);

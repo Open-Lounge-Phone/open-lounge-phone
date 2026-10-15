@@ -1,5 +1,6 @@
-// Labs glue (see labs.h): settings in NVS, the intercom's sockets and audio, key actions (Home
-// Assistant, stories, macro pad, check-in, doorbell, chime) and what the screen says.
+// Labs glue (see labs.h): settings in NVS, key actions (Home Assistant, stories, macro pad,
+// check-in, and the house intercom's room, all-rooms, doorbell and chime keys through the phone's
+// own intercom, lan.h) and what the screen says.
 #include "labs.h"
 
 #include <ctype.h>
@@ -21,10 +22,9 @@
 #include "labs_cfg.h"
 #include "labs_checkin.h"
 #include "labs_hid.h"
-#include "labs_ic.h"
 #include "labs_usb.h"
 #include "labs_web.h"
-#include "lwip/sockets.h"
+#include "lan.h"
 #include "net.h"
 #include "nvs.h"
 #include "ota.h"
@@ -33,16 +33,12 @@
 
 static const char *TAG = "labs";
 
-#define PORT_CTRL 47100
-#define PORT_AUDIO 47101
-#define HELLO_MS 20000
 #define HA_POLL_MS 60000
 #define STORY_WAIT_MS 15000
 
 bool app_emit(cJSON *m);       // main.c: to the server (false: not signed in / not sent)
 
 static labs_cfg_t s_cfg;
-static ic_t s_ic;
 static checkin_t s_ci;
 static int s_pin;
 static char s_host[40];
@@ -50,13 +46,9 @@ static char s_note[2][41];
 static int64_t s_note_until;
 static char s_status[41];      // Home Assistant's status line
 static char s_labels[LABS_KEYS][25];
-static int s_ctrl = -1, s_audio = -1;
-static volatile uint32_t s_audio_peer;   // network order
-static bool s_audio_on;
-static int64_t s_next_hello, s_next_poll, s_next_check;
+static int64_t s_next_poll;
 static int s_pending_story = -1;
 static int64_t s_pending_until;
-static ic_state_t s_was = IC_IDLE;
 
 // ---------------------------------------------------------------- settings
 
@@ -91,7 +83,6 @@ static void host_from_name(void) {
 const labs_cfg_t *labs_cfg(void) { return &s_cfg; }
 const char *labs_host(void) { return s_host; }
 bool labs_pin_ok(int pin) { return pin == s_pin; }
-const ic_t *labs_ic(void) { return &s_ic; }
 
 /** The settings page saved new settings: keep and use them (a new mode may need a restart). */
 bool labs_cfg_set(const labs_cfg_t *c) {
@@ -101,12 +92,8 @@ bool labs_cfg_set(const labs_cfg_t *c) {
   cfg_save();
   labels_refresh();
   if (renamed) {
-    ic_t keep = s_ic;
-    icom_init(&s_ic, s_cfg.name);
-    memcpy(s_ic.peers, keep.peers, sizeof s_ic.peers);
     host_from_name();
     labs_web_rename(s_host);
-    s_next_hello = 0;   // tell the other rooms the new name now
   }
   s_next_poll = 0;
   ESP_LOGI(TAG, "LABS settings saved (mode %s)%s", labs_mode_name(s_cfg.mode), restart ? ": restarting" : "");
@@ -134,7 +121,6 @@ void labs_start(void) {
   s_pin = 1000 + (int)(esp_random() % 9000);
   host_from_name();
   labels_refresh();
-  icom_init(&s_ic, s_cfg.name);
   if (s_cfg.mode == LM_MACRO) labs_usb_start();
   ESP_LOGI(TAG, "LABS %s, mode %s; settings http://%s.local (PIN in MENU 4)", s_cfg.name,
            labs_mode_name(s_cfg.mode), s_host);
@@ -162,102 +148,11 @@ static bool server_send(const char *t, const char *by) {
   return app_emit(m);
 }
 
-// ---------------------------------------------------------------- the intercom's network
-
-static void broadcast(ic_out_t *o) {
-  if (s_ctrl < 0) { o->n = 0; return; }
-  struct sockaddr_in to = {.sin_family = AF_INET, .sin_port = htons(PORT_CTRL),
-                           .sin_addr.s_addr = htonl(INADDR_BROADCAST)};
-  for (int i = 0; i < o->n; i++) {
-    sendto(s_ctrl, o->lines[i], strlen(o->lines[i]), 0, (struct sockaddr *)&to, sizeof to);
-    ESP_LOGI(TAG, "IC -> %s", o->lines[i]);
-  }
-  o->n = 0;
-}
-
-static void ctrl_task(void *arg) {
-  char buf[IC_LINE];
-  for (;;) {
-    struct sockaddr_in from;
-    socklen_t fl = sizeof from;
-    int n = recvfrom(s_ctrl, buf, sizeof buf - 1, 0, (struct sockaddr *)&from, &fl);
-    if (n <= 0) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
-    buf[n] = '\0';
-    char *d = malloc(n + 24);
-    if (!d) continue;
-    snprintf(d, n + 24, "M|%lu|%s", (unsigned long)from.sin_addr.s_addr, buf);
-    app_post(EV_LABS, 0, d);
-  }
-}
-
-static void audio_task(void *arg) {
-  uint8_t buf[4 + 320];
-  for (;;) {
-    struct sockaddr_in from;
-    socklen_t fl = sizeof from;
-    int n = recvfrom(s_audio, buf, sizeof buf, 0, (struct sockaddr *)&from, &fl);
-    if (n > 4 && s_audio_on && from.sin_addr.s_addr == s_audio_peer) audio_rx_ulaw(buf + 4, n - 4);
-  }
-}
-
-static void audio_send(const uint8_t *ulaw, size_t n, uint32_t pts) {
-  static uint32_t seq;
-  uint8_t pkt[4 + 320];
-  if (s_audio < 0 || !s_audio_peer || n > 320) return;
-  seq++;
-  memcpy(pkt, &seq, 4);
-  memcpy(pkt + 4, ulaw, n);
-  struct sockaddr_in to = {.sin_family = AF_INET, .sin_port = htons(PORT_AUDIO),
-                           .sin_addr.s_addr = s_audio_peer};
-  sendto(s_audio, pkt, 4 + n, 0, (struct sockaddr *)&to, sizeof to);
-}
-
-static int udp(int port, bool bcast) {
-  int s = socket(AF_INET, SOCK_DGRAM, 0);
-  if (s < 0) return -1;
-  int on = 1;
-  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
-  if (bcast) setsockopt(s, SOL_SOCKET, SO_BROADCAST, &on, sizeof on);
-  struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(port), .sin_addr.s_addr = htonl(INADDR_ANY)};
-  if (bind(s, (struct sockaddr *)&a, sizeof a) < 0) { close(s); return -1; }
-  return s;
-}
+// ---------------------------------------------------------------- the network
 
 void labs_net_up(void) {
-  if (s_ctrl < 0) {
-    s_ctrl = udp(PORT_CTRL, true);
-    s_audio = udp(PORT_AUDIO, false);
-    if (s_ctrl >= 0) xTaskCreate(ctrl_task, "labs_ic", 4096, NULL, 5, NULL);
-    if (s_audio >= 0) xTaskCreate(audio_task, "labs_au", 3072, NULL, 6, NULL);
-    ESP_LOGI(TAG, "intercom on UDP %d/%d %s", PORT_CTRL, PORT_AUDIO, s_ctrl >= 0 ? "" : "(failed)");
-  }
   labs_web_start(s_host);
-  s_next_hello = 0;
   s_next_poll = 0;
-}
-
-/** After any intercom change: audio, ringing, a chime. */
-static void ic_sync(void) {
-  bool talk = s_ic.st == IC_TALK;
-  if (talk && !s_audio_on) {
-    s_audio_peer = s_ic.peer_ip;
-    s_audio_on = true;
-    audio_call(true, audio_send);
-    ESP_LOGI(TAG, "IC talking with %s", s_ic.peer);
-  } else if (!talk && s_audio_on) {
-    s_audio_on = false;
-    s_audio_peer = 0;
-    audio_call(false, NULL);
-  }
-  if (s_ic.chimed) {
-    s_ic.chimed = false;
-    signals_beep(BEEP_PAIR);
-    ESP_LOGI(TAG, "IC chime [%s|%s]: beep", s_ic.note[0], s_ic.note[1]);
-  }
-  if (s_ic.st != s_was) {
-    ESP_LOGI(TAG, "IC state %d -> %d", s_was, s_ic.st);
-    s_was = s_ic.st;
-  }
 }
 
 // ---------------------------------------------------------------- Home Assistant
@@ -342,16 +237,7 @@ static void today(int *day, int *minute) {
 // ---------------------------------------------------------------- keys and the hook
 
 bool labs_key(int index, bool hook_up, int64_t now) {
-  if (index == 11) {                                       // BACK: stop the intercom
-    if (s_ic.st == IC_IDLE) return false;
-    ic_out_t o = {0};
-    icom_cancel(&s_ic, &o);
-    broadcast(&o);
-    ic_sync();
-    return true;
-  }
   if (index < 0 || index >= LABS_KEYS) return false;
-  if (s_ic.st != IC_IDLE) return true;                     // keys wait while the intercom is busy
   int day, minute;
   today(&day, &minute);
   int rem = checkin_reminder(&s_cfg, &s_ci, day, minute);
@@ -364,24 +250,29 @@ bool labs_key(int index, bool hook_up, int64_t now) {
     return true;
   }
   const char *label = s_labels[index];
-  ic_out_t o = {0};
+  // The intercom keys use the phone's own house intercom (on in the app, Manage phone).
+  bool lan = a == LA_INTERCOM || a == LA_ALL || a == LA_DOORBELL || a == LA_CHIME;
+  if (lan && !lan_enabled()) {
+    note("INTERCOM IS OFF", "TURN IT ON IN THE APP", now);
+    return true;
+  }
   switch (a) {
     case LA_PHONE:
       return false;
     case LA_INTERCOM:
     case LA_ALL:
       if (!hook_up) { note("LIFT THE HANDSET", "THEN PRESS THE KEY", now); return true; }
-      icom_call(&s_ic, a == LA_ALL ? "*" : k->target, false, esp_random(), now, &o);
-      break;
+      lan_call(a == LA_ALL ? "*" : k->target, false, now);
+      return true;
     case LA_DOORBELL:
-      icom_call(&s_ic, k->target[0] ? k->target : "*", true, esp_random(), now, &o);
+      lan_call(k->target[0] ? k->target : "*", true, now);
       signals_beep(BEEP_OK);
-      break;
+      return true;
     case LA_CHIME:
-      icom_chime(&s_ic, k->target[0] ? k->target : label, &o);
+      lan_chime(k->target[0] ? k->target : label);
       signals_beep(BEEP_PAIR);
       note(label[0] ? label : "CHIME", "SENT TO EVERY ROOM", now);
-      break;
+      return true;
     case LA_HA:
       ha_call(k, label, now);
       return true;
@@ -410,9 +301,6 @@ bool labs_key(int index, bool hook_up, int64_t now) {
     default:
       return false;
   }
-  broadcast(&o);
-  ic_sync();
-  return true;
 }
 
 bool labs_hook(bool up, int64_t now) {
@@ -422,27 +310,12 @@ bool labs_hook(bool up, int64_t now) {
     s_pending_story = -1;
     return false;
   }
-  if (s_ic.st == IC_IDLE) return false;
-  ic_out_t o = {0};
-  icom_hook(&s_ic, up, now, &o);
-  broadcast(&o);
-  ic_sync();
-  return true;
+  return false;  // the house intercom takes its own (lan_hook, before this)
 }
 
 void labs_event(int a, char *data, int64_t now) {
   if (!data) return;
-  if (data[0] == 'M' && data[1] == '|') {
-    char *ip = data + 2, *line = strchr(ip, '|');
-    if (line) {
-      *line++ = '\0';
-      ESP_LOGI(TAG, "IC <- %s", line);
-      ic_out_t o = {0};
-      icom_msg(&s_ic, (uint32_t)strtoul(ip, NULL, 10), line, now, &o);
-      broadcast(&o);
-      ic_sync();
-    }
-  } else if (data[0] == 'N' && data[1] == '|') {
+  if (data[0] == 'N' && data[1] == '|') {
     char *b = strchr(data + 2, '|');
     if (b) *b++ = '\0';
     note(data + 2, b ? b : "", now);
@@ -453,43 +326,19 @@ void labs_event(int a, char *data, int64_t now) {
 }
 
 void labs_tick(int64_t now) {
-  ic_out_t o = {0};
-  if (s_ctrl >= 0 && now >= s_next_hello) {
-    s_next_hello = now + HELLO_MS;
-    icom_hello(&s_ic, &o);
-  }
-  icom_tick(&s_ic, now, &o);
-  broadcast(&o);
-  ic_sync();
   if (now >= s_next_poll && net_wifi_up()) {
     s_next_poll = now + HA_POLL_MS;
     ha_poll();
   }
-  if (now >= s_next_check) {
-    s_next_check = now + 10000;
-    int day, minute;
-    today(&day, &minute);
-    if (checkin_alert_pending(&s_cfg, &s_ci, day, minute)) {
-      // Offline (no server connection): try again on the next check, so the alert isn't lost.
-      char by[16];
-      snprintf(by, sizeof by, "%02d:%02d", s_cfg.checkin_by / 60, s_cfg.checkin_by % 60);
-      if (server_send("checkin.missed", by)) {
-        ESP_LOGW(TAG, "CHECK-IN missed (by %s): the family was told", by);
-        checkin_due_alert(&s_cfg, &s_ci, day, minute);
-        cfg_save();
-      } else {
-        ESP_LOGW(TAG, "CHECK-IN missed (by %s): not connected, trying again", by);
-      }
-    }
-  }
+  // The daily check-in's time is set in the app now and watched by the server (the phone's own
+  // check-in); labs keeps the reminders.
   if (s_pending_story >= 0 && now >= s_pending_until) s_pending_story = -1;
 }
 
 // ---------------------------------------------------------------- the screen
 
 int labs_lines(char out[2][41], bool idle, bool offhook, int64_t now) {
-  int n = icom_lines(&s_ic, now, out);
-  if (n) return n;
+  int n;
   if (now < s_note_until) {
     snprintf(out[0], 41, "%s", s_note[0]);
     snprintf(out[1], 41, "%s", s_note[1]);
@@ -498,13 +347,22 @@ int labs_lines(char out[2][41], bool idle, bool offhook, int64_t now) {
   if (!idle) return 0;
   int day, minute;
   today(&day, &minute);
-  if (checkin_reminder(&s_cfg, &s_ci, day, minute) >= 0 || s_cfg.mode == LM_CHECKIN) {
-    n = checkin_lines(&s_cfg, &s_ci, day, minute, out);
-    if (n) return n;
+  int rem = checkin_reminder(&s_cfg, &s_ci, day, minute);
+  if (rem >= 0) {  // a reminder (the check-in itself is the phone's own screen now)
+    snprintf(out[0], 41, "%02d:%02d %s", s_cfg.reminders[rem].at / 60, s_cfg.reminders[rem].at % 60,
+             s_cfg.reminders[rem].text);
+    snprintf(out[1], 41, "PRESS A KEY: DONE");
+    return 2;
   }
   switch (s_cfg.mode) {
     case LM_INTERCOM: {
-      int peers = icom_peer_count(&s_ic, now);
+      char rooms[8][25];
+      int peers = lan_rooms(rooms, 8, now);
+      if (!lan_enabled()) {
+        snprintf(out[0], 41, "%s", s_cfg.name);
+        snprintf(out[1], 41, "INTERCOM IS OFF");
+        return 2;
+      }
       snprintf(out[0], 41, "%s", s_cfg.name);
       if (peers) snprintf(out[1], 41, "%d ROOM%s NEARBY", peers, peers == 1 ? "" : "S");
       else snprintf(out[1], 41, "NO OTHER ROOMS YET");
@@ -533,9 +391,7 @@ const char *labs_label(int index) {
   return s_labels[index][0] ? s_labels[index] : (s_cfg.mode == LM_DOORBELL ? "RING" : NULL);
 }
 
-bool labs_busy(void) { return s_ic.st != IC_IDLE; }
 bool labs_standalone(void) { return s_cfg.mode != LM_PHONE; }
-bool labs_ringing(void) { return s_ic.st == IC_RINGING; }
 
 int labs_menu_lines(char out[6][25]) {
   snprintf(out[0], 25, "LABS: %.18s", s_cfg.name);

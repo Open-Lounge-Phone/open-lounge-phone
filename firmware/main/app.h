@@ -39,6 +39,9 @@ typedef enum {
   EV_CALL_BACK,    // MENU -> 5 -> 1: data = the missed call's id (malloc'd)
   EV_MISSED_CLEAR, // MENU -> 5 -> 3: clear the missed calls (everywhere)
   EV_REDIAL,       // MENU -> 8: call again what this phone last called
+  EV_LAN,          // the house intercom's receive task: data = "<ip>|<sealed line>" (malloc'd)
+  EV_INTERCOM,     // MENU -> 4 -> a digit: a = the room's index, -1 = every room
+  EV_CHIME,        // MENU -> 4: post the chime (a notice to every phone of the space)
 } ev_type_t;
 
 typedef struct {

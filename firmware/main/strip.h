@@ -25,6 +25,9 @@ typedef struct {
   int missed_n[MAX_MISSED];          // …how many (calls or messages)
   int64_t missed_at[MAX_MISSED];     // …when the newest was (ms since the epoch, 0 = unknown)
   char missed_id[MAX_MISSED][65];    // …what MENU 5 → 1 calls back ("" = can't from here)
+  // The daily check-in (config.checkin): by this time, done today, the guardians were told.
+  char checkin_by[6];                // "" = no check-in
+  bool checkin_done, checkin_alerted;
   char owner_mode[10];        // "kids" | "personal" | "lounge" | ""
   char owner_space[65];
   char owner_person[25];
@@ -44,6 +47,7 @@ typedef struct {
   vm_stage_t vm_stage;        // leaving a voicemail (vmleave.c)
   int vm_remaining_ms;        // …while recording
   int local_minute;           // minutes since local midnight for the ready clock, -1 = unknown
+  bool checked_in;            // I'm OK was just counted: THANK YOU / CHECKED IN
 } strip_input_t;
 
 /** Returns the number of lines (1 or 2) written to out. */

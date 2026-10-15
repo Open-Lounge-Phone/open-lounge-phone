@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "check.h"
-#include "labs_ic.h"
+#include "intercom.h"
 
 /** Delivers every line in `o` to each of the phones (as a broadcast does). */
 static void deliver(ic_t **phones, int n, uint32_t from_ip, ic_out_t *o, int64_t now) {
@@ -29,7 +29,13 @@ TEST(ic_room_to_room) {
   CHECK_STR(kids.peer, "KITCHEN");
   char l[2][41];
   icom_lines(&kids, 0, l);
+  CHECK_STR(l[0], "KITCHEN CALLING");
   CHECK_STR(l[1], "LIFT TO ANSWER");
+  char rooms[8][25];
+  CHECK(icom_rooms(&kitchen, 1000, rooms, 8) == 2);
+  CHECK_STR(rooms[0], "KID'S ROOM");
+  CHECK_STR(rooms[1], "GARAGE");
+  CHECK(icom_rooms(&kitchen, 1000 + IC_PEER_MS, rooms, 8) == 0);
   icom_hook(&kids, true, 10, &o); deliver(all, 3, 101, &o, 10);
   CHECK(kitchen.st == IC_TALK && kids.st == IC_TALK);
   CHECK(kitchen.peer_ip == 101 && kids.peer_ip == 100);
@@ -134,4 +140,18 @@ TEST(ic_renamed_room_replaces_its_old_name) {
   int named = 0;
   for (int i = 0; i < IC_PEERS; i++) named += !strcmp(hall.peers[i].name, "PHONE");
   CHECK(named == 0);
+}
+
+TEST(ic_busy_in_a_server_call) {
+  ic_t a, b;
+  icom_init(&a, "A"); icom_init(&b, "B");
+  ic_t *all[] = {&a, &b};
+  ic_out_t o = {0};
+  b.engaged = true;  // B is in a call through the server
+  icom_call(&a, "B", false, 5, 0, &o); deliver(all, 2, 100, &o, 0);
+  CHECK(b.st == IC_IDLE);
+  CHECK(a.st == IC_IDLE);  // told BUSY
+  char l[2][41];
+  icom_lines(&a, 1, l);
+  CHECK_STR(l[1], "IS BUSY");
 }
