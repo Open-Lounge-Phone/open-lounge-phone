@@ -10,6 +10,7 @@
 #include "app.h"
 #include "board.h"
 #include "cJSON.h"
+#include "agc.h"
 #include "audio.h"
 #include "display.h"
 #include "esp_log.h"
@@ -660,11 +661,16 @@ static void draw_check(int w, int h, int64_t now) {
   else snprintf(up, sizeof up, "%s, CLOCK NOT SET", t);
   snprintf(mem, sizeof mem, "%u KB FREE, LOW %u KB", (unsigned)(esp_get_free_heap_size() / 1024),
            (unsigned)(esp_get_minimum_free_heap_size() / 1024));
-  // The handset's mic, live while the handset is up (speak into it): for `audio gain`.
+  // The handset's mic, live while the handset is up (speak into it): the speech level after the
+  // AGC, and a word from the level at the ADC (a weak handset, or too much analog gain).
   audio_stats_t st = audio_stats();
+  bool heard = st.speech_ms > 0 && now - st.speech_ms < 3000 && st.speech_in_dbfs > -99;
   if (!s_hook_up) snprintf(mic, sizeof mic, "LIFT TO TEST");
-  else if (st.mic_dbfs <= -99) snprintf(mic, sizeof mic, "LISTENING...");
-  else snprintf(mic, sizeof mic, "%.0f DBFS PEAK %.0f", st.mic_dbfs, st.mic_peak_dbfs);
+  else if (!heard) snprintf(mic, sizeof mic, "SPEAK NOW");
+  else
+    snprintf(mic, sizeof mic, "SPEAK NOW: %.0f DB %s",
+             audio_agc_on() ? st.speech_out_dbfs : st.speech_in_dbfs,
+             agc_verdict(st.speech_in_dbfs, st.mic_peak_dbfs));
   const char *rows[][2] = {
       {net_label, wifi},     {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server},
       {"LAST ISSUE", issue}, {"HANDSET", handset},          {"MIC", mic},
@@ -673,8 +679,10 @@ static void draw_check(int w, int h, int64_t now) {
   screen_page(fb, w, h, "PHONE CHECK", rows, 8, "1 SELF-TEST      BACK: MENU");
   display_pixels(fb);
   free(fb);
-  ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] mic=[%s] up=[%s] mem=[%s]",
-           wifi, ip[0] ? ip : "-", server, issue, handset, mic, up, mem);
+  ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] mic=[%s] up=[%s] mem=[%s] "
+           "miclevel=%.1f micpeak=%.1f speechin=%.1f agc=%.1f",
+           wifi, ip[0] ? ip : "-", server, issue, handset, mic, up, mem, st.mic_dbfs,
+           st.mic_peak_dbfs, st.speech_in_dbfs, st.agc_gain_db);
 }
 
 void app_print_lounge(void) {

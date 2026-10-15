@@ -42,6 +42,9 @@ void audio_mute(bool muted);
 /** The phone check (MENU 7) with the handset up: the mic is on only to measure its level
  * (audio_stats mic_dbfs / mic_peak_dbfs); nothing is sent or kept. */
 void audio_listen(bool on);
+/** The mic's automatic gain control (on by default: CONFIG_OLP_MIC_AGC); `audio agc`. */
+void audio_agc(bool on);
+bool audio_agc_on(void);
 /** A received mu-law frame (any length) from the call. Safe from any task. */
 void audio_rx_ulaw(const uint8_t *data, size_t n);
 
@@ -63,6 +66,10 @@ typedef struct {
   float rx_tone_dbfs;   // received audio at the watched frequency
   float watch_hz;
   bool in_call;
+  // The mic's AGC (once a second): its gain, and the speech it heard before and after it.
+  float agc_gain_db;
+  float speech_in_dbfs, speech_out_dbfs;  // -100 until there was speech
+  int64_t speech_ms;                      // when those were last updated (ms since boot)
 } audio_stats_t;
 audio_stats_t audio_stats(void);
 /** Which frequency to watch for in the received audio (default 440 Hz: the e2e's test tone). */

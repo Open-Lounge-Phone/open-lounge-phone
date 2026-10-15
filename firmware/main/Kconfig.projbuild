@@ -165,9 +165,28 @@ config OLP_EARPIECE_MAX_DB
 config OLP_MIC_PGA_DB
     int "Handset mic PGA gain (dB, 0-30 in 3 dB steps)"
     range 0 30
-    default 18
+    default 30
     help
-        ES8311 PGA gain for the handset electret (hardware sim b07 assumed 18 dB).
+        ES8311 analog PGA gain for the handset electret: the fixed analog gain, set high enough
+        for a quiet handset without clipping a loud one. On the first board speech peaked around
+        -38 dBFS at 18 dB, so the default is the PGA's top (30 dB) plus OLP_MIC_SCALE_DB; the
+        AGC does the rest. To be confirmed on a board with `audio gain` and the phone check
+        (docs/audio.md).
+
+config OLP_MIC_SCALE_DB
+    int "Handset mic ADC digital scale-up (dB, 0-42 in 6 dB steps)"
+    range 0 42
+    default 6
+    help
+        The ES8311 ADC's digital gain after the PGA (register 0x16).
+
+config OLP_MIC_AGC
+    bool "Automatic gain control on the handset mic"
+    default y
+    help
+        A slow digital AGC after the ADC: speech to about -24 dBFS (gain -6 to +18 dB), only
+        following frames that look like speech, with a peak limiter at -3 dBFS. `audio agc
+        on|off` on the console.
 
 config OLP_AUDIO_TEST_DEVICE
     bool "Use the test audio device (1 kHz source, analysing sink) instead of the ES8311"

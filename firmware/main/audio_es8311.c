@@ -67,7 +67,7 @@ static void speaker(bool on) {
 
 /** Mic gain: the analog PGA (0-30 dB, 3 dB steps) and the ADC's digital scale-up (0-42 dB, 6 dB
  * steps). Starts at the build's PGA setting; `audio gain` changes it live for tuning. */
-static int s_pga_db = CONFIG_OLP_MIC_PGA_DB, s_scale_db = 0;
+static int s_pga_db = CONFIG_OLP_MIC_PGA_DB, s_scale_db = CONFIG_OLP_MIC_SCALE_DB;
 
 static void apply_mic_gain(void) {
   // PGA gain in 3 dB steps (0-10); MIC1P/MIC1N differential input.
@@ -167,12 +167,12 @@ static esp_err_t init(void) {
   wr(0x13, 0x10);
   wr(0x1C, 0x6A);  // ADC: equalizer bypass, digital DC offset cancel
   wr(0x37, 0x08);  // DAC: equalizer bypass
-  wr(0x16, 0x00);  // ADC gain scale-up 0 dB (the PGA does the gain)
+  wr(0x16, (uint8_t)(s_scale_db / 6));  // ADC gain scale-up (Kconfig OLP_MIC_SCALE_DB)
   s_mic_on = true;
   mic(false);
   speaker(false);
-  ESP_LOGI(TAG, "ES8311 (id %02x%02x) ready: 8 kHz, mic PGA %d dB", id[0], id[1],
-           CONFIG_OLP_MIC_PGA_DB);
+  ESP_LOGI(TAG, "ES8311 (id %02x%02x) ready: 8 kHz, mic PGA %d dB, scale-up %d dB", id[0], id[1],
+           s_pga_db, s_scale_db);
   return ESP_OK;
 }
 

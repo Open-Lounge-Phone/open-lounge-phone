@@ -4,8 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "agc.h"
 #include "audio_dev.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -37,10 +39,15 @@ static bool s_volume_dirty = true;
 static int s_loop_ms;
 static tone_t s_forced_tone;  // bring-up: `audio tone` (plays even on the hook)
 static audio_stats_t s_stats = {.mic_dbfs = -100, .mic_peak_dbfs = -100, .rx_dbfs = -100,
-                                .rx_tone_dbfs = -100, .watch_hz = 440};
+                                .rx_tone_dbfs = -100, .watch_hz = 440, .speech_in_dbfs = -100,
+                                .speech_out_dbfs = -100};
 
 // Task-only state.
 static tone_gen_t s_tone;
+static agc_t s_agc;  // the mic's automatic gain (item 1 of docs/audio.md)
+static bool s_agc_on = CONFIG_OLP_MIC_AGC;
+static int s_speech_frames;             // speech frames in the current one-second window…
+static float s_speech_in, s_speech_out;  // …and their summed levels (dBFS)
 static dsp_meter_t s_rx_meter, s_mic_meter;  // one-second windows
 static int s_mic_peak;                          // the loudest mic sample in the current window
 
@@ -140,6 +147,42 @@ static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+/** The AGC on a mic frame, and the speech levels it saw (the phone check shows them). */
+static void mic_gain(int16_t *pcm, size_t n) {
+  if (s_agc_on) {
+    agc_process(&s_agc, pcm, n);
+  } else {  // off (`audio agc off`): it still measures, on a copy
+    int16_t copy[DSP_FRAME];
+    size_t k = n > DSP_FRAME ? DSP_FRAME : n;
+    memcpy(copy, pcm, k * sizeof *copy);
+    agc_process(&s_agc, copy, k);
+  }
+  if (s_agc.speech) {
+    s_speech_frames++;
+    s_speech_in += s_agc.in_db;
+    s_speech_out += s_agc.out_db;
+  }
+  if (s_agc.frames % (DSP_RATE / DSP_FRAME) != 0) return;  // once a second
+  int64_t now = esp_timer_get_time() / 1000;
+  taskENTER_CRITICAL(&s_lock);
+  s_stats.agc_gain_db = s_agc.gain_db;
+  if (s_speech_frames > 0) {
+    s_stats.speech_in_dbfs = s_speech_in / (float)s_speech_frames;
+    s_stats.speech_out_dbfs = s_speech_out / (float)s_speech_frames;
+    s_stats.speech_ms = now;
+  }
+  taskEXIT_CRITICAL(&s_lock);
+  s_speech_frames = 0;
+  s_speech_in = s_speech_out = 0;
+}
+
+void audio_agc(bool on) {
+  s_agc_on = on;
+  ESP_LOGI(TAG, "mic AGC %s", on ? "on" : "off");
+}
+
+bool audio_agc_on(void) { return s_agc_on; }
+
 void audio_record(int16_t *buf, size_t max_samples) {
   taskENTER_CRITICAL(&s_lock);
   s_rec_buf = buf;
@@ -193,7 +236,11 @@ void audio_mute(bool muted) {
 
 void audio_listen(bool on) {
   taskENTER_CRITICAL(&s_lock);
-  if (on && !s_listen) s_stats.mic_dbfs = s_stats.mic_peak_dbfs = -100;  // a fresh reading
+  if (on && !s_listen) {  // a fresh reading
+    s_stats.mic_dbfs = s_stats.mic_peak_dbfs = -100;
+    s_stats.speech_in_dbfs = s_stats.speech_out_dbfs = -100;
+    s_stats.speech_ms = 0;
+  }
   s_listen = on;
   taskEXIT_CRITICAL(&s_lock);
 }
@@ -224,6 +271,11 @@ static void task(void *arg) {
     if (mic_want != mic_now) {
       s_dev->mic(mic_want);
       mic_now = mic_want;
+      if (mic_now) {
+        agc_init(&s_agc, DSP_RATE);  // learns this call's noise floor afresh
+        s_speech_frames = 0;
+        s_speech_in = s_speech_out = 0;
+      }
     }
     bool speaker_want = offhook || loop_ms > 0 || forced || play;
     if (speaker_want != speaker_now) {
@@ -243,7 +295,8 @@ static void task(void *arg) {
     }
     if (mic_now) {
       s_dev->read(mic, DSP_FRAME);
-      measure(&s_mic_meter, mic, DSP_FRAME, false);
+      measure(&s_mic_meter, mic, DSP_FRAME, false);  // the level from the ADC (before the AGC)
+      mic_gain(mic, DSP_FRAME);
       if (rec) {
         taskENTER_CRITICAL(&s_lock);
         if (s_rec_buf) {
@@ -292,10 +345,11 @@ static void task(void *arg) {
       if (now - last_log >= 5000) {
         last_log = now;
         audio_stats_t st = audio_stats();
-        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu miclevel=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
+        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu miclevel=%.1f agc=%.1f "
+                 "speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
                  (unsigned long)st.tx_frames, (unsigned long)st.rx_frames,
-                 (unsigned long)st.rx_bytes, (unsigned long)st.underruns, st.mic_dbfs, st.rx_dbfs,
-                 st.watch_hz, st.rx_tone_dbfs);
+                 (unsigned long)st.rx_bytes, (unsigned long)st.underruns, st.mic_dbfs,
+                 st.agc_gain_db, st.speech_out_dbfs, st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs);
       }
     }
   }
@@ -401,11 +455,13 @@ void audio_print_status(void) {
   audio_stats_t st = audio_stats();
   audio_test_sink_t sink = audio_test_sink();
   printf("AUDIO device=%s call=%d volume=%d/%d(%.0fdBFS) tx=%lu rx=%lu rxbytes=%lu under=%lu "
-         "drops=%lu miclevel=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
+         "drops=%lu miclevel=%.1f micpeak=%.1f agc=%.1f(%s) speechin=%.1f speech=%.1f "
+         "rxlevel=%.1f rx%.0fHz=%.1f",
          audio_device_name(), st.in_call, s_volume, VOLUME_MAX, audio_volume_db(s_volume),
          (unsigned long)st.tx_frames, (unsigned long)st.rx_frames, (unsigned long)st.rx_bytes,
-         (unsigned long)st.underruns, (unsigned long)st.drops, st.mic_dbfs, st.rx_dbfs,
-         st.watch_hz, st.rx_tone_dbfs);
+         (unsigned long)st.underruns, (unsigned long)st.drops, st.mic_dbfs, st.mic_peak_dbfs,
+         st.agc_gain_db, s_agc_on ? "on" : "off", st.speech_in_dbfs, st.speech_out_dbfs,
+         st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs);
   if (s_dev == &audio_dev_test)
     printf(" earpiece=%.1f earpiece%.0fHz=%.1f", sink.rms_dbfs, sink.watch_hz, sink.tone_dbfs);
   printf("\n");
