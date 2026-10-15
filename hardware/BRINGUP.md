@@ -119,10 +119,17 @@ Only on a board meant to stay a phone: a release build burns an eFuse key on its
 
 The v0.901 board adds an RJ45 (J4) with PoE magnetics, a W5500 (U4) on the display's SPI bus and
 an isolated 802.3af PoE module (PS1), diode-OR'd with USB into the 5 V rail V5 (`DESIGN.md` §12a).
-Firmware needs the W5500 driver first (ESP-IDF esp_eth, polling mode: `int_gpio_num = -1`,
-`poll_period_ms > 0`, `reset_gpio_num = -1`; MAC from `esp_read_mac(ESP_MAC_ETH)`, the W5500 has
-none). Until then the PHY idles at ~65 mA in auto-negotiation (USB peak 526 mA vs 500 in the
-budget: fine on any real charger, but note it).
+Flash the **v0.901 build** (`firmware/README.md` "Building for each board": `sdkconfig.v0901`,
+board id `minimal-v0901`); the rev A build never touches the W5500. How the firmware drives it
+and chooses between the cable and Wi-Fi: `firmware/README.md` "Wired network". Until the
+firmware runs, the PHY idles at ~65 mA in auto-negotiation (USB peak 526 mA vs 500 in the
+budget: fine on any real charger, but note it); the firmware powers it down while on Wi-Fi.
+
+**Power for these tests** (hardware/README.md "Power"): a v0.901 phone runs from PoE or a real
+USB-C charger. The debug setup is **PoE plus a computer's USB for the console**: the PoE cable
+carries the load, the computer port only flashes and reads the console. Don't run the network
+tests from a computer port alone: with the PHY and Wi-Fi on together the board draws more than its
+500 mA. Steps 1-2 (straps, download mode) are fine on a computer port alone (no network yet).
 
 1. **Straps, before anything else.** USB only, no Ethernet cable. Measure GPIO45 (U4 pin 34,
    ETH_MISO) and GPIO0 (U4 pin 32, ETH_CS) at power-up and while RESET is held: GPIO45 < 0.4 V,
@@ -137,16 +144,59 @@ budget: fine on any real charger, but note it).
    POE_5V ≈ 5.27 V at PS1, V5 ≈ 4.9 V, VBUS at an open receptacle may float a little through D3's leakage (harmless, no current). Both:
    V5 follows the higher source, nothing gets warm, the USB console still works.
 4. **PoE classification.** On the switch: class 0, ~3 W drawn in a call. The module must not
-   whine at idle (< 100 mA load): if it does, fit R29 (51 Ω 2512).
+   whine at idle (< 100 mA load): if it does, fit R28 (51 Ω 2512, not fitted by default).
 5. **Isolation.** Unpowered, PS1 and J4 in place: > 10 MΩ from J4's PoE pins (7-10) and BR1/BR2
    to GND at 500 V DC if a megger is at hand; never connect the PoE side to the USB ground.
-6. **Link.** Cable to a switch: the RJ45's green LED (link) lights, yellow (activity) flickers;
-   firmware gets an address by DHCP and a call works with Wi-Fi off. Unplug: Wi-Fi takes over.
-7. **Display + Ethernet.** A full e-paper refresh while a call streams over Ethernet: no audio
-   underruns beyond the usual, the picture is clean (the two share SCLK/MOSI).
+6. **The W5500 answers.** USB only, no cable, Wi-Fi saved. The boot log shows
+   `ETH W5500 ready, mac xx:xx:…` (the chip's Ethernet MAC, the eFuse base + 3) and
+   `ETH PHY on (looking for a link)`; `ETH: no W5500 answering` means SPI: check U4's supply (U5,
+   3.3 V), its 25 MHz crystal, the CS (IO0) and MISO (IO45) lines with a scope during the first
+   second. After ~5 s: `NET settled: Wi-Fi (no usable cable)`, `NET Wi-Fi radio on`,
+   `ETH PHY off (power-down)`. Measure the 5 V current with the PHY off and during a look (every
+   30 s, `ETH PHY on` for ~6 s): the difference is the PHY's (~65 mA expected).
+7. **Link and DHCP.** Plug a cable from a switch with a DHCP server. Within 30 s (the next look):
+   the RJ45's green LED (link) lights, yellow (activity) flickers, the log shows
+   `ETH link up 100 Mbit/s full duplex`, `ETH got ip=…`, `NET uplink wired ip=…`,
+   `NET Wi-Fi off …`, `NET Wi-Fi radio off`. `eth` prints
+   `ETH controller=W5500 phy=on link=up 100M full ip=… mac=… uplink=wired cable="WIRED NETWORK"`;
+   MENU 3 shows `WIRED NETWORK` / the address. Try a 10 Mbit/s port or a forced half-duplex port
+   if there is one (`eth` shows what was negotiated). Pair or sign in and make a call over the
+   cable both ways (the audio counters in `audio` grow, no underruns beyond the usual).
+8. **Unplug and replug.** Pull the cable: `ETH link down`, `NET uplink none: CABLE UNPLUGGED`,
+   the screen `OFFLINE` / `CABLE UNPLUGGED`, Wi-Fi joins within seconds (`NET uplink wifi`,
+   `NET switched to Wi-Fi: reconnecting to the server`), back `READY`; the PHY powers down 6 s
+   after the pull. Plug it back within those 6 s: straight back on the cable. Later: back on the
+   cable at the next look (≤ 30 s), Wi-Fi off. A call on Wi-Fi while the cable comes back stays
+   on Wi-Fi (MENU 3: `CABLE AFTER CALL`) and moves when it ends; pulling the cable during a call
+   ends the call (expected) and the phone comes back on Wi-Fi.
+9. **Cable only.** `wifi forget`, `reboot` with the cable in: no setup network opens
+   (`PROV open` never appears), the phone comes online on the cable. Pull it: `CABLE UNPLUGGED`,
+   the PHY stays on (no `ETH PHY off`), replug: online again within a few seconds. MENU 3 → 1:
+   the setup page says the cable is connected and Wi-Fi is optional, and saves a server alone.
+   A switch port with no DHCP server: `NO DHCP ON CABLE` after 15 s.
+10. **PoE only.** Unplug USB: the phone keeps running from the cable alone (no reset, no
+    reconnect: the diode-OR hands over). Power it up from PoE alone too (a PoE switch or an
+    802.3af/at injector; a passive 24 V injector must not power it): it boots, gets its address
+    on the cable and makes a call. The console is gone (no USB), so watch the screen and the
+    switch's per-port power reading. Power-cycle it a few times from the switch. **Minimum
+    load:** the PoE module needs at least 100 mA at 5 V or it whines and the switch may drop it
+    (DESIGN.md §12a); measure the 5 V current at the module's output (a USB power meter can't
+    see it: use a series shunt on POE_5V, or the switch's reading ÷ ~48 V × efficiency) idle and
+    in a call in every network mode: on the cable; on Wi-Fi with the PHY powered down (unplug
+    the data side, e.g. a PoE injector whose LAN port is disconnected, so the phone falls back
+    to Wi-Fi while still powered: the lowest draw, the one to watch); and during a cable check.
+    Every mode must stay above 100 mA with margin; if Wi-Fi with the PHY down comes close, fit
+    R28 (51 Ω 2512, ~100 mA) and record it.
+11. **Display + Ethernet.** A full e-paper refresh while a call streams over Ethernet (MENU 0
+    About, MENU 7 Phone check): no audio underruns beyond the usual (`audio`), the picture is
+    clean (the two share SCLK/MOSI), no `PHYCFGR write … failed` or SPI errors in the log.
+12. **BOOT while running.** Press BOOT with the phone on the cable: nothing happens to the network
+    (CS stays high through the 1 kΩ).
 
 ## 9. What to record
 
 Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the chosen cap,
 `miclevel` for speech and for silence, the PGA gain used, call setup time (`RTC CONNECTED … ms`),
-underruns per minute, whether echo was heard, and how each phone OS handled the setup page.
+underruns per minute, whether echo was heard, and how each phone OS handled the setup page. On
+hw v0.901: the `eth` line, the 5 V current with the PHY off and on, how long a plugged cable took
+to be used, the switch's PoE class and power, and any audio underruns during an e-paper refresh.

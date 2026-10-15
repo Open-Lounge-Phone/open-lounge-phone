@@ -2,6 +2,12 @@
 # Currents in mA. hw v0.901: two 5 V sources (USB VBUS, the PoE module) each through a Schottky
 # into V5; two 3.3 V LDOs from V5 (U2: module, codec, display; U5: the W5500); the ringer runs
 # from V5 directly.
+#
+# Supported power (owner rule, hardware/README.md "Power"): PoE, or a real USB-C charger. A
+# computer's USB port is for debugging (flashing, the console) and only with the PoE cable also
+# plugged in, so PoE carries the load; a computer port alone is not a supported power source.
+# The board has no CC sensing (5.1k Rd only), so it can't tell a charger from a computer port:
+# this is a rule for whoever powers it, not something the firmware enforces.
 
 ldo:                            # both regulators are this part
   part: SGM2212-3.3
@@ -20,11 +26,24 @@ module_supply_min_ma: 500
 
 sources:
   usb:
-    name: "USB default power (5.1k Rd, no PD)"
+    # A computer's USB port: debugging only, with PoE plugged in too (see the rule above). Kept
+    # in the budget at its 500 mA so the modes that fit it (and their LDO headroom at 4.40 V)
+    # stay checked; "both" is not allowed on it.
+    name: "USB default power from a computer port (5.1k Rd, no PD)"
     limit_ma: 500               # USB 2.0 default; Type-C "Default USB Power"
     v_min: 4.40                 # worst case at the device receptacle (USB 2.0 low-power port)
     v_max: 5.25
     diode: B5819W               # D3; Vf from the B5819W curve (0.6 V at 1 A max)
+    vf_v: {100: 0.30, 500: 0.45, 1000: 0.60}
+    vf_min_v: 0.20
+  usb_charger:
+    # A USB-C charger: it advertises Type-C Current (Rp) of 1.5 A or 3 A; the board draws from
+    # it without reading the advertisement (no CC sensing), hence the rule above.
+    name: "USB-C charger (Type-C Current 1.5 A or more)"
+    limit_ma: 1500              # Type-C 1.5 A advertisement (most chargers offer 3 A)
+    v_min: 4.75                 # vSafe5V minimum (Type-C spec)
+    v_max: 5.50
+    diode: B5819W               # D3, as for usb
     vf_v: {100: 0.30, 500: 0.45, 1000: 0.60}
     vf_min_v: 0.20
   poe:
@@ -40,12 +59,21 @@ sources:
 ambient_max_c: 40               # inside the enclosure, warm room
 margin: 0.20                    # peaks must stay 20 % below the LDO rating
 
-# Operating modes (firmware chooses; DESIGN.md §2): which sources may run each mode
+# Operating modes (firmware chooses: firmware/README.md "Wired network", DESIGN.md §12a): which
+# sources may run each mode
 modes:
-  wifi: {sources: [usb, poe], what: "Wi-Fi uplink; the W5500 PHY in power-down (PHYCFGR) between cable checks"}
-  ethernet: {sources: [usb, poe], what: "wired uplink; the Wi-Fi radio off"}
-  both: {sources: [poe], what: "Wi-Fi and Ethernet at once: allowed on PoE power only"}
-  phy_idle: {sources: [usb, poe], what: "Wi-Fi uplink with the PHY left on and no cable (firmware without Ethernet support)", warn_only: true}
+  wifi: {sources: [usb, usb_charger, poe], what: "Wi-Fi uplink; the W5500 PHY in power-down (PHYCFGR) between cable checks"}
+  ethernet: {sources: [usb, usb_charger, poe], what: "wired uplink; the Wi-Fi radio off"}
+  # The PHY linked and the Wi-Fi radio on together, only (firmware 0.9.5): a cable check that
+  # finds a cable, until the phone moves to it (~1 s after the address); a call on Wi-Fi when a
+  # cable comes back, until the call ends; the setup network opened by hand while on a cable,
+  # until it closes. Over a computer port's 500 mA: PoE or a charger only (the rule above).
+  both: {sources: [usb_charger, poe], what: "Wi-Fi and Ethernet at once: PoE or a USB-C charger only"}
+  # Wi-Fi with the PHY on and no cable: firmware 0.9.5 does this only during a cable check (6 s
+  # every 30 s; every 5 min after a cable that gave no address; none during a call) and for 6 s
+  # after a cable is pulled. Firmware without wired-network support (a rev A build flashed on
+  # this board) leaves the PHY on all the time. Over 500 mA: WARN on a computer port.
+  phy_idle: {sources: [usb, usb_charger, poe], what: "Wi-Fi uplink with the PHY on and no cable (cable checks; firmware without Ethernet support)", warn_only: true}
 
 # peak: worst simultaneous in that mode; avg: a call in progress. A plain number = every mode.
 loads:

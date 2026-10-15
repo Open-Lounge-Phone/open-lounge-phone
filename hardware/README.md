@@ -52,6 +52,24 @@ export and the project footprint library (hot-swap socket, board marking).
 Hardware designs in this directory are licensed under the
 [CERN Open Hardware Licence v2 – Strongly Reciprocal](LICENSE).
 
+## Power
+
+- **Rev A (hw v0.1) boards:** USB-C only.
+- **v0.901 boards:** a USB-C charger, or one Ethernet cable from a PoE switch port or a PoE
+  injector that follows IEEE 802.3af or 802.3at. Network and power then come on that one cable,
+  up to 100 m. Plugging in both is fine: PoE takes over.
+- **Use a real charger or PoE.** A computer's USB port is only for debugging (flashing and the
+  console), and only with the PoE cable plugged in too, so PoE carries the load. A computer port
+  on its own isn't a supported power source: at moments the phone uses its cable and Wi-Fi
+  together and draws more than such a port's 500 mA.
+- **"Passive" PoE injectors** (the 24 V kind) won't power it.
+- **USB-C is still how you flash it** and read its console, on either board.
+
+The numbers behind this (DESIGN.md §12a, `schematic/power_budget.yaml`): the board draws at most
+618 mA at 5 V, of the PoE module's 1400 mA; the module asks for at least 100 mA, and the phone
+draws more than that in every network mode; it is an 802.3af class 0 device (any 802.3af or
+802.3at port powers it).
+
 ## Versions
 
 | Tag | What | Date |
@@ -63,6 +81,7 @@ Hardware releases are tagged `hw-vX.Y`; firmware releases are tagged `fw-vX.Y.Z`
 gets a new `hw-` tag and a new silkscreen rev letter, and the fab files for a tag come from that
 tag's release, not from a fresh `make fab` (the router isn't byte-for-byte deterministic yet).
 Phones never follow GitHub's "latest release" (which can be a hardware release): official
-firmware takes updates from the fixed `fw-stable` release's `firmware-manifest.json`, signed and
-naming the board it is for (`minimal-revA` = `hw-v0.1`); firmware built from source has updates
+firmware takes updates from the fixed `fw-stable` release, one manifest per board, signed and
+naming the board it is for (`minimal-revA` = `hw-v0.1`: `firmware-manifest.json`; `minimal-v0901`
+= hw v0.901: `firmware-manifest-minimal-v0901.json`); firmware built from source has updates
 off until you add your own key. See `firmware/README.md` "Updates" and "Your keys, your server".

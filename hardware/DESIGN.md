@@ -370,10 +370,31 @@ the module's LDO runs no hotter than in rev A. V5 carries ≤ 9.4 µF (USB attac
 
 | Mode | Sources | 5 V peak | Note |
 |---|---|---|---|
-| Wi-Fi (PHY in power-down) | USB, PoE | 474 mA | |
-| Ethernet (Wi-Fi radio off) | USB, PoE | 394 mA | |
-| both | PoE only | 619 mA | of 1400 mA |
-| Wi-Fi with the PHY left on, no cable | USB, PoE | 526 mA | WARN: what the board draws until firmware powers the PHY down |
+| Wi-Fi (PHY in power-down) | computer USB, USB-C charger, PoE | 473 mA | |
+| Ethernet (Wi-Fi radio off) | computer USB, USB-C charger, PoE | 393 mA | |
+| both | USB-C charger, PoE | 618 mA | of 1400 mA (PoE), 1500 mA (charger) |
+| Wi-Fi with the PHY on, no cable | computer USB, USB-C charger, PoE | 525 mA | WARN on a computer port (500 mA) |
+
+**Supported power (owner rule).** A v0.901 phone runs from PoE or a real USB-C charger. A
+computer's USB port is only for debugging (flashing, the console), and only with the PoE cable
+also plugged in, so PoE carries the load; a computer port alone is not a supported power source.
+The reason is the two rows above that draw more than a computer port's 500 mA. The board has no
+CC sensing, so this is a rule for whoever powers the phone, not something the firmware enforces.
+`power_budget.yaml` models it: `usb` (a computer port, 500 mA, kept so the modes that fit it stay
+checked), `usb_charger` (Type-C Current 1.5 A or more) and `poe`; "both" is allowed on the last
+two only.
+
+**When the PHY and the Wi-Fi radio are on together** (firmware 0.9.5, `firmware/README.md`
+"Wired network"; the firmware keeps these short and rare):
+
+- "both" (PHY linked, radio on): a cable check that finds a cable, until the phone moves to it
+  (about a second after it gets its address); a call that is on Wi-Fi when a cable comes back,
+  until the call ends; the setup network opened by hand while the phone is on its cable, until
+  it closes.
+- "PHY on, no cable" (radio on): each cable check while on Wi-Fi, 6 s every 30 s (every 5 minutes
+  after a cable that gave no address; none during a call), and 6 s after a cable is pulled.
+  Firmware without wired-network support (a rev A build on this board) leaves the PHY on all
+  the time.
 
 LDO junctions stay ≤ 88 °C at 40 °C ambient in every mode. The PoE module needs ≥ 100 mA to keep
 the PSE's maintain-power signature; a powered phone draws more, R28 (51 Ω, not fitted) is the
@@ -405,11 +426,13 @@ router's ends into R28's 2512 pad) and two acute junctions at U2's output pin re
 board (JLC reference, cost.py): **$17.98 at 100, $15.30 at 1000** (rev A $7.64 / $6.16); the PoE
 module ($4.24), the W5500 ($1.82) and the RJ45 ($1.22) are most of the difference.
 
-**Firmware to do (not on this branch):** ESP-IDF esp_eth W5500 driver in polling mode on SPI2
-(shared with the display, ≤ 20 MHz), MAC from `esp_read_mac(ESP_MAC_ETH)` (the W5500 has none),
-PHY power-down (PHYCFGR) while Wi-Fi is the uplink, Ethernet preferred when a link is up;
-`hardware/build/main/gpio_map.json` now has ETH_CS / ETH_MISO instead of BOOT. Bring-up:
-BRINGUP.md §8.
+**Firmware** (0.9.5, `firmware/README.md` "Wired network"): a board choice in the build
+(`minimal-revA` / `minimal-v0901`; a rev A build has no wired network code and never drives IO0 or
+IO45); ESP-IDF's esp_eth W5500 driver polled on SPI2 (16 MHz, shared with the display at 10 MHz),
+MAC from `esp_read_mac(ESP_MAC_ETH)`; a working cable is used and the Wi-Fi radio is off; on
+Wi-Fi the PHY is in power-down (PHYCFGR) and woken every 30 s for a 6 s look (when the two are on
+together: the list under the power table). Setup needs no Wi-Fi on a cable. Bring-up: BRINGUP.md
+§8.
 
 **Not changed:** the other cases (plush, flat case, faceplate) have no RJ45 opening or hood yet;
 the 2.9" display option is unaffected (J4/PS1 are right of its standoffs).
