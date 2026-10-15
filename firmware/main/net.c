@@ -86,14 +86,27 @@ static void retry_now(void *arg) {
 
 static int s_reason;       // the last disconnect reason (0 = none since the last join)
 static int s_last_reason;  // the last one ever (diagnostics), kept after a join
+static int s_key_fails;    // handshake failures in a row (a single one is often just timing)
+static bool s_dropped;     // the last disconnect ended a working connection
+
+/** Handshake failures in a row before the screen suggests the password. */
+#define KEY_FAILS_FOR_PASSWORD 3
+
+static bool key_failure(int reason) {
+  return reason == WIFI_REASON_AUTH_FAIL || reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
+         reason == WIFI_REASON_HANDSHAKE_TIMEOUT || reason == WIFI_REASON_MIC_FAILURE;
+}
 
 static const char *problem_text(int reason) {
+  if (reason && s_dropped) return "WI-FI DROPPED";  // it was connected: not a joining problem
   switch (reason) {
     case WIFI_REASON_AUTH_FAIL:
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_MIC_FAILURE:
-      return "WRONG PASSWORD?";
+      // One failed handshake is usually timing (it happens at boot); only a streak is likely
+      // the password.
+      return s_key_fails >= KEY_FAILS_FOR_PASSWORD ? "WRONG PASSWORD?" : "JOINING WI-FI";
     case WIFI_REASON_AUTH_EXPIRE:     // the router never finished the first handshake:
     case WIFI_REASON_ASSOC_EXPIRE:    // usually the radio (antenna, distance), not the password
     case WIFI_REASON_BEACON_TIMEOUT:
@@ -133,6 +146,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     if (s_ssid[0]) esp_wifi_connect();
     else app_post(EV_WIFI_DOWN, 0, NULL);  // nothing to join: the setup network decides
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    s_dropped = s_wifi_up;  // it had an address until now
     s_wifi_up = false;
     app_post(EV_WIFI_DOWN, 0, NULL);
     // Back off a little (up to ~10 s; a minute while the setup network is up: a station
@@ -142,6 +156,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     const wifi_event_sta_disconnected_t *d = data;
     s_reason = d ? d->reason : -1;
     s_last_reason = s_reason;
+    s_key_fails = key_failure(s_reason) ? s_key_fails + 1 : 0;
     const char *why = net_wifi_problem();
     ESP_LOGW(TAG, "wifi disconnected (reason %d%s%s%s, rssi %d dBm); retry in %d ms", s_reason,
              why ? ": " : "", why ? why : "",
@@ -155,6 +170,8 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     ip_event_got_ip_t *e = data;
     retries = 0;
     s_reason = 0;
+    s_key_fails = 0;
+    s_dropped = false;
     s_wifi_up = true;
     ESP_LOGI(TAG, "WIFI connected ip=" IPSTR, IP2STR(&e->ip_info.ip));
     app_post(EV_WIFI_UP, 0, NULL);
@@ -234,6 +251,10 @@ void net_start(void) {
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   apply_wifi();
   ESP_ERROR_CHECK(esp_wifi_start());
+  // The phone is always plugged in: no modem sleep. Sleeping between beacons (DTIM) let the
+  // router drop it for missed acknowledgements (reason 34) and adds jitter to call audio.
+  esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);
+  if (ps != ESP_OK) ESP_LOGW(TAG, "wifi power save stays on: %s", esp_err_to_name(ps));
 }
 
 void net_save_wifi(const char *ssid, const char *pass) {

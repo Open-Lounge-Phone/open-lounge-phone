@@ -65,13 +65,29 @@ static void speaker(bool on) {
   wr(0x31, on ? (r31 & ~0x60) : (r31 | 0x60));
 }
 
+/** Mic gain: the analog PGA (0-30 dB, 3 dB steps) and the ADC's digital scale-up (0-42 dB, 6 dB
+ * steps). Starts at the build's PGA setting; `audio gain` changes it live for tuning. */
+static int s_pga_db = CONFIG_OLP_MIC_PGA_DB, s_scale_db = 0;
+
+static void apply_mic_gain(void) {
+  // PGA gain in 3 dB steps (0-10); MIC1P/MIC1N differential input.
+  wr(0x14, 0x10 | (s_pga_db / 3));
+  wr(0x16, (uint8_t)(s_scale_db / 6));  // ADC gain scale-up, 6 dB steps (0-7)
+}
+
+void audio_es8311_mic_gain(int pga_db, int scale_db) {
+  s_pga_db = pga_db < 0 ? 0 : pga_db > 30 ? 30 : pga_db / 3 * 3;
+  s_scale_db = scale_db < 0 ? 0 : scale_db > 42 ? 42 : scale_db / 6 * 6;
+  if (s_dev && s_mic_on) apply_mic_gain();
+  ESP_LOGI(TAG, "mic gain: PGA %d dB, ADC scale-up %d dB", s_pga_db, s_scale_db);
+}
+
 static void mic(bool on) {
   if (!s_dev || on == s_mic_on) return;
   s_mic_on = on;
   if (on) {
-    // PGA gain in 3 dB steps (0-10); MIC1P/MIC1N differential input; ADC volume 0 dB.
-    wr(0x14, 0x10 | (CONFIG_OLP_MIC_PGA_DB / 3));
-    wr(0x17, 0xBF);
+    apply_mic_gain();
+    wr(0x17, 0xBF);  // ADC volume 0 dB
     if (!s_rx_enabled && i2s_channel_enable(s_rx) == ESP_OK) s_rx_enabled = true;
   } else {
     wr(0x17, 0x00);  // ADC volume to mute
@@ -114,7 +130,13 @@ static esp_err_t init(void) {
           },
   };
   if ((err = i2s_channel_init_std_mode(s_tx, &std)) != ESP_OK) return err;
-  if ((err = i2s_channel_init_std_mode(s_rx, &std)) != ESP_OK) return err;
+  // Receive one slot only. Mono with the default slot mask (both) reads the left AND right slot
+  // of every frame: 16000 samples a second for an 8 kHz call, each mic sample twice. The audio
+  // task reads 8000 a second, so half of every 20 ms block was dropped and the rest played at
+  // half speed (calls and voicemail sounded like mush). The ES8311 puts its ADC on the left.
+  i2s_std_config_t rx = std;
+  rx.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
+  if ((err = i2s_channel_init_std_mode(s_rx, &rx)) != ESP_OK) return err;
   i2s_channel_enable(s_tx);
 
   uint8_t id_reg = 0xFD, id[2] = {0};

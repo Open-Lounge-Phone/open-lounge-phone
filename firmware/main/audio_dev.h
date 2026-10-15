@@ -28,6 +28,10 @@ extern const audio_dev_t audio_dev_test;
 /** True if the ES8311 answers on I2C (probe only). */
 bool audio_es8311_present(void);
 
+/** Mic gain for tuning on a board: analog PGA 0-30 dB (3 dB steps) and the ADC's digital
+ * scale-up 0-42 dB (6 dB steps). Applies now if the mic is on, else when it next turns on. */
+void audio_es8311_mic_gain(int pga_db, int scale_db);
+
 /** The test device's sink: what the earpiece "heard" in the last second. */
 typedef struct {
   float rms_dbfs;      // overall level

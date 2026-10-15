@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "audio.h"
+#include "audio_dev.h"
 #include "media.h"
 #include "display.h"
 #include "esp_console.h"
@@ -143,9 +144,12 @@ static int cmd_audio(int argc, char **argv) {
     audio_loopback(strcmp(argv[2], "off") ? atoi(argv[2]) : 0);
   } else if (argc >= 3 && !strcmp(argv[1], "watch")) {
     audio_watch((float)atof(argv[2]));
+  } else if (argc >= 3 && !strcmp(argv[1], "gain")) {
+    // Tuning on a board: watch miclevel in the AUDIO log line (or `audio loop`) while talking.
+    audio_es8311_mic_gain(atoi(argv[2]), argc >= 4 ? atoi(argv[3]) : 0);
   } else if (argc > 1) {
     printf("usage: audio [tone <dialtone|ringback|busy|hold|test|none>] [loop <ms>|off] "
-           "[watch <hz>]\n");
+           "[watch <hz>] [gain <pga 0-30 dB> [scale-up 0-42 dB]]\n");
     return 1;
   }
   audio_print_status();
