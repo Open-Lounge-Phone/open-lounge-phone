@@ -13,13 +13,14 @@ prov_action_t prov_step(prov_t *p, prov_event_t ev, bool has_creds, bool forced,
       p->down_since = now;
       // Asked for, or nothing saved: it stays open until something is saved.
       p->forced = forced || !has_creds;
+      p->asked = forced;
       if (forced || !has_creds) {
         p->ap_on = true;
         return PROV_ACT_START_AP;
       }
       return PROV_ACT_NONE;
     case PROV_EV_OPEN:
-      p->forced = true;
+      p->forced = p->asked = true;
       if (p->ap_on) return PROV_ACT_NONE;
       p->ap_on = true;
       return PROV_ACT_START_AP;
@@ -29,6 +30,16 @@ prov_action_t prov_step(prov_t *p, prov_event_t ev, bool has_creds, bool forced,
       // Back on the saved network: close the fallback setup network (not one that was asked for).
       if (p->ap_on && !p->forced) {
         p->ap_on = false;
+        return PROV_ACT_STOP_AP;
+      }
+      return PROV_ACT_NONE;
+    case PROV_EV_WIRED_UP:
+      p->sta_up = true;
+      p->down_since = -1;
+      // Online over a cable: setup isn't needed for a network any more. It closes unless someone
+      // asked for it (then only saving closes it, as with Wi-Fi).
+      if (p->ap_on && !p->asked) {
+        p->ap_on = p->forced = false;
         return PROV_ACT_STOP_AP;
       }
       return PROV_ACT_NONE;
@@ -46,6 +57,11 @@ prov_action_t prov_step(prov_t *p, prov_event_t ev, bool has_creds, bool forced,
       return PROV_ACT_REBOOT;
   }
   return PROV_ACT_NONE;
+}
+
+prov_wifi_t prov_wifi_answer(const char *name, bool has_saved, bool cable) {
+  if (name && name[0]) return PROV_WIFI_SAVE;
+  return has_saved || cable ? PROV_WIFI_KEEP : PROV_WIFI_MISSING;
 }
 
 prov_hold_t prov_boot_hold(int held_ms) {

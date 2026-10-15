@@ -1,12 +1,15 @@
 // Wi-Fi station (credentials from NVS, else Kconfig) and the WebSocket to the server
 // (esp_websocket_client + TLS with the ESP-IDF certificate bundle). The setup network (SoftAP
-// provisioning) is prov.c; it saves credentials here.
+// provisioning) is prov.c; it saves credentials here. On a board with a wired network (hw
+// v0.901) it also runs the choice between the cable and Wi-Fi (netsel.c) and applies it: the
+// cable's PHY (eth.c), the Wi-Fi station and radio, and the default route.
 #include "net.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "app.h"
+#include "board.h"
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -17,6 +20,11 @@
 #if CONFIG_OLP_QEMU
 #include "esp_eth.h"
 #endif
+#if BOARD_HAS_ETHERNET && !CONFIG_OLP_QEMU
+#include "bootloader_random.h"
+#endif
+#include "eth.h"
+#include "netsel.h"
 #include "nvs.h"
 #include "sdkconfig.h"
 
@@ -30,6 +38,37 @@ static char s_ssid[33];
 static esp_netif_t *s_netif;
 static char *s_rx;  // reassembly buffer for one message
 static size_t s_rx_len;
+
+#if BOARD_HAS_ETHERNET
+static netsel_t s_sel;      // the cable or Wi-Fi (netsel.c)
+static bool s_sta_wanted;   // the station joins the saved Wi-Fi (netsel's choice)
+static bool s_ap_on;        // the setup network needs the radio
+static bool s_radio;        // esp_wifi is started
+static net_uplink_t s_last_used = NET_NONE;  // the last network that carried the phone
+#endif
+
+/** The station joins its saved network: always on rev A; netsel's choice with a cable. */
+static bool sta_wanted(void) {
+#if BOARD_HAS_ETHERNET
+  return s_sta_wanted;
+#else
+  return true;
+#endif
+}
+
+#if BOARD_HAS_ETHERNET
+static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
+#endif
+
+/** Wi-Fi joined (with an address) or lost: the app hears it directly (rev A) or through the
+ * network choice (hw v0.901: it may be the cable that matters). */
+static void post_wifi(bool up) {
+#if BOARD_HAS_ETHERNET
+  app_post(EV_NET, up ? NS_WIFI_IP : NS_WIFI_DOWN, NULL);
+#else
+  app_post(up ? EV_WIFI_UP : EV_WIFI_DOWN, 0, NULL);
+#endif
+}
 
 static void nvs_str(const char *key, char *out, size_t len, const char *fallback) {
   nvs_handle_t h;
@@ -81,7 +120,7 @@ bool net_has_wifi(void) {
 void net_slow_retry(bool slow) { s_slow_retry = slow; }
 
 static void retry_now(void *arg) {
-  if (s_ssid[0]) esp_wifi_connect();
+  if (s_ssid[0] && sta_wanted()) esp_wifi_connect();
 }
 
 static int s_reason;       // the last disconnect reason (0 = none since the last join)
@@ -143,12 +182,20 @@ int net_wifi_channel(void) {
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
   static int retries;
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-    if (s_ssid[0]) esp_wifi_connect();
-    else app_post(EV_WIFI_DOWN, 0, NULL);  // nothing to join: the setup network decides
+    if (s_ssid[0] && sta_wanted()) esp_wifi_connect();
+    else post_wifi(false);  // nothing to join: the setup network decides
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+#if BOARD_HAS_ETHERNET
+    if (!s_sta_wanted) {  // turned off on purpose (the cable is in use): no problem, no retry
+      s_wifi_up = s_dropped = false;
+      s_reason = 0;
+      post_wifi(false);
+      return;
+    }
+#endif
     s_dropped = s_wifi_up;  // it had an address until now
     s_wifi_up = false;
-    app_post(EV_WIFI_DOWN, 0, NULL);
+    post_wifi(false);
     // Back off a little (up to ~10 s; a minute while the setup network is up: a station
     // scanning for a missing network hops channels and drops the setup network's clients).
     int delay = s_slow_retry ? 60000 : retries < 10 ? 500 * (retries + 1) : 10000;
@@ -174,7 +221,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     s_dropped = false;
     s_wifi_up = true;
     ESP_LOGI(TAG, "WIFI connected ip=" IPSTR, IP2STR(&e->ip_info.ip));
-    app_post(EV_WIFI_UP, 0, NULL);
+    post_wifi(true);
   }
 }
 
@@ -195,7 +242,7 @@ static void apply_wifi(void) {
   ESP_LOGI(TAG, "wifi: %s", s_ssid[0] ? s_ssid : "(not set: use `wifi <ssid> <pass>`)");
 }
 
-#if CONFIG_OLP_QEMU
+#if CONFIG_OLP_QEMU && !BOARD_HAS_ETHERNET
 // QEMU has no Wi-Fi: its OpenCores Ethernet (user-mode NAT) stands in for it. Everything above
 // the link (DHCP, DNS, TLS, UDP for WebRTC) is the same as on the board.
 static void eth_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
@@ -232,15 +279,153 @@ static void start_qemu_ethernet(void) {
 }
 #endif
 
-void net_start(void) {
-#if CONFIG_OLP_QEMU
-  ESP_ERROR_CHECK(esp_netif_init());
-  ESP_ERROR_CHECK(esp_event_loop_create_default());
-  start_qemu_ethernet();
-  return;
+#if BOARD_HAS_ETHERNET
+// --- the cable or Wi-Fi (hw v0.901) ------------------------------------------------------------
+
+/** The radio runs while the station is wanted or the setup network is open. With it off, the
+ * SAR ADC keeps the random number generator truly random (TLS, keys): the radio is its other
+ * entropy source, and the two can't run together. */
+static void radio_apply(void) {
+#if !CONFIG_OLP_QEMU
+  bool want = s_sta_wanted || s_ap_on;
+  if (want && !s_radio) {
+    bootloader_random_disable();
+    esp_err_t err = esp_wifi_start();  // STA_START joins the saved network if it's wanted
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(err));
+      bootloader_random_enable();
+      return;
+    }
+    s_radio = true;
+    esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);  // as on rev A: no modem sleep
+    if (ps != ESP_OK) ESP_LOGW(TAG, "wifi power save stays on: %s", esp_err_to_name(ps));
+    ESP_LOGI(TAG, "NET Wi-Fi radio on");
+  } else if (!want && s_radio) {
+    esp_timer_stop(s_retry);
+    esp_wifi_stop();
+    s_radio = s_wifi_up = s_dropped = false;
+    s_reason = 0;
+    bootloader_random_enable();
+    ESP_LOGI(TAG, "NET Wi-Fi radio off");
+  }
 #endif
+}
+
+static void set_station(bool want) {
+  if (want == s_sta_wanted) return;
+  s_sta_wanted = want;
+  ESP_LOGI(TAG, "NET Wi-Fi %s", want ? "on" : "off (the cable carries the phone)");
+#if !CONFIG_OLP_QEMU
+  if (s_radio && want && s_ssid[0]) esp_wifi_connect();
+  if (s_radio && !want) esp_wifi_disconnect();
+  radio_apply();
+#endif
+}
+
+static ns_input_t sel_input(bool busy) {
+  return (ns_input_t){.wired = eth_present(), .has_wifi = s_ssid[0] != '\0', .busy = busy};
+}
+
+static const char *uplink_name(net_uplink_t u) {
+  return u == NET_WIRED ? "wired" : u == NET_WIFI ? "wifi" : "none";
+}
+
+net_change_t net_select(int ev, bool busy) {
+  ns_input_t in = sel_input(busy);
+  net_uplink_t before = s_sel.uplink;
+  bool was_settled = s_sel.settled;
+  netsel_step(&s_sel, (ns_event_t)ev, &in, now_ms());
+  if (s_sel.settled && !was_settled)
+    ESP_LOGI(TAG, "NET settled: %s", !in.wired              ? "Wi-Fi only (no wired network)"
+                                     : s_sel.uplink == NET_WIRED ? "the cable"
+                                     : in.has_wifi             ? "Wi-Fi (no usable cable)"
+                                                               : "waiting for a cable");
+  eth_phy(s_sel.phy_on);
+  set_station(s_sel.wifi_on);
+  if (s_sel.uplink == before) return NET_SAME;
+  // The chosen network is the default route (both can have an address while a call finishes).
+  void *netif = s_sel.uplink == NET_WIRED ? eth_netif() : s_sel.uplink == NET_WIFI ? s_netif : NULL;
+  if (netif) esp_netif_set_default_netif(netif);
+  char ip[16];
+  net_uplink_ip(ip, sizeof ip);
+  const char *why = s_sel.uplink == NET_NONE ? net_problem() : NULL;
+  ESP_LOGI(TAG, "NET uplink %s%s%s%s%s", uplink_name(s_sel.uplink), ip[0] ? " ip=" : "", ip,
+           why ? ": " : "", why ? why : "");
+  if (s_sel.uplink == NET_NONE) return NET_WENT_DOWN;
+  net_change_t c =
+      s_last_used != NET_NONE && s_last_used != s_sel.uplink ? NET_SWITCHED : NET_WENT_UP;
+  s_last_used = s_sel.uplink;
+  return c;
+}
+
+bool net_settled(void) { return s_sel.settled; }
+net_uplink_t net_uplink(void) { return s_sel.uplink; }
+bool net_up(void) { return s_sel.uplink != NET_NONE; }
+bool net_wired(void) { return eth_present(); }
+
+const char *net_problem(void) {
+  ns_input_t in = sel_input(false);
+  return netsel_problem(&s_sel, &in, s_wifi_up ? NULL : net_wifi_problem());
+}
+
+const char *net_cable_line(void) {
+  ns_input_t in = sel_input(false);
+  return netsel_cable_text(netsel_cable(&s_sel, &in));
+}
+
+void net_setup_radio(bool on) {
+  s_ap_on = on;
+  radio_apply();
+}
+#else
+// --- rev A: Wi-Fi only ---------------------------------------------------------------------------
+net_change_t net_select(int ev, bool busy) {
+  (void)ev;
+  (void)busy;
+  return NET_SAME;
+}
+bool net_settled(void) { return true; }
+net_uplink_t net_uplink(void) { return s_wifi_up ? NET_WIFI : NET_NONE; }
+bool net_up(void) { return s_wifi_up; }
+bool net_wired(void) { return false; }
+const char *net_problem(void) { return s_wifi_up ? NULL : net_wifi_problem(); }
+const char *net_cable_line(void) { return NULL; }
+void net_setup_radio(bool on) { (void)on; }
+#endif
+
+void net_uplink_ip(char *ip, size_t n) {
+  ip[0] = '\0';
+  if (net_uplink() == NET_WIRED) {
+    eth_info_t e;
+    eth_info(&e);
+    snprintf(ip, n, "%s", e.ip);
+  } else if (net_uplink() == NET_WIFI && s_netif) {
+    esp_netif_ip_info_t info;
+    if (esp_netif_get_ip_info(s_netif, &info) == ESP_OK) snprintf(ip, n, IPSTR, IP2STR(&info.ip));
+  }
+}
+
+void net_start(void) {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
+#if CONFIG_OLP_QEMU && BOARD_HAS_ETHERNET
+  // QEMU for hw v0.901: its Ethernet is the cable (eth.c) and there is no Wi-Fi radio. The saved
+  // Wi-Fi still counts for the choice (sdkconfig.qemu names one): the phone then powers the
+  // "PHY" down and looks for the cable now and then, as on the board.
+  nvs_str("ssid", s_ssid, sizeof s_ssid, CONFIG_OLP_WIFI_SSID);
+  ESP_LOGI(TAG, "saved Wi-Fi: %s (QEMU: no radio; its Ethernet is the cable)",
+           s_ssid[0] ? s_ssid : "(none)");
+  netsel_init(&s_sel, now_ms());
+  eth_start();
+  net_select(NS_TICK, false);
+#elif CONFIG_OLP_QEMU
+  start_qemu_ethernet();
+#endif
+#if CONFIG_OLP_QEMU
+  (void)wifi_event;  // no Wi-Fi driver in QEMU
+  (void)retry_now;
+  (void)apply_wifi;
+#else
   s_netif = esp_netif_create_default_wifi_sta();
   wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&init));
@@ -250,11 +435,21 @@ void net_start(void) {
   ESP_ERROR_CHECK(esp_timer_create(&t, &s_retry));
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   apply_wifi();
+#if BOARD_HAS_ETHERNET
+  // The cable first: the radio stays off until the network choice wants Wi-Fi (or the setup
+  // network opens). Until then the SAR ADC is the random number generator's entropy source.
+  bootloader_random_enable();
+  netsel_init(&s_sel, now_ms());
+  eth_start();
+  net_select(NS_TICK, false);  // no W5500 answering: straight to Wi-Fi
+#else
   ESP_ERROR_CHECK(esp_wifi_start());
   // The phone is always plugged in: no modem sleep. Sleeping between beacons (DTIM) let the
   // router drop it for missed acknowledgements (reason 34) and adds jitter to call audio.
   esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);
   if (ps != ESP_OK) ESP_LOGW(TAG, "wifi power save stays on: %s", esp_err_to_name(ps));
+#endif
+#endif
 }
 
 void net_save_wifi(const char *ssid, const char *pass) {
@@ -267,6 +462,15 @@ void net_set_wifi(const char *ssid, const char *pass) {
   nvs_put("pass", pass ? pass : "");
 #if CONFIG_OLP_QEMU
   return;  // no Wi-Fi driver in QEMU: saved only
+#endif
+#if BOARD_HAS_ETHERNET
+  apply_wifi();
+  if (s_radio && s_sta_wanted) {
+    esp_wifi_disconnect();
+    esp_wifi_connect();
+  }
+  app_post(EV_NET, NS_TICK, NULL);  // a Wi-Fi to fall back on now (or none): choose again
+  return;
 #endif
   esp_wifi_disconnect();
   apply_wifi();

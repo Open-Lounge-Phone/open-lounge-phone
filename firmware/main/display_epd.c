@@ -9,6 +9,7 @@
 #include "sdkconfig.h"
 
 #include "board.h"
+#include "board_spi.h"
 #include "display.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -105,15 +106,8 @@ static esp_err_t epd_init(void) {
                       .mode = GPIO_MODE_INPUT,
                       .pull_down_en = GPIO_PULLDOWN_ENABLE};
   gpio_config(&in);
-  spi_bus_config_t bus = {
-      .mosi_io_num = PIN_EPD_DIN,
-      .miso_io_num = -1,
-      .sclk_io_num = PIN_EPD_CLK,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .max_transfer_sz = 4096,
-  };
-  esp_err_t err = spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO);
+  // The bus is shared with the W5500 on hw v0.901 (board_spi.c).
+  esp_err_t err = board_spi_init();
   if (err != ESP_OK) return err;
   spi_device_interface_config_t dev = {
       .clock_speed_hz = 10 * 1000 * 1000,
@@ -121,7 +115,7 @@ static esp_err_t epd_init(void) {
       .spics_io_num = PIN_EPD_CS,
       .queue_size = 1,
   };
-  err = spi_bus_add_device(SPI2_HOST, &dev, &s_spi);
+  err = spi_bus_add_device(BOARD_SPI_HOST, &dev, &s_spi);
   if (err != ESP_OK) return err;
   if (!panel_init()) return ESP_ERR_NOT_FOUND;
   s_fitted = true;

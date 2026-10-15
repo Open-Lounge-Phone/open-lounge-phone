@@ -45,7 +45,15 @@ void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_l
   snprintf(ip, ip_len, "10.0.0.2");
 }
 void net_server_url(char *out, size_t len) { snprintf(out, len, "wss://example.org"); }
-bool net_wifi_up(void) { return true; }
+// The network in use: Wi-Fi (rev A) unless a test puts the phone on a cable (hw v0.901).
+static net_uplink_t s_net_uplink = NET_WIFI;
+static const char *s_cable_line;  // NULL: no wired network on this board
+bool net_wifi_up(void) { return s_net_uplink == NET_WIFI; }
+net_uplink_t net_uplink(void) { return s_net_uplink; }
+const char *net_cable_line(void) { return s_cable_line; }
+void net_uplink_ip(char *ip, size_t n) {
+  snprintf(ip, n, "%s", s_net_uplink == NET_WIRED ? "192.168.1.23" : "10.0.0.2");
+}
 bool ota_enabled(void) { return true; }
 
 // --- helpers -------------------------------------------------------------------------------
@@ -286,4 +294,49 @@ TEST(menu_4_is_the_intercom_or_the_chime) {
   reset_events();
   menu_key(&q, key(0), 2);
   CHECK(s_ev_type == -1);
+}
+
+TEST(menu_network_screen_on_wifi) {  // rev A, and hw v0.901 without a cable
+  s_net_uplink = NET_WIFI;
+  s_cable_line = NULL;
+  menu_t m = {0};
+  menu_key(&m, K_MENU, 0);
+  menu_key(&m, key(3), 1);
+  char out[MENU_LINES][25];
+  CHECK(menu_lines(&m, out) == 4);
+  CHECK_STR(out[0], "NETWORK");
+  CHECK_STR(out[1], "HOME -50");
+  CHECK_STR(out[2], "EXAMPLE.ORG");
+  CHECK_STR(out[3], "1 CHANGE");
+  // hw v0.901 on Wi-Fi: the cable's state heads the screen, Wi-Fi below.
+  s_cable_line = "CABLE UNPLUGGED";
+  menu_lines(&m, out);
+  CHECK_STR(out[0], "CABLE UNPLUGGED");
+  CHECK_STR(out[1], "HOME -50");
+  // Neither works.
+  s_net_uplink = NET_NONE;
+  menu_lines(&m, out);
+  CHECK_STR(out[1], "HOME OFFLINE");
+  s_net_uplink = NET_WIFI;
+  s_cable_line = NULL;
+}
+
+TEST(menu_network_screen_on_the_cable) {
+  s_net_uplink = NET_WIRED;
+  s_cable_line = "WIRED NETWORK";
+  menu_t m = {0};
+  menu_key(&m, K_MENU, 0);
+  menu_key(&m, key(4), 1);  // 4 opens the same screen (the server)
+  char out[MENU_LINES][25];
+  CHECK(menu_lines(&m, out) == 4);
+  CHECK_STR(out[0], "WIRED NETWORK");
+  CHECK_STR(out[1], "192.168.1.23");
+  CHECK_STR(out[2], "EXAMPLE.ORG");
+  CHECK_STR(out[3], "1 CHANGE");
+  for (int i = 0; i < 4; i++) CHECK(strlen(out[i]) <= 20);
+  reset_events();
+  menu_key(&m, key(1), 2);  // setup still opens (the server, and Wi-Fi if wanted)
+  CHECK(s_ev_type == EV_PROV_OPEN);
+  s_net_uplink = NET_WIFI;
+  s_cable_line = NULL;
 }

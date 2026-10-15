@@ -216,7 +216,7 @@ static void ha_call(const labs_key_t *k, const char *label, int64_t now) {
 }
 
 static void ha_poll(void) {
-  if (!s_cfg.ha_url[0] || !s_cfg.ha_token[0] || !s_cfg.ha_status[0] || !net_wifi_up()) return;
+  if (!s_cfg.ha_url[0] || !s_cfg.ha_token[0] || !s_cfg.ha_status[0] || !net_up()) return;
   ha_job_t *j = calloc(1, sizeof *j);
   if (!j) return;
   j->status = true;
@@ -326,7 +326,7 @@ void labs_event(int a, char *data, int64_t now) {
 }
 
 void labs_tick(int64_t now) {
-  if (now >= s_next_poll && net_wifi_up()) {
+  if (now >= s_next_poll && net_up()) {
     s_next_poll = now + HA_POLL_MS;
     ha_poll();
   }

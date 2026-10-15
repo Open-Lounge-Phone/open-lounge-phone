@@ -19,6 +19,8 @@
 #include "esp_wifi.h"
 #include "identity.h"
 #include "net.h"
+#include "eth.h"
+#include "board.h"
 #include "prov_core.h"
 #include "prov.h"
 #include "ota.h"
@@ -224,6 +226,33 @@ static int cmd_ota(int argc, char **argv) {
   return 0;
 }
 
+static int cmd_eth(int argc, char **argv) {
+#if BOARD_HAS_ETHERNET
+  eth_info_t e;
+  eth_info(&e);
+  static const char *uplinks[] = {"none", "wired", "wifi"};
+  const char *cable = net_cable_line();
+#if CONFIG_OLP_QEMU
+  const char *chip = "qemu-ethernet";
+#else
+  const char *chip = "W5500";
+#endif
+  if (!e.present) {
+    printf("ETH controller=none (no %s answered at power-on): Wi-Fi only\n", chip);
+    return 0;
+  }
+  printf("ETH controller=%s phy=%s link=%s", chip, e.phy_on ? "on" : "off(power-down)",
+         e.link ? "up" : "down");
+  if (e.link) printf(" %dM %s", e.speed_mbps, e.full_duplex ? "full" : "half");
+  printf(" ip=%s mac=%02x:%02x:%02x:%02x:%02x:%02x uplink=%s cable=\"%s\"\n",
+         e.ip[0] ? e.ip : "-", e.mac[0], e.mac[1], e.mac[2], e.mac[3], e.mac[4], e.mac[5],
+         uplinks[net_uplink()], cable ? cable : "-");
+#else
+  printf("eth: no wired network on this board (rev A: Wi-Fi only)\n");
+#endif
+  return 0;
+}
+
 static int cmd_reboot(int argc, char **argv) {
   esp_restart();
   return 0;
@@ -261,6 +290,7 @@ void console_start(void) {
       {.command = "setup", .help = "setup [test [ssid [pass]]]: open the Wi-Fi setup network (test: fetch/post its page from the phone)",
        .func = cmd_setup},
       {.command = "ota", .help = "ota [check|now|url <u>|url default]: firmware updates", .func = cmd_ota},
+      {.command = "eth", .help = "the wired network (hw v0.901): link, speed, address, MAC", .func = cmd_eth},
       {.command = "reboot", .help = "restart", .func = cmd_reboot},
   };
   for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++)

@@ -64,6 +64,55 @@ TEST(prov_open_from_menu) {
   CHECK(prov_step(&p, PROV_EV_OPEN, true, false, 3000) == PROV_ACT_NONE);
 }
 
+// hw v0.901: a working cable is a network, so setup doesn't demand Wi-Fi.
+TEST(prov_a_working_cable_at_power_on_needs_no_setup) {
+  prov_t p;
+  prov_init(&p);
+  // The app boots setup only once the network choice is made; a cable counts as a network.
+  CHECK(prov_step(&p, PROV_EV_BOOT, true /* cable */, false, 0) == PROV_ACT_NONE);
+  CHECK(prov_step(&p, PROV_EV_WIRED_UP, true, false, 100) == PROV_ACT_NONE);
+  CHECK(prov_step(&p, PROV_EV_TICK, true, false, PROV_FALLBACK_MS * 3) == PROV_ACT_NONE);
+}
+
+TEST(prov_a_cable_closes_the_setup_network_opened_for_lack_of_one) {
+  prov_t p;
+  prov_init(&p);
+  CHECK(prov_step(&p, PROV_EV_BOOT, false, false, 0) == PROV_ACT_START_AP);  // nothing at all
+  // Wi-Fi coming up wouldn't close it (only saving does); a cable does: it is the network.
+  CHECK(prov_step(&p, PROV_EV_WIRED_UP, false, false, 1000) == PROV_ACT_STOP_AP);
+  CHECK(!p.ap_on);
+  // Unplugged for good: setup is offered again after the fallback time.
+  prov_step(&p, PROV_EV_STA_DOWN, false, false, 2000);
+  CHECK(prov_step(&p, PROV_EV_TICK, false, false, 2000 + PROV_FALLBACK_MS) == PROV_ACT_START_AP);
+  // …and the cable back closes it again.
+  CHECK(prov_step(&p, PROV_EV_WIRED_UP, false, false, 3000 + PROV_FALLBACK_MS) == PROV_ACT_STOP_AP);
+}
+
+TEST(prov_a_cable_never_closes_setup_someone_asked_for) {
+  prov_t p;
+  prov_init(&p);
+  CHECK(prov_step(&p, PROV_EV_BOOT, true, true /* MENU+BACK */, 0) == PROV_ACT_START_AP);
+  CHECK(prov_step(&p, PROV_EV_WIRED_UP, true, false, 1000) == PROV_ACT_NONE);
+  CHECK(p.ap_on);
+  prov_init(&p);
+  prov_step(&p, PROV_EV_BOOT, true, false, 0);
+  prov_step(&p, PROV_EV_WIRED_UP, true, false, 500);
+  CHECK(prov_step(&p, PROV_EV_OPEN, true, false, 1000) == PROV_ACT_START_AP);  // MENU 4 -> 1
+  CHECK(prov_step(&p, PROV_EV_WIRED_UP, true, false, 2000) == PROV_ACT_NONE);
+  CHECK(p.ap_on);
+  CHECK(prov_step(&p, PROV_EV_SAVED, true, false, 3000) == PROV_ACT_REBOOT);
+}
+
+TEST(prov_wifi_is_optional_with_a_cable) {
+  CHECK(prov_wifi_answer("Home", false, false) == PROV_WIFI_SAVE);
+  CHECK(prov_wifi_answer("Home", true, true) == PROV_WIFI_SAVE);
+  CHECK(prov_wifi_answer("", true, false) == PROV_WIFI_KEEP);   // keep the saved network
+  CHECK(prov_wifi_answer("", false, true) == PROV_WIFI_KEEP);   // none, on the cable
+  CHECK(prov_wifi_answer("", false, false) == PROV_WIFI_MISSING);
+  CHECK(prov_wifi_answer(NULL, false, false) == PROV_WIFI_MISSING);
+  CHECK(prov_check("", "") != NULL);  // what the page says when it's missing
+}
+
 TEST(prov_names) {
   uint8_t mac[6] = {0x24, 0x6f, 0x28, 0x01, 0xab, 0x0c};
   char ssid[33];

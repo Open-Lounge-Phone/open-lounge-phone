@@ -344,8 +344,12 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       if (!strcmp(url, PROV_HUB_URL)) snprintf(host, sizeof host, "PUBLIC HUB");
       else if (url[0]) prov_server_host(url, host, sizeof host);
       else snprintf(host, sizeof host, "NOT SET");
-      snprintf(out[0], 25, "NETWORK");
-      if (!ssid[0]) snprintf(out[1], 25, "WI-FI NOT SET");
+      // A board with a wired network (hw v0.901) heads it with the cable: WIRED NETWORK and its
+      // address when in use, else what the cable is doing over the Wi-Fi line.
+      const char *cable = net_cable_line();
+      snprintf(out[0], 25, "%s", cable ? cable : "NETWORK");
+      if (net_uplink() == NET_WIRED) net_uplink_ip(out[1], 25);
+      else if (!ssid[0]) snprintf(out[1], 25, "WI-FI NOT SET");
       else if (!net_wifi_up()) snprintf(out[1], 25, "%.15s OFFLINE", ssid);
       else snprintf(out[1], 25, "%.16s %d", ssid, rssi);
       snprintf(out[2], 25, "%.24s", host);

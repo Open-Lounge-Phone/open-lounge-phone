@@ -112,13 +112,19 @@ static const char HEAD[] =
     ".net{padding:.5em;border:1px solid #ccc;border-radius:8px;background:#fff}"
     "input[type=text],input[type=password]{width:100%;box-sizing:border-box;font-size:1em;"
     "padding:.5em}button{font-size:1.1em;padding:.6em 1.2em;margin-top:.8em}"
-    ".err{color:#a00;font-weight:bold}small{color:#666}</style></head><body>";
+    ".err{color:#a00;font-weight:bold}.ok{color:#060}small{color:#666}</style></head><body>";
 
 static void send_page(httpd_req_t *req, const char *error) {
   httpd_resp_set_type(req, "text/html; charset=utf-8");
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
   httpd_resp_sendstr_chunk(req, HEAD);
-  httpd_resp_sendstr_chunk(req, "<h1>Set up your phone</h1><p>Choose its Wi-Fi and its server.</p>");
+  // A board with a working cable (hw v0.901) is online already: Wi-Fi is optional.
+  bool cable = net_uplink() == NET_WIRED;
+  httpd_resp_sendstr_chunk(req, cable ? "<h1>Set up your phone</h1><p>Choose its server.</p>"
+                                        "<p class=ok>The network cable is connected: Wi-Fi is "
+                                        "optional.</p>"
+                                      : "<h1>Set up your phone</h1><p>Choose its Wi-Fi and its "
+                                        "server.</p>");
   if (error) {
     char esc[200];
     prov_html_escape(error, esc, sizeof esc);
@@ -126,7 +132,8 @@ static void send_page(httpd_req_t *req, const char *error) {
     httpd_resp_sendstr_chunk(req, esc);
     httpd_resp_sendstr_chunk(req, "</p>");
   }
-  httpd_resp_sendstr_chunk(req, "<form method=post action=/save><h2>Wi-Fi</h2>");
+  httpd_resp_sendstr_chunk(req, cable ? "<form method=post action=/save><h2>Wi-Fi (optional)</h2>"
+                                      : "<form method=post action=/save><h2>Wi-Fi</h2>");
   char line[512], esc[200];
   char saved[33] = "", ip[16];
   int rssi;
@@ -138,6 +145,11 @@ static void send_page(httpd_req_t *req, const char *error) {
     snprintf(line, sizeof line,
              "<label class=net><input type=radio name=ssid value=\"\" checked> Keep %s</label>", esc);
     httpd_resp_sendstr_chunk(req, line);
+  } else if (cable) {
+    // Nothing saved: on the cable it can stay that way.
+    httpd_resp_sendstr_chunk(req, "<label class=net><input type=radio name=ssid value=\"\" "
+                                  "checked> No Wi-Fi: use the cable</label>");
+    keep = true;  // nothing else pre-selected
   }
   for (int i = 0; i < s_naps; i++) {
     prov_html_escape(s_aps[i].ssid, esc, sizeof esc);
@@ -203,7 +215,10 @@ static esp_err_t post_save(httpd_req_t *req) {
   char saved[33] = "", ip[16];
   int rssi;
   net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
-  bool keep_wifi = !err && !name[0] && saved[0] && net_has_wifi();
+  // No network named: keep the saved one, or none at all on a working cable (hw v0.901).
+  bool cable = net_uplink() == NET_WIRED;
+  bool keep_wifi =
+      !err && prov_wifi_answer(name, saved[0] && net_has_wifi(), cable) == PROV_WIFI_KEEP;
   if (!err && !keep_wifi) err = prov_check(name, a.pass);
   if (!err && !keep_wifi && !a.pass[0]) {  // a network the scan saw as secured needs its password
     for (int i = 0; i < s_naps; i++)
@@ -222,16 +237,23 @@ static esp_err_t post_save(httpd_req_t *req) {
     net_set_server(server);
     identity_set_device_id("");  // another server: the phone pairs there again
   }
-  ESP_LOGI(TAG, "PROV SAVED ssid=%s server=%s (restarting)", keep_wifi ? saved : name, server);
-  if (keep_wifi) name = saved;
+  if (keep_wifi) name = saved[0] && net_has_wifi() ? saved : "";
+  bool cable_only = !name[0];  // nothing saved, nothing named: the cable (prov_wifi_answer)
+  ESP_LOGI(TAG, "PROV SAVED ssid=%s server=%s (restarting)", cable_only ? "(none: cable)" : name,
+           server);
   char esc[200], line[512];
   prov_html_escape(name, esc, sizeof esc);
   httpd_resp_set_type(req, "text/html; charset=utf-8");
   httpd_resp_sendstr_chunk(req, HEAD);
-  snprintf(line, sizeof line,
-           "<h1>Saved</h1><p>The phone restarts and joins <b>%s</b>. Its display shows when it "
-           "is online; then pair it in the Open Lounge Phone app.</p></body></html>",
-           esc);
+  if (cable_only)
+    snprintf(line, sizeof line,
+             "<h1>Saved</h1><p>The phone restarts on its network cable. Its display shows when "
+             "it is online; then pair it in the Open Lounge Phone app.</p></body></html>");
+  else
+    snprintf(line, sizeof line,
+             "<h1>Saved</h1><p>The phone restarts and joins <b>%s</b>. Its display shows when it "
+             "is online; then pair it in the Open Lounge Phone app.</p></body></html>",
+             esc);
   httpd_resp_sendstr_chunk(req, line);
   httpd_resp_sendstr_chunk(req, NULL);
   xTaskCreate(reboot_task, "prov_reboot", 2048, NULL, 5, NULL);
@@ -325,6 +347,7 @@ void prov_start_ap(void) {
   memcpy(ap.ap.password, s_pass, strlen(s_pass));
   esp_err_t err = esp_wifi_set_config(WIFI_IF_AP, &ap);
   if (err != ESP_OK) ESP_LOGE(TAG, "AP config failed: %s", esp_err_to_name(err));
+  net_setup_radio(true);  // hw v0.901 on its cable: the radio is off until now
   scan();
   start_dns();
   start_http();
@@ -341,6 +364,7 @@ void prov_stop_ap(void) {
 #if !CONFIG_OLP_QEMU
   esp_wifi_set_mode(WIFI_MODE_STA);
   net_slow_retry(false);
+  net_setup_radio(false);  // hw v0.901 on its cable: the radio goes off again
 #endif
   s_active = false;
   ESP_LOGI(TAG, "PROV AP DOWN");
@@ -379,11 +403,11 @@ void prov_selftest(const char *save_ssid, const char *save_pass) {
   char *buf = malloc(4096);
   if (!buf) return;
   int st = http("/", NULL, buf, 4096);
-  printf("PROV TEST GET / %d %s %s networks=%d\n", st,
+  printf("PROV TEST GET / %d %s %s networks=%d%s\n", st,
          strstr(buf, "action=/save") ? "form" : "NO-FORM",
          strstr(buf, "name=srv value=own") && strstr(buf, "name=srv value=hub") ? "server-choice"
                                                                                : "NO-SERVER-CHOICE",
-         s_naps);
+         s_naps, strstr(buf, "Wi-Fi is optional") ? " wifi-optional" : "");
   st = http("/generate_204", NULL, buf, 4096);
   printf("PROV TEST GET /generate_204 %d (captive redirect)\n", st);
   st = http("/save", "ssid=x&pass=short", buf, 4096);  // too short: refused, nothing saved

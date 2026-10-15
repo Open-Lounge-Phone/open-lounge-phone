@@ -21,6 +21,7 @@
 #include "input.h"
 #include "menu.h"
 #include "net.h"
+#include "eth.h"
 #include "nvs_flash.h"
 #include "ota.h"
 #include "ota_core.h"
@@ -414,8 +415,9 @@ static void render(void) {
     char ssid[33], ip[16];
     int rssi;
     net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
-    in.no_wifi = ssid[0] == '\0';
-    in.wifi_problem = net_wifi_up() ? NULL : net_wifi_problem();
+    // A board with a working wired network says what its cable is doing instead of NO WI-FI.
+    in.no_wifi = ssid[0] == '\0' && !net_wired();
+    in.wifi_problem = net_problem();
     n = strip_lines(&in, strip);
     // A Lounge phone: SCAN TO USE, PRESS KEY 7, HI ANA (lounge.c) over the usual status.
     char ll[2][41];
@@ -424,7 +426,7 @@ static void render(void) {
                  ? lounge_lines(&s_lounge, idle, s_phone.kind == PH_OFFHOOK, ll, now)
                  : 0;
 #if CONFIG_OLP_LABS
-    if (!ln && net_wifi_up() && !s_code[0])
+    if (!ln && net_up() && !s_code[0])
       ln = labs_lines(ll, idle, s_phone.kind == PH_OFFHOOK, now);
 #endif
     // The house intercom ringing, calling or talking (or its note) over the rest.
@@ -631,9 +633,17 @@ static void draw_check(int w, int h, int64_t now) {
   net_wifi_info(ssid, sizeof ssid, &rssi, ip, sizeof ip);
   net_server_url(url, sizeof url);
   char wifi[48], server[48], issue[40], handset[32], up[40], mem[40], t[16], mic[40];
+  const char *net_label = "WI-FI";
   if (!ssid[0]) snprintf(wifi, sizeof wifi, "NOT SET");
   else if (!net_wifi_up()) snprintf(wifi, sizeof wifi, "%.14s, NOT JOINED", ssid);
   else snprintf(wifi, sizeof wifi, "%.12s %d DBM CH %d", ssid, rssi, net_wifi_channel());
+  if (net_uplink() == NET_WIRED) {  // hw v0.901 on its cable: the link instead of Wi-Fi
+    eth_info_t e;
+    eth_info(&e);
+    net_label = "CABLE";
+    snprintf(wifi, sizeof wifi, "%d MBIT/S %s DUPLEX", e.speed_mbps, e.full_duplex ? "FULL" : "HALF");
+    net_uplink_ip(ip, sizeof ip);
+  }
   static const char *conns[] = {"CONNECTING", "ONLINE", "OFFLINE"};
   span(t, sizeof t, now - s_conn_since);
   if (!url[0]) snprintf(server, sizeof server, "NOT SET");
@@ -656,7 +666,7 @@ static void draw_check(int w, int h, int64_t now) {
   else if (st.mic_dbfs <= -99) snprintf(mic, sizeof mic, "LISTENING...");
   else snprintf(mic, sizeof mic, "%.0f DBFS PEAK %.0f", st.mic_dbfs, st.mic_peak_dbfs);
   const char *rows[][2] = {
-      {"WI-FI", wifi},       {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server},
+      {net_label, wifi},     {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server},
       {"LAST ISSUE", issue}, {"HANDSET", handset},          {"MIC", mic},
       {"RUNNING", up},       {"MEMORY", mem},
   };
@@ -691,21 +701,99 @@ void app_print_status(void) {
          ssid[0] ? ssid : "-", rssi, ip[0] ? ip : "-", w[0], w[1], w[2], w[3], s_cfg.missed_count,
          storage_encrypted() ? "encrypted" : "plain", s_shown[0], s_shown[1],
          menu_screen_name(s_menu.screen));
+#if BOARD_HAS_ETHERNET
+  char nip[16];
+  net_uplink_ip(nip, sizeof nip);
+  const char *cable = net_cable_line();
+  static const char *uplinks[] = {"none", "wired", "wifi"};
+  printf("NET uplink=%s ip=%s cable=%s\n", uplinks[net_uplink()], nip[0] ? nip : "-",
+         cable ? cable : "none");
+#endif
 }
+
+// --- the network: Wi-Fi, or the cable on hw v0.901 ---------------------------------------------
+
+static bool s_started;      // the server connection was opened once (it reconnects by itself)
+#if BOARD_HAS_ETHERNET
+static bool s_prov_booted;  // setup was told the power-on network state (after the choice)
+#endif
+static void prov_event(prov_event_t ev, bool forced);
+static void on_closed(int code);
+
+/** Online (Wi-Fi joined, or the cable has an address). */
+static void network_up(bool wired) {
+  prov_event(wired ? PROV_EV_WIRED_UP : PROV_EV_STA_UP, false);
+  lan_net_up();
+#if CONFIG_OLP_LABS
+  labs_net_up();
+#endif
+  if (ota_enabled()) ota_time_start();  // the clock is only for the update window
+  if (s_next_ota_check < 0) s_next_ota_check = now_ms() + 60 * 1000;  // first check
+  if (!s_started) {
+    s_started = true;
+    open_socket();
+  }
+}
+
+static void network_down(void) {
+  prov_event(PROV_EV_STA_DOWN, false);
+  if (!s_ws_open) s_conn = CONN_OFFLINE;
+}
+
+#if BOARD_HAS_ETHERNET
+/** A call (or a message, or the house intercom) is on: the network choice doesn't move it. */
+static bool network_busy(void) {
+  return (s_phone.kind != PH_IDLE && s_phone.kind != PH_OFFHOOK) || media_active() ||
+         vm_leave_stage() != VM_IDLE || lan_busy();
+}
+
+static void network_changed(net_change_t c) {
+  switch (c) {
+    case NET_WENT_UP:
+      network_up(net_uplink() == NET_WIRED);
+      break;
+    case NET_SWITCHED:
+      // The server connection (and a call's media) lived on the other network: start over on this
+      // one rather than wait for the old socket to time out. A call on it is over (on_closed).
+      ESP_LOGW(TAG, "NET switched to %s: reconnecting to the server",
+               net_uplink() == NET_WIRED ? "the cable" : "Wi-Fi");
+      {
+        bool reopen = s_started;  // else network_up opens it for the first time
+        network_up(net_uplink() == NET_WIRED);
+        if (reopen) {
+          if (s_ws_open) on_closed(0);
+          open_socket();
+        }
+      }
+      break;
+    case NET_WENT_DOWN:
+      network_down();
+      break;
+    case NET_SAME:
+      break;
+  }
+}
+#endif
 
 // --- the Wi-Fi setup network ----------------------------------------------------------------
 
 static void prov_event(prov_event_t ev, bool forced) {
-  switch (prov_step(&s_prov, ev, net_has_wifi(), forced, now_ms())) {
+  // A working cable (hw v0.901) is a network too: setup isn't needed for one.
+  bool has_network = net_has_wifi() || net_uplink() == NET_WIRED;
+  switch (prov_step(&s_prov, ev, has_network, forced, now_ms())) {
     case PROV_ACT_START_AP:
-      ESP_LOGI(TAG, "PROV open (%s)", ev == PROV_EV_TICK ? "saved Wi-Fi unreachable for 3 min"
-                                      : ev == PROV_EV_OPEN ? "asked for"
-                                      : forced            ? "MENU+BACK at power-on"
-                                                          : "no Wi-Fi saved");
+      ESP_LOGI(TAG, "PROV open (%s)",
+               ev == PROV_EV_TICK ? (net_wired() ? "no network for 3 min"
+                                                 : "saved Wi-Fi unreachable for 3 min")
+               : ev == PROV_EV_OPEN ? "asked for"
+               : forced             ? "MENU+BACK at power-on"
+               : net_wired()        ? "no Wi-Fi saved, no cable"
+                                    : "no Wi-Fi saved");
       prov_start_ap();
       break;
     case PROV_ACT_STOP_AP:
-      ESP_LOGI(TAG, "PROV close (back on the saved Wi-Fi)");
+      ESP_LOGI(TAG, "PROV close (%s)", ev == PROV_EV_WIRED_UP ? "online over the cable"
+                                                                : "back on the saved Wi-Fi");
       prov_stop_ap();
       break;
     case PROV_ACT_REBOOT: {
@@ -1358,10 +1446,17 @@ void app_main(void) {
   input_start();
   console_start();
   prov_init(&s_prov);
+#if BOARD_HAS_ETHERNET
+  // With a cable the setup network waits for the network choice (a few seconds), unless asked for.
+  if (forced_setup || net_settled()) {
+    s_prov_booted = true;
+    prov_event(PROV_EV_BOOT, forced_setup);
+  }
+#else
   prov_event(PROV_EV_BOOT, forced_setup);
+#endif
   render();
 
-  bool started = false;
   for (;;) {
     app_event_t ev;
     if (xQueueReceive(s_queue, &ev, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -1497,21 +1592,15 @@ void app_main(void) {
           }
           break;
         case EV_WIFI_UP:
-          prov_event(PROV_EV_STA_UP, false);
-          lan_net_up();
-#if CONFIG_OLP_LABS
-          labs_net_up();
-#endif
-          if (ota_enabled()) ota_time_start();  // the clock is only for the update window
-          if (s_next_ota_check < 0) s_next_ota_check = now_ms() + 60 * 1000;  // first check
-          if (!started) {
-            started = true;
-            open_socket();
-          }
+          network_up(false);
           break;
         case EV_WIFI_DOWN:
-          prov_event(PROV_EV_STA_DOWN, false);
-          if (!s_ws_open) s_conn = CONN_OFFLINE;
+          network_down();
+          break;
+        case EV_NET:  // hw v0.901: the cable or Wi-Fi changed (netsel.c); never on rev A
+#if BOARD_HAS_ETHERNET
+          network_changed(net_select(ev.a, network_busy()));
+#endif
           break;
         case EV_OTA_NOW:
           if (s_phone.kind == PH_IDLE || s_phone.kind == PH_OFFHOOK) {
@@ -1559,7 +1648,7 @@ void app_main(void) {
           esp_restart();
           break;
         case EV_RECONNECT:
-          if (started) open_socket();
+          if (s_started) open_socket();
           break;
         case EV_RTC_SDP:
           if (media_active()) {
@@ -1590,6 +1679,14 @@ void app_main(void) {
     tick();
     if (s_phone.kind == PH_INCOMING) snake_stop();  // a call wins
     snake_tick(now_ms());
+#if BOARD_HAS_ETHERNET
+    network_changed(net_select(NS_TICK, network_busy()));  // looks for a cable, timeouts
+    if (!s_prov_booted && net_settled()) {
+      // The power-on network choice is made: now setup knows whether a network is missing.
+      s_prov_booted = true;
+      prov_event(PROV_EV_BOOT, false);
+    }
+#endif
     prov_event(PROV_EV_TICK, false);
     sync_media();
     render();

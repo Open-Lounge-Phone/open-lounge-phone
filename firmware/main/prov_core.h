@@ -17,6 +17,7 @@ typedef enum {
   PROV_EV_TICK,        // time passes
   PROV_EV_SAVED,       // the page saved new credentials
   PROV_EV_OPEN,        // the console / menu asked for setup
+  PROV_EV_WIRED_UP,    // online over a cable (hw v0.901): a network without Wi-Fi
 } prov_event_t;
 
 typedef enum { PROV_ACT_NONE, PROV_ACT_START_AP, PROV_ACT_STOP_AP, PROV_ACT_REBOOT } prov_action_t;
@@ -26,6 +27,7 @@ typedef struct {
   bool has_creds;      // saved Wi-Fi exists
   bool sta_up;
   bool forced;         // asked for, or nothing saved: stays open until saved (STA_UP doesn't close it)
+  bool asked;          // someone asked for it (MENU, console, MENU+BACK): only saving closes it
   int64_t down_since;  // when the station lost (or never had) Wi-Fi, -1 while up
 } prov_t;
 
@@ -76,6 +78,19 @@ const char *prov_form_answers(const char *body, prov_answers_t *a);
 
 /** NULL if a network can be saved with these, else why not (shown on the page). */
 const char *prov_check(const char *ssid, const char *pass);
+
+/** What the page does with its Wi-Fi answer. */
+typedef enum {
+  PROV_WIFI_SAVE,     // a network was named: check it (prov_check) and save it
+  PROV_WIFI_KEEP,     // none named: keep the saved one, or none at all while a cable works
+  PROV_WIFI_MISSING,  // none named, none saved, no cable: the page asks (prov_check says why)
+} prov_wifi_t;
+
+/**
+ * `name`: the network picked or typed ("" = none). `has_saved`: a Wi-Fi network is saved.
+ * `cable`: the phone is online over a cable (hw v0.901), so Wi-Fi is optional.
+ */
+prov_wifi_t prov_wifi_answer(const char *name, bool has_saved, bool cable);
 
 typedef struct {
   char ssid[33];
