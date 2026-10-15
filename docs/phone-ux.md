@@ -54,7 +54,7 @@ Highest priority first: the first row that applies is shown.
 | You put the call on hold | `ON HOLD` / name (`MENU 1 RESUMES`) |
 | Choosing who to transfer to | `TRANSFER TO?` / `PRESS A KEY` |
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
-| In a call | `IN CALL 01:23` / name; recorded: `REC 01:23` / name; while connecting `CONNECTING` / name |
+| In a call | `IN CALL 01:23` / name; muted: `MUTED 01:23` / name; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name |
 | They put you on hold | `ON HOLD` / name |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
 | Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED` or `CALL FAILED` `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
@@ -79,10 +79,10 @@ leave the phone.
 | Calling | nothing | open the menu | nothing | down: cancel |
 | Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
 | Ringing | nothing | open the menu | nothing | lift: answer |
-| In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen | nothing | down: hang up |
+| In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen (1 Hold, 2 Transfer, 3 Mute / Unmute, 9 Volume) | nothing | down: hang up |
 | Call on hold | nothing (one call has audio at a time) | the call screen (1 Resume) | nothing | down: hang up both |
 | Leaving a message | nothing | nothing | nothing | down: send it (under 1.5 s: dropped) |
-| In a room | any key: "still here" | the call screen (1 Mute / Unmute) | nothing | down: leave |
+| In a room | any key: "still here" | the call screen (3 Mute / Unmute, 9 Volume) | nothing | down: leave |
 | Self-test | ticks that key off | ticks it off | ticks it off | ticks it off (and works as usual) |
 | Menu open | the option shown | close the menu | one level up (closes at the top) | as in the state underneath |
 | Power-on with MENU+BACK held | | | | 3 s: setup network, 10 s: factory reset |
@@ -122,11 +122,16 @@ someone else takes it over) the phone forgets them and shows `SIGNED OUT` / `SEE
 `TIME'S UP`, `SOMEONE ELSE`) for 4 s, then the code again. Digit keys do nothing on a free phone
 without house-line keys.
 
-**Call screen** (MENU in a call or a room): `CALL` (or `ROOM`) / `1 HOLD` / `2 TRANSFER` /
-`9 VOLUME`. On hold: `1 RESUME`. In a room: `1 MUTE` or `1 UNMUTE`. Transfer without a held call
-is blind: the next key picks who gets it. The hardware phone has audio for one call at a time, so
-holding doesn't add a second caller; adding a caller, merging and transferring to the held call
-are in the app and the browser phone.
+**Call screen** (MENU in a call or a room). Each action keeps its digit everywhere (the
+browser phone too): **1** hold, resume or merge, **2** transfer, **3** mute or unmute, **9**
+volume. In a call: `CALL` / `1 HOLD` / `2 TRANSFER` / `3 MUTE 9 VOLUME` (`3 UNMUTE` when muted).
+On hold: `1 RESUME`. In a room: `ROOM` / `3 MUTE` (or `3 UNMUTE`) / `9 VOLUME`. Transfer without
+a held call is blind: the next key picks who gets it. Mute stops the handset's mic for this call
+(the other side hears silence; the server isn't told, so it lasts until you unmute, hang up or the
+call is held): the screen says `MUTED` and the status LED blinks slowly in pairs. In a room the
+room's server is told (everyone sees you muted). The hardware phone has audio for one call at a
+time, so holding doesn't add a second caller; adding a caller, merging and transferring to the
+held call are in the app and the browser phone.
 
 **Self-test** (MENU 7 then 1): press every key, lift and hang up the handset, plug the handset
 in and out. The earpiece plays a 1 kHz tone meanwhile (lift the handset to hear it) and each key
@@ -144,7 +149,8 @@ jack is optional), with a long beep after 30 s without input, or when a call rin
 | Fast flash (4 per second) | ringing, or a Lounge phone waiting for its `PRESS KEY` proof |
 | Short blink every 2 s | offline: no Wi-Fi or no server |
 | On | calling, in a call or in a room |
-| Double flash every second | this call or room is being recorded (it is also the recording light) |
+| Slow double blink (two 0.25 s blinks every 2 s) | in a call or a room with the mic muted (MENU 3) |
+| Double flash every second | this call or room is being recorded (it is also the recording light; it wins over muted) |
 
 ## Sounds
 

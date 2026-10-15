@@ -332,6 +332,15 @@ describe("recording", () => {
         activeLabel: "Ben",
       }),
     ).toEqual(["IN CALL 01:05", "BEN"]);
+    // Muted (MENU 3): said instead of IN CALL, after REC when both apply.
+    const muted = { kind: "incall" as const, callId: "c", connected: true, muted: true };
+    expect(statusLines({ ...base, deviceState: muted, activeLabel: "Ben" })).toEqual([
+      "MUTED 01:05",
+      "BEN",
+    ]);
+    expect(
+      statusLines({ ...base, deviceState: muted, activeLabel: "Ben", recording: true }),
+    ).toEqual(["REC MUTED 01:05", "BEN"]);
     expect(
       statusLines({
         ...base,

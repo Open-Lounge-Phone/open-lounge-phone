@@ -48,6 +48,8 @@ export type DeviceState =
       heldByThem?: boolean;
       /** MENU → Transfer: the next key transfers the call to that key's person (blind). */
       transferPending?: boolean;
+      /** MENU → Mute: the mic stops sending in this call (local: the server isn't told). */
+      muted?: boolean;
     }
   /**
    * In a room (a party line, a phone room, or a 3-way call after Merge). `roomId` is unknown
@@ -109,11 +111,28 @@ export function roomEndToCall(reason: RoomEndReason): EndReason {
   }
 }
 
-/** Which actions the MENU offers in this state. */
+/**
+ * The digit each call action has on the call screen, the same in every state and on every phone
+ * (docs/phone-ux.md): 1 hold / resume / merge, 2 transfer, 3 mute / unmute.
+ */
+export function callActionDigit(a: CallAction): number {
+  switch (a) {
+    case "transfer":
+      return 2;
+    case "mute":
+    case "unmute":
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+/** Which actions the MENU offers in this state (each on its `callActionDigit`). */
 export function callActions(s: DeviceState): CallAction[] {
   if (s.kind === "incall" && s.connected) {
-    if (s.held) return ["merge", "transfer"];
-    return s.heldByThem ? [] : ["hold", "transfer"];
+    const mute: CallAction = s.muted ? "unmute" : "mute";
+    if (s.held) return ["merge", "transfer", mute];
+    return s.heldByThem ? [mute] : ["hold", "transfer", mute];
   }
   if (s.kind === "offhook" && s.held) return ["resume"];
   if (s.kind === "inroom" && s.roomId) return [s.muted ? "unmute" : "mute"];
@@ -308,6 +327,8 @@ function action(s: DeviceState, a: CallAction): DeviceStep {
       return stay({ ...s, transferPending: true });
     case "mute":
     case "unmute": {
+      // In a call the mic is the phone's own: nobody else needs to know.
+      if (s.kind === "incall") return stay({ ...s, muted: a === "mute" });
       if (s.kind !== "inroom" || !s.roomId) return stay(s);
       const muted = a === "mute";
       return stay({ ...s, muted }, { t: "room.mute", roomId: s.roomId, muted });

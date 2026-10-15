@@ -669,6 +669,10 @@ function step(input: DeviceInput): void {
     void startMedia(s.callId, prev.kind === "dialing" || offererFor.delete(s.callId));
   }
   if (s.kind !== "incall" && call) endCall();
+  // MENU 3 in a call: the mic really stops sending (its track is disabled), and comes back.
+  if (s.kind === "incall" && call?.callId === s.callId) {
+    for (const t of call.mic?.getAudioTracks() ?? []) t.enabled = !s.muted;
+  }
   if (s.kind !== "inroom" && roomAudio) leaveRoomAudio();
   if (s.kind === "voicemail" && prev.kind !== "voicemail") startLeaving(s.offer);
   if (prev.kind === "voicemail" && s.kind !== "voicemail") leaveFlow?.finish(); // hang up to send

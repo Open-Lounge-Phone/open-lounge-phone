@@ -5,6 +5,7 @@
 import {
   CALL_PROMPT_TEXT,
   type CallAction,
+  callActionDigit,
   PROMPT_TEXT,
   WORKPLACE_PROMPT_TEXT,
 } from "@openloungephone/core";
@@ -69,7 +70,8 @@ export interface MenuContext {
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
   /** The four words of this phone's key (the app shows the same ones: compare them). */
   fingerprint?: readonly string[];
-  /** In a call or a room: what MENU offers there (see `callActions`), digit 1 upward. */
+  /** In a call or a room: what MENU offers there (see `callActions`), each on its digit
+   * (`callActionDigit`: 1 hold / resume / merge, 2 transfer, 3 mute), plus 9 volume. */
   call?: { actions: readonly CallAction[] };
   /** A team/org space with extensions: 6 → Dial extension. */
   extensions?: boolean;
@@ -148,6 +150,9 @@ function rootLabels(ctx: MenuContext): Partial<Record<number, string>> {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/** The call screen's volume item (the same digit as on the hardware's call screen). */
+const CALL_VOLUME_DIGIT = 9;
 
 /** The call screen's labels and what each action says (prompt ids for firmware). */
 const CALL_LABEL: Record<CallAction, string> = {
@@ -250,7 +255,12 @@ export function menuView(state: MenuState, settings: Settings, ctx: MenuContext)
       return {
         ...base,
         title: ctx.call?.actions.some((a) => a === "mute" || a === "unmute") ? "ROOM" : "CALL",
-        labels: Object.fromEntries((ctx.call?.actions ?? []).map((a, i) => [i + 1, CALL_LABEL[a]])),
+        labels: {
+          ...Object.fromEntries(
+            (ctx.call?.actions ?? []).map((a) => [callActionDigit(a), CALL_LABEL[a]]),
+          ),
+          [CALL_VOLUME_DIGIT]: "Volume",
+        },
         backLabel: "Close",
       };
     case "extension":
@@ -314,9 +324,9 @@ export function menuPrompt(state: MenuState, settings: Settings, ctx: MenuContex
         : PROMPT_TEXT["greet.say_greeting"];
     case "call": {
       const options = (ctx.call?.actions ?? []).map(
-        (a, i) => `Press ${i + 1} to ${CALL_SPOKEN[a]}.`,
+        (a) => `Press ${callActionDigit(a)} to ${CALL_SPOKEN[a]}.`,
       );
-      return `${options.join(" ")} Press back to leave the menu.`;
+      return `${options.join(" ")} Press ${CALL_VOLUME_DIGIT} for the volume. Press back to leave the menu.`;
     }
     case "extension":
       return WORKPLACE_PROMPT_TEXT["ext.enter"];
@@ -405,6 +415,8 @@ export function menuStep(
   if (event.type === "back") {
     if (state.screen === "call") return { state: undefined, settings };
     if (state.screen === "greetings") return enter("voicemail");
+    // The volume from the call screen goes back to it.
+    if (state.screen === "volume" && ctx.call?.actions.length) return enter("call");
     return state.screen === "root" ? { state: undefined, settings } : enter("root");
   }
 
@@ -479,7 +491,8 @@ export function menuStep(
     }
     case "call": {
       const actions = ctx.call?.actions ?? [];
-      const action = actions[d - 1];
+      if (d === CALL_VOLUME_DIGIT) return enter("volume");
+      const action = actions.find((a) => callActionDigit(a) === d);
       if (!action) return { state: touched, settings };
       const attended = actions.includes("merge");
       const say = callActionPrompt(action, attended);

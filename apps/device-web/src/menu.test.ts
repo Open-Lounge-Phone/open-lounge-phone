@@ -285,7 +285,10 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
       DEFAULT_SETTINGS,
       ctx(["hold", "transfer"]),
     );
-    expect(view).toMatchObject({ title: "CALL", labels: { 1: "Add caller", 2: "Transfer" } });
+    expect(view).toMatchObject({
+      title: "CALL",
+      labels: { 1: "Add caller", 2: "Transfer", 9: "Volume" },
+    });
     const add = menuStep(
       open.state,
       DEFAULT_SETTINGS,
@@ -308,7 +311,26 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
     expect(m.action).toEqual({ type: "call", action: "merge" });
   });
 
-  it("in a room: MENU mutes; BACK closes", () => {
+  it("in a call 3 mutes and unmutes; 9 is the volume, BACK goes back to the call", () => {
+    const c = ctx(["hold", "transfer", "mute"]);
+    const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
+    const view = menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, c);
+    expect(view.labels).toEqual({ 1: "Add caller", 2: "Transfer", 3: "Mute", 9: "Volume" });
+    expect(
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 3, now: 1 }, c),
+    ).toMatchObject({ state: undefined, action: { type: "call", action: "mute" }, say: "Muted." });
+    const unmute = ctx(["hold", "transfer", "unmute"]);
+    expect(
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 3, now: 1 }, unmute).action,
+    ).toEqual({ type: "call", action: "unmute" });
+    const vol = menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 9, now: 1 }, c);
+    expect(vol.state?.screen).toBe("volume");
+    expect(menuStep(vol.state, DEFAULT_SETTINGS, { type: "back", now: 2 }, c).state?.screen).toBe(
+      "call",
+    );
+  });
+
+  it("in a room: MENU 3 mutes; BACK closes", () => {
     const c = ctx(["mute"]);
     const open = menuStep(undefined, DEFAULT_SETTINGS, { type: "menu", now: 0 }, c);
     expect(menuView(open.state as NonNullable<typeof open.state>, DEFAULT_SETTINGS, c).title).toBe(
@@ -318,7 +340,10 @@ describe("the call menu (hold, add caller, merge, transfer, rooms)", () => {
       menuStep(open.state, DEFAULT_SETTINGS, { type: "back", now: 1 }, c).state,
     ).toBeUndefined();
     expect(
-      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 1, now: 1 }, c),
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 1, now: 1 }, c).action,
+    ).toBeUndefined();
+    expect(
+      menuStep(open.state, DEFAULT_SETTINGS, { type: "digit", digit: 3, now: 1 }, c),
     ).toMatchObject({
       action: { type: "call", action: "mute" },
       say: "Muted.",

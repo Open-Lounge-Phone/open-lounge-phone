@@ -410,6 +410,9 @@ body {
 .status-led[data-mode="recording"] {
   animation: double 1s steps(1) infinite;
 }
+.status-led[data-mode="muted"] {
+  animation: muted 2s steps(1) infinite;
+}
 
 @keyframes flash {
   0% {
@@ -430,6 +433,21 @@ body {
     opacity: 1;
   }
   28% {
+    opacity: 0.08;
+  }
+}
+/* Muted: two 0.25 s blinks every 2 s (slower and longer than the recording light's). */
+@keyframes muted {
+  0% {
+    opacity: 1;
+  }
+  12.5% {
+    opacity: 0.08;
+  }
+  25% {
+    opacity: 1;
+  }
+  37.5% {
     opacity: 0.08;
   }
 }
@@ -461,7 +479,8 @@ body {
   .status-led[data-mode="breathe"],
   .status-led[data-mode="blink"],
   .status-led[data-mode="ringing"],
-  .status-led[data-mode="recording"] {
+  .status-led[data-mode="recording"],
+  .status-led[data-mode="muted"] {
     animation: none;
     opacity: 0.8;
   }

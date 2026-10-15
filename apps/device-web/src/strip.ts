@@ -128,7 +128,13 @@ export function statusLines(input: StatusInput): StatusLines {
         return name ? ["CONNECTING", clip(name)] : ["CONNECTING"];
       }
       {
-        const what = input.recording ? "REC" : "IN CALL";
+        const what = s.muted
+          ? input.recording
+            ? "REC MUTED"
+            : "MUTED"
+          : input.recording
+            ? "REC"
+            : "IN CALL";
         return name
           ? [`${what} ${clock(input.now - input.callStartedAt)}`, clip(name)]
           : [`${what} ${clock(input.now - input.callStartedAt)}`];

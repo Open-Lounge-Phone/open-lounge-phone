@@ -12,7 +12,9 @@ export type LedMode =
   | "blink"
   | "ringing"
   | "breathe"
-  | "recording";
+  | "recording"
+  /** In a call or a room with the mic muted: a slow double blink. */
+  | "muted";
 
 export type Connection = "connecting" | "online" | "offline";
 
@@ -51,6 +53,7 @@ export function statusLed(input: LedInput): LedMode {
   if (connection === "offline") return "blink";
   if (s.kind === "incoming") return "ringing";
   if ((s.kind === "incall" || s.kind === "inroom") && input.recording) return "recording";
+  if ((s.kind === "incall" || s.kind === "inroom") && s.muted) return "muted";
   if (s.kind === "incall" || s.kind === "inroom" || s.kind === "dialing") return "on";
   if (s.kind === "idle" && (config?.missed?.length ?? 0) > 0) return "breathe";
   return "dim";

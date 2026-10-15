@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  callActionDigit,
+  callActions,
   type DeviceInput,
   type DeviceState,
   deviceStep,
@@ -254,6 +256,30 @@ describe("hold, add caller, merge and transfer (MENU)", () => {
     // You can't hold or transfer a call they're holding.
     expect(deviceStep(state, act("hold")).send).toEqual([]);
     expect(soundFor(run([active("c1")], state).state)).toBe("none");
+  });
+
+  it("mute in a call is the phone's own: nothing sent, offered on 3, kept until unmute", () => {
+    const { state } = run([...inCall]);
+    expect(callActions(state)).toEqual(["hold", "transfer", "mute"]);
+    const muted = deviceStep(state, act("mute"));
+    expect(muted.send).toEqual([]);
+    expect(muted.state).toMatchObject({ kind: "incall", callId: "c1", muted: true });
+    expect(callActions(muted.state)).toEqual(["hold", "transfer", "unmute"]);
+    // Still muted when they put us on hold and back.
+    const held = run([active("c1", { hold: "them" })], muted.state).state;
+    expect(held).toMatchObject({ muted: true, heldByThem: true });
+    expect(callActions(held)).toEqual(["unmute"]);
+    const back = run([active("c1"), act("unmute")], held).state;
+    expect(back).toMatchObject({ kind: "incall", muted: false });
+    // A call that isn't connected yet has nothing to mute.
+    const connecting = run([hook("up"), button(0), callState("c2", "connecting")]).state;
+    expect(deviceStep(connecting, act("mute")).state).toEqual(connecting);
+  });
+
+  it("each call action has its digit: 1 hold/resume/merge, 2 transfer, 3 mute", () => {
+    expect(
+      (["hold", "resume", "merge", "transfer", "mute", "unmute"] as const).map(callActionDigit),
+    ).toEqual([1, 1, 1, 2, 3, 3]);
   });
 
   it("blind transfer: MENU → Transfer, then a key", () => {

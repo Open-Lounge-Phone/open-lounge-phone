@@ -61,6 +61,13 @@ describe("statusLed", () => {
     expect(statusLed(input({ recording: true }))).toBe("dim");
   });
 
+  it("blinks slowly in pairs while muted in a call or a room; recording wins", () => {
+    const muted = { kind: "incall" as const, callId: "c", connected: true, muted: true };
+    expect(statusLed(state(muted))).toBe("muted");
+    expect(statusLed(state({ kind: "inroom", roomId: "r", muted: true }))).toBe("muted");
+    expect(statusLed(input({ deviceState: muted, recording: true }))).toBe("recording");
+  });
+
   it("is dim with the handset up and after calls", () => {
     expect(statusLed(state({ kind: "offhook" }))).toBe("dim");
     expect(statusLed(state({ kind: "offhook", lastEnd: "busy" }))).toBe("dim");
