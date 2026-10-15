@@ -25,6 +25,7 @@ import {
   NO_EXTENSION_NOTE,
   PROMPT_TEXT,
   RECORDING_MAX_MS,
+  repeatedEnd,
   soundFor,
   WORKPLACE_PROMPT_TEXT,
 } from "@openloungephone/core";
@@ -216,6 +217,8 @@ let unauthorizedStreak = 0;
 let announceTimer: ReturnType<typeof setInterval> | undefined;
 let lastStatusText = "";
 let callStartedAt: number | undefined;
+/** The last few calls that ended here (a repeated ended for one of them is dropped). */
+let endedCalls: string[] = [];
 let callTicker: ReturnType<typeof setInterval> | undefined;
 let noticeTicker: ReturnType<typeof setInterval> | undefined;
 /** A notice from the space (docs/notices.md), until it's dismissed or cleared. */
@@ -412,7 +415,14 @@ async function handle(msg: ServerToDevice): Promise<void> {
       break;
     }
     case "call.ringing":
-    case "call.state":
+    case "call.state": {
+      // A second ended for a call that already ended can't end the next one.
+      const repeat = repeatedEnd(endedCalls, msg);
+      endedCalls = repeat.recent;
+      if (repeat.repeat) {
+        log("•", `repeated end of ${msg.callId} ignored`);
+        break;
+      }
       if (msg.t === "call.state" && msg.state === "ended" && msg.note === NO_EXTENSION_NOTE) {
         speak(WORKPLACE_PROMPT_TEXT["ext.unknown"]);
       }
@@ -430,6 +440,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
       }
       step({ type: "server", msg });
       break;
+    }
     case "room.state":
       step({ type: "server", msg });
       if (deviceState.kind === "inroom" && deviceState.roomId === msg.roomId) {
@@ -955,6 +966,8 @@ function playNoticeAudio(): void {
     `/api/notices/${encodeURIComponent(notice.id)}/audio?token=${encodeURIComponent(notice.audio.token)}`,
   );
   el.volume = settings.volume / 10;
+  // Over and over until the handset goes down or a key clears the notice.
+  el.loop = true;
   void el.play().catch((e) => log("•", `notice audio: ${e}`));
   noticeAudio = el;
 }
@@ -1015,9 +1028,16 @@ function pressKey(key: KeyId): void {
     if (menu || canUseMenu()) applyMenu({ type: "menu", now });
     return;
   }
+  // A notice's recording playing with the handset up: any key stops it and clears the notice.
+  if (noticeAudio && hookUp && deviceState.kind === "offhook" && !menu) {
+    dismissNotice();
+    return;
+  }
   if (key === "back") {
     if (menu) applyMenu({ type: "back", now });
     else if (notice && deviceState.kind === "idle") dismissNotice();
+    // Ringing: BACK silences the ringer on this phone (lifting still answers).
+    else if (deviceState.kind === "incoming") step({ type: "silence" });
     return;
   }
   const digit = Number(key);

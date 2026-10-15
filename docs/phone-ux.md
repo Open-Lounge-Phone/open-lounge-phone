@@ -45,7 +45,7 @@ Highest priority first: the first row that applies is shown.
 | No server chosen | `SET UP:` / `CHOOSE A SERVER` / `PRESS MENU 4` |
 | Pairing | `PAIR 123 456` / `ENTER IN APP` |
 | No Wi-Fi saved | `NO WI-FI` / `PRESS MENU 3` |
-| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `WRONG PASSWORD?`, `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
+| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `JOINING WI-FI` (a handshake failed; one at power-on is usually just timing), `WRONG PASSWORD?` (three failed handshakes in a row), `WI-FI DROPPED` (a working connection was lost), `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
 | Connecting | `CONNECTING` |
 | Calling | `CALLING MOM` (or `CALLING` / long name) |
 | Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (with a call back too: `1 VM 2 CALL BACK`; only a call back: `2 CALL ME BACK`; neither: the line's name; `WAITING IN LINE` when it shows no places) |
@@ -53,15 +53,15 @@ Highest priority first: the first row that applies is shown.
 | A public line calling you back | the line's name / `CALLS YOU BACK` (lift to answer: the call to the line goes on, `CALLING` or `IN LINE 1`) |
 | You put the call on hold | `ON HOLD` / name (`MENU 1 RESUMES`) |
 | Choosing who to transfer to | `TRANSFER TO?` / `PRESS A KEY` |
-| Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER` |
-| In a call | `IN CALL 01:23` / name; muted: `MUTED 01:23` / name; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name. When the audio connection drops: `RECONNECTING` / name while it is restored (the call's timer and status come back only once audio flows again); if it can't be restored within 20 s the call ends (`CONNECTION LOST`, below). On the browser phone, when packet loss or jitter make the audio poor: the second line says `POOR CONNECTION` until it's better (not on the hardware phone: its WebRTC library doesn't report it) |
+| Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER`, with `BACK: SILENCE` in turn on the second line (every 3 s). After BACK the ringer stops on this phone (the LED keeps flashing; the call still rings the person's other phones and apps, and goes to voicemail at the usual time): `GRANDMA CALLING` / `LIFT TO ANSWER` |
+| In a call | `IN CALL 01:23` / name, with `MENU 3: MUTE` in turn on the second line (every 3 s); muted: `MUTED 01:23` / name, in turn with `MENU 3: UNMUTE`; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name. When the audio connection drops: after 2 s (the other side hanging up drops it too, a moment before the server says the call ended: that's a normal end) `RECONNECTING` / name while it is restored (the call's timer and status come back only once audio flows again); if it can't be restored within 20 s the call ends (`CONNECTION LOST`, below). On the browser phone, when packet loss or jitter make the audio poor: the second line says `POOR CONNECTION` until it's better (not on the hardware phone: its WebRTC library doesn't report it) |
 | They put you on hold | `ON HOLD` / name |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
 | Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED`, `CALL FAILED` or `CONNECTION LOST` (the call's audio connection dropped and couldn't be restored, on either side) `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
-| Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording ([notices.md](notices.md)) |
+| Ready, a notice from the space | its one or two lines (`BUS IS HERE`), with a chime when it arrives (none during quiet hours); any key clears it, lifting the handset plays its recording over and over until the handset goes down or a key clears the notice (that key doesn't dial) ([notices.md](notices.md)) |
 | Ready, missed calls | `MISSED MOM` / `ASK A GROWN-UP` (kids) or `PLAY IN APP`, or `3 MISSED CALLS` / each name in turn (3 s). Goes away once the messages are heard (played on the phone, `3 CLEAR`, or opened in the app). A public line's call back that nobody took (a person's own phone): `MISSED CALL BACK` / the line's name, or among the names; it goes with `3 CLEAR`, by calling the line, or by taking its next call back |
 | Ready, quiet hours | `QUIET TIL 07:00` (or `QUIET HOURS`) / the owner line |
 | Lounge phone | see "Lounge phone" below: the takeover code, `PRESS KEY 7`, `HI ANA` |
@@ -75,10 +75,10 @@ leave the phone.
 | State | Digits | MENU | BACK | Hook |
 |---|---|---|---|---|
 | Ready (handset down) | nothing (a click); with a notice showing: clear it | open the menu | with a notice showing: clear it | lift: dial tone (and a notice's recording) |
-| Handset up | call that key's person | open the menu | nothing | down: back to ready |
+| Handset up | call that key's person (while a notice's recording plays: stop it and clear the notice) | open the menu | nothing (while a notice's recording plays: stop it and clear the notice) | down: back to ready |
 | Calling | nothing | open the menu | nothing | down: cancel |
 | Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
-| Ringing | nothing | open the menu | nothing | lift: answer |
+| Ringing | nothing | open the menu | silence the ringer on this phone | lift: answer |
 | In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen (1 Hold, 2 Transfer, 3 Mute / Unmute, 9 Volume) | nothing | down: hang up |
 | Call on hold | nothing (one call has audio at a time) | the call screen (1 Resume) | nothing | down: hang up both |
 | Leaving a message | nothing | nothing | nothing | down: send it (under 1.5 s: dropped) |
@@ -99,7 +99,7 @@ The menu closes by itself after 20 s without a key.
 | 4 | The same screen as 3 | yes |
 | 5 | Lounge phone in use: open to chat on / off | yes |
 | 6 | Dial an extension (team and organization spaces; shown when the space has extensions): `EXT 204_`, digits, BACK deletes, MENU dials (handset up) | yes |
-| 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, time running and clock, memory; 1 starts the self-test | yes |
+| 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, the mic level, time running and clock, memory; 1 starts the self-test. With the handset up the page switches the handset's mic on and shows its live level (`MIC -38 DBFS PEAK -21`, every second; speak into it) until the page closes, for setting the mic gain (`audio gain` on the console, [BRINGUP.md](../hardware/BRINGUP.md)); handset down: `LIFT TO TEST` | yes |
 | 8 | Lounge phone in use: log out (the phone forgets the person) | yes |
 | 9 | Update now (official firmware with updates on) | yes |
 | 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |

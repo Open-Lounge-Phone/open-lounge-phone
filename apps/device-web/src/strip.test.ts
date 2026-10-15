@@ -455,3 +455,35 @@ describe("the call's connection", () => {
     ]);
   });
 });
+
+describe("how-to hints in turn on the second line", () => {
+  it("ringing: BACK: SILENCE every third turn, until silenced", async () => {
+    const { statusLines, HINT_CYCLE_MS } = await import("./strip.ts");
+    const ringing = { kind: "incoming" as const, callId: "c", from: "Mom" };
+    const at = (now: number, s: typeof ringing & { silenced?: true } = ringing) =>
+      statusLines({ connection: "online", deviceState: s, now });
+    expect(at(0)).toEqual(["MOM CALLING", "LIFT TO ANSWER"]);
+    expect(at(2 * HINT_CYCLE_MS)).toEqual(["MOM CALLING", "BACK: SILENCE"]);
+    expect(at(3 * HINT_CYCLE_MS)).toEqual(["MOM CALLING", "LIFT TO ANSWER"]);
+    expect(at(2 * HINT_CYCLE_MS, { ...ringing, silenced: true })).toEqual([
+      "MOM CALLING",
+      "LIFT TO ANSWER",
+    ]);
+  });
+
+  it("in a call: how to mute, and how to unmute once muted", async () => {
+    const { statusLines, HINT_CYCLE_MS } = await import("./strip.ts");
+    const now = 2 * HINT_CYCLE_MS;
+    const call = { kind: "incall" as const, callId: "c", connected: true };
+    const base = { connection: "online" as const, callStartedAt: 0, activeLabel: "Ben", now };
+    expect(statusLines({ ...base, deviceState: call })).toEqual(["IN CALL 00:06", "MENU 3: MUTE"]);
+    expect(statusLines({ ...base, deviceState: { ...call, muted: true } })).toEqual([
+      "MUTED 00:06",
+      "MENU 3: UNMUTE",
+    ]);
+    expect(statusLines({ ...base, deviceState: call, now: now + HINT_CYCLE_MS })).toEqual([
+      "IN CALL 00:09",
+      "BEN",
+    ]);
+  });
+});

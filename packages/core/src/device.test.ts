@@ -7,6 +7,7 @@ import {
   type DeviceState,
   deviceStep,
   initialDeviceState,
+  repeatedEnd,
   soundFor,
 } from "./device.ts";
 import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
@@ -555,5 +556,40 @@ describe("a call whose connection is lost", () => {
       },
     });
     expect(r.state).toEqual({ kind: "offhook", lastEnd: "error", lost: true });
+  });
+});
+
+describe("silencing the ringer and repeated ends", () => {
+  it("BACK while ringing silences this phone; lifting still answers", () => {
+    const ring = deviceStep(initialDeviceState, ringing("c1")).state;
+    expect(soundFor(ring)).toBe("ring");
+    const quiet = deviceStep(ring, { type: "silence" });
+    expect(quiet.send).toEqual([]);
+    expect(quiet.state).toMatchObject({ kind: "incoming", callId: "c1", silenced: true });
+    expect(soundFor(quiet.state)).toBe("none");
+    expect(deviceStep(quiet.state, hook("up")).send).toContainEqual({
+      t: "call.answer",
+      callId: "c1",
+    });
+    // Nothing to silence otherwise.
+    expect(deviceStep({ kind: "offhook" }, { type: "silence" }).state).toEqual({
+      kind: "offhook",
+    });
+  });
+
+  it("drops a second ended for a call that already ended", () => {
+    const end = { t: "call.state", callId: "c1", state: "ended" };
+    const first = repeatedEnd([], end);
+    expect(first).toEqual({ repeat: false, recent: ["c1"] });
+    expect(repeatedEnd(first.recent, end).repeat).toBe(true);
+    expect(repeatedEnd(first.recent, { ...end, callId: "c2" }).repeat).toBe(false);
+    expect(
+      repeatedEnd(first.recent, { t: "call.state", callId: "c1", state: "active" }).repeat,
+    ).toBe(false);
+    // Only the last few are remembered.
+    let recent: string[] = [];
+    for (const id of ["a", "b", "c", "d", "e"])
+      recent = repeatedEnd(recent, { ...end, callId: id }).recent;
+    expect(recent).toEqual(["e", "d", "c", "b"]);
   });
 });

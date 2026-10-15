@@ -44,9 +44,17 @@ export type DeviceState =
     }
   /**
    * Ringing, handset down. `callback`: a public line calling you back, as you asked. `addon`: the
-   * caller is an add-on (shown as `SEAT · ADD-ON`).
+   * caller is an add-on (shown as `SEAT · ADD-ON`). `silenced`: BACK stopped the ringer on this
+   * phone (it still rings elsewhere; lifting still answers).
    */
-  | { kind: "incoming"; callId: string; from: string; callback?: true; addon?: true }
+  | {
+      kind: "incoming";
+      callId: string;
+      from: string;
+      callback?: true;
+      addon?: true;
+      silenced?: true;
+    }
   | {
       kind: "incall";
       callId: string;
@@ -83,6 +91,8 @@ export type DeviceInput =
   | { type: "extension"; number: string }
   /** The call's audio connection dropped and reconnecting gave up: end it, saying why. */
   | { type: "lost" }
+  /** BACK while ringing: this phone's ringer stops (the call goes on ringing elsewhere). */
+  | { type: "silence" }
   | {
       type: "server";
       msg: Extract<
@@ -201,6 +211,9 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
   }
 
   if (input.type === "action") return action(s, input.action);
+  if (input.type === "silence") {
+    return s.kind === "incoming" ? stay({ ...s, silenced: true }) : stay(s);
+  }
   if (input.type === "lost") {
     if (s.kind !== "incall") return stay(s);
     return stay(
@@ -355,6 +368,22 @@ function action(s: DeviceState, a: CallAction): DeviceStep {
   }
 }
 
+/**
+ * A `call.state ended` for a call that already ended here (a server repeating itself, or a late
+ * answer to our own hang-up): phones drop it, so it can't end the next call. `recent` holds the
+ * last few ended call ids.
+ */
+export function repeatedEnd(
+  recent: readonly string[],
+  msg: { t: string; callId?: string; state?: string },
+): { repeat: boolean; recent: string[] } {
+  if (msg.t !== "call.state" || msg.state !== "ended" || !msg.callId) {
+    return { repeat: false, recent: [...recent] };
+  }
+  if (recent.includes(msg.callId)) return { repeat: true, recent: [...recent] };
+  return { repeat: false, recent: [msg.callId, ...recent].slice(0, 4) };
+}
+
 export function soundFor(s: DeviceState): Sound {
   switch (s.kind) {
     case "idle":
@@ -364,7 +393,7 @@ export function soundFor(s: DeviceState): Sound {
     case "incall":
       return s.heldByThem ? "hold" : "none";
     case "incoming":
-      return "ring";
+      return s.silenced ? "none" : "ring";
     case "dialing":
       return s.queue ? "hold" : "ringback";
     case "offhook":

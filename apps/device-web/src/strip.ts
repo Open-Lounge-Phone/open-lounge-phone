@@ -122,7 +122,9 @@ export function statusLines(input: StatusInput): StatusLines {
           : [labelled, "LIFT TO ANSWER"];
       }
       const who = withName("", s.from.trim(), "CALLING");
-      return who.length === 1 ? [who[0], "LIFT TO ANSWER"] : who;
+      // In turn on the second line: BACK silences the ringer here (until it's silenced).
+      const answer = !s.silenced && hintNow(input.now) ? "BACK: SILENCE" : "LIFT TO ANSWER";
+      return who.length === 1 ? [who[0], answer] : who;
     }
     case "incall":
       if (s.transferPending) return ["TRANSFER TO?", "PRESS A KEY"];
@@ -141,7 +143,9 @@ export function statusLines(input: StatusInput): StatusLines {
           : input.recording
             ? "REC"
             : "IN CALL";
-        const second = input.poor ? "POOR CONNECTION" : name ? clip(name) : undefined;
+        // In turn with the name: how to mute or unmute (MENU 3, docs/phone-ux.md).
+        const hint = hintNow(input.now) ? (s.muted ? "MENU 3: UNMUTE" : "MENU 3: MUTE") : undefined;
+        const second = input.poor ? "POOR CONNECTION" : (hint ?? (name ? clip(name) : undefined));
         return second
           ? [`${what} ${clock(input.now - input.callStartedAt)}`, second]
           : [`${what} ${clock(input.now - input.callStartedAt)}`];
@@ -243,3 +247,8 @@ export const WEAK_CHARGER = "USE 1.5A CHARGER";
 
 /** How long each missed caller's name stays on screen when several are cycling. */
 export const MISSED_CYCLE_MS = 3000;
+
+/** A how-to hint (`BACK: SILENCE`, `MENU 3: MUTE`) takes the second line every third turn of
+ * this long. */
+export const HINT_CYCLE_MS = 3000;
+const hintNow = (now: number) => Math.floor(now / HINT_CYCLE_MS) % 3 === 2;

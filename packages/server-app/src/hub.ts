@@ -1601,8 +1601,10 @@ export class HouseholdHub {
     const room = this.rooms.get(msg.callId);
     const party = room && this.partyOf(room, peer);
     if (!room || !party) {
-      // Late messages for a finished call are normal; tell the sender it is over.
-      if (msg.t !== "rtc.ice") {
+      // Late messages for a finished call are normal; tell the sender it is over. Not for a
+      // hang-up: the sender is done with it, and its ended went out already (a second one could
+      // end the sender's next call).
+      if (msg.t === "call.answer" || msg.t === "rtc.sdp") {
         peer.conn.send({ t: "call.state", callId: msg.callId, state: "ended", reason: "hangup" });
       }
       return;

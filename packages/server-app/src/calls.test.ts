@@ -103,6 +103,20 @@ describe("calls across servers", () => {
     const lost = { reason: "error", note: CONNECTION_LOST_NOTE };
     expect(await jApp.nextState("ended")).toMatchObject(lost);
     expect(await bApp.nextState("ended")).toMatchObject(lost);
+    // A late hang-up for the call that's over gets no second ended (it could end a next call).
+    jApp.write({ t: "call.hangup", callId: ringing.callId });
+    jApp.write({ t: "ping" });
+    await jApp.next("pong");
+    expect(
+      jApp.all("call.state").filter((m) => m.callId === ringing.callId && m.state === "ended"),
+    ).toHaveLength(1);
+    // A late answer is still told the call is over.
+    jApp.write({ t: "call.answer", callId: ringing.callId });
+    jApp.write({ t: "ping" });
+    await jApp.next("pong");
+    expect(jApp.all("call.state").filter((m) => m.callId === ringing.callId)).toContainEqual(
+      expect.objectContaining({ state: "ended", reason: "hangup" }),
+    );
   });
 
   it("closes the idle stream after a minute, and reopens it for the next call", async () => {
