@@ -316,6 +316,10 @@
           "name": {
             "type": "string",
             "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "share": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,30}$"
           }
         },
         "required": ["kind", "handle", "name"]
@@ -434,6 +438,10 @@
               "name": {
                 "type": "string",
                 "pattern": "^[a-z0-9._-]{2,30}$"
+              },
+              "share": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,30}$"
               }
             },
             "required": ["kind", "handle", "name"]
@@ -466,6 +474,21 @@
       "addon": {
         "type": "string",
         "pattern": "^[a-z0-9._-]{2,30}$"
+      },
+      "addonShare": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,30}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": ["id", "label"]
       }
     },
     "required": ["callId", "from", "to"]
@@ -649,6 +672,60 @@
       }
     },
     "required": ["from", "to", "phones"]
+  },
+  "AddonSharesBody": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,30}$"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": ["handle", "id", "name"]
+      },
+      "to": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]{2,30}$"
+      },
+      "shares": {
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "addon": {
+              "type": "string",
+              "pattern": "^[a-z0-9._-]{2,30}$"
+            },
+            "share": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{1,30}$"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          "required": ["addon", "share", "label"]
+        }
+      }
+    },
+    "required": ["from", "to", "shares"]
   },
   "LoungeClaimBody": {
     "type": "object",

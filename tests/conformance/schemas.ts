@@ -25,6 +25,7 @@ export const FEDERATION_SCHEMAS: Record<string, z.ZodType> = {
   CallResult: fed.CallResult,
   PresenceBody: fed.PresenceBody,
   PhonesBody: fed.PhonesBody,
+  AddonSharesBody: fed.AddonSharesBody,
   LoungeClaimBody: fed.LoungeClaimBody,
   LoungeClaimResult: fed.LoungeClaimResult,
   LoungeProgressBody: fed.LoungeProgressBody,

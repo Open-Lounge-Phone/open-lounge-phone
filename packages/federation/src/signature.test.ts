@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress, isFederatableHost, parseAddress } from "./address.ts";
+import {
+  formatAddonAddress,
+  formatAddress,
+  isFederatableHost,
+  parseAddonAddress,
+  parseAddress,
+} from "./address.ts";
 import {
   generateServerKey,
   keyFingerprint,
@@ -224,6 +230,37 @@ describe("server keys and discovery", () => {
       expect(parseAddress(bad), bad).toBeUndefined();
     }
     expect(formatAddress({ handle: "a.b", host: "h" })).toBe("a.b@h");
+  });
+
+  it("parses add-on addresses and their shares' addresses", () => {
+    expect(parseAddonAddress(" Jesse+Seat@Hub.example ")).toEqual({
+      handle: "jesse",
+      name: "seat",
+      host: "hub.example",
+    });
+    expect(parseAddonAddress("jesse+seat+book-club@hub.example:8443")).toEqual({
+      handle: "jesse",
+      name: "seat",
+      share: "book-club",
+      host: "hub.example:8443",
+    });
+    for (const bad of [
+      "jesse@hub.example",
+      "jesse+@hub.example",
+      "+seat@hub.example",
+      "jesse+seat+@hub.example",
+      "jesse+seat+book.club@hub.example",
+      "jesse+seat+book_club@hub.example",
+      `jesse+seat+${"x".repeat(31)}@hub.example`,
+      "jesse+seat+a+b@hub.example",
+    ]) {
+      expect(parseAddonAddress(bad), bad).toBeUndefined();
+    }
+    // Neither is ever a person's address.
+    expect(parseAddress("jesse+seat+bookclub@hub.example")).toBeUndefined();
+    const share = { handle: "jesse", name: "seat", share: "bookclub", host: "h.example" };
+    expect(formatAddonAddress(share)).toBe("jesse+seat+bookclub@h.example");
+    expect(formatAddonAddress({ ...share, share: undefined })).toBe("jesse+seat@h.example");
   });
 });
 

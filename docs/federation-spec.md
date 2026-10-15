@@ -382,6 +382,7 @@ Federation version 1, base path `/fed/v1`. JSON bodies are at most 16384 bytes; 
 | `POST /fed/v1/voicemail` | yes | A voicemail message for a phone here, or with `kind=person` for a person here. |
 | `POST /fed/v1/greeting` | yes | The greeting to play before `from` leaves a message for `to`. |
 | `POST /fed/v1/phones` | yes | The household phones `to` may call through their connection with `from`. |
+| `POST /fed/v1/addon-shares` | yes | Feature `addon-shares`: the shares of `from`'s add-ons that `to` holds (for listing and keys). |
 | `POST /fed/v1/presence` | yes | `from`'s availability, for their connections on the receiving server (opt-in). |
 | `POST /fed/v1/lounge/claim` | yes | The sender vouches that its account `from` scanned the receiver's Lounge phone. |
 | `POST /fed/v1/lounge/progress` | yes | The receiver's account's takeover of the sender's Lounge phone moved on. |
@@ -500,6 +501,7 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 | `ringLabel` | string (len ≥1, len ≤24) |  | What to show while ringing, when it isn't `from.name`. |
 | `recording` | boolean |  | The caller's space records this call; the receiver may refuse (`denied` + `note`). |
 | `addon` | string (`^[a-z0-9._-]{2,30}$`) |  | Feature `addons`: the caller is `from`'s add-on of this name; `to` must be a person. |
+| `addonShare` | { id: string (`^[a-z0-9-]{1,30}$`), label: string (len ≥1, len ≤40) } |  | Feature `addon-shares` (with `addon`): the add-on calls within this share of it; `to` holds it. |
 
 **Responses**
 
@@ -619,6 +621,32 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 **Receiver rules**
 
 - Replaces the previous list for that connection; an empty list clears it.
+
+### `POST /fed/v1/addon-shares`
+
+Feature `addon-shares`: the shares of `from`'s add-ons that `to` holds (for listing and keys).
+
+Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `from` | `Party` | yes | One of the sending server's accounts. |
+| `to` | string (`^[a-z0-9._-]{2,30}$`) | yes |  |
+| `shares` | { addon: string (`^[a-z0-9._-]{2,30}$`), share: string (`^[a-z0-9-]{1,30}$`), label: string (len ≥1, len ≤40) }[] (0–100) | yes |  |
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 202 | { ok: `true` } | Always; ignored unless `to` has an active connection with `from`. |
+
+**Receiver rules**
+
+- Replaces the previous list for that connection; an empty list clears it.
+- Informational: the add-on's server decides every call into a share (`addon` target with `share`) by its own grants.
+- Sent only to servers that list `addon-shares`.
 
 ### `POST /fed/v1/presence`
 
@@ -838,7 +866,7 @@ One of:
 - { kind: `"phone"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"guest"`, deviceId: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
 - { kind: `"line"`, handle: string (`^[a-z0-9._-]{2,30}$`), callback?: string (len ≥1, len ≤64, `^[A-Za-z0-9_-]+$`) }
-- { kind: `"addon"`, handle: string (`^[a-z0-9._-]{2,30}$`), name: string (`^[a-z0-9._-]{2,30}$`) }
+- { kind: `"addon"`, handle: string (`^[a-z0-9._-]{2,30}$`), name: string (`^[a-z0-9._-]{2,30}$`), share?: string (`^[a-z0-9-]{1,30}$`) }
 
 #### `VoicemailOffer`
 
@@ -1079,6 +1107,7 @@ This implementation speaks federation version 1 (`/fed/v1`).
 | `public-lines` | no | Public lines: the `line` call target (a published ring group, no connection needed), `call.state.queue` and `call.state.line` on the stream, `call.voicemail` from the caller's server, and the line's voicemail offer passed with `ended`. |
 | `line-callback` | no | Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`. |
 | `addons` | no | Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it. |
+| `addon-shares` | no | Shares of add-ons (`handle+name+share@host`, docs/add-ons.md): the `addon` call target's `share`, `CallBody.addonShare` for an add-on's call within a share, and `POST /fed/v1/addon-shares` (the shares a person there holds). Needs `addons`. Grants to people on a server that doesn't list it, and calls into shares with it, are refused. |
 <!-- END GENERATED: features -->
 
 New features are added to this registry (and to `FEATURES` in `packages/federation`) in the

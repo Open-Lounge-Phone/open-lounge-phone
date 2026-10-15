@@ -91,6 +91,10 @@
             "type": "string",
             "minLength": 3,
             "maxLength": 300
+          },
+          "share": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,30}$"
           }
         },
         "required": ["t", "address"]
@@ -120,6 +124,88 @@
           }
         },
         "required": ["t", "callId", "key"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "addon.shares"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "shares": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9-]{1,30}$"
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                }
+              },
+              "required": ["id", "label"]
+            }
+          }
+        },
+        "required": ["t", "shares"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "addon.share.created"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,30}$"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t", "id", "requestId"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "addon.share.refused"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["t", "requestId", "reason"]
       },
       {
         "type": "object",
@@ -1723,9 +1809,35 @@
               "kind": {
                 "type": "string",
                 "enum": ["addon"]
+              },
+              "share": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
               }
             },
             "required": ["label"]
+          },
+          "share": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,30}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "grantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            },
+            "required": ["id", "label", "grantId"]
           },
           "line": {
             "type": "object",
@@ -1979,6 +2091,45 @@
           }
         },
         "required": ["t", "callId", "key"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "const": "addon.share.request"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "by": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "with": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "required": ["t", "requestId", "label", "by", "with"]
       },
       {
         "type": "object",
@@ -2646,6 +2797,10 @@
             "type": "string",
             "minLength": 3,
             "maxLength": 300
+          },
+          "share": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,30}$"
           }
         },
         "required": ["t", "address"]
@@ -3691,9 +3846,35 @@
               "kind": {
                 "type": "string",
                 "enum": ["addon"]
+              },
+              "share": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
               }
             },
             "required": ["label"]
+          },
+          "share": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,30}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "grantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            },
+            "required": ["id", "label", "grantId"]
           },
           "line": {
             "type": "object",

@@ -4,6 +4,7 @@ import type { z } from "zod";
 import {
   AcceptBody,
   Accepted,
+  AddonSharesBody,
   CallBody,
   CallResult,
   GreetingBody,
@@ -182,6 +183,20 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
     body: PhonesBody,
     responses: [accepted("Always.")],
     rules: ["Replaces the previous list for that connection; an empty list clears it."],
+  },
+  {
+    method: "POST",
+    path: "/fed/v1/addon-shares",
+    signed: true,
+    summary:
+      "Feature `addon-shares`: the shares of `from`'s add-ons that `to` holds (for listing and keys).",
+    body: AddonSharesBody,
+    responses: [accepted("Always; ignored unless `to` has an active connection with `from`.")],
+    rules: [
+      "Replaces the previous list for that connection; an empty list clears it.",
+      "Informational: the add-on's server decides every call into a share (`addon` target with `share`) by its own grants.",
+      "Sent only to servers that list `addon-shares`.",
+    ],
   },
   {
     method: "POST",

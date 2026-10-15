@@ -27,6 +27,7 @@ export const DEVICE_FEATURES = [
   "line-callback",
   "notices",
   "addons",
+  "addon-shares",
   "missed-calls",
   "call-waiting",
   "checkin",
@@ -60,7 +61,7 @@ export const ServerInfo = z
       })
       .describe("The protocol versions the server accepts."),
     features: Names(32).describe(
-      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on), `missed-calls` (missed calls in `config.missed` with `kind`, `call.back`, `missed.changed`), `call-waiting` (`call.ringing.waiting`), `checkin` (`config.checkin`, `checkin.ok` counted by the server), `chime` (`config.chime`, `notice.chime`), `intercom` (`config.intercom`). Unknown names are ignored.",
+      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on), `addon-shares` (shares of add-ons: `addon.shares`, `addon.share.*`, `call.ringing.share`, `call.ringing.from.share`, `call.address.share`; with `addons`), `missed-calls` (missed calls in `config.missed` with `kind`, `call.back`, `missed.changed`), `call-waiting` (`call.ringing.waiting`), `checkin` (`config.checkin`, `checkin.ok` counted by the server), `chime` (`config.chime`, `notice.chime`), `intercom` (`config.intercom`). Unknown names are ignored.",
     ),
   })
   .describe("What the server speaks, so a client can adapt to an older or newer server.");

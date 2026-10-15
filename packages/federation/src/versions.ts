@@ -36,6 +36,8 @@ export const FEATURES = {
     "Call me back from a public line's queue: `call.callback` from the caller's server, `call.state.callback` with `ended`, `POST /fed/v1/lines/callback` (ring the person now) and `/fed/v1/lines/callback/missed`, and the `line` call target's `callback`. Needs `public-lines`.",
   addons:
     "Add-ons (services linked to a person's account, `handle+name@host`): the `addon` call target, `CallBody.addon` for calls from an add-on, and `call.key` on the stream. A server lists it only when its operator turned add-ons on; add-on calls are never placed with a server that doesn't list it.",
+  "addon-shares":
+    "Shares of add-ons (`handle+name+share@host`, docs/add-ons.md): the `addon` call target's `share`, `CallBody.addonShare` for an add-on's call within a share, and `POST /fed/v1/addon-shares` (the shares a person there holds). Needs `addons`. Grants to people on a server that doesn't list it, and calls into shares with it, are refused.",
 } as const satisfies Record<string, string>;
 
 export type Feature = keyof typeof FEATURES;

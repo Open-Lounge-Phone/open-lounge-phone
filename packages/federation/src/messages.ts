@@ -20,9 +20,12 @@ import {
   VoicemailOffer,
 } from "@openloungephone/protocol";
 import { z } from "zod";
-import { HANDLE_RE } from "./address.ts";
+import { HANDLE_RE, SHARE_ID_RE } from "./address.ts";
 
 export const Handle = z.string().regex(HANDLE_RE);
+/** A share of an add-on (docs/add-ons.md, Sharing): its id and what it's called. */
+export const ShareId = z.string().regex(SHARE_ID_RE);
+export const ShareLabel = z.string().trim().min(1).max(40);
 const Id = z
   .string()
   .min(1)
@@ -103,6 +106,9 @@ export const CallTarget = z.discriminatedUnion("kind", [
     kind: z.literal("addon"),
     handle: Handle.describe("The owner's handle."),
     name: Handle.describe("The add-on's name (after `+`)."),
+    share: ShareId.optional().describe(
+      "Feature `addon-shares`: one of its shares (`handle+name+share@host`). Only someone the owner gave that share reaches it; without `share`, only the owner.",
+    ),
   }),
 ]);
 export type CallTarget = z.infer<typeof CallTarget>;
@@ -150,6 +156,16 @@ export const CallBody = z.object({
   addon: Handle.optional().describe(
     "Feature `addons`: the caller is `from`'s add-on of this name; `to` must be a person.",
   ),
+  /**
+   * Feature `addon-shares`: the add-on calls within one of its shares, to someone who holds it.
+   * The receiver shows the share's label with the add-on's name (e.g. `SEAT · BOOK CLUB`).
+   */
+  addonShare: z
+    .object({ id: ShareId, label: ShareLabel })
+    .optional()
+    .describe(
+      "Feature `addon-shares` (with `addon`): the add-on calls within this share of it; `to` holds it.",
+    ),
 });
 export type CallBody = z.infer<typeof CallBody>;
 
@@ -205,6 +221,26 @@ export const PhonesBody = z.object({
   phones: z.array(z.object({ id: Id, label: z.string().trim().min(1).max(24) })).max(16),
 });
 export type PhonesBody = z.infer<typeof PhonesBody>;
+
+/**
+ * `POST /fed/v1/addon-shares` (feature `addon-shares`): the shares of `from`'s add-ons that `to`
+ * holds (`from` gave them), so `to`'s server can list them with the connection and put them on
+ * keys. Replaces the earlier list. Authority stays with the sender: it checks every call.
+ */
+export const AddonSharesBody = z.object({
+  from: Party,
+  to: Handle,
+  shares: z
+    .array(
+      z.object({
+        addon: Handle.describe("The add-on's name: `from.handle+addon+share@sender`."),
+        share: ShareId,
+        label: ShareLabel.describe("The share's label, as the add-on calls it."),
+      }),
+    )
+    .max(100),
+});
+export type AddonSharesBody = z.infer<typeof AddonSharesBody>;
 
 /**
  * `POST /fed/v1/lounge/claim`: the sending server vouches that `from` (its account) scanned this

@@ -15,6 +15,11 @@ import {
 // correlate an `error` reply with the message that caused it.
 const Ref = { id: Id.optional() };
 
+/** A share of an add-on (docs/add-ons.md, Sharing): `[a-z0-9-]`, 1–30, unique per add-on. */
+export const ShareId = z.string().regex(/^[a-z0-9-]{1,30}$/);
+/** What a share is called (e.g. "Book club"). */
+export const ShareLabel = z.string().trim().min(1).max(40);
+
 // ---------------------------------------------------------------------------
 // Shared between devices and companion apps: call control and WebRTC signaling.
 // ---------------------------------------------------------------------------
@@ -139,12 +144,48 @@ export const CallAddress = z
       .min(3)
       .max(300)
       .describe(
-        "`handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one.",
+        "`handle@host` (a person), `handle+name@host` (an add-on) or `handle+name+share@host` (one of its shares), on this server or another one.",
       ),
+    share: ShareId.optional().describe(
+      "Server feature `addon-shares`, from an add-on only: call within this share of it. The callee must be its owner or hold the share; they see the share's label with the add-on's name.",
+    ),
   })
   .describe(
-    "Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).",
+    "Server feature `addons`. Call by address. An add-on calls its owner, or (with `share`) someone who holds that share (people only); an app calls an add-on it may talk to: its own (`handle+name@host`), or a share of one that its owner gave them (`handle+name+share@host`). Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).",
   );
+
+export const AddonSharesMsg = z
+  .object({
+    t: z.literal("addon.shares"),
+    ...Ref,
+    shares: z
+      .array(z.object({ id: ShareId, label: ShareLabel }))
+      .max(100)
+      .describe("Everything it offers for sharing now; ids unique."),
+  })
+  .describe(
+    "Server feature `addon-shares`, from an add-on only: the parts of itself it offers for sharing (e.g. one shared project). Replaces the previous list; send it after connecting and whenever it changes. A share left out is gone: the people it was given to lose it and their calls into it end.",
+  );
+
+export const AddonShareCreated = z
+  .object({
+    t: z.literal("addon.share.created"),
+    ...Ref,
+    requestId: Id,
+    id: ShareId.describe("The new share (already in the add-on's latest `addon.shares`)."),
+  })
+  .describe(
+    "Server feature `addon-shares`, from an add-on: it made the share its owner asked for (`addon.share.request`). Send `addon.shares` with it first; the server then gives it to the people in the request.",
+  );
+
+export const AddonShareRefused = z
+  .object({
+    t: z.literal("addon.share.refused"),
+    ...Ref,
+    requestId: Id,
+    reason: z.string().trim().min(1).max(200).describe("Shown to its owner as it is."),
+  })
+  .describe("Server feature `addon-shares`, from an add-on: it won't make that share.");
 
 export const CallKey = z
   .object({
@@ -687,6 +728,9 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   CallExtension,
   CallAddress,
   CallKey,
+  AddonSharesMsg,
+  AddonShareCreated,
+  AddonShareRefused,
   PairBegin,
   AuthProof,
   Hook,
@@ -951,7 +995,20 @@ export const CallRinging = z
         .describe(
           '`addon`: the caller is an add-on (`label` is its name). Show it with an add-on label, e.g. `SEAT · ADD-ON` on a phone\'s display, an "add-on" badge in an app.',
         ),
+      share: ShareLabel.optional().describe(
+        "With `kind` `addon`: it calls within one of its shares that you hold (`address` is the share's). Show the share's label with its name, e.g. `SEAT · BOOK CLUB` on a phone, \"seat · Book club\" in an app.",
+      ),
     }),
+    share: z
+      .object({
+        id: ShareId,
+        label: ShareLabel,
+        grantId: Id.describe("The grant the caller holds (stable until it's revoked)."),
+      })
+      .optional()
+      .describe(
+        "To an add-on only: the call came in through this share (`handle+name+share@host`); keep it inside that scope. Absent = its owner is calling.",
+      ),
     line: LineInfo.optional().describe("The call is for a public line you answer for."),
     waiting: z
       .literal(true)
@@ -1193,6 +1250,22 @@ export const NoticeCleared = z
   .object({ t: z.literal("notice.cleared"), ...Ref, id: Id })
   .describe("The notice expired or was taken down: stop showing it.");
 
+export const AddonShareRequest = z
+  .object({
+    t: z.literal("addon.share.request"),
+    ...Ref,
+    requestId: Id,
+    label: ShareLabel.describe("What its owner called it."),
+    by: z.string().max(300).describe("Its owner's address (`handle@host`)."),
+    with: z
+      .array(z.string().max(300))
+      .max(50)
+      .describe("The people to give it to, by address (`handle@host`)."),
+  })
+  .describe(
+    'Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("New shared project with…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.',
+  );
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -1211,6 +1284,7 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   CallRinging,
   CallStateMsg,
   CallKey,
+  AddonShareRequest,
   RtcConfig,
   RtcSdp,
   RtcIce,

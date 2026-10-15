@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `addon-shares`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -72,12 +72,13 @@ Team/org spaces: dial an extension of your space (a member, a phone, a room or a
 
 ### `call.address`
 
-Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
+Server feature `addons`. Call by address. An add-on calls its owner, or (with `share`) someone who holds that share (people only); an app calls an add-on it may talk to: its own (`handle+name@host`), or a share of one that its owner gave them (`handle+name+share@host`). Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one. |
+| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person), `handle+name@host` (an add-on) or `handle+name+share@host` (one of its shares), on this server or another one. |
+| `share` | string (`^[a-z0-9-]{1,30}$`) |  | Server feature `addon-shares`, from an add-on only: call within this share of it. The callee must be its owner or hold the share; they see the share's label with the add-on's name. |
 
 ### `call.key`
 
@@ -88,6 +89,34 @@ Server feature `addons`: a key pressed during an answered call with an add-on (`
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 | `key` | string (`^[0-9*#]$`) | yes |  |
+
+### `addon.shares`
+
+Server feature `addon-shares`, from an add-on only: the parts of itself it offers for sharing (e.g. one shared project). Replaces the previous list; send it after connecting and whenever it changes. A share left out is gone: the people it was given to lose it and their calls into it end.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `shares` | { id: string (`^[a-z0-9-]{1,30}$`), label: string (len ≤40) }[] | yes | Everything it offers for sharing now; ids unique. |
+
+### `addon.share.created`
+
+Server feature `addon-shares`, from an add-on: it made the share its owner asked for (`addon.share.request`). Send `addon.shares` with it first; the server then gives it to the people in the request.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (`^[a-z0-9-]{1,30}$`) | yes | The new share (already in the add-on's latest `addon.shares`). |
+| `requestId` | string (len ≤64) | yes |  |
+
+### `addon.share.refused`
+
+Server feature `addon-shares`, from an add-on: it won't make that share.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `requestId` | string (len ≤64) | yes |  |
+| `reason` | string (len ≤200) | yes | Shown to its owner as it is. |
 
 ### `pair.begin`
 
@@ -590,7 +619,8 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"`, share?: string (len ≤40) } | yes |  |
+| `share` | { id: string (`^[a-z0-9-]{1,30}$`), label: string (len ≤40), grantId: string (len ≤64) } |  | To an add-on only: the call came in through this share (`handle+name+share@host`); keep it inside that scope. Absent = its owner is calling. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 | `waiting` | `true` |  | Call waiting: you're in a call and this one rings softly (a beep in the earpiece, a banner). `call.answer` takes it and puts your current call on hold (`call.state active hold: you`); `call.hangup` declines it; left alone it goes to voicemail after the usual ring time. Only to apps, and to phones listing `call-waiting`. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |
@@ -624,6 +654,18 @@ Server feature `addons`: a key pressed during an answered call with an add-on (`
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
 | `key` | string (`^[0-9*#]$`) | yes |  |
+
+### `addon.share.request`
+
+Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("New shared project with…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `requestId` | string (len ≤64) | yes |  |
+| `label` | string (len ≤40) | yes | What its owner called it. |
+| `by` | string (len ≤300) | yes | Its owner's address (`handle@host`). |
+| `with` | string (len ≤300)[] | yes | The people to give it to, by address (`handle@host`). |
 
 ### `rtc.config`
 
@@ -806,12 +848,13 @@ Call a public line (a team's or organization's published ring group) on this ser
 
 ### `call.address`
 
-Server feature `addons`. Call by address. An add-on calls its owner or one of the connections its owner allowed (people only); an app calls an add-on (`handle+name@host`) it may talk to: its own, or one whose owner allowed them. Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
+Server feature `addons`. Call by address. An add-on calls its owner, or (with `share`) someone who holds that share (people only); an app calls an add-on it may talk to: its own (`handle+name@host`), or a share of one that its owner gave them (`handle+name+share@host`). Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person) or `handle+name@host` (an add-on), on this server or another one. |
+| `address` | string (len ≥3, len ≤300) | yes | `handle@host` (a person), `handle+name@host` (an add-on) or `handle+name+share@host` (one of its shares), on this server or another one. |
+| `share` | string (`^[a-z0-9-]{1,30}$`) |  | Server feature `addon-shares`, from an add-on only: call within this share of it. The callee must be its owner or hold the share; they see the share's label with the add-on's name. |
 
 ### `call.key`
 
@@ -1139,7 +1182,8 @@ Incoming call; device rings until answered, hung up, or ended.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
-| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"` } | yes |  |
+| `from` | { label: string (len ≤24), address?: string (len ≤300), kind?: `"addon"`, share?: string (len ≤40) } | yes |  |
+| `share` | { id: string (`^[a-z0-9-]{1,30}$`), label: string (len ≤40), grantId: string (len ≤64) } |  | To an add-on only: the call came in through this share (`handle+name+share@host`); keep it inside that scope. Absent = its owner is calling. |
 | `line` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | The call is for a public line you answer for. |
 | `waiting` | `true` |  | Call waiting: you're in a call and this one rings softly (a beep in the earpiece, a banner). `call.answer` takes it and puts your current call on hold (`call.state active hold: you`); `call.hangup` declines it; left alone it goes to voicemail after the usual ring time. Only to apps, and to phones listing `call-waiting`. |
 | `callback` | { name: string (len ≤64), description?: string (len ≤140), address?: string (len ≤300) } |  | A public line you asked to call you back: it's your turn. Answer, and your call to the line goes on as a new call (`call.state ended` with `transfer`, you're its caller); hang up to let it go. |

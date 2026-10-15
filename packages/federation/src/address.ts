@@ -25,29 +25,40 @@ export const formatAddress = (a: Address) => `${a.handle}@${a.host}`;
 /** An add-on's name, the part after `+` (validated like a handle). */
 export const ADDON_NAME_RE = HANDLE_RE;
 
-/** An add-on's address: `handle+name@host` (docs/add-ons.md). */
+/** A share's id, the part after the second `+` (docs/add-ons.md, Sharing). */
+export const SHARE_ID_RE = /^[a-z0-9-]{1,30}$/;
+
+/**
+ * An add-on's address: `handle+name@host`, or one of its shares: `handle+name+share@host`
+ * (docs/add-ons.md). The plain address is its owner's alone; a share's is for the people who
+ * hold that share.
+ */
 export interface AddonAddress extends Address {
   name: string;
+  /** The share (its id), for `handle+name+share@host`. */
+  share?: string;
 }
 
 /**
- * Parses `handle+name@host` (an add-on on someone's account). `parseAddress` never accepts it,
- * so nothing that takes a person's address (a knock, a connection, a public line) can reach an
- * add-on by accident.
+ * Parses `handle+name@host` (an add-on on someone's account) and `handle+name+share@host` (one
+ * of its shares). `parseAddress` never accepts either, so nothing that takes a person's address
+ * (a knock, a connection, a public line) can reach an add-on by accident.
  */
 export function parseAddonAddress(text: string): AddonAddress | undefined {
   const t = text.trim().toLowerCase().replace(/^@/, "");
   const at = t.lastIndexOf("@");
-  const plus = t.indexOf("+");
-  if (at <= 0 || plus <= 0 || plus > at) return undefined;
-  const handle = t.slice(0, plus);
-  const name = t.slice(plus + 1, at);
+  if (at <= 0) return undefined;
+  const parts = t.slice(0, at).split("+");
   const host = t.slice(at + 1);
+  if (parts.length !== 2 && parts.length !== 3) return undefined;
+  const [handle = "", name = "", share] = parts;
   if (!HANDLE_RE.test(handle) || !ADDON_NAME_RE.test(name) || !HOST_RE.test(host)) return undefined;
-  return { handle, name, host };
+  if (share !== undefined && !SHARE_ID_RE.test(share)) return undefined;
+  return share === undefined ? { handle, name, host } : { handle, name, share, host };
 }
 
-export const formatAddonAddress = (a: AddonAddress) => `${a.handle}+${a.name}@${a.host}`;
+export const formatAddonAddress = (a: AddonAddress) =>
+  `${a.handle}+${a.name}${a.share ? `+${a.share}` : ""}@${a.host}`;
 
 const hostName = (host: string) => host.replace(/:\d+$/, "").toLowerCase();
 
