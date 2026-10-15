@@ -329,6 +329,91 @@ Still open:
    cups hang below the handle, and its weight (≥ 121 g for a 45 gf hook switch).
 5. The earlier questions that still stand: base envelope and toy classification (Kids).
 
+## 12a. hw v0.901: wired network and PoE
+
+A sidebar revision of the minimal board (owner request 2026-10-15): an **RJ45 with Power over
+Ethernet**, so a phone can run from one cable like a desk phone. Everything of rev A stays where
+it was (refs, placement, routes); the network is added at the board's right end, between the
+MENU and BACK keys. Silkscreen rev **v0.901**. The owner's "no I/O expander" rule holds.
+
+| Block | Parts | Ref |
+|---|---|---|
+| RJ45 | HanRun HR871150C: 10/100 magnetics with the cable-side centre taps out (802.3af, 350 mA per tap), 2 LEDs; THT on the top, mouth 3.5 mm past the right edge (flush with the case wall) | J4 |
+| Ethernet | WIZnet W5500 (SPI, 10/100 PHY + TCP/IP offload) on the bottom, WIZnet's joined-centre-tap reference circuit, 25 MHz crystal, its own SGM2212-3.3 | U4, Y1, U5 |
+| PoE | SDAPO DP9900LP-5V isolated 802.3af PD module (class 0, 5 V 1.4 A, 1500 V; Silvertel Ag9905LP-compatible) on the top; two MB10S bridges (mode A data pairs, mode B spare pairs), SMAJ58A, 100 µF tantalum + 10 µF | PS1, BR1, BR2, D4 |
+| 5 V OR | USB VBUS → B5819W, PoE 5 V → SS34, into one rail **V5** (both LDOs and the ringer) | D3, D5 |
+
+**GPIO (no free pins, no expander).** The W5500 shares the display's SPI clock and data
+(EPD_CLK IO13 = SCLK, EPD_DIN IO14 = MOSI; separate chip selects, ESP-IDF's bus lock time-shares
+them). Its two own lines use the last two pins, both straps:
+
+- **ETH_CS = GPIO0**, 10 kΩ pull-up (high at reset = SPI boot). The BOOT button reaches GPIO0
+  through 1 kΩ (R14): held at reset it still reads 3.3 V × 1k/11k = 0.30 V (download mode); pressed
+  while firmware drives CS high it costs 3.3 mA and selects nothing. Firmware never read BOOT at
+  runtime.
+- **ETH_MISO = GPIO45** (VDD_SPI strap, must read low), 10 kΩ pull-down. The W5500's MISO is
+  Hi-Z whenever its SCSn is high (datasheet v1.1.0 p10, TCHZ 2.16 ns p61), and SCSn is pulled up,
+  so nothing drives GPIO45 at reset. `check_pin_table` accepts a tri-state output on a low-only
+  strap only when its enable net is provably held high at reset (pull-up, no pull-down, only
+  inputs on it), and refuses a BOOT series resistor that would lift GPIO0 above 0.41 V.
+- **No GPIO for RSTn or INTn**: RSTn has its own power-on RC (10 kΩ / 4.7 µF, ~47 ms, still in reset
+  when the module latches its straps 10 + 3 ms after power-up) and firmware soft-resets it; INTn is
+  unused (ESP-IDF's W5500 driver polls: `int_gpio_num = -1`, `poll_period_ms > 0`). PMODE[2:0] are
+  left open (internal pull-ups: all capable, auto-negotiation).
+
+**Power.** The two 5 V sources each come in through a Schottky, so neither can feed the other or
+a USB host. The PoE module's ADJ (100 kΩ to −VDC) lifts it to 5.27 V, which pays its diode and
+makes PoE the source when both are present. The USB-C receptacle's A9/B4 VBUS pad is routed; its
+other pad (A4/B9) is the plug's VBUS too and stays unrouted. The W5500 has its own LDO (U5), so
+the module's LDO runs no hotter than in rev A. V5 carries ≤ 9.4 µF (USB attach limit 10 µF):
+4.7 µF at each LDO. `power_budget.yaml` / `check_power_budget` now check every **mode × source**:
+
+| Mode | Sources | 5 V peak | Note |
+|---|---|---|---|
+| Wi-Fi (PHY in power-down) | USB, PoE | 474 mA | |
+| Ethernet (Wi-Fi radio off) | USB, PoE | 394 mA | |
+| both | PoE only | 619 mA | of 1400 mA |
+| Wi-Fi with the PHY left on, no cable | USB, PoE | 526 mA | WARN: what the board draws until firmware powers the PHY down |
+
+LDO junctions stay ≤ 88 °C at 40 °C ambient in every mode. The PoE module needs ≥ 100 mA to keep
+the PSE's maintain-power signature; a powered phone draws more, R28 (51 Ω, not fitted) is the
+fallback.
+
+**Isolation.** Everything on the PoE input side (the RJ45's pins 7-10, both bridges, the TVS, the
+module's input) is net class PoE: `checks.check_poe` keeps those nets off GND and every other
+part; `fab-common.kicad_dru` keeps their copper **3 mm** from everything else on both layers
+(1 mm inside the RJ45's own pin grid, which HanRun's 1500 Vrms rating covers); the ground fills
+leave a 3 mm rule-area gap round them (`route.py` `poe_keepouts`). The RJ45 shield (class
+Chassis) goes to GND through 1 nF 2 kV.
+
+**Layout.** Top: J4 and PS1 (8.0 mm) side by side in the strip between the MENU and BACK
+keycaps (x 132-156), under a hood on the lid (PROTO_BOX.md). Bottom: the PoE input parts in one
+row under the module's input half and BR1 west of the RJ45's PoE pins; the W5500 west of the
+RJ45 with its SPI fan (one 0.6 mm-pitch bundle in its pin order from J3 and the module), the TX
+pair through one via pair to the top (the W5500 has TX north of RX, the RJ45 the other way round),
+RX on the bottom with its AC coupling and termination; the PoE 5 V reaches the V5 node at the
+module's LDO on the top layer along y 18.5 (between the rear switches' holes and their legends).
+
+**Results (2026-10-15).** `make build`: 99 parts on 46 BOM lines (17 JLC extended), ERC 0 / 0,
+0 check errors (one WARN: the PHY-idle USB peak above). Routed (`route.py`: hand routes for the
+structured parts, the grid router for the rest in a second window `ETH_WINDOW`): KiCad DRC
+**0 errors, 0 warnings, 0 unconnected** with the PoE isolation rules; 2.92 m of track, 43
+signal/supply vias, USB pair unchanged from rev A (26.00 / 25.91 mm). Two segments off 45° (the
+router's ends into R28's 2512 pad) and two acute junctions at U2's output pin remain, cosmetic.
+`make sim` b01 with the OR diode: 3V3 3.128-3.365 V through a 60 → 400 mA burst at VBUS 4.40 V,
+728 mV LDO headroom after the diode. `make proto`: 47 fit checks pass, hood included. Cost per
+board (JLC reference, cost.py): **$17.98 at 100, $15.30 at 1000** (rev A $7.64 / $6.16); the PoE
+module ($4.24), the W5500 ($1.82) and the RJ45 ($1.22) are most of the difference.
+
+**Firmware to do (not on this branch):** ESP-IDF esp_eth W5500 driver in polling mode on SPI2
+(shared with the display, ≤ 20 MHz), MAC from `esp_read_mac(ESP_MAC_ETH)` (the W5500 has none),
+PHY power-down (PHYCFGR) while Wi-Fi is the uplink, Ethernet preferred when a link is up;
+`hardware/build/main/gpio_map.json` now has ETH_CS / ETH_MISO instead of BOOT. Bring-up:
+BRINGUP.md §8.
+
+**Not changed:** the other cases (plush, flat case, faceplate) have no RJ45 opening or hood yet;
+the 2.9" display option is unaffected (J4/PS1 are right of its standoffs).
+
 ## 13. Sources
 
 - ESP32-S3-WROOM-1/1U datasheet v1.8 (Espressif): straps p13-15, supply p27, current p28,
@@ -341,6 +426,11 @@ Still open:
 - ST USBLC6-2 datasheet p1-2; HOOYA PJ-31060 drawing rev A2 p1; TDK PS series buzzers p2;
   JSCJ MMBT3904 rev 2.1 p1; Lite-On LTST-C230KRKT p1, p3; XKB TS-1187A rev A0; HanElectricity
   CPG151101S11-2 and Kailh KH-PS2206-43 drawings p1. Links in [components/](components/README.md).
+- hw v0.901: WIZnet W5500 datasheet v1.1.0 (pins p8-10, MISO p10/p61, reset and clock p60-61,
+  currents p59-60) and its reference schematics (W5500 with magjack, joined centre tap); HanRun
+  HR871150C rev 00 (schematic p1, drawing p2, PCB layout p3); SDAPO DP9900 series (pins and typical
+  connection p3, ADJ p4, characteristics p5-6, LP package p8); MDD MB1S-MB10S rev 2024A2 p1;
+  ESP32-S3 datasheet v2.2 (strap timing table 3-2, power-up glitches table 2-2).
 - WeAct Studio EpaperModule (github.com/WeActStudio/WeActStudio.EpaperModule, Hardware/):
   2.13" and 2.9" board shapes (72 × 30, holes 66.4 × 24.4; 91.8 × 37.5, holes 86.2 × 31.9;
   the same 2x4 header) and schematic (header order).

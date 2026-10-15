@@ -46,10 +46,15 @@ EDGE = 0.3
 HOLE_CLR = 0.25
 HOLE_TO_HOLE = 0.5
 CLASS = {  # netclass: (track, clearance) = place.NETCLASSES
-    "Default": (0.2, 0.15), "Power": (0.4, 0.2), "USB": (0.3, 0.15), "Audio": (0.25, 0.2)}
-POWER = {"VBUS", "3V3"}
+    "Default": (0.2, 0.15), "Power": (0.4, 0.2), "USB": (0.3, 0.15), "Audio": (0.25, 0.2),
+    "Eth": (0.25, 0.15), "PoE": (0.5, 0.25), "Chassis": (0.5, 0.25)}
+POWER = {"VBUS", "3V3", "V5", "POE_5V", "ETH_3V3", "ETH_3V3A"}
 USBN = {"USB_DP", "USB_DN"}
 AUDIO = {"HS_EAR", "HS_MIC", "EAR_AC", "DAC_OUTP", "MIC1P", "MIC1N", "MIC_BIAS"}
+ETHN = {"ETH_TXP", "ETH_TXN", "ETH_RXP", "ETH_RXN", "ETH_RDP_J", "ETH_RDN_J"}
+POEN = {"POE_VA1", "POE_VA2", "POE_VB1", "POE_VB2", "POE_VIN_P", "POE_VIN_N"}
+CHASSIS = {"ETH_SHIELD"}
+POE_ISO, POE_ISO_J4 = 3.0, 1.0      # fab-common.kicad_dru "safety: PoE isolation"
 
 
 def cls(net: str) -> str:
@@ -59,7 +64,25 @@ def cls(net: str) -> str:
         return "USB"
     if net in AUDIO:
         return "Audio"
+    if net in ETHN:
+        return "Eth"
+    if net in POEN:
+        return "PoE"
+    if net in CHASSIS:
+        return "Chassis"
     return "Default"
+
+
+def iso_clearance(net: str, it: dict) -> float:
+    """The PoE isolation rule between the net being routed and an item (0 if it doesn't apply)."""
+    if not it["net"] or not net:
+        return 0.0
+    a, b = cls(net), cls(it["net"])
+    if (a == "PoE") == (b == "PoE") or "Chassis" in (a, b):
+        return 0.0
+    if "pad" in it and it["pad"].GetParentFootprint().GetReference() == "J4":
+        return POE_ISO_J4 + 0.05
+    return POE_ISO + 0.05
 
 
 # ---------------------------------------------------------------------------------------------
@@ -206,12 +229,251 @@ def display(cu):
     jx, jy = pad(cu.b, "J3", "2")
     y = 56.5
     cu.track("EPD_RST", B, chamfer([(rx, ry), (rx, y), (jx, y), (jx, jy)], [0.6, 0.7]), BUS_W)
-    # BOOT (IO0): out of the corner pin, over to SW2 (both pads of its contact)
+    # IO0 = ETH_CS (hw v0.901): out of the corner pin into R14 (1 k), R14 -> SW2 (BOOT, both pads
+    # of its contact); ETH_CS itself hops onto the top layer toward the W5500 (eth_hand())
     bx, by = pad(cu.b, "U1", "27")
-    s1 = [p for p in pads_of(cu.b, "SW2") if p[1] == "BOOT"]
+    r14a, r14b = pad(cu.b, "R14", "1"), pad(cu.b, "R14", "2")
+    s1 = [p for p in pads_of(cu.b, "SW2") if p[1] == "BOOT_SW"]
     (ax, ay), (cx, cy) = sorted([p[0] for p in s1])
-    cu.track("BOOT", B, [(bx, by), (ax - (by - ay), by), (ax, ay), (cx, cy)], BUS_W)
+    cu.track("ETH_CS", B, [(bx, by), r14a], BUS_W)
+    cu.track("BOOT_SW", B, [r14b, (ax, by - (ax - r14b[0])), (ax, ay), (cx, cy)], BUS_W)
     # 3V3 to J3 pin 8 comes with the top trunk (power())
+
+
+def v5_trunk(cu):
+    """hw v0.901: the PoE side's 5 V (D5's cathode, at the right end) to the V5 node at the LDO,
+    on the top layer along y 18.5 (between the rear switches' holes and their legends), with a
+    short bottom hop under the top 3V3 trunk at x 36; a branch down to the Ethernet LDO U5."""
+    b = cu.b
+    W5 = 0.8
+    vk = pad(b, "D5", "1")
+    xe, ye = 137.2, 18.5
+    cu.track("V5", B, [vk, (xe + 0.5, vk[1]), (xe, ye)], W5)
+    cu.via("V5", xe, ye)
+    u5in = pad(b, "U5", "3")                          # branch to U5: down the top layer west
+    xb, yb = 102.0, u5in[1] + 2.2                     # of the Ethernet parts, then east under
+    cu.track("V5", F, [(xe, ye), (37.4, ye)], W5)     # U5 into its input pin from the south
+    cu.track("V5", F, [(xb, ye), (xb, yb)], 0.6)
+    cu.via("V5", xb, yb)
+    cu.track("V5", B, [(xb, yb), (u5in[0], yb), u5in], 0.6)
+    cu.via("V5", 37.4, ye)
+    cu.track("V5", B, [(37.4, ye), (34.4, ye)], W5)
+    cu.via("V5", 34.4, ye)
+    xv, yv = 22.75, 17.65                             # on the V5 diagonal D3 -> LDO input
+    cu.track("V5", F, [(34.4, ye), (xv + (ye - yv), ye), (xv, yv)], W5)
+    cu.via("V5", xv, yv)
+
+
+def eth_hand(cu):
+    """hw v0.901: the structured part of the wired network, by hand (the router joins the rest
+    in ETH_WINDOW).
+
+    - SPI: one bottom bundle from J3 / the module, top to bottom in the W5500's pin order (DIN,
+      MISO, CLK, CS at 0.6 mm), parallel 45° fan into pins 35-32; MISO and CS hop over the
+      display and BOOT lines on the top layer, CLK leaves J3 on the top between pins 6 and 4.
+    - the crystal's XO / XI around their pins (30/31) to Y1, south-west of the W5500.
+    - TX pair: its 49.9 R terminations north of the PHY pins, then a via pair onto the top layer
+      over the RX pair to the RJ45's pins 1/2 (the W5500 has TX north of RX, the RJ45 the other
+      way round; one hop instead of a crossing).
+    - four GND vias under the W5500 for its ground pins (eth_gnd()).
+    - the PoE input side (poe_hand())."""
+    b = cu.b
+    # ---- SPI bundle
+    yd, ym, yc, ys = 42.73, 43.33, 43.93, 44.53          # DIN, MISO, CLK, CS
+    d6 = pad(b, "J3", "6")
+    c5 = pad(b, "J3", "5")
+    cu.track("EPD_CLK", F, [c5, (c5[0] + yc - c5[1], yc), (47.5, yc)], BUS_W)
+    cu.via("EPD_CLK", 47.5, yc)
+    m = pad(b, "U1", "26")
+    cu.track("ETH_MISO", B, [m, (21.4, m[1])], BUS_W)
+    cu.via("ETH_MISO", 21.4, m[1])
+    cu.track("ETH_MISO", F, [(21.4, m[1]), (46.5, m[1]), (48.5, m[1] - 2.0), (48.5, ym)], BUS_W)
+    cu.via("ETH_MISO", 48.5, ym)
+    by = pad(b, "U1", "27")[1]
+    yt = 53.6
+    cu.via("ETH_CS", 24.0, by)
+    cu.track("ETH_CS", F, [(24.0, by), (24.0 + yt - by, yt), (49.5, yt), (49.5, ys)], BUS_W)
+    cu.via("ETH_CS", 49.5, ys)
+    # fan into U4: line k on y = x + c_k (parallel 45°), c 0.85 apart (0.6 mm pitch)
+    c_cs = 47.75 - 113.0
+    for k, (net, y0, pin, x0) in enumerate((("EPD_DIN", yd, "35", d6[0]), ("ETH_MISO", ym, "34", 48.5),
+                                            ("EPD_CLK", yc, "33", 47.5), ("ETH_CS", ys, "32", 49.5))):
+        px, py = pad(b, "U4", pin)
+        c = c_cs - (3 - k) * 0.85
+        cu.track(net, B, [(x0, y0), (y0 - c, y0), (py - c, py), (px, py)], BUS_W)
+    # ---- crystal: XO (pin 31) to Y1's NE pad, XI (pin 30) round its east side to the SW pad
+    xo, xi = pad(b, "U4", "31"), pad(b, "U4", "30")
+    yo, yi = pad(b, "Y1", "3"), pad(b, "Y1", "1")
+    cu.track("W5500_XO", B, [xo, (yo[0] + (yo[1] - xo[1]), xo[1]), yo], BUS_W)
+    xv = yo[0] + 1.25
+    cu.track("W5500_XI", B, [xi, (xv + 1.0, xi[1]), (xv, xi[1] + 1.0), (xv, yi[1] + 1.0),
+                             (yi[0], yi[1] + 1.0), yi], BUS_W)
+    # ---- TX pair: terminations, via hop, top layer to the RJ45 (pins 1 TX+, 2 TX-)
+    W = CLASS["Eth"][0]
+    tn, tp = pad(b, "U4", "1"), pad(b, "U4", "2")
+    r21, r20 = pad(b, "R21", "1"), pad(b, "R20", "1")
+    vn, vp = (r21[0], tn[1] - 0.4), (r20[0], tp[1])
+    cu.track("ETH_TXN", B, [tn, (vn[0] - 0.4, tn[1]), vn, r21], W)
+    cu.track("ETH_TXP", B, [tp, vp, r20], W)
+    cu.via("ETH_TXN", *vn)
+    cu.via("ETH_TXP", *vp)
+    j1, j2 = pad(b, "J4", "1"), pad(b, "J4", "2")
+    yn, yp = j1[1] + 1.38, j1[1] + 0.68
+    cu.track("ETH_TXN", F, [vn, (vn[0], yn), (j2[0], yn), j2], W)
+    cu.track("ETH_TXP", F, [vp, (vp[0], yp), (j1[0] - (yp - j1[1]), yp), j1], W)
+    u4_escape(cu)
+    phy_rx(cu)
+    eth_leds(cu)
+    poe_hand(cu)
+
+
+def u4_escape(cu):
+    """hw v0.901: the W5500's supply and ground pins at 0.5 mm pitch: each ground pin inward to its
+    own GND via under the package (the top GND pour joins them); AVDD pins 4/8 and 21 inward
+    (the router finishes them, with a via of its own), pin 11 round the free corner to pin 15;
+    VDD (28) and the LED pins (25, 27) outward west to vias beside the package (the crystal's XI
+    runs past them)."""
+    b = cu.b
+    U = lambda n: pad(b, "U4", str(n))     # noqa: E731
+    w = 0.2
+    xe, xw, ys = U(1)[0] - 0.74, U(25)[0] + 0.74, U(13)[1] - 0.74    # pad inner ends
+    yn = U(37)[1] + 0.74
+    # ground: each pin straight (or one 45° step) to its own via inside the pin ring
+    g3, g48 = (121.0, U(3)[1]), (U(48)[0] - (46.4 - yn), 46.4)
+    g29, g9 = (118.4, U(29)[1]), (121.6, U(9)[1])
+    cu.track("GND", B, [(xe, U(3)[1]), g3], w)
+    cu.track("GND", B, [(U(48)[0], yn), g48], w)
+    cu.track("GND", B, [(xw, U(29)[1]), g29], w)
+    cu.track("GND", B, [(xe, U(9)[1]), g9], w)
+    gs = [(U(n)[0], 51.0) for n in (14, 16, 19, 23)]
+    for n, v in zip((14, 16, 19, 23), gs):
+        cu.track("GND", B, [(U(n)[0], ys), v], w)
+    for v in [g3, g48, g29, g9] + gs:
+        cu.via("GND", *v)
+    a4, a21 = (123.5, 47.9), (U(21)[0], 50.75)
+    cu.track("ETH_3V3A", B, [(xe, U(4)[1]), (a4[0] + 0.35, U(4)[1]), (a4[0], U(4)[1] + 0.35), a4], w)
+    cu.track("ETH_3V3A", B, [(xe, U(8)[1]), (a4[0] + 0.35, U(8)[1]), (a4[0], U(8)[1] - 0.35), a4], w)
+    # pin 11: outward round the package's free corner (pins 12/13 unused) to pin 15's line south
+    xo, yo = U(11)[0] + 1.14, U(13)[1] + 1.09
+    cu.track("ETH_3V3A", B, [U(11), (xo, U(11)[1]), (xo, yo), (U(15)[0], yo), U(15)], w)
+    cu.track("ETH_3V3A", B, [(U(21)[0], ys), a21], w)
+    # VDD and the LEDs: outward west to vias beside the package
+    vd, va, vl = (115.5, 49.85), (115.5, 50.85), (115.5, 51.85)
+    cu.track("ETH_3V3", B, [U(28), (vd[0] + 0.1, U(28)[1]), vd], w)
+    cu.track("ETH_ACTLED", B, [U(27), (116.0, U(27)[1]), (va[0], U(27)[1] + 0.5), va], w)
+    cu.track("ETH_LINKLED", B, [U(25), (116.1, U(25)[1]), vl], w)
+    cu.via("ETH_3V3", *vd)
+    cu.via("ETH_ACTLED", *va)
+    cu.via("ETH_LINKLED", *vl)
+    # EXRES1 out to R15 (upright beside the package), R15's ground via below it
+    r15a, r15b = pad(b, "R15", "1"), pad(b, "R15", "2")
+    cu.track("W5500_EXRES", B, [U(10), (r15a[0] - (r15a[1] - U(10)[1]), U(10)[1]), r15a], w)
+    vg = (r15b[0] + 0.8, r15b[1] + 0.8)                       # east of the TX- top track
+    cu.track("GND", B, [r15b, vg], 0.3)
+    cu.via("GND", *vg)
+    # the Ethernet LDO's output pin to its tab (the same pin 2; no pour joins them here)
+    u5 = [unP(q.GetPosition()) for q in b.FindFootprintByReference("U5").Pads() if q.GetNumber() == "2"]
+    cu.track("ETH_3V3", B, sorted(u5), 0.5)
+
+
+def phy_rx(cu):
+    """hw v0.901: the RX pair from the W5500 (pins 5 RX-, 6 RX+) through its AC coupling (C30, C29)
+    to the RJ45 (pins 5 RD-, 4 RD+), 3 mm south of the PoE side until it is inside the RJ45's own
+    pin grid; terminations R23/R22 to C31 south of it (RX- reaches R23 over a via pair); the
+    joined centre tap (pin 3) to R24 / C32."""
+    b = cu.b
+    W = CLASS["Eth"][0]
+    n5, p6 = pad(b, "U4", "5"), pad(b, "U4", "6")
+    c30a, c30b = pad(b, "C30", "2"), pad(b, "C30", "1")       # RXN, RDN_J
+    c29a, c29b = pad(b, "C29", "2"), pad(b, "C29", "1")       # RXP, RDP_J
+    j5, j4, j3 = pad(b, "J4", "5"), pad(b, "J4", "4"), pad(b, "J4", "3")
+    yn, yp = c30a[1], c29a[1]
+    cu.track("ETH_RXN", B, [n5, (129.3, n5[1]), (129.3, yn), c30a], W)
+    cu.track("ETH_RXP", B, [p6, (128.6, p6[1]), (128.6, yp), c29a], W)
+    xj = 138.05                                                 # the RJ45's courtyard
+    cu.track("ETH_RDN_J", B, [c30b, (xj, yn), (xj + (yn - j5[1]), j5[1]), j5], W)
+    xd = 137.8
+    cu.track("ETH_RDP_J", B, [c29b, (xd, yp), (xd + (yp - j4[1]), j4[1]), j4], W)
+    # terminations: RX- over a via pair (it would cross RX+), RX+ straight down
+    r23, r22 = pad(b, "R23", "1"), pad(b, "R22", "1")
+    v1, v2 = (r23[0], yn), (r23[0], r23[1] - 0.6)
+    cu.via("ETH_RXN", *v1)
+    cu.track("ETH_RXN", F, [v1, v2], W)
+    cu.via("ETH_RXN", *v2)
+    cu.track("ETH_RXN", B, [v2, r23], W)
+    cu.track("ETH_RXP", B, [(r22[0], yp), r22], W)
+    r23c, r22c, c31 = pad(b, "R23", "2"), pad(b, "R22", "2"), pad(b, "C31", "1")
+    cu.track("ETH_RXC", B, [r23c, r22c, (r22c[0] + 0.4, r22c[1]), (r22c[0] + 0.4, c31[1]), c31], W)
+    # centre tap: out of pin 3 south of RD+, west to C32 and R24
+    c32, r24 = pad(b, "C32", "1"), pad(b, "R24", "2")
+    yc = 53.6
+    cu.track("ETH_CT", B, [j3, (j3[0] - (yc - j3[1]), yc), (r24[0], yc), r24], 0.25)
+    cu.track("ETH_CT", B, [(c32[0], yc), c32], 0.25)
+
+
+def eth_leds(cu):
+    """hw v0.901: the W5500's LED lines (vias beside its west side, u4_escape) on the top layer
+    down to the front and east along it to the LED resistors at the right edge; the ETH_3V3 feed
+    for the RJ45's LED anodes (pins 11, 13) on the top layer round the RJ45's shield tab."""
+    b = cu.b
+    w = 0.2
+    va, vl = (115.5, 50.85), (115.5, 51.85)
+    r26, r25 = pad(b, "R26", "2"), pad(b, "R25", "2")
+    ya, yl, xa, xl = 62.6, 62.0, r26[0], r25[0] - 0.6    # 0.25 mm past H6's hole
+    cu.track("ETH_ACTLED", F, [va, (114.7, va[1] + 0.8), (114.7, ya), (xa, ya), (xa, r26[1] - 0.9)], w)
+    cu.via("ETH_ACTLED", xa, r26[1] - 0.9)
+    cu.track("ETH_ACTLED", B, [(xa, r26[1] - 0.9), r26], w)
+    cu.track("ETH_LINKLED", F, [vl, (vl[0], yl), (xl, yl), (xl, r25[1] + 0.6)], w)
+    cu.via("ETH_LINKLED", xl, r25[1] + 0.6)   # one 45° step to R25's pad
+    cu.track("ETH_LINKLED", B, [(xl, r25[1] + 0.6), r25], w)
+    # ETH_3V3 top trunk: from a via south-east of the supply parts east under the TX pair, round
+    # the RJ45's front shield tab, up beside its LED pins
+    e1 = (116.8, 57.3)
+    p11, p13 = pad(b, "J4", "11"), pad(b, "J4", "13")
+    xv = 151.3
+    cu.via("ETH_3V3", *e1)
+    cu.track("ETH_3V3", F, [e1, (142.8, e1[1]), (144.3, 58.8), (xv, 58.8), (xv, p13[1]), p13], 0.3)
+    cu.track("ETH_3V3", F, [(xv, p11[1]), p11], 0.3)
+
+
+def poe_hand(cu):
+    """hw v0.901: the isolated PoE input side (net class PoE, 0.5 mm), by hand: the RJ45's
+    cable-side centre taps to the bridges (BR1 mode A west of the RJ45, BR2 mode B under the
+    module), VIN+ along the module's input half to the TVS and pins 5/6, VIN- on the top layer
+    along y 35.6 and 39.6 to pins 7/8. 3 mm from everything else (fab-common.kicad_dru)."""
+    b = cu.b
+    W = CLASS["PoE"][0]
+    J = lambda n: pad(b, "J4", n)          # noqa: E731
+    P = lambda n: pad(b, "PS1", n)         # noqa: E731
+    br1 = {n: pad(b, "BR1", n) for n in "1234"}
+    br2 = {n: pad(b, "BR2", n) for n in "1234"}
+    dk, da = pad(b, "D4", "1"), pad(b, "D4", "2")
+    # mode A (data-pair centre taps) -> BR1's AC pins (VA2 east, VA1 west)
+    cu.track("POE_VA2", B, [J("8"), (br1["3"][0], J("8")[1])], W)
+    cu.track("POE_VA1", B, [J("7"), (br1["4"][0], J("7")[1]), br1["4"]], W)
+    # mode B (spare pairs) -> BR2's AC pins, north under the module
+    xb = J("9")[0] + 0.14
+    cu.track("POE_VB1", B, [J("9"), (xb, J("9")[1] - 0.14),
+                            (xb, br2["3"][1] + 0.4 + br2["3"][0] - xb),
+                            (br2["3"][0], br2["3"][1] + 0.4), br2["3"]], W)
+    cu.track("POE_VB2", B, [J("10"), (J("10")[0], br2["4"][1]), br2["4"]], W)
+    # VIN+: BR2 + -> along y 31.0 -> TVS cathode -> BR1 + ; module pins 5/6
+    yv = 31.0
+    cu.track("POE_VIN_P", B, [br2["1"], (br2["1"][0], yv), (dk[0], yv), dk], W)
+    cu.track("POE_VIN_P", B, [dk, (dk[0], br1["1"][1] - 0.62 - (dk[0] - br1["1"][0])),
+                              (br1["1"][0], br1["1"][1] - 0.62), br1["1"]], W)
+    cu.track("POE_VIN_P", B, [(dk[0], P("5")[1]), P("5"), P("6")], W)
+    # VIN-: BR2 - -> pin 7 (bottom); pins 7-8; TVS anode and BR1 - on the top layer
+    p7, p8 = P("7"), P("8")
+    cu.track("POE_VIN_N", B, [br2["2"], (br2["2"][0], 35.9), (p7[0] - 1.94, 35.9), p7, p8], W)
+    cu.track("POE_VIN_N", B, [da, (da[0], 35.25)], W)
+    cu.via("POE_VIN_N", da[0], 35.25)
+    cu.track("POE_VIN_N", F, [(da[0], 35.25), (da[0] + 0.35, 35.6), (p7[0] - 1.26, 35.6),
+                              (p7[0], 36.86), p7], W)
+    v1 = (br1["2"][0] + 0.68, br1["2"][1] + 0.68)
+    cu.track("POE_VIN_N", B, [br1["2"], v1], W)
+    cu.via("POE_VIN_N", *v1)
+    cu.track("POE_VIN_N", F, [v1, (v1[0] + (v1[1] - 39.6), 39.6), (p7[0] - (39.6 - p7[1]), 39.6), p7], W)
 
 
 def pads_of(board, ref):
@@ -254,32 +516,35 @@ def usb(cu):
     r1, r2 = pad(b, "R1", "1"), pad(b, "R2", "1")
     cu.track("CC1", B, [a5, (a5[0], r1[1] - (a5[0] - r1[0])), r1], 0.2)
     cu.track("CC2", B, [b5, (b5[0], r2[1])], 0.2)
-    for ref in ("R1", "R2"):
-        gx, gy = pad(b, ref, "2")
-        cu.track("GND", B, [(gx, gy), (gx, 12.7)], 0.3)
-        cu.via("GND", gx, 12.7)
+    gx, gy = pad(b, "R1", "2")
+    cu.track("GND", B, [(gx, gy), (gx, 12.7)], 0.3)
+    cu.via("GND", gx, 12.7)
+    # R2's via sits west of its pad (hw v0.901: the USB OR diode D3 is east of it)
+    gx, gy = pad(b, "R2", "2")
+    cu.track("GND", B, [(gx, gy), (20.55, gy + gx - 20.55), (20.55, 12.45)], 0.3)
+    cu.via("GND", 20.55, 12.45)
 
 
 def power(cu):
     b = cu.b
-    # ---- VBUS: east pads -> LDO + C_IN; west pads -> piezo, its 1 k; the TVS VBUS pin is
-    # reached through the gap between its pad rows (joins both halves, crosses nothing)
-    a9, a4 = pad(b, "J1", "A9"), pad(b, "J1", "A4")
+    # ---- hw v0.901: VBUS (east pad A9/B4) -> D3 (USB OR diode) -> V5 -> LDO + C_IN; the
+    # piezo, its 1 k and the TVS's supply pin hang off V5 west of it, reached through the gap
+    # between the TVS's pad rows (crosses nothing). The west pad A4/B9 is the plug's VBUS too and
+    # stays unrouted. The PoE 5 V comes in on the top layer (v5_trunk()).
+    a9 = pad(b, "J1", "A9")
+    d3a, d3k = pad(b, "D3", "2"), pad(b, "D3", "1")
     u3in, c1 = pad(b, "U2", "3"), pad(b, "C1", "1")
-    xt = 22.3
-    cu.track("VBUS", B, [a9, (a9[0], 8.6), (xt, 8.6 + xt - a9[0])], 0.4)
-    cu.track("VBUS", B, [(xt, 8.6 + xt - a9[0]), (xt, 17.0), (xt + u3in[1] - 17.0, u3in[1]), u3in],
-             0.6)
-    cu.track("VBUS", B, [u3in, (u3in[0], c1[1])], 0.6)
+    xt = d3k[0]
+    cu.track("VBUS", B, [a9, (a9[0], 8.6), (d3a[0], 8.6 + d3a[0] - a9[0]), d3a], 0.4)
+    cu.track("V5", B, [d3k, (xt, 17.0), (xt + u3in[1] - 17.0, u3in[1]), u3in], 0.6)
+    cu.track("V5", B, [u3in, (u3in[0], c1[1])], 0.6)
     bz, r11 = pad(b, "BZ1", "1"), pad(b, "R11", "1")
-    xw = 16.8
-    cu.track("VBUS", B, [a4, (a4[0], 8.6), (xw, 8.6 + a4[0] - xw), (xw, bz[1] - (xw - bz[0])), bz,
-                         (r11[0], bz[1] + r11[0] - bz[0]), r11], 0.4)
+    cu.track("V5", B, [bz, (r11[0], bz[1] + r11[0] - bz[0]), r11], 0.4)
     d5 = pad(b, "D1", "5")
     yg = 18.0
-    cu.track("VBUS", B, [r11, (r11[0], 15.05), (17.25, 15.75), (17.25, 17.7), (17.55, yg),
-                         (21.9, yg), (xt, yg - 0.4)], 0.3)
-    cu.track("VBUS", B, [(d5[0], yg), d5], 0.3)
+    cu.track("V5", B, [r11, (r11[0], 15.05), (17.25, 15.75), (17.25, 17.7), (17.55, yg),
+                       (xt - 0.4, yg), (xt, yg - 0.4)], 0.3)
+    cu.track("V5", B, [(d5[0], yg), d5], 0.3)
     # ---- 3V3: LDO tab pour island (zones()); pin 2 and C_OUT
     p2, c2 = pad(b, "U2", "2", max), pad(b, "C2", "1")
     cu.track("3V3", B, [(p2[0], p2[1]), (p2[0], 16.3)], 0.5)
@@ -468,7 +733,8 @@ NARROW = 0.15            # neck-down width near the net's own pads (fine-pitch e
 NEAR = 0.8               # mm around own pads where the neck-down is allowed
 MIN_RUN = 5              # cells between turns (0.25 mm straight, 0.35 mm diagonal)
 TURN = 6.0               # cost of a 45° turn (cells)
-VIA_COST = {"Default": 50.0, "Power": 40.0, "Audio": 400.0, "USB": 1e9}
+VIA_COST = {"Default": 50.0, "Power": 40.0, "Audio": 400.0, "USB": 1e9, "Eth": 300.0,
+            "PoE": 60.0, "Chassis": 50.0}
 TOP_COST = 1.6           # the top is the GND plane: signals prefer the bottom
 DIRS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 
@@ -483,6 +749,7 @@ class Router:
         self.Y = self.y0 + np.arange(self.ny)[:, None] * RES
         self.items = []
         self.log = []
+        self.extend_ends = False
         self._collect()
         self.edge_d = self._edge_distance()
         self.protect = [np.zeros((self.ny, self.nx), bool), np.zeros((self.ny, self.nx), bool)]
@@ -593,7 +860,7 @@ class Router:
                         self.y0 + np.arange(j0, j1)[:, None] * RES - cy) \
                         < it["drill"] + HOLE_TO_HOLE + VIA_DRILL / 2 + MARGIN
                 continue
-            c = max(c_own, it["clr"])
+            c = max(c_own, it["clr"], iso_clearance(net, it))
             for L in it["layers"]:
                 full[L][j0:j1, i0:i1] |= dist < c + w / 2 + MARGIN
                 narrow[L][j0:j1, i0:i1] |= dist < c + NARROW / 2 + MARGIN
@@ -638,8 +905,6 @@ class Router:
             return out
         j0, j1, i0, i1, dist = r
         inside = dist <= 0.0
-        if it["g"][0] == "seg":
-            inside = dist <= 0.0
         js, is_ = np.nonzero(inside)
         s = set(((js + j0) * self.nx + (is_ + i0)).tolist())
         for L in it["layers"]:
@@ -683,7 +948,7 @@ class Router:
         return out
 
     # ---- A* over (layer, cell, direction, run)
-    def astar(self, src, tgt, ok, via_ok, cost_via, max_expand=600000):
+    def astar(self, src, tgt, ok, via_ok, cost_via, max_expand=2000000):
         nx, N = self.nx, self.nx * self.ny
         okb = [bytes(o.ravel().astype(np.uint8)) for o in ok]
         vb = bytes(via_ok.ravel().astype(np.uint8))
@@ -797,6 +1062,70 @@ class Router:
                 m += 1
             added += cu.track(net, L, [xy(i, j), xy(pts[m][1], pts[m][2])], w if wide else NARROW)
             k = m
+        # a path may end exactly on a pad's or track's edge (the grid touches it), which KiCad
+        # doesn't count as connected: carry each end on in its own direction (45° multiples)
+        # until it is inside that copper
+        def inside(L, e):
+            for it in self.items:
+                if it["net"] != net or L not in it["layers"]:
+                    continue
+                g = it["g"]
+                if g[0] == "seg":
+                    ax, ay, bx, by, hw = g[1:]
+                    vx, vy = bx - ax, by - ay
+                    L2 = vx * vx + vy * vy
+                    t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((e[0] - ax) * vx + (e[1] - ay) * vy) / L2))
+                    if math.dist((ax + t * vx, ay + t * vy), e) <= hw - 0.03:
+                        return True
+                elif g[0] == "circle":
+                    if math.dist((g[1], g[2]), e) <= g[3] - 0.03:
+                        return True
+                else:                              # rect / roundrect pad: keep off its corners
+                    m = 0.03
+                    if g[1] + m <= e[0] <= g[3] - m and g[2] + m <= e[1] <= g[4] - m:
+                        rc = 0.3 * min(g[3] - g[1], g[4] - g[2]) if "pad" in it else 0.0
+                        cx_ = min(e[0] - g[1], g[3] - e[0])
+                        cy_ = min(e[1] - g[2], g[4] - e[1])
+                        if not (cx_ < rc and cy_ < rc):
+                            return True
+            return False
+
+        for a, b_ in ((pts[1], pts[0]), (pts[-2], pts[-1])) if len(pts) > 1 and self.extend_ends else ():
+            if a[0] != b_[0]:
+                continue
+            e = xy(b_[1], b_[2])
+            d = (b_[1] - a[1], b_[2] - a[2])
+            n = math.hypot(*d)
+            if n == 0 or inside(b_[0], e):
+                continue
+            u = (d[0] / n * RES, d[1] / n * RES)
+            q = e
+            for _ in range(10):
+                q = (round(q[0] + u[0], 4), round(q[1] + u[1], 4))
+                if inside(b_[0], q):
+                    added += cu.track(net, b_[0], [e, q], NARROW)
+                    break
+            else:                                  # e.g. along a pad's edge: into its centre
+                for it in self.items:
+                    if it["net"] == net and b_[0] in it["layers"] and "pad" in it:
+                        g = it["g"]
+                        c = self._centre(g)
+                        hit = (math.dist(c, e) <= g[3] + 0.02) if g[0] == "circle" else \
+                            (g[1] - 0.02 <= e[0] <= g[3] + 0.02 and g[2] - 0.02 <= e[1] <= g[4] + 0.02)
+                        if hit:
+                            # toward its centre in the nearest 45° direction, else straight in
+                            dx, dy = c[0] - e[0], c[1] - e[1]
+                            k = round(math.atan2(dy, dx) / (math.pi / 4))
+                            u2 = (math.cos(k * math.pi / 4) * RES, math.sin(k * math.pi / 4) * RES)
+                            q2 = e
+                            for _ in range(40):
+                                q2 = (round(q2[0] + u2[0], 4), round(q2[1] + u2[1], 4))
+                                if inside(b_[0], q2):
+                                    break
+                            else:
+                                q2 = (round(c[0], 4), round(c[1], 4))
+                            added += cu.track(net, b_[0], [e, q2], NARROW)
+                            break
         for t in added:
             self.add_track(t)
         return added
@@ -916,6 +1245,18 @@ LEFTOVER = ["MIC1P", "HS_MIC", "ES8311_ADCVREF", "ES8311_DACVREF", "MIC1N", "ES8
 # may hop through vias like any digital net
 VIA_NET = {"MIC1P": 1e9, "HS_MIC": 1e9, "MIC1N": 50.0}
 CORNER = (0.0, 0.0, 40.0, 60.0)          # router window: the electronics band
+# hw v0.901: second window over the wired network (W5500, RJ45, PoE) at the right end
+ETH_WINDOW = (98.0, 15.0, 156.0, 64.0)
+# routing order: the isolated PoE side first (the tightest), then the module output, the PHY
+# pairs, supplies, the W5500's own pins, the LEDs and the SPI ends
+ETH_NETS = ["POE_5V", "POE_ADJ", "W5500_TOCAP", "W5500_1V2O", "ETH_RST", "ETH_3V3A", "ETH_3V3",
+            "V5", "W5500_XI", "W5500_XO", "ETH_CS", "ETH_MISO",
+            "ETH_LED_LINK_K", "ETH_LED_ACTIVITY_K", "ETH_SHIELD"]
+# the PoE module's top-layer keep-out under its body (its footprint's rule area, as rectangles)
+# no GND stitching where it would sit within 3 mm of the PoE input side
+POE_NO_GND = [(128.4, 27.9, 156.0, 43.2), (129.0, 36.0, 147.0, 51.3)]
+PS1_KEEPOUT = [(139.47, 24.17, 150.84, 27.48), (147.85, 27.17, 156.38, 30.48),
+               (139.47, 27.17, 142.47, 34.28), (133.77, 31.28, 142.47, 34.28)]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -960,6 +1301,41 @@ def zones(board):
     add_zone(board, "3V3", pcbnew.B_Cu, ISLAND_3V3, 2, "3V3 LDO tab island")
     add_zone(board, "GND", pcbnew.F_Cu, outline_poly(), 1, "GND top")
     add_zone(board, "GND", pcbnew.B_Cu, outline_poly(), 1, "GND bottom")
+    poe_keepouts(board)
+
+
+def poe_keepouts(board):
+    """hw v0.901: no copper pour within 3 mm of the PoE input side, on both layers (the zone filler
+    run from Python doesn't apply fab-common.kicad_dru's custom rules; DRC does, and checks it).
+    One rule area per PoE pad / track / via: its bounding box grown by the isolation distance."""
+    g = POE_ISO + 0.1
+    boxes = []
+    for fp in board.GetFootprints():
+        for p in fp.Pads():
+            if cls(p.GetNetname()) == "PoE":
+                boxes.append(p.GetBoundingBox())
+    for t in board.GetTracks():
+        if cls(t.GetNetname()) == "PoE":
+            boxes.append(t.GetBoundingBox())
+    for bb in boxes:
+        (x0, y0), (x1, y1) = unP(bb.GetOrigin()), unP(bb.GetEnd())
+        z = pcbnew.ZONE(board)
+        z.SetIsRuleArea(True)
+        z.SetDoNotAllowZoneFills(True)
+        z.SetDoNotAllowTracks(False)
+        z.SetDoNotAllowVias(False)
+        z.SetDoNotAllowPads(False)
+        z.SetDoNotAllowFootprints(False)
+        ls = pcbnew.LSET()
+        ls.AddLayer(pcbnew.F_Cu)
+        ls.AddLayer(pcbnew.B_Cu)
+        z.SetLayerSet(ls)
+        z.SetZoneName("PoE isolation (no pour)")
+        ol = z.Outline()
+        ol.NewOutline()
+        for x, y in ((x0 - g, y0 - g), (x1 + g, y0 - g), (x1 + g, y1 + g), (x0 - g, y1 + g)):
+            ol.Append(P(x, y))
+        board.Add(z)
 
 
 def fill(board):
@@ -1006,6 +1382,8 @@ def stitch(cu, board):
     def free(x, y):
         if any(b[0] - 0.2 <= x <= b[2] + 0.2 and b[1] - 0.2 <= y <= b[3] + 0.2 for b in bodies):
             return False
+        if any(k[0] <= x <= k[2] and k[1] <= y <= k[3] for k in POE_NO_GND):
+            return False
         if any(math.dist((x, y), s) < 4.2 for s in screws):
             return False
         return all(math.dist((x, y), (hx, hy)) >= hr + VIA_DRILL / 2 + HOLE_TO_HOLE + 0.05
@@ -1047,6 +1425,8 @@ def hand(board):
     display(cu)
     usb(cu)
     power(cu)
+    v5_trunk(cu)
+    eth_hand(cu)
     audio(cu)
     codec(cu)
     r = Router(board, CORNER)
@@ -1080,23 +1460,77 @@ def leftovers(placed, attempts=8):
     return board, cu, r
 
 
+def eth_gnd(r, cu):
+    """hw v0.901: each of the W5500's ground pins joined to the GND vias under it (router A*;
+    the fills can't reach between 0.5 mm-pitch pins)."""
+    b = cu.b
+    fp = b.FindFootprintByReference("U4")
+    vias = [it for it in r.items if it["net"] == "GND" and it["drill"] > 0
+            and any(math.dist(r._centre(it["g"]), v) < 0.01 for v in U4_GND_VIAS)]
+    tgt = {}
+    for it in vias:
+        for L, s_ in r.cells(it).items():
+            tgt.setdefault(L, set()).update(s_)
+    for p in fp.Pads():
+        if p.GetNetname() != "GND":
+            continue
+        it = next(i for i in r.items if "pad" in i and i["net"] == "GND"
+                  and i["pad"].GetParentFootprint().GetReference() == "U4"
+                  and i["pad"].GetNumber() == p.GetNumber())
+        ok, ok_full, via_ok = r.masks("GND", 0.2)
+        path = r.astar(r.cells(it), tgt, [ok[0], ok[1]], np.zeros_like(via_ok), 1e9)
+        if not path:
+            r.log.append(f"FAIL GND: U4.{p.GetNumber()} to its vias")
+            continue
+        r.commit(cu, "GND", path, 0.2, ok_full)
+
+
+ETH_W = {"ETH_3V3": 0.3, "ETH_3V3A": 0.3, "V5": 0.4, "POE_5V": 0.5}
+
+
+def eth_router(board, cu, order=None):
+    """hw v0.901: route ETH_NETS in their window (deterministic order, failures logged)."""
+    r = Router(board, ETH_WINDOW)
+    r.extend_ends = True
+    for x0, y0, x1, y1 in PS1_KEEPOUT:
+        r.items.append(dict(layers=(F,), g=("rect", x0, y0, x1, y1), net="", clr=0.0, drill=0.0))
+    r.protect_under(ETHN, F, 0.5)
+    failed = []
+    for net in order or ETH_NETS:
+        done, fail = r.route_net(cu, net, w=ETH_W.get(net), cost_via=VIA_COST[cls(net)])
+        if fail:
+            failed.append(net)
+    print(f"  eth: {len(failed)} nets failed {failed}", flush=True)
+    return r, failed
+
+
 def route(pcb) -> int:
     placed = pcb.parent / "route" / "placed.kicad_pcb"
     if not placed.exists():
         raise SystemExit(f"{placed} missing: run place.py (make place) first")
-    board, cu, r = leftovers(placed)
+    order = list(ETH_NETS)
+    for k in range(4):                     # failed nets first, from the placed board again
+        board, cu, r = leftovers(placed)
+        re_, failed = eth_router(board, cu, order)
+        if not failed:
+            break
+        order = failed + [n for n in order if n not in failed]
     # GND vias: every SMD ground pad in the band (not the key sockets: the bottom fill joins
     # them), plus the codec's exposed pad
     for fp in board.GetFootprints():
         ref = fp.GetReference()
         if not fp.IsFlipped() or ref.startswith(("SW3", "SW4", "SW5", "SW6", "SW7", "SW8", "SW9",
                                                  "SW10", "SW11", "SW12", "SW13", "SW14", "SW15",
-                                                 "U1", "J1", "D1", "R1", "R2")):
+                                                 "U1", "J1", "D1", "R1", "R2", "U4")):
             continue
         for p in fp.Pads():
             if p.GetNetname() == "GND" and p.GetAttribute() == pcbnew.PAD_ATTRIB_SMD \
                     and not (ref == "U3" and p.GetNumber() == "21"):
-                r.ground_via(cu, p)
+                x, y = unP(p.GetPosition())
+                rr = re_ if ETH_WINDOW[0] <= x <= ETH_WINDOW[2] and ETH_WINDOW[1] <= y <= ETH_WINDOW[3] \
+                    else r
+                rr.ground_via(cu, p)
+    r.log += re_.log
     for line in r.log:
         print("  " + line)
 

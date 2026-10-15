@@ -65,6 +65,20 @@ BZ1_C, BZ1_D, BZ1_H = (15.8, 15.0), 12.2, 6.5      # piezo body centre (between 
 LED = (2.755, 59.325)                              # D2 reverse-mount LED, shines up through a hole
 USB_X, JACK_X = 19.5, 6.5                          # J1 / J2 centres on the rear edge (bottom side)
 BUTTONS = [(3.345, 23.045, "RESET SW1"), (35.0, 52.8, "BOOT SW2")]   # bottom side: floor pinholes
+# hw v0.901 (default; OLP_BOARD=v0.1 builds the shell for the first board): the wired network at
+# the right end (layout/place.py J4_AT, PS1_PIN1). The RJ45 (13.3 mm) and the PoE module (8 mm)
+# stand on the board's top under a HOOD on the lid, between the MENU and BACK keycaps; the RJ45's
+# mouth comes out through the right wall (tray below the lid top, hood above it).
+BOARD_REV = os.environ.get("OLP_BOARD", "v0.901")
+NETWORK = BOARD_REV != "v0.1"
+J4_AT = (148.7, 49.5)
+RJ45_W, RJ45_D, RJ45_H, RJ45_SPRING_W = 16.0, 21.2, 13.3, 18.35   # HanRun HR871150C (rev 00 p2)
+RJ45_FRONT = J4_AT[0] + 10.8                       # 159.5: the mouth, 3.5 mm past the board edge
+RJ45_CUT = (16.54, 14.0)                           # HanRun's suggested panel opening (p3)
+PS1_BODY, PS1_H = (134.47, 25.0, 155.67, 39.2), 8.5   # DP9900LP 21.2 x 14.2, 8.0 +- 0.5 (p8)
+
+HOOD = (132.0, 23.5, 63.9)     # board x where the hood starts, board y range (keycaps end 22.6 / 65.4)
+HOOD_WALL, HOOD_ROOF, HOOD_CLEAR = 1.4, 1.6, 0.7
 
 # ---------------------------------------------------------------- box parameters (mm)
 GAP, WALL, FLOOR = 1.0, 2.5, 2.0
@@ -83,6 +97,8 @@ LID_T = 2.0
 Z_LT = Z_BT + PLATE_ABOVE_PCB  # lid (plate) top 14.6
 Z_LU = Z_LT - LID_T            # lid underside = the tray's ledge 12.6 (flat: the lid prints on it)
 TOP_CLEAR = Z_LU - Z_BT        # 3.0 above the board top under the flat lid
+Z_HOOD_IN = Z_BT + RJ45_H + HOOD_CLEAR             # hood ceiling (hw v0.901)
+Z_HOOD_TOP = Z_HOOD_IN + HOOD_ROOF
 BOT_CLEAR = Z_BB - Z_FLOOR     # 6.0 below the board bottom
 
 KEY_CUT = 14.0                 # MX nominal; for hobby FDM use ~14.1
@@ -161,7 +177,7 @@ TEXT, TEXT_SIZE, TEXT_DEPTH = "Open Lounge Phone · proto", 6.0, 0.6
 # paraboloid (tallest mid-floor, where a flat panel bows most), trimmed under the board's parts
 RIB_T, RIB_PITCH, RIB_H_MID, RIB_H_EDGE = 1.2, 16.0, 2.5, 0.8
 RIB_CLEAR = 0.5                # rib top to anything hanging under the board
-THT_LEADS = {"J3": 3.0, "BZ1": 3.0}   # through-hole leads below the board [est]
+THT_LEADS = {"J3": 3.0, "BZ1": 3.0, "J4": 1.9, "PS1": 1.4}   # through-hole leads below the board [est]
 MX_POST_BELOW = 1.7            # MX centre post below the board (3.3 post, 1.6 board)
 BED = 220.0
 
@@ -173,6 +189,10 @@ HEIGHTS = [
     ("Kailh", 1.85), ("CPG151101S11", 1.85), ("SOT-223", 1.8), ("SOT-23", 1.2), ("QFN", 1.0),
     ("MountingHole", 0.1), ("logo", 0.05), ("name", 0.05),
     ("_1206_", 1.2), ("_0805_", 1.3), ("_0603_", 0.9), ("_0402_", 0.6),
+    # hw v0.901
+    ("RJ45_HanRun_HR871150C", RJ45_H), ("Silvertel_Ag99xxLP", PS1_H), ("CP_EIA-7343", 2.8),
+    ("TO-269AA", 2.7), ("D_SMA", 2.3), ("D_SOD-123", 1.35), ("LQFP-48", 1.6),
+    ("Crystal_SMD_3225", 0.8), ("_2512_", 0.7), ("L_0603", 0.9),
 ]
 
 
@@ -369,8 +389,23 @@ def envelope() -> Part:
     e = chamfer(e.edges().group_by(Axis.Z)[0], BOTTOM_CHAMFER)
     e = fillet(e.edges().group_by(Axis.Z)[-1], TOP_ROUND)
     inset = TOP_ROUND + 0.5
-    return e + rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * inset, OUT_H - 2 * inset, OUT_R - inset,
-                     Z_LT - 1, Z_LT + 200)
+    e = e + rrect(OUT_W / 2, OUT_H / 2, OUT_W - 2 * inset, OUT_H - 2 * inset, OUT_R - inset,
+                  Z_LT - 1, Z_LT + 200)
+    if NETWORK:                    # the hood runs out to the right wall's outer face
+        e = e + hood_box(BOTTOM_CHAMFER, Z_HOOD_TOP)
+    return e
+
+
+def hood_box(z0, z1, grow=0.0) -> Part:
+    """hw v0.901: the hood's outline (board x HOOD[0] to the case's right face, HOOD's y range)."""
+    return box(bx2x(HOOD[0]) - grow, OUT_W, by2y(HOOD[2]) - grow, by2y(HOOD[1]) + grow, z0, z1)
+
+
+def rj45_opening(z0) -> Part:
+    """The RJ45's mouth through the right wall (HanRun's panel opening, from the board top)."""
+    y = by2y(J4_AT[1])
+    return box(OUT_W - WALL - 1.0, OUT_W + 1.0, y - RJ45_CUT[0] / 2, y + RJ45_CUT[0] / 2,
+               z0, Z_BT + RJ45_CUT[1])
 
 
 def floor_ribs(parts: list[dict]) -> tuple[Part | None, list[tuple[str, float]]]:
@@ -452,6 +487,8 @@ def tray(parts: list[dict] | None = None) -> Part:
     for bx, by, _ in BUTTONS:    # poke a paper clip through the floor to press RESET / BOOT
         cut.append(cyl(bx2x(bx), by2y(by), -1, Z_FLOOR + 1, PINHOLE_D))
     cut += rear_cutters()
+    if NETWORK:
+        cut.append(rj45_opening(Z_BT - 0.4))
     from build123d import Rot
     txt = Text(TEXT, font_size=TEXT_SIZE, align=(Align.CENTER, Align.CENTER))
     cut.append(Pos(OUT_W / 2 + 20, OUT_H / 2, Z_FLOOR) * extrude(txt, amount=-TEXT_DEPTH))   # inside
@@ -475,6 +512,8 @@ def lid() -> Part:
         x, y = bx2x(bx), by2y(by)
         add.append(cyl(x, y, Z_LT - 0.01, Z_DISP, POST_D))
     add.append(lid_ribs())
+    if NETWORK:                    # the hood over the RJ45 and the PoE module
+        add.append(hood_box(Z_LT - 0.01, Z_HOOD_TOP))
     body = plate + union(add)
     cut = []
     for bx, by, _ in keys():
@@ -494,6 +533,10 @@ def lid() -> Part:
     for x, y in sound_holes():
         cut.append(cyl(x, y, Z_PIEZO_TOP, Z_PIEZO_TOP + 5, SOUND_D))
     cut.append(cyl(bx2x(LED[0]), by2y(LED[1]), Z_LU - 3, Z_LT + 1, LED_HOLE))
+    if NETWORK:                    # the hood's inside (through the plate) and the RJ45's mouth
+        cut.append(box(bx2x(HOOD[0]) + HOOD_WALL, OUT_W - WALL, by2y(HOOD[2]) + HOOD_WALL,
+                       by2y(HOOD[1]) - HOOD_WALL, Z_LU - 3, Z_HOOD_IN))
+        cut.append(rj45_opening(Z_LU - 3))
     for bx, by in BOLTS:
         x, y = bx2x(bx), by2y(by)
         cut.append(cyl(x, y, Z_BT - 1, Z_LT + 1, SCREW_CLEAR))
@@ -661,6 +704,27 @@ def run_checks(parts, shapes) -> list[tuple[str, str, str]]:
         if p["side"] == "bottom" and p["h"] > BOT_CLEAR - 1.0:
             add(False, f"under-board height {p['ref']}", f"{p['fp']} h {p['h']} > {BOT_CLEAR - 1}")
     through = {"J3": "socket passes the lid cut-out", "BZ1": "piezo dome"}
+    if NETWORK:
+        through |= {"J4": "network hood", "PS1": "network hood"}
+        hx0, hy0, hy1 = HOOD[0] + HOOD_WALL, HOOD[1] + HOOD_WALL, HOOD[2] - HOOD_WALL
+        for ref in ("J4", "PS1"):
+            q = by_ref.get(ref)
+            if not q:
+                add(False, f"hood {ref}", "missing from the board")
+                continue
+            c = q["crt"] if ref == "PS1" else (J4_AT[0] - 10.4, J4_AT[1] - RJ45_SPRING_W / 2,
+                                               RJ45_FRONT, J4_AT[1] + RJ45_SPRING_W / 2)
+            body = PS1_BODY if ref == "PS1" else c
+            ok = (body[0] >= hx0 - 0.05 and body[1] >= hy0 - 0.3 and body[3] <= hy1 + 0.3
+                  and q["h"] <= Z_HOOD_IN - Z_BT - 0.5)
+            add(ok, f"hood {ref}", f"body x {body[0]:.1f}-{body[2]:.1f}, y {body[1]:.1f}-{body[3]:.1f}, "
+                f"h {q['h']} under the hood (inside x >= {hx0:.1f}, y {hy0:.1f}-{hy1:.1f}, "
+                f"{Z_HOOD_IN - Z_BT:.1f} high)")
+        add(abs(by_ref["J4"]["at"][1] - J4_AT[1]) < 0.3 and abs(RJ45_FRONT - (BOARD_W + GAP + WALL)) < 0.05,
+            "RJ45 mouth", f"J4 at {by_ref['J4']['at']}: its mouth is flush with the right wall's face; "
+            f"opening {RJ45_CUT[0]} x {RJ45_CUT[1]} from the board top (tray + hood)")
+        gap_k = min(HOOD[1] - (YR + KEYCAP / 2), (YF - KEYCAP / 2) - HOOD[2])
+        add(gap_k >= 0.8, "hood vs keycaps", f"{gap_k:.2f} mm between the hood and the MENU/BACK keycaps")
     for p in parts:
         if p["side"] == "top" and p["h"] + 0.2 > TOP_CLEAR and "Kailh" not in p["fp"]:
             add(p["ref"] in through, f"top part {p['ref']}",

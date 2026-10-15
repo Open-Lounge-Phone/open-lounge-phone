@@ -147,7 +147,7 @@ def order(boards: int) -> str:
     fees = {"PCB (5 pcs, 2 layers)": m["pcb"]["order_usd"][1], "shipping": m["shipping_usd"][1],
             "PCBA setup + stencil": asm["setup_usd"] + asm["stencil_usd"],
             f"extended-part fees ({len(ext)} x {asm['extended_fee_usd']:.2f})": asm["extended_fee_usd"] * len(ext),
-            "THT soldering setup (J3, BZ1)": asm["tht_setup_usd"]}
+            "THT soldering setup (J3, BZ1, J4, PS1)": asm["tht_setup_usd"]}
     joints_usd = n_smd * asm["per_joint_usd"] + n_tht * asm["tht_per_joint_usd"]
     total = sum(fees.values()) + (parts + joints_usd) * built
     out = [f"JLCPCB reference quote: {built} assembled boards in one order (EST, cost_model.yaml "

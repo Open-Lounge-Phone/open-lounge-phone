@@ -50,6 +50,7 @@ def build(d: Design) -> None:
     nets["EN"] = Net("EN")
 
     nets["POE_5V"] = rail("POE_5V")
+    nets["_VBUS"] = VBUS
     for name, fn, args in (("power", power, (nets, GND, VBUS, V5, V3V3)),
                            ("mcu", mcu, (nets, GND, V3V3)),
                            ("keys", keys, (d, nets, GND)),
@@ -68,10 +69,10 @@ def power(n, GND, VBUS, V5, V3V3):
     LDO limits (>= 810 mA) and shuts down on over-temperature (SGM2212 p6, p10).
     hw v0.901: VBUS reaches the 5 V rail V5 through a Schottky (the PoE 5 V comes in through
     another, poe()), so neither source can feed the other. Only the receptacle's A9/B4 VBUS
-    pad is used (the plug joins all four VBUS contacts; 0.5 A on two contacts)."""
+    pad is routed (the plug joins all four VBUS contacts; 0.5 A on two contacts)."""
     j = make("USB-C", ref="J1", note="power + native USB (flash/console)")
     j["VBUS_E"] += VBUS
-    j["VBUS_W"] += NC
+    j["VBUS_W"] += Net("VBUS_W")    # the plug's VBUS too, unrouted (its two pads overlap)
     j["GND"] += GND
     j["SHIELD"] += GND
     cc1, cc2 = Net("CC1"), Net("CC2")
@@ -88,12 +89,12 @@ def power(n, GND, VBUS, V5, V3V3):
     esd["VBUS"] += V5      # the clamp's supply reference: the 5 V rail behind the OR
     esd["GND"] += GND
 
-    # USB into the 5 V OR; a bleeder holds an open VBUS at 0 V against the diode's reverse
-    # leakage while PoE runs the board (a USB-C sink must not drive VBUS)
+    # USB into the 5 V OR
     du = make("B5819W", ref="D3", note="USB VBUS -> V5 (OR)")
     du["A"] += VBUS
     du["K"] += V5
-    series(VBUS, GND, R("10k", note="VBUS bleeder (diode leakage with PoE power)"))
+    # No VBUS bleeder: D3's reverse leakage (uA at 5 V) only lets an open receptacle's VBUS float,
+    # it can't source current into a host (no room for one beside the receptacle).
 
     # 3.3 V LDO. C_IN 4.7 uF here + 4.7 uF at the Ethernet LDO: the whole V5 rail stays under the
     # 10 uF USB attach limit (SGM2212 p10 asks >= 2.2 uF); C_OUT: 2.2 uF at the LDO (p10) +
@@ -125,8 +126,7 @@ def mcu(n, GND, V3V3):
     # hw v0.901: GPIO0 is also the W5500's chip select (ETH_CS, 10 k pull-up in ethernet()), so
     # the button reaches it through 1 k: 3.3 V x 1k / 11k = 0.30 V at reset (download mode), and
     # a press while firmware drives CS only costs 3.3 mA.
-    sw = Net("BOOT_SW")
-    series(n["ETH_CS"], sw, R("1k", note="BOOT button series (GPIO0 is also ETH_CS)"))
+    sw = n["BOOT_SW"] = Net("BOOT_SW")    # its 1 k series resistor is made in ethernet()
     boot = make("TACT", ref="SW2", note="BOOT (hold + RESET = download mode)")
     boot["A"] += sw
     boot["B"] += GND
@@ -248,12 +248,13 @@ def ethernet(n, GND, V5, V3V3):
     into 2 x 49.9 R to a 10 nF node, the centre tap fed through 10 R with 100 nF.
 
     GPIO budget: no free GPIO for RSTn or INTn. INTn stays open (ESP-IDF polls: int_gpio_num -1,
-    poll_period_ms > 0); RSTn follows EN through a second RC (10 k / 1 uF), so the W5500 is held in
-    reset through the module's strap window (S3: GPIO straps held 3 ms after EN rises) and resets
-    with the RESET button; firmware also soft-resets it (MR.RST).
+    poll_period_ms > 0); RSTn has its own power-on RC (10 k / 4.7 uF, ~47 ms: still in reset when
+    the module latches its straps 10 ms + 3 ms after power-up); firmware soft-resets it (MR.RST)
+    at init.
     Straps: SCSn = GPIO0 with a 10 k pull-up (high at reset = SPI boot, and MISO is then Hi-Z,
     W5500 p10); MISO = GPIO45 (VDD_SPI strap, must read low) with a 10 k pull-down."""
     E3, EA = rail("ETH_3V3"), rail("ETH_3V3A")
+    series(n["ETH_CS"], n["BOOT_SW"], R("1k", note="BOOT button series (GPIO0 is also ETH_CS)"))
     # own regulator: keeps the W5500's 130 mA off the module's LDO (heat) and its supply clean
     ldo = make("SGM2212-3.3", ref="U5", note="ETH_3V3 LDO (W5500)")
     ldo["VIN"] += V5
@@ -272,14 +273,13 @@ def ethernet(n, GND, V5, V3V3):
     u["AGND"] += GND
     decouple(E3, GND, "10u", "100n", note="W5500 VDD pin 28")
     decouple(EA, GND, "10u", note="W5500 AVDD bulk")
-    decouple(EA, GND, "100n", "100n", "100n", "100n", "100n", "100n",
-             note="W5500 AVDD pins 4/8/11/15/17/21")
+    decouple(EA, GND, "100n", "100n", "100n", note="W5500 AVDD (east pins 8/11, south 15/17, 21)")
+    # PMODE[2:0] open: internal pull-ups = 111, all capable with auto-negotiation (p10; WIZnet's
+    # magjack reference leaves them open too)
     for p in ("DNC", "NC12", "NC13", "VBG", "NC46", "NC47", "RSVD38", "RSVD39", "RSVD40",
-              "RSVD41", "RSVD42", "SPDLED", "DUPLED", "INTn"):
+              "RSVD41", "RSVD42", "SPDLED", "DUPLED", "INTn", "PMODE0", "PMODE1", "PMODE2"):
         u[p] += NC
     u["RSVD23"] += GND                       # "must be tied to GND" (p9)
-    for p in ("PMODE0", "PMODE1", "PMODE2"):  # 111: all capable, auto-negotiation (p10)
-        u[p] += E3
     for pin, net, part in (("EXRES1", "W5500_EXRES", R("12.4k", note="EXRES1 12.4 k 1 % (p11)")),
                            ("TOCAP", "W5500_TOCAP", C("4.7u", note="TOCAP (p8)")),
                            ("1V2O", "W5500_1V2O", C("10n", note="1V2O (p8)"))):
@@ -304,13 +304,13 @@ def ethernet(n, GND, V5, V3V3):
     u["MOSI"] += n["EPD_DIN"]
     u["SCSn"] += n["ETH_CS"]
     u["MISO"] += n["ETH_MISO"]
-    series(n["ETH_CS"], V3V3, R("10k", note="ETH_CS pull-up: high at reset (SPI boot, MISO Hi-Z)"))
+    series(n["ETH_CS"], E3, R("10k", note="ETH_CS pull-up: high at reset (SPI boot, MISO Hi-Z)"))
     series(n["ETH_MISO"], GND, R("10k", note="ETH_MISO pull-down: GPIO45 strap low at reset"))
-    # reset: follows EN, one RC later
+    # reset: power-on RC (no free GPIO), longer than the module's EN delay
     rst = Net("ETH_RST")
     u["RSTn"] += rst
-    series(n["EN"], rst, R("10k", note="RSTn from EN (no free GPIO)"))
-    series(rst, GND, C("1u", note="RSTn delay past the strap window"))
+    series(rst, E3, R("10k", note="RSTn power-on RC (no free GPIO)"))
+    series(rst, GND, C("4.7u", note="RSTn power-on RC: ~47 ms, past the strap window"))
 
     # magnetics (chip side of the RJ45; its cable side is in poe())
     j = make("RJ45_POE", ref="J4", note="Ethernet + PoE")
@@ -364,7 +364,8 @@ def poe(n, GND, V5):
     j["VC2+"] += vb1
     j["VC2-"] += vb2
     vp, vn = Net("POE_VIN_P"), Net("POE_VIN_N")
-    for ref, a, b in (("BR1", va1, va2), ("BR2", vb1, vb2)):
+    # (a bridge's two AC pins are interchangeable: BR1's are swapped so its tracks don't cross)
+    for ref, a, b in (("BR1", va2, va1), ("BR2", vb1, vb2)):
         br = make("MB10S", ref=ref, note="PoE input bridge (mode A)" if ref == "BR1" else
                   "PoE input bridge (mode B)")
         br["AC1"] += a

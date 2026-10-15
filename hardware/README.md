@@ -7,6 +7,9 @@ codec for an off-the-shelf analog handset, a piezo ringer and one status LED. 53
 2-layer board. It has **no** battery, NFC, speaker, per-key LEDs, hardware mute switch or mic
 lights.
 
+Branch `hw-v0.901` (not released): the same board plus an RJ45 with PoE (W5500, isolated
+802.3af module), DRC clean; DESIGN.md §12a.
+
 Status: **schematic done and checked (M1)**, **placement done (M2)**: 156 × 88 mm, all SMD on
 the bottom, DRC clean, image in `build/review/placement.png` (`make placement`); **routed
 (M3)**: 2 layers, DRC clean, `make fab` writes Gerbers, JLC BOM/CPL and previews to
@@ -54,6 +57,7 @@ Hardware designs in this directory are licensed under the
 | Tag | What | Date |
 |---|---|---|
 | [`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) | Minimal board, silkscreen **rev A**: the first board ordered from JLCPCB. The release holds the exact Gerbers, BOM/CPL, schematic and layer PDFs, STEP, and the build guide | 2026-09-30 |
+| `hw-v0.901` (branch, not released) | Sidebar revision: the minimal board plus an **RJ45 with PoE** (W5500 on SPI, isolated 802.3af module, USB/PoE diode-OR), silkscreen **v0.901**; the proto box gets a hood over the RJ45 (DESIGN.md §12a). Not ordered | 2026-10-15 |
 
 Hardware releases are tagged `hw-vX.Y`; firmware releases are tagged `fw-vX.Y.Z`. A board revision
 gets a new `hw-` tag and a new silkscreen rev letter, and the fab files for a tag come from that

@@ -65,4 +65,3 @@ loads:
   V5:
     piezo_ringer: {peak: 6, avg: 0}           # 5 V across the 1k (TDK PS p2 circuit) while the NPN is on
     ldo_quiescent: {peak: 4, avg: 0}          # IGND 1.6 mA max at 800 mA (p6), two LDOs
-    vbus_bleeder: {peak: 1, avg: 1}           # 10 k on VBUS (on the USB side; counted everywhere)

@@ -115,7 +115,7 @@ def _boot_low_v(net, vdd=3.3):
     resistor) makes against the pull-ups to 3V3. None if no BOOT button reaches the net."""
     def ohms(part):
         return _parse_ohms(part.value.split()[0])
-    ups = [ohms(r) for r in _resistors_to(net, {"3V3"})]
+    ups = [ohms(r) for r in _resistors_to(net, {"3V3", "ETH_3V3"})]
     r_up = 1 / sum(1 / r for r in ups) if ups else float("inf")
     for p in net.pins:
         part = p.part
@@ -398,7 +398,9 @@ def i2c_devices(circuit) -> list:
     return out
 
 
-OPEN_INPUTS: dict = {}  # SpecKey -> pin names deliberately left open
+OPEN_INPUTS: dict = {  # SpecKey -> pin names deliberately left open
+    "W5500": ("PMODE0", "PMODE1", "PMODE2"),   # internal pull-ups: 111 = all capable, auto-neg (p10)
+}
 
 
 def check_nets(circuit):
