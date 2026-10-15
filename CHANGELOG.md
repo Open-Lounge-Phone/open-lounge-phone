@@ -10,9 +10,9 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.7.0 (unreleased)
+## 0.7.0 (2026-10-15, `server-v0.7.0`)
 
-On `main`, not tagged yet. Phones: firmware 0.9.4 ([firmware/CHANGELOG.md](firmware/CHANGELOG.md))
+Phones: firmware 0.9.4 ([firmware/CHANGELOG.md](firmware/CHANGELOG.md))
 and the browser phone show what's new here; [docs/phone-ux.md](docs/phone-ux.md) has every screen.
 
 - **Mute everywhere**: MENU 3 in a call on the phones (the browser phone disables the mic track;
@@ -65,6 +65,10 @@ and the browser phone show what's new here; [docs/phone-ux.md](docs/phone-ux.md)
   is its owner's alone; anyone else needs a share. An add-on that called allowed connections
   with `call.address` (no share) is refused `unavailable` now: give those people a share and
   call within it.
+- **The app explains itself**: linking an add-on says what the link code is for and that sharing
+  happens later on the add-on's card; Help's "What's what" says a server holds many households
+  and explains owners, the recovery code and add-ons. The Python bridge shows the link code's
+  expiry and whether the add-on is online.
 - Protocol (additive): `call.hangup.lost`, `call.ringing.waiting`, `hello.features`,
   `config.missed[].{kind,at,count,id}`, `call.back`, `missed.changed`, `config.checkin`,
   `config.chime`, `config.intercom`, `notice.chime`, `addon.shares`, `addon.share.request`,
