@@ -67,6 +67,8 @@ export type DeviceState =
       transferPending?: boolean;
       /** MENU → Mute: the mic stops sending in this call (local: the server isn't told). */
       muted?: boolean;
+      /** Call waiting: another call rings softly (1 takes it and holds this one, 2 ignores it). */
+      waiting?: { callId: string; from: string; addon?: true };
     }
   /**
    * In a room (a party line, a phone room, or a 3-way call after Merge). `roomId` is unknown
@@ -108,8 +110,11 @@ export interface DeviceStep {
   send: DeviceToServer[];
 }
 
-/** What the speaker/ringer should be doing in a given state. `hold` = the soft on-hold tone. */
-export type Sound = "none" | "dialtone" | "ringback" | "ring" | "busy" | "hold";
+/**
+ * What the speaker/ringer should be doing in a given state. `hold` = the soft on-hold tone;
+ * `waiting` = the call-waiting beep over the call.
+ */
+export type Sound = "none" | "dialtone" | "ringback" | "ring" | "busy" | "hold" | "waiting";
 
 export const initialDeviceState: DeviceState = { kind: "idle" };
 
@@ -185,6 +190,15 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     }
     if (s.kind === "inroom" && s.roomId) hangups.push({ t: "room.leave", roomId: s.roomId });
     if (s.kind === "incoming") return stay(s); // already down
+    // A call was waiting: now it rings like any call.
+    if (s.kind === "incall" && s.waiting) {
+      const { callId, from, addon } = s.waiting;
+      return stay(
+        { kind: "incoming", callId, from, ...(addon ? { addon } : {}) },
+        ...hangups,
+        hook,
+      );
+    }
     return stay({ kind: "idle" }, ...hangups, hook);
   }
 
@@ -202,6 +216,17 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     // …and key 2 asks the line to call you back instead (you keep your place).
     if (s.kind === "dialing" && s.queue?.callback && s.callId && input.index === 1) {
       return stay(s, { t: "call.callback", callId: s.callId });
+    }
+    // Call waiting: 1 takes it (the server holds this call first), 2 ignores it.
+    if (s.kind === "incall" && s.waiting && !s.transferPending && input.index <= 1) {
+      if (input.index === 1) {
+        const { waiting: _w, ...rest } = s;
+        return stay(rest);
+      }
+      return stay(
+        { kind: "incall", callId: s.waiting.callId, connected: false, held: s.callId },
+        { t: "call.answer", callId: s.waiting.callId },
+      );
     }
     if (s.kind === "incall" && s.transferPending) {
       const { transferPending: _t, ...rest } = s;
@@ -271,12 +296,30 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
         ...(msg.from.kind === "addon" ? { addon: true as const } : {}),
       });
     }
-    // Busy: decline so the caller hears it immediately instead of waiting for a timeout.
     if ("callId" in s && s.callId === msg.callId) return stay(s);
+    // Call waiting: in a call, a second call rings softly (one at a time).
+    if (msg.waiting && s.kind === "incall" && s.connected && !s.held && !s.waiting) {
+      return stay({
+        ...s,
+        waiting: {
+          callId: msg.callId,
+          from: msg.from.label,
+          ...(msg.from.kind === "addon" ? { addon: true as const } : {}),
+        },
+      });
+    }
+    if (s.kind === "incall" && s.waiting?.callId === msg.callId) return stay(s);
+    // Busy: decline so the caller hears it immediately instead of waiting for a timeout.
     return stay(s, { t: "call.hangup", callId: msg.callId });
   }
 
   // call.state
+  // The waiting call: it ends when the caller gives up (or it goes to voicemail).
+  if (s.kind === "incall" && s.waiting?.callId === msg.callId) {
+    if (msg.state !== "ended") return stay(s);
+    const { waiting: _w, ...rest } = s;
+    return stay(rest);
+  }
   // The call on hold: it can only end (the other person hung up) while we're elsewhere.
   if ("held" in s && s.held === msg.callId) {
     if (msg.state !== "ended") return stay(s);
@@ -427,7 +470,7 @@ export function soundFor(s: DeviceState): Sound {
     case "voicemail": // the greeting, the tone and the recording are the shell's
       return "none";
     case "incall":
-      return s.heldByThem ? "hold" : "none";
+      return s.waiting ? "waiting" : s.heldByThem ? "hold" : "none";
     case "incoming":
       return s.silenced ? "none" : "ring";
     case "dialing":

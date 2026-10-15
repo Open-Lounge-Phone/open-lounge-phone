@@ -631,3 +631,78 @@ describe("calling back and redial", () => {
     }
   });
 });
+
+describe("call waiting", () => {
+  const active = (callId: string, extra: Record<string, unknown> = {}): DeviceInput => ({
+    type: "server",
+    msg: { t: "call.state", callId, state: "active", ...extra },
+  });
+  const waitingRing = (callId: string, label = "Ana"): DeviceInput => ({
+    type: "server",
+    msg: { t: "call.ringing", callId, from: { label }, waiting: true },
+  });
+  const inCall = [hook("up"), button(0), callState("c1", "ringing"), active("c1")];
+
+  it("rings softly in a call; 1 takes it, the first call goes on hold", () => {
+    const { state, sent } = run([...inCall, waitingRing("c2")]);
+    expect(sent.at(-1)).not.toMatchObject({ t: "call.hangup" });
+    expect(state).toMatchObject({
+      kind: "incall",
+      callId: "c1",
+      waiting: { callId: "c2", from: "Ana" },
+    });
+    expect(soundFor(state)).toBe("waiting");
+    const take = deviceStep(state, button(0));
+    expect(take.send).toEqual([{ t: "call.answer", callId: "c2" }]);
+    expect(take.state).toEqual({ kind: "incall", callId: "c2", connected: false, held: "c1" });
+    // The server holds c1 (hold: you) and connects c2; when c2 ends, c1 is on hold.
+    const talking = run([active("c1", { hold: "you" }), active("c2")], take.state).state;
+    expect(talking).toEqual({ kind: "incall", callId: "c2", connected: true, held: "c1" });
+    expect(
+      run(
+        [
+          {
+            type: "server",
+            msg: { t: "call.state", callId: "c2", state: "ended", reason: "hangup" },
+          },
+        ],
+        talking,
+      ).state,
+    ).toEqual({ kind: "offhook", lastEnd: "hangup", held: "c1" });
+  });
+
+  it("2 ignores it; it goes away when the caller gives up or it goes to voicemail", () => {
+    const { state } = run([...inCall, waitingRing("c2")]);
+    const ignored = deviceStep(state, button(1));
+    expect(ignored.send).toEqual([]);
+    expect(ignored.state).toEqual({ kind: "incall", callId: "c1", connected: true });
+    const gone = deviceStep(state, {
+      type: "server",
+      msg: { t: "call.state", callId: "c2", state: "ended", reason: "timeout" },
+    });
+    expect(gone.state).toEqual({ kind: "incall", callId: "c1", connected: true });
+  });
+
+  it("hanging up the current call makes the waiting one ring like any call", () => {
+    const { state } = run([...inCall, waitingRing("c2")]);
+    const down = deviceStep(state, hook("down"));
+    expect(down.send).toEqual([
+      { t: "call.hangup", callId: "c1" },
+      { t: "hook", state: "down" },
+    ]);
+    expect(down.state).toEqual({ kind: "incoming", callId: "c2", from: "Ana" });
+    expect(deviceStep(down.state, hook("up")).send).toContainEqual({
+      t: "call.answer",
+      callId: "c2",
+    });
+  });
+
+  it("not while one is held, or one already waits: those are declined", () => {
+    const { state } = run([...inCall, waitingRing("c2")]);
+    expect(deviceStep(state, waitingRing("c3")).send).toEqual([{ t: "call.hangup", callId: "c3" }]);
+    // A plain ring (an older server) while in a call: declined as before.
+    expect(deviceStep(run(inCall).state, ringing("c4")).send).toEqual([
+      { t: "call.hangup", callId: "c4" },
+    ]);
+  });
+});

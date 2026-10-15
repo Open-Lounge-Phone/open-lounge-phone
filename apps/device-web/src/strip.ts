@@ -128,6 +128,13 @@ export function statusLines(input: StatusInput): StatusLines {
     }
     case "incall":
       if (s.transferPending) return ["TRANSFER TO?", "PRESS A KEY"];
+      // Call waiting: who, and the keys (a long name takes turns with them).
+      if (s.waiting) {
+        const who = s.waiting.addon ? addonLabel(s.waiting.from) : clip(s.waiting.from.trim());
+        const top = `WAITING: ${who}`;
+        if (top.length <= STATUS_WIDTH) return [top, WAITING_KEYS];
+        return ["CALL WAITING", hintNow(input.now) ? WAITING_KEYS : who];
+      }
       if (s.heldByThem) return name ? ["ON HOLD", clip(name)] : ["ON HOLD"];
       if (s.held && s.connected) return [clip(name || "IN CALL"), "MENU: MERGE"];
       if (!s.connected || input.callStartedAt === undefined) {
@@ -252,6 +259,9 @@ export const WEAK_CHARGER = "USE 1.5A CHARGER";
 
 /** How long each missed caller's name stays on screen when several are cycling. */
 export const MISSED_CYCLE_MS = 3000;
+
+/** Call waiting's keys: 1 takes the call (this one goes on hold), 2 ignores it. */
+export const WAITING_KEYS = "1 TAKE 2 IGNORE";
 
 /** A how-to hint (`BACK: SILENCE`, `MENU 3: MUTE`) takes the second line every third turn of
  * this long. */

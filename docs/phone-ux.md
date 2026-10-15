@@ -56,6 +56,7 @@ Highest priority first: the first row that applies is shown.
 | Ringing | `GRANDMA CALLING` / `LIFT TO ANSWER`, with `BACK: SILENCE` in turn on the second line (every 3 s). After BACK the ringer stops on this phone (the LED keeps flashing; the call still rings the person's other phones and apps, and goes to voicemail at the usual time): `GRANDMA CALLING` / `LIFT TO ANSWER` |
 | In a call | `IN CALL 01:23` / name, with `MENU 3: MUTE` in turn on the second line (every 3 s); muted: `MUTED 01:23` / name, in turn with `MENU 3: UNMUTE`; recorded: `REC 01:23` (muted: `REC MUTED 01:23`) / name; while connecting `CONNECTING` / name. When the audio connection drops: after 2 s (the other side hanging up drops it too, a moment before the server says the call ended: that's a normal end) `RECONNECTING` / name while it is restored (the call's timer and status come back only once audio flows again); if it can't be restored within 20 s the call ends (`CONNECTION LOST`, below). On the browser phone, when packet loss or jitter make the audio poor: the second line says `POOR CONNECTION` until it's better (not on the hardware phone: its WebRTC library doesn't report it) |
 | They put you on hold | `ON HOLD` / name |
+| In a call, another call waiting | `WAITING: MOM` (a long name: `CALL WAITING` / the name, in turn with the keys) / `1 TAKE 2 IGNORE`, with the call-waiting beep in the earpiece (see "Call waiting") |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
 | Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED`, `CALL FAILED` or `CONNECTION LOST` (the call's audio connection dropped and couldn't be restored, on either side) `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
@@ -80,6 +81,7 @@ leave the phone.
 | Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
 | Ringing | nothing | open the menu | silence the ringer on this phone | lift: answer |
 | In a call | nothing (after MENU 2 Transfer: the key's person gets the call) | the call screen (1 Hold, 2 Transfer, 3 Mute / Unmute, 9 Volume) | nothing | down: hang up |
+| In a call, another call waiting | 1: take it (this call goes on hold; on the hardware phone this call ends); 2: ignore it (it goes to voicemail at the usual time) | the call screen | nothing | down: hang up this call; the waiting one then rings like any call (lift to answer) |
 | Call on hold | nothing (one call has audio at a time) | the call screen (1 Resume) | nothing | down: hang up both |
 | Leaving a message | nothing | nothing | nothing | down: send it (under 1.5 s: dropped) |
 | In a room | any key: "still here" | the call screen (3 Mute / Unmute, 9 Volume) | nothing | down: leave |
@@ -160,6 +162,22 @@ room's server is told (everyone sees you muted). The hardware phone has audio fo
 time, so holding doesn't add a second caller; adding a caller, merging and transferring to the
 held call are in the app and the browser phone.
 
+**Call waiting.** A second call to someone who is in a call no longer gets busy: it rings
+softly where they're talking. On the phone: a beep in the earpiece every 5 s and `WAITING: MOM`
+/ `1 TAKE 2 IGNORE`. **1** takes it: on the browser phone (and in the app) the call you're in
+goes on hold (the other person hears the hold tone) and you talk with the new caller; when that
+call ends the first one is on hold (`ON HOLD` / name, `MENU 1 RESUMES`), and MENU offers
+`1 MERGE` and `2 TRANSFER` meanwhile. The hardware phone has audio for one call at a time (one
+WebRTC connection; a held call would come back without sound), so there **1** ends the call
+you're in and answers the waiting one. **2** ignores it: it stops beeping here and goes to voicemail after the
+callee's usual ring time, as an unanswered call does. Hanging up the call you're in makes the
+waiting call ring like any call. A second call waiting, a call you're holding, or being in a
+room: busy, as before. Kids' phones get call waiting too; their allow-list and quiet hours
+decide exactly as for a first call (someone not allowed is refused without a beep). It's on
+unless turned off: a person in the app (Settings → Calls; their apps and own phones follow
+it), a kids' phone by its guardians (Manage phone). Phones get it only if they say they show it
+(`hello.features` `call-waiting`); older phones stay busy.
+
 **Reconnecting.** When a call's audio connection drops (Wi-Fi blips, a network change), the
 phone says `RECONNECTING` instead of sitting in silence. The side that placed the call restarts
 the connection (an ICE restart: new routes, same call), every few seconds, for up to 20 s; then
@@ -208,6 +226,7 @@ jack is optional), with a long beep after 30 s without input, or when a call rin
 | Ringback, 440 + 480 Hz, 2 s on / 4 s off | calling |
 | Busy, 480 + 620 Hz, 0.5 s on / 0.5 s off | the call didn't go through |
 | Hold beep | they put you on hold, or a call you put on hold is waiting |
+| Call-waiting beep, 440 Hz, 0.3 s every 5 s | in a call, another call is waiting |
 | Beep, 1 kHz, 0.6 s | start speaking: the message is recording |
 | 1 kHz steady | the self-test |
 

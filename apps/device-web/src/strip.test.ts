@@ -506,3 +506,24 @@ describe("one missed call (no message)", () => {
     ).toEqual(["MISSED MOM", "ASK A GROWN-UP"]);
   });
 });
+
+describe("call waiting", () => {
+  it("who is waiting, and the keys", async () => {
+    const { statusLines, HINT_CYCLE_MS } = await import("./strip.ts");
+    const base = { connection: "online" as const, callStartedAt: 0, activeLabel: "Ben", now: 0 };
+    const call = { kind: "incall" as const, callId: "c1", connected: true };
+    expect(
+      statusLines({ ...base, deviceState: { ...call, waiting: { callId: "c2", from: "Mom" } } }),
+    ).toEqual(["WAITING: MOM", "1 TAKE 2 IGNORE"]);
+    const long = { ...call, waiting: { callId: "c2", from: "Grandma Josephine" } };
+    // The browser phone's 16 characters (the hardware phone scrolls the rest).
+    expect(statusLines({ ...base, deviceState: long })).toEqual([
+      "CALL WAITING",
+      "GRANDMA JOSEPHIN",
+    ]);
+    expect(statusLines({ ...base, deviceState: long, now: 2 * HINT_CYCLE_MS })).toEqual([
+      "CALL WAITING",
+      "1 TAKE 2 IGNORE",
+    ]);
+  });
+});

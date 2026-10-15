@@ -308,7 +308,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
       display: displayMode === "segments" ? "seg14" : displayMode,
       ...(deviceId ? { deviceId } : {}),
       // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
-      features: ["missed-calls"],
+      features: ["missed-calls", "call-waiting"],
     };
     raw(hello);
     log("→", hello);
@@ -679,6 +679,18 @@ function step(input: DeviceInput): void {
       else closeCallAudio(heldCall);
       heldCall = undefined;
     }
+  }
+  // Took a waiting call: the call we were in steps aside (the server holds it).
+  if (
+    prev.kind === "incall" &&
+    s.kind === "incall" &&
+    s.held === prev.callId &&
+    call?.callId === prev.callId
+  ) {
+    for (const t of call.mic?.getAudioTracks() ?? []) t.enabled = false;
+    heldCall = call;
+    call = undefined;
+    audioEl.srcObject = null;
   }
   // Transferred (attended): the call goes on under a new id; the old audio goes.
   if (s.kind === "incall" && call && call.callId !== s.callId) endCall();
