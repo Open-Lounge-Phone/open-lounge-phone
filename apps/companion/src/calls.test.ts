@@ -1,3 +1,4 @@
+import { CONNECTION_LOST_NOTE } from "@openloungephone/core";
 import { describe, expect, it } from "vitest";
 import { type CallEvent, type CallView, callStep, canLeaveVoicemail, toneFor } from "./calls.ts";
 
@@ -90,6 +91,18 @@ describe("local actions", () => {
     const ended = run([ringing("c1"), { type: "hangup" }]).view;
     expect(ended).toEqual({ phase: "ended", label: "Kid phone", reason: "hangup" });
     expect(run([{ type: "dismiss" }], ended).view).toEqual(idle);
+  });
+
+  it("a lost connection ends a live call, saying why; nothing else is lost", () => {
+    const live = run([ringing("c1"), { type: "answer" }, state("c1", "active")]).view;
+    expect(run([{ type: "lost" }], live).view).toEqual({
+      phase: "ended",
+      label: "Kid phone",
+      reason: "error",
+      note: CONNECTION_LOST_NOTE,
+    });
+    const ringingView = run([ringing("c1")]).view;
+    expect(run([{ type: "lost" }], ringingView).view).toBe(ringingView);
   });
 
   it("ignores dialing while in a call", () => {

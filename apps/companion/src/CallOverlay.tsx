@@ -278,15 +278,22 @@ export function CallOverlay({ snap, conn, people = [], api, extensions }: Props)
                 (call.queue ? queueText(call.queue) : call.ringing ? "Ringing…" : "Calling…")}
               {call.phase === "connecting" && "Connecting…"}
               {call.phase === "active" &&
-                (call.hold === "them"
-                  ? "put you on hold"
-                  : formatDuration(now - (call.startedAt ?? now)))}
+                (snap.reconnecting
+                  ? "Reconnecting…"
+                  : call.hold === "them"
+                    ? "put you on hold"
+                    : formatDuration(now - (call.startedAt ?? now)))}
               {call.phase === "ended" &&
                 !canLeaveVoicemail(call) &&
                 (call.callbackUntil !== undefined
                   ? `${call.label} will call you back. You keep your place in line.`
                   : (call.note ?? endReasonText(call.reason, call.person)))}
             </div>
+            {call.phase === "active" && snap.poor && !snap.reconnecting && (
+              <div className="muted small" role="status">
+                Poor connection
+              </div>
+            )}
             {(call.phase === "connecting" || call.phase === "active") && (
               <MicMeter
                 conn={conn}

@@ -1,4 +1,5 @@
 import type { Tone } from "@openloungephone/client";
+import { CONNECTION_LOST_NOTE } from "@openloungephone/core";
 import type { EndReason, LineInfo, ServerToApp, VoicemailOffer } from "@openloungephone/protocol";
 
 /** Waiting in a public line's queue (`call.state.queue`). */
@@ -84,6 +85,8 @@ export type CallEvent =
     }
   | { type: "answer" }
   | { type: "hangup" }
+  /** The call's audio connection dropped and reconnecting gave up (we hung up with `lost`). */
+  | { type: "lost" }
   | { type: "dismiss" }
   | {
       type: "server";
@@ -138,6 +141,17 @@ export function callStep(view: CallView, e: CallEvent): CallStep {
     case "hangup":
       if (view.phase === "idle" || view.phase === "ended") return { view };
       return { view: { phase: "ended", label: labelOf(view), reason: "hangup", ...addonOf(view) } };
+    case "lost":
+      if (view.phase !== "connecting" && view.phase !== "active") return { view };
+      return {
+        view: {
+          phase: "ended",
+          label: labelOf(view),
+          reason: "error",
+          note: CONNECTION_LOST_NOTE,
+          ...addonOf(view),
+        },
+      };
     case "dismiss":
       return view.phase === "ended" ? { view: { phase: "idle" } } : { view };
     case "server":

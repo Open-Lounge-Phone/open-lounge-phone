@@ -100,6 +100,10 @@ export interface Snapshot {
   muted: boolean;
   /** Bumped when the microphone changes (the level meter reads the new one). */
   micSeq?: number;
+  /** The current call's audio connection dropped and is being restored. */
+  reconnecting?: boolean;
+  /** The current call's incoming audio is poor (packet loss or jitter). */
+  poor?: boolean;
   error?: string;
   /** Your latest Lounge takeover / session event. */
   lounge?: LoungeClaim;
@@ -629,7 +633,12 @@ export class Connection {
       this.dismissTimer = setTimeout(() => this.dismiss(), ENDED_DISPLAY_MS);
     }
     const current = "callId" in view && view.callId ? this.calls.get(view.callId) : undefined;
-    this.set({ call: view, remote: current?.remote });
+    // A new call (or none) starts with no reconnecting or poor-connection note.
+    const health =
+      view.phase === "active" && beforeId === view.callId
+        ? {}
+        : { reconnecting: false, poor: false };
+    this.set({ call: view, remote: current?.remote, ...health });
     if (view.phase === "ended" || view.phase === "idle") this.maybeReleaseMic();
   }
 
@@ -961,8 +970,22 @@ export class Connection {
         this.recorders.get(callId)?.recorder.add(remote);
         if (this.currentCallId() === callId) this.set({ remote });
       },
-      onState: (state) => {
-        if (state === "failed") this.set({ error: "Audio connection failed" });
+      onLink: (state) => {
+        const current = this.currentCallId() === callId;
+        if (state === "lost") {
+          // Reconnecting gave up: end the call, saying why (the other side is told too).
+          this.socket.send({ t: "call.hangup", callId, lost: true });
+          if (current) this.apply({ type: "lost" });
+          else if (this.snap.held?.callId === callId) {
+            this.closeCall(callId);
+            this.set({ held: undefined });
+          }
+          return;
+        }
+        if (current) this.set({ reconnecting: state === "reconnecting" });
+      },
+      onQuality: (poor) => {
+        if (this.currentCallId() === callId) this.set({ poor });
       },
     });
     void audio.media.start().catch((e) => this.set({ error: `Call setup failed: ${e}` }));
