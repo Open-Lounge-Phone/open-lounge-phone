@@ -231,15 +231,20 @@ several people as a whole. Only the pieces it offers can be shared, such as one 
 
 **What the add-on is told.**
 - A call that came in through a share carries it: `call.ringing {from: {label, address},
-  share: {id, label}}`.
+  share: {id, label, grantId}}`. `grantId` names the grant, so the add-on can attribute what
+  happens to it.
 - A call without `share` is from the owner.
 - The add-on must keep the conversation inside that scope (in the Seat: read and write only that
-  shared project). The server can't see inside the add-on, so this part is the add-on's job.
-  The server's job is that nobody without a grant gets in.
+  shared project). The server can't see inside the add-on, so this part is the add-on's job, and
+  it should be enforced by the add-on's own permissions, not only by instructions to a model.
+  The Seat, for example, gives a shared call a token limited to that one project. The server's
+  job is that nobody without a grant gets in.
+- A share holder gets voice access through the share. They don't become a user of the add-on.
 
 **New shared projects from the hub.**
 - The owner can ask from the card: **New shared project with…** (name, people). The server sends
-  `addon.share.request {requestId, label, with: [addresses]}`.
+  `addon.share.request {requestId, label, by, with: [addresses]}`. `by` is the owner's address,
+  so the add-on can attribute and name the new scope.
 - The add-on creates the scope, sends its updated `addon.shares`, and answers
   `addon.share.created {requestId, id}`.
 - The server then grants it to those people. The owner started it, so no second confirmation is
