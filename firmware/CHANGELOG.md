@@ -1,5 +1,36 @@
 # Firmware changelog
 
+## 0.9.5 — 2026-10-15: wired network for hw v0.901, a board choice
+
+Nothing changes on the boards that exist (rev A, hw v0.1): a default build is the rev A build,
+with no wired network code in it, and behaves as 0.9.4.
+
+- **Board choice** (menuconfig → Open Lounge Phone → Board): rev A (the default) or hw v0.901 (the
+  RJ45 + PoE revision; `sdkconfig.v0901`). It decides the pins in use and the board id updates are
+  signed for: `minimal-revA` or `minimal-v0901` (no longer settable by hand), so an update for one
+  board never installs on the other. Each board has its own manifest in the update channel; rev A
+  keeps `firmware-manifest.json`, hw v0.901 reads `firmware-manifest-minimal-v0901.json`.
+  `tools/release.sh build` signs both (`--board` for one).
+- **Wired network** (hw v0.901): the W5500 on the display's SPI bus (polled, no INT/RST lines;
+  the e-paper and the W5500 take turns on the bus), DHCP, the same DNS, TLS and call paths as
+  Wi-Fi. A cable with a link and an address is used and the Wi-Fi radio is off; no cable, no
+  address, or the cable pulled: Wi-Fi, with the cable's PHY powered down and woken every 30 s to
+  look for one (5 minutes after a cable that gave no address). A call on Wi-Fi stays there until
+  it ends; losing the network a call is on ends the call (the server connection starts again on
+  the other network). A board whose W5500 doesn't answer runs on Wi-Fi.
+- **Setup with a cable**: a working cable is a network, so setup no longer demands Wi-Fi: the
+  setup network doesn't open, and when it is opened (MENU 3/4 → 1) its page says Wi-Fi is
+  optional and saves a server alone. A setup network that opened only because there was no
+  network closes when the cable comes up.
+- **Screens**: `OFFLINE` / `CABLE UNPLUGGED` or `NO DHCP ON CABLE`; MENU 3 heads the network
+  screen with the cable (`WIRED NETWORK` and the address, `CABLE UNPLUGGED`, `CABLE CONNECTING`,
+  `CABLE AFTER CALL`, `NO DHCP ON CABLE`); the phone check shows the cable's speed instead of
+  Wi-Fi while it's in use.
+- **Console**: `eth` (link, speed and duplex, address, MAC); on rev A it says there is no wired
+  network. `status` adds a `NET` line on hw v0.901.
+- **QEMU**: a QEMU build for hw v0.901 uses QEMU's Ethernet as the cable; `tools/qemu_cable.py`
+  pulls it out and plugs it back in through the QEMU monitor (`QEMU_MONITOR` in `tools/qemu.sh`).
+
 ## 0.9.4 — 2026-10-15: mute, call waiting, missed calls, redial, the house intercom
 
 Needs a server 0.7.0 for missed calls, call waiting, the check-in, the chime and the intercom (an

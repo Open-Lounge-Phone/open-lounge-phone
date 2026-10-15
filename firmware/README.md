@@ -24,6 +24,7 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Rooms (group calls) have no media on the phone yet |
 | The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume (earpiece, ringer loudness and style), 2 Voicemail (count, play, clear), 3 Network: Wi-Fi and server (→ 1 change: the setup network; kids' phones ask twice, Lounge phones don't offer it), 4 the house intercom or the chime (else Network), 5 Missed calls / 8 Redial (on a Lounge phone in use: 5 chat / 8 log out), 6 Extension, 7 Phone check (the mic's live level with the handset up; → 1 self-test), 9 Update now, 0 About (firmware version + the four fingerprint words); the clock on the ready screen; the daily check-in (`CHECK IN BY 10:00` / `PRESS 1: I'M OK`); the status LED double-flashes in a recorded call | Spoken prompts |
 | **House intercom** (`intercom.c`, `lan.c`, `lan_crypto.c`; see below): phones of one space on the same network call room to room with no server, off unless turned on in the app; control lines HMAC-signed with the space's key, audio AES-128-CTR | Tried in QEMU only: two boards on real Wi-Fi, the codec's audio over it |
+| **Wired network** on hw v0.901 (`eth.c`, `netsel.c`; see below): the W5500 on the display's SPI bus, DHCP, the cable used when it works and Wi-Fi off, Wi-Fi as the fallback with the cable's PHY powered down and checked every 30 s; setup without Wi-Fi on a cable; `eth` on the console | Run in QEMU with its Ethernet as the cable (`tools/qemu_cable.py`); the W5500 itself needs a v0.901 board ([BRINGUP.md](../hardware/BRINGUP.md) §8) |
 
 ## Build and flash
 
@@ -45,11 +46,28 @@ idf.py build
 idf.py -p <port> flash monitor      # e.g. /dev/cu.usbmodem1101; Ctrl-] quits the monitor
 ```
 
+### Building for each board
+
+The board is a build setting (menuconfig → *Open Lounge Phone* → *Board*). It decides which
+pins the firmware uses and the board id that updates must be signed for.
+
+| Board | Build | Board id |
+|---|---|---|
+| **Minimal board, rev A** (hw v0.1, Wi-Fi only): the default | `idf.py build` | `minimal-revA` |
+| **hw v0.901** (rev A + RJ45 with a W5500, and PoE) | `idf.py -B build-v0901 -D SDKCONFIG=build-v0901/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.v0901" build` | `minimal-v0901` |
+
+A rev A build has no wired network code at all: it never drives GPIO0 (the BOOT button there)
+or GPIO45, never looks for a W5500, and links nothing from `esp_eth` (CI checks the image). The
+board id isn't settable by hand, so an update built for one board can't install on the other.
+Flash the build for the board you have. A v0.901 build on a rev A board would find no W5500 and
+run on Wi-Fi, but it drives GPIO0 high as a chip select, and rev A's BOOT button pulls GPIO0
+straight to ground (v0.901 has 1 kΩ in series): don't hold BOOT on such a board.
+
 Flashing and the console use the board's USB-C (native USB, USB-Serial-JTAG). If the board
 doesn't show up, hold BOOT, press RESET, release BOOT. `idf.py menuconfig` → *Open Lounge Phone*
-can bake in a default server and Wi-Fi (both empty by default), *Updates* turns updates on with
-your key, and *Call audio* sets the earpiece cap, mic gain and ICE options. CI
-builds the board, Wokwi and QEMU targets with the `espressif/idf:v5.5.5` image and runs the host
+picks the board (above), can bake in a default server and Wi-Fi (both empty by default),
+*Updates* turns updates on with your key, and *Call audio* sets the earpiece cap, mic gain and ICE
+options. CI builds both boards, the Wokwi and QEMU targets with the `espressif/idf:v5.5.5` image and runs the host
 unit tests (`make -C firmware/test/host`: G.711, tones, meters, ICE server choice).
 
 ## Your keys, your server
@@ -88,7 +106,9 @@ burned into your phones' eFuses; the project has no say in it.
 
 **Pin map.** `main/board.h` is generated from `hardware/build/main/gpio_map.json`:
 `make -C hardware build`, then `python3 firmware/tools/gen_board.py` (it also copies the
-fingerprint word list from `packages/core`; `--check` fails on drift).
+fingerprint word list from `packages/core`; `--check` fails on drift). The pin map is hw v0.901's;
+its wired network pins sit inside `#if CONFIG_OLP_BOARD_V0901` (`BOARD_HAS_ETHERNET` is 0 on rev
+A, whose pins are otherwise the same).
 
 ## House intercom
 
@@ -113,6 +133,65 @@ comes without it (turned off, or the phone moved to another space) or on a wipe.
   restarted with no internet can't check messages' age until it's back (the replay list still
   works).
 
+## Wired network (hw v0.901)
+
+Only in builds for hw v0.901 (`sdkconfig.v0901`); a rev A build has none of it. The pure decisions
+are `main/netsel.c` (host-tested); `main/eth.c` drives the chip and `main/net.c` applies the
+choice. Screens and keys: [docs/phone-ux.md](../docs/phone-ux.md) "Wired network".
+
+- **The chip.** A WIZnet W5500 with ESP-IDF's `esp_eth` driver (`esp_eth_mac_new_w5500` /
+  `esp_eth_phy_new_w5500`) in **polling mode**: its INTn and RSTn have no GPIO, so
+  `int_gpio_num = -1` with a 10 ms RX poll, `reset_gpio_num = -1` (its own power-on RC, then the
+  driver's soft reset), the link read every 500 ms. It shares the display's SPI bus (SPI2: SCLK
+  IO13, MOSI IO14) with its own chip select (IO0) and MISO (IO45, which only this build adds to
+  the bus); ESP-IDF's bus lock gives each device whole transactions, so a full e-paper refresh
+  and network frames take turns (`main/board_spi.c`). The W5500 runs at 16 MHz, the e-paper at
+  10. It has no MAC address: the phone gives it the chip's Ethernet one
+  (`esp_read_mac(ESP_MAC_ETH)`, the eFuse base + 3). A board whose W5500 doesn't answer at
+  power-on logs it and runs on Wi-Fi. The driver runs all the time: powering the PHY down
+  (PHYCFGR power-down mode) drops its link bit and the driver reports the link down; waking it
+  (all-capable autonegotiation, with the PHY reset pulse) brings the link and then DHCP back.
+  Between, the driver reads the link once every 500 ms and polls nothing else.
+- **The network.** `esp_netif` with DHCP; DNS, TLS (the certificate bundle), the WebSocket,
+  WebRTC and the house intercom run unchanged over it. The cable's interface ranks above Wi-Fi
+  for the default route, and the phone sets the default to whichever network it chose.
+- **Choosing.** At power-on the cable first, with the Wi-Fi radio off: a link within 5 s and an
+  address within 15 s of the link means the cable is used, and Wi-Fi stays off. No cable (or no
+  address): Wi-Fi, if one is saved; the W5500's PHY is put in power-down (PHYCFGR) and woken
+  every 30 s for a 6 s look (5 minutes after a link that got no address; no looks during a
+  call); a look that finds a link and an address moves the phone to the cable. The cable pulled
+  out: Wi-Fi at once, the PHY kept on 6 s more for a bumped cable. No Wi-Fi saved: the PHY stays
+  on and the phone waits for the cable. **Calls:** a call on Wi-Fi stays on Wi-Fi until it ends,
+  even if a cable comes back (the phone moves to the cable when it hangs up). When the network
+  a call is on is lost, the call ends and the phone reconnects to the server on the other
+  network at once rather than waiting for the old socket to time out (a PoE-powered phone is
+  always on its cable, so this matters only when a cable is pulled). The PHY and the Wi-Fi radio
+  are on together only during a cable check that finds a cable, while a call finishes on Wi-Fi
+  after a cable came back, and while the setup network is open on a cable.
+- **Random numbers.** The S3's random number generator is truly random only while the radio or
+  the SAR ADC feeds it. With the radio off (on the cable) the firmware keeps the SAR ADC entropy
+  source on (`bootloader_random_enable`), and swaps it for the radio when Wi-Fi starts (the two
+  can't run together). Device keys, TLS and DTLS keep true random numbers either way.
+- **Setup.** A working cable is a network: the setup network doesn't open for lack of Wi-Fi,
+  and a setup network that opened only for lack of a network closes when the cable comes up.
+  Opened by hand (MENU 3/4 → 1, `setup`), the page says Wi-Fi is optional and can save just a
+  server (`No Wi-Fi: use the cable`).
+- **PoE** is power only: the firmware doesn't know or care where its 5 V comes from. A v0.901
+  phone runs from PoE or a real USB-C charger; a computer's USB port is for flashing and the
+  console, with the PoE cable plugged in too (the moments above when the PHY and Wi-Fi are on
+  together draw more than a computer port's 500 mA; hardware/README.md "Power").
+
+**Tested:** host tests (`test_netsel.c`: power-on, fallback, looks, unplug and replug, no Wi-Fi,
+no address, calls; `test_prov_core.c`: setup with a cable; `test_menu.c`: the Network screen) and,
+in QEMU, `tools/qemu_cable.py`: a QEMU build for hw v0.901 uses QEMU's Ethernet as the cable
+(QEMU has no W5500), and the QEMU monitor's `set_link` pulls it out and plugs it back in: the
+cable used with no setup network, `eth`, MENU 4, unplug → `CABLE UNPLUGGED`, the PHY powered down
+(in QEMU the driver is stopped instead: its PHY model can't power down) and looked for every 30 s, replug found at the next look; with no Wi-Fi: the PHY kept on, the
+setup page saving a server alone, setup opening with no network and closing when the cable
+comes. **Needs a v0.901 board** ([BRINGUP.md](../hardware/BRINGUP.md) §8): the W5500 itself
+(SPI at 16 MHz shared with the e-paper, the PHYCFGR power-down and wake-up, link LEDs), real
+Wi-Fi fallback, a call on the cable, PoE-only power.
+
 ## Console
 
 At the `olp>` prompt (USB serial, 115200 in the simulator):
@@ -125,9 +204,10 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `ota [check\|now\|url <url>\|url default]` | updates: status, check, install now, the channel URL (only in builds with an update key) |
 | `setup test [ssid [pass]]` | fetch the setup page from the phone itself and post a bad form (and, with an ssid, a real one): bring-up and Wokwi |
 | `server [<address>\|hub\|none]` | show or set the server (`phone.example.com`, `wss://…`, `ws://…` for a local test server); another server means pairing again |
-| `status` | phone state, connection, device id, Wi-Fi, the four words, the strip |
+| `status` | phone state, connection, device id, Wi-Fi, the four words, the strip (hw v0.901: plus `NET uplink=wired\|wifi\|none ip=… cable=…`) |
 | `key <0-9\|menu\|back>`, `hook <up\|down>` | press a key or move the hook, as the real switches do |
 | `drop [wifi]` | drop the WebSocket (or Wi-Fi) to test reconnects |
+| `eth` | the wired network (hw v0.901): controller, PHY on/off, link, speed and duplex, address, MAC, the network in use; on rev A: `no wired network on this board` |
 | `wipe` | forget the device key, id and settings (keeps Wi-Fi), reboot |
 | `audio` | audio device, call counters (`tx`/`rx` frames, underruns) and levels (`miclevel`, `rxlevel`, the watched tone) |
 | `audio tone <dialtone\|ringback\|busy\|hold\|test\|none>` | play a tone in the earpiece, even on the hook (bring-up) |
@@ -149,9 +229,11 @@ a call, and the pairing code as **`PAIRING CODE: 123456`**.
 **Releases and tags.** Hardware releases are `hw-vX.Y` (fab files; `hw-v0.1` = the minimal
 board, rev A); firmware releases are `fw-vX.Y.Z` (the signed image and its manifest), created with
 `--latest=false`. Phones **never use `/releases/latest`** (that is whatever release is newest, a
-hardware one included): they read one fixed channel, the `fw-stable` release's
-`firmware-manifest.json` (`CONFIG_OLP_OTA_MANIFEST_URL`), which `tools/release.sh publish
---release` replaces. CI checks this scheme (`tools/check_release_scheme.py`). Updates are **off**
+hardware one included): they read one fixed channel, the `fw-stable` release, one manifest per
+board (`CONFIG_OLP_OTA_MANIFEST_URL`): `firmware-manifest.json` for rev A,
+`firmware-manifest-minimal-v0901.json` for hw v0.901. `tools/release.sh build` signs an image and
+a manifest for every board (`--board reva|v0901` for one) and `publish --release` replaces
+them. CI checks this scheme (`tools/check_release_scheme.py`). Updates are **off**
 in source builds (no key, no URL: "Your keys, your server"); official releases use the project's
 channel, your own releases yours (`--repo`).
 
@@ -160,7 +242,7 @@ channel, your own releases yours (`--repo`).
 release key over `olp-ota-v1\n<board>\n<version>\n<url>\n<sha256>\n<size>\n`
 (`tools/ota_manifest.py` makes and verifies it; `main/ota_core.c` parses it, host-tested). The
 phone installs only a manifest that (1) is signed by the update key built into it
-(`main/ota_signing_pub.pem` in official releases, yours in your builds), (2) names its board (`CONFIG_OLP_BOARD_ID`, `minimal-revA`), and
+(`main/ota_signing_pub.pem` in official releases, yours in your builds), (2) names its board (`CONFIG_OLP_BOARD_ID`: `minimal-revA` or `minimal-v0901`, from the board choice), and
 (3) is newer than what runs. It then downloads the image over HTTPS (certificate bundle; GitHub's
 redirects followed), hashes it while writing the other slot, refuses a size or SHA-256 that differs
 from the manifest, and lets `esp_ota_end` check the image; in release builds that includes the
@@ -363,6 +445,10 @@ firmware/tools/qemu.sh run        # build, fresh flash + eFuse files, console on
 firmware/tools/qemu.sh resume     # run again on the same flash (NVS, OTA state kept)
 python3 firmware/tools/qemu_smoke.py   # the CI boot smoke test (a default build: no server)
 ```
+
+`firmware/tools/qemu_cable.py` builds QEMU for hw v0.901 (`build-qemu-v0901`) and runs the wired
+network checks above (`QEMU_MONITOR=<port>` puts QEMU's monitor on a local port, with the phone's
+network as the netdev `cable`).
 
 The smoke test boots a default build (no `OLP_SIM_SERVER`): it checks `SET UP: CHOOSE A SERVER`,
 MENU → 4, that updates are off, and, from a packet capture of QEMU's network (`QEMU_PCAP`), that

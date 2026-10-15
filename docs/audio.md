@@ -1,4 +1,4 @@
-# Call audio on the phone (design for firmware 0.9.5)
+# Call audio on the phone (design for firmware 0.9.6)
 
 > **Status: planned.** Firmware 0.9.4 fixes the mic being read twice per sample (calls and
 > voicemail sounded like mush) and stops Wi-Fi power saving. This page is the design for the next
@@ -125,7 +125,7 @@ reference handsets.
 
 ## Order and release
 
-All five ship together as firmware **0.9.5**, in this order inside the build: AGC (1),
+All five ship together as firmware **0.9.6**, in this order inside the build: AGC (1),
 concealment (4), Opus (2), sidetone (3), echo (5). Each step keeps the call working if the next
 one isn't ready. No server or protocol change is needed: Opus is negotiated in the SDP, which the
 server only relays.

@@ -44,8 +44,8 @@ Highest priority first: the first row that applies is shown.
 | Server too old or phone too old | `SERVER TOO OLD` or `UPDATE NEEDED` / what to do |
 | No server chosen | `SET UP:` / `CHOOSE A SERVER` / `PRESS MENU 4` |
 | Pairing | `PAIR 123 456` / `ENTER IN APP` |
-| No Wi-Fi saved | `NO WI-FI` / `PRESS MENU 3` |
-| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `JOINING WI-FI` (a handshake failed; one at power-on is usually just timing), `WRONG PASSWORD?` (three failed handshakes in a row), `WI-FI DROPPED` (a working connection was lost), `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI` |
+| No Wi-Fi saved (a board without a network socket) | `NO WI-FI` / `PRESS MENU 3` |
+| Offline | `OFFLINE` / `RECONNECTING`, or why Wi-Fi won't join: `JOINING WI-FI` (a handshake failed; one at power-on is usually just timing), `WRONG PASSWORD?` (three failed handshakes in a row), `WI-FI DROPPED` (a working connection was lost), `WEAK WI-FI` (the router didn't answer: antenna or distance), `NETWORK NOT SEEN` (5 GHz only or out of range), `SECURITY NOT OK`, `CAN'T JOIN WI-FI`. A board with a network socket (hw v0.901) also says what its cable is doing: `CABLE UNPLUGGED` (no link: no cable, or a dead socket at the other end) and `NO DHCP ON CABLE` (a link, but nobody gave the phone an address); with Wi-Fi saved, Wi-Fi's own reason comes first, and the cable's only while the cable was what the phone was using |
 | Connecting | `CONNECTING` |
 | Calling | `CALLING MOM` (or `CALLING` / long name) |
 | Waiting in a public line's queue | `IN LINE 2` / `1 VOICEMAIL` (with a call back too: `1 VM 2 CALL BACK`; only a call back: `2 CALL ME BACK`; neither: the line's name; `WAITING IN LINE` when it shows no places) |
@@ -99,14 +99,14 @@ The menu closes by itself after 20 s without a key.
 |---|---|---|
 | 1 | Volume: earpiece 1 quieter, 2 louder (0-10, 3 dB steps, capped); ringer 4 soft / medium / loud, 5 style classic / double / beeps (each press plays it) | yes |
 | 2 | Voicemail: how many new messages. A person's own phone: `1 PLAY` (handset up) plays each unheard message in the earpiece, oldest first (1 again, 2 next, BACK stop; one played to the end is marked heard, everywhere), `3 CLEAR` marks them all heard (missed calls and call backs are on 5, not here); a message recorded before phones could play it says `PLAY IN APP`. A kids' phone: `ASK A GROWN-UP` (they listen in the app). `4 GREETING`: 1 record your name, 2 a whole greeting, 3 back to the standard one (the browser phone; planned on hardware) | yes |
-| 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on) | yes |
+| 3 | Network: the Wi-Fi network and signal, and the server; `1 CHANGE` opens the setup network (Wi-Fi and server). A kids' phone asks `PRESS 1 AGAIN` first; a Lounge phone doesn't offer it (`ADMIN: SEE GUIDE`: hold MENU+BACK at power-on). A board with a network socket (hw v0.901) heads the screen with its cable: `WIRED NETWORK` and the phone's address on it while the cable is in use; otherwise `CABLE UNPLUGGED`, `CABLE CONNECTING` (a link, its address on the way), `NO DHCP ON CABLE` or `CABLE AFTER CALL` (the cable works; a call on Wi-Fi finishes first), over the Wi-Fi line. See "Wired network" below | yes |
 | 4 | House intercom, when it's on for this phone (the rooms to call, see "House intercom"); else the chime, when the phone has one (`CHIME` / its words / `1 SEND TO ALL PHONES`); else the same screen as 3 | yes (the intercom: hardware only) |
 | 5 | Missed calls (not on a Lounge phone; a Lounge phone in use: open to chat on / off): see "Missed calls" below | yes |
 | 6 | Dial an extension (team and organization spaces; shown when the space has extensions): `EXT 204_`, digits, BACK deletes, MENU dials (handset up) | yes |
-| 7 | Phone check: a page with Wi-Fi (network, signal, channel), address, server (online, for how long), the last Wi-Fi problem, handset and jack, the mic level, time running and clock, memory; 1 starts the self-test. With the handset up the page switches the handset's mic on and shows its live level (`MIC -38 DBFS PEAK -21`, every second; speak into it) until the page closes, for setting the mic gain (`audio gain` on the console, [BRINGUP.md](../hardware/BRINGUP.md)); handset down: `LIFT TO TEST` | yes |
+| 7 | Phone check: a page with Wi-Fi (network, signal, channel; on the cable instead: `CABLE` and its speed, `100 MBIT/S FULL DUPLEX`), address, server (online, for how long), the last Wi-Fi problem, handset and jack, the mic level, time running and clock, memory; 1 starts the self-test. With the handset up the page switches the handset's mic on and shows its live level (`MIC -38 DBFS PEAK -21`, every second; speak into it) until the page closes, for setting the mic gain (`audio gain` on the console, [BRINGUP.md](../hardware/BRINGUP.md)); handset down: `LIFT TO TEST` | yes |
 | 8 | Redial (not on a Lounge phone; a Lounge phone in use: log out, the phone forgets the person): with the handset up, calls again what this phone last called (a key, an extension or a call back); handset down: `LIFT THE HANDSET` / `THEN MENU 8`; nothing called yet: `NOTHING TO REDIAL`. The phone remembers it across restarts until it's removed | yes |
 | 9 | Update now (official firmware with updates on) | yes |
-| 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |
+| 0 | About: a page with the mark and `OPEN LOUNGE PHONE`, the firmware, board (`MINIMAL-REVA`, or `MINIMAL-V0901` for the board with a network socket) and server, the public key part (the four fingerprint words, `WORD-WORD-WORD-WORD`) that the app shows for the same phone, and `OPEN SOURCE  OPENLOUNGEPHONE.APP` along the bottom | yes |
 
 Root screen: `MENU`, then the items that apply, packed into up to five lines that fit (20
 characters at 2x on the 2.13-inch; six lines of 20 px fill its 122 px): `1 VOLUME 2 VOICEMAIL` /
@@ -243,6 +243,30 @@ in and out. The earpiece plays a 1 kHz tone meanwhile (lift the handset to hear 
 clicks the piezo. It ends with a short double beep when every key and the hook are ticked (the
 jack is optional), with a long beep after 30 s without input, or when a call rings.
 
+### Wired network
+
+The board with a network socket (hw v0.901, the RJ45 with Power over Ethernet) uses a cable
+when it has one; the boards without one are Wi-Fi only and nothing here applies to them.
+
+- **A working cable wins.** At power-on the phone looks for a cable first (`CONNECTING`, a few
+  seconds). A cable with a link and an address is used for everything and the Wi-Fi radio is
+  off. No Wi-Fi needs to be set up for it: a phone on a working cable never opens the setup
+  network by itself; MENU 3 → 1 still opens it, and its page says Wi-Fi is optional and asks only
+  for the server.
+- **No cable, or one that doesn't work:** Wi-Fi, if a network is saved. The cable's port is
+  powered down meanwhile and checked every 30 s (every 5 minutes after a cable that gave no
+  address), so plugging one in takes up to half a minute to be noticed. With no Wi-Fi saved the
+  port stays on and the phone waits for the cable (`OFFLINE` / `CABLE UNPLUGGED`). With neither
+  at power-on the setup network opens at once (after 3 minutes without any network later on);
+  a cable coming up closes it again, unless someone opened it.
+- **Pulled out:** Wi-Fi takes over at once (the port stays on a few seconds in case the cable
+  was only bumped). `OFFLINE` / `CABLE UNPLUGGED` until Wi-Fi joins.
+- **Calls:** a call on Wi-Fi stays on Wi-Fi until it ends, even if a cable starts working
+  meanwhile (`CABLE AFTER CALL` in MENU 3); the phone moves to the cable when it hangs up. When
+  the network a call is on is lost (the cable pulled, Wi-Fi gone), the call ends and the phone
+  reconnects to the server on the other network; the call can then be placed again.
+- **Power:** PoE or a USB-C charger (hardware/README.md "Power").
+
 ## Status LED (red)
 
 | Pattern | Means |
@@ -252,7 +276,7 @@ jack is optional), with a long beep after 30 s without input, or when a call rin
 | Slow breathe (4 s) | ready, with missed calls or new voicemail |
 | Pulse (1 s) | pairing, or connecting to the server |
 | Fast flash (4 per second) | ringing (a call, or another room on the house intercom), or a Lounge phone waiting for its `PRESS KEY` proof |
-| Short blink every 2 s | offline: no Wi-Fi or no server |
+| Short blink every 2 s | offline: no network (Wi-Fi or the cable) or no server |
 | On | calling, in a call or in a room |
 | Slow double blink (two 0.25 s blinks every 2 s) | in a call or a room with the mic muted (MENU 3) |
 | Double flash every second | this call or room is being recorded (it is also the recording light; it wins over muted) |
