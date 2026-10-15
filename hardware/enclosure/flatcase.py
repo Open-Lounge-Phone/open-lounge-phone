@@ -289,6 +289,7 @@ def leg_2d():
     body = poly(pts)
     # a frame, not a sail: cut the inside out, leaving 10 mm struts
     inner = offset(body, amount=-10.0)
+    inner -= rect(-500.0, 500.0, zb - 16.0, zb + 50.0)   # a wider top strut round the T-slot
     if inner.area > 100:
         body -= inner
     for t0, t1 in leg_tab_spans():
