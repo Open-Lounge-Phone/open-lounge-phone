@@ -12,11 +12,17 @@
   as the repo's latest release, or update another channel;
 - the manifest's signed text differs between the firmware (main/ota_core.c) and the release tool
   (tools/ota_manifest.py), or either drops the board id;
-- the board id isn't set.
+- the board ids aren't what phones expect: rev A (the default board) minimal-revA, hw v0.901
+  minimal-v0901, distinct, chosen by the board choice and not settable by hand; a board's
+  sdkconfig fragment sets anything but the board; each board has its own manifest in the
+  channel (rev A keeps firmware-manifest.json, the name its phones read).
 
 With --default-build DIR (a build from the defaults, e.g. CI's `idf.py build`) it also checks the
-built image: no update key, no update URL, no server, no project host to call. With
---release-build DIR (tools/release.sh build → build-release) it checks the image embeds the
+built image: no update key, no update URL, no server, no project host to call, the rev A board,
+and no wired network code linked (no esp_eth object). With --board-build DIR (a build with
+sdkconfig.v0901) it checks the same of that image, its board id and that its W5500 driver is in.
+
+With --release-build DIR (tools/release.sh build → build-release) it checks the image embeds the
 project's public key and the official channel.
 """
 import argparse
@@ -73,7 +79,7 @@ src = layered("sdkconfig.defaults")
 for sym in ("CONFIG_OLP_OTA", "CONFIG_OLP_OTA_PUBKEY", "CONFIG_OLP_OTA_MANIFEST_URL",
             "CONFIG_OLP_SERVER_URL"):
     check(sym not in src, f"sdkconfig.defaults sets {sym}")
-for f in ("sdkconfig.sim", "sdkconfig.qemu"):
+for f in ("sdkconfig.sim", "sdkconfig.qemu", "sdkconfig.v0901"):
     for sym, v in layered(f).items():
         check(not (sym.startswith("CONFIG_OLP_OTA") or sym == "CONFIG_OLP_SERVER_URL"),
               f"{f} sets {sym}={v!r}")
@@ -101,8 +107,20 @@ for f in FW.rglob("*"):
         except OSError:
             pass
 
-board = default("OLP_BOARD_ID")
-check(board == "minimal-revA", f"board id {board!r}")
+# Board ids: one per board, from the board choice, never typed in.
+bid = re.search(r"^config OLP_BOARD_ID\n((?:    .*\n|\n)*?)(?=^\S|\Z)", kconfig, re.M)
+bid_body = bid.group(1) if bid else ""
+check(re.match(r"    string\n", bid_body) is not None,
+      "OLP_BOARD_ID has a prompt: it must come from the board choice only")
+board = (re.findall(r'^    default "([^"]*)"$', bid_body, re.M) or [""])[0]
+board_v0901 = dict(re.findall(r'^    default "([^"]*)" if (OLP_BOARD_\w+)$', bid_body, re.M))
+check(board == "minimal-revA", f"rev A board id {board!r}")
+check(board_v0901.get("minimal-v0901") == "OLP_BOARD_V0901",
+      f"hw v0.901 board id: {board_v0901!r}")
+check(re.search(r"^choice OLP_BOARD\n(?:    .*\n)*?    default OLP_BOARD_REVA\n", kconfig, re.M)
+      is not None, "the default board is not rev A")
+frag = layered("sdkconfig.v0901")
+check(frag == {"CONFIG_OLP_BOARD_V0901": "y"}, f"sdkconfig.v0901 sets more than the board: {frag}")
 
 release = (FW / "tools/release.sh").read_text()
 creates = re.findall(r"gh release create \"([^\"]+)\"", release)
@@ -110,8 +128,12 @@ check(set(creates) == {"fw-v$v", "$CHANNEL"}, f"release.sh creates {creates}")
 check(re.search(r'^CHANNEL="fw-stable"$', release, re.M) is not None, "channel is not fw-stable")
 check(re.search(r'^OFFICIAL="Open-Lounge-Phone/open-lounge-phone"$', release, re.M) is not None,
       "release.sh's official repo")
-check('defaults="sdkconfig.defaults;sdkconfig.release"' in release,
-      "release.sh doesn't build from sdkconfig.release")
+check('defaults="sdkconfig.defaults;sdkconfig.release$(board_defaults "$b")"' in release,
+      "release.sh doesn't build from sdkconfig.release (+ the board's fragment)")
+check(re.search(r'^BOARDS="reva v0901"$', release, re.M) is not None, "release.sh's boards")
+check('manifest_name() { [ "$1" = minimal-revA ] && echo "firmware-manifest.json" || '
+      'echo "firmware-manifest-$1.json"; }' in release,
+      "release.sh: rev A must keep firmware-manifest.json, other boards their own manifest")
 check('PUB="main/ota_signing_pub.pem"' in release, "release.sh's official key")
 for line in release.splitlines():
     if 'gh release create "fw-v$v"' in line:
@@ -139,11 +161,30 @@ def image(build: Path) -> bytes:
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--default-build", type=Path)
+ap.add_argument("--board-build", type=Path, help="a source build with sdkconfig.v0901")
 ap.add_argument("--release-build", type=Path)
 opts = ap.parse_args()
-if opts.default_build:
-    d = FW / opts.default_build
+
+
+def linked(d: Path, lib: str) -> set:
+    """The objects the linker pulled from a library (from the map file)."""
+    return set(re.findall(rf"{re.escape(lib)}\(([^)]+)\)", (d / "openloungephone.map").read_text()))
+
+
+for d, rev_a in ((opts.default_build, True), (opts.board_build, False)):
+    if not d:
+        continue
+    d = FW / d
     h, img = sdkconfig_h(d), image(d)
+    want = "minimal-revA" if rev_a else "minimal-v0901"
+    check(f'#define CONFIG_OLP_BOARD_ID "{want}"' in h, f"{d}: board id is not {want}")
+    eth = linked(d, "libesp_eth.a")
+    if rev_a:
+        check("#define CONFIG_OLP_BOARD_REVA 1" in h, f"{d}: not a rev A build")
+        check(not eth, f"{d}: a rev A image links wired network code: {sorted(eth)}")
+    else:
+        check("#define CONFIG_OLP_BOARD_V0901 1" in h, f"{d}: not a hw v0.901 build")
+        check("esp_eth_mac_w5500.c.obj" in eth, f"{d}: the W5500 driver isn't linked")
     check("#define CONFIG_OLP_OTA 1" not in h, f"{d}: updates are on")
     check("CONFIG_OLP_OTA_MANIFEST_URL" not in h, f"{d}: an update URL is configured")
     check('#define CONFIG_OLP_SERVER_URL ""' in h, f"{d}: a server is configured")
@@ -166,4 +207,4 @@ if errors:
     print("release scheme check FAILED:\n  " + "\n  ".join(errors))
     sys.exit(1)
 print("release scheme OK: source builds have no server, no update key, no update URL; the "
-      "release build embeds the official key and fw-stable channel; tags fw-v*; board", board)
+      "release build embeds the official key and fw-stable channel; tags fw-v*; boards", board, "and", "minimal-v0901")

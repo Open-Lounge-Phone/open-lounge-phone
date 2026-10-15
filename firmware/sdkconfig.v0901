@@ -1,0 +1,5 @@
+# hw v0.901 (rev A + RJ45 with a W5500, and PoE), layered on sdkconfig.defaults:
+#   idf.py -B build-v0901 -D SDKCONFIG=build-v0901/sdkconfig \
+#     -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.v0901" build
+# Only the board: no server, no update key or URL (README "Building for each board").
+CONFIG_OLP_BOARD_V0901=y

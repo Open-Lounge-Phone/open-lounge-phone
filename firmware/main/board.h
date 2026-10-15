@@ -26,11 +26,18 @@
 #define PIN_STATUS_LED           1  // active high
 #define PIN_BOOT                 0  // through 1k; also the W5500's CS (hw v0.901)
 
+// hw v0.901 (CONFIG_OLP_BOARD_V0901) adds a W5500 on the display's SPI bus. Rev A (hw v0.1,
+// the default board) has none: there GPIO0 is only the BOOT button and GPIO45 is free, so a
+// rev A build never drives them or looks for the chip.
+#if CONFIG_OLP_BOARD_V0901
 #define BOARD_HAS_ETHERNET       1  // W5500, polled (no INT / RST GPIO)
 #define PIN_ETH_CS               0  // 10k pull-up; BOOT through 1k
 #define PIN_ETH_MISO             45  // strap GPIO45, 10k pull-down
 #define PIN_ETH_SCLK             13  // shared with the display
 #define PIN_ETH_MOSI             14  // shared with the display
+#else
+#define BOARD_HAS_ETHERNET       0
+#endif
 
 #define PIN_EPD_CLK              13
 #define PIN_EPD_DIN              14

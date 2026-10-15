@@ -1,5 +1,32 @@
 menu "Open Lounge Phone"
 
+choice OLP_BOARD
+    prompt "Board"
+    default OLP_BOARD_REVA
+    help
+        The board this firmware is for: it decides which pins are in use and the board id that
+        updates must be signed for (an update for one board never installs on another).
+        README "Building for each board".
+
+config OLP_BOARD_REVA
+    bool "Minimal board rev A (hw v0.1): Wi-Fi"
+    help
+        The board that exists today. GPIO0 is only the BOOT button and GPIO45 is free: this
+        build never drives them and has no wired network code. Board id minimal-revA.
+
+config OLP_BOARD_V0901
+    bool "hw v0.901: rev A + RJ45 (W5500 wired network) and PoE"
+    select ETH_USE_SPI_ETHERNET if !OLP_QEMU
+    select ETH_SPI_ETHERNET_W5500 if !OLP_QEMU
+    help
+        The RJ45 revision: a W5500 on the display's SPI bus (CS on GPIO0, MISO on GPIO45),
+        polled. With a cable that has a link and an address the phone uses it and turns Wi-Fi
+        off; without, it falls back to Wi-Fi. Board id minimal-v0901. In a QEMU build, QEMU's
+        Ethernet stands in for the W5500 (the cable), so the network choice runs in the
+        simulator.
+
+endchoice
+
 config OLP_SNAKE
     bool "Games easter egg (MENU ten times in a row)"
     default n
@@ -70,11 +97,14 @@ config OLP_STORAGE_ENCRYPTED
 menu "Updates (OTA)"
 
 config OLP_BOARD_ID
-    string "Board id (updates must be signed for it)"
+    string
+    default "minimal-v0901" if OLP_BOARD_V0901
     default "minimal-revA"
     help
-        The board this firmware runs on (hardware release hw-v0.1 = the minimal board, rev A).
-        A signed manifest for another board is refused.
+        The board this firmware runs on, from the board choice (no prompt: it can't be set by
+        hand, so a build for one board never carries another's id). minimal-revA = hw v0.1 (the
+        minimal board, rev A), minimal-v0901 = hw v0.901 (RJ45 + PoE). A signed manifest for
+        another board is refused.
 
 config OLP_OTA
     bool "Firmware updates over the air (needs your own update key)"
