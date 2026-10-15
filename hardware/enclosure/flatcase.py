@@ -1,17 +1,16 @@
 """The flat-cut case: a laser-cut sandwich for the minimal board, a wall phone on a desk stand.
 
 Every part is cut from one sheet of 3 mm acrylic (or plywood) and held with M3 standoffs,
-screws and nuts. Layers, front to back: the front plate (the keys come through two long row
-slots, the hook key through its own hole, the e-paper through a window), the board on short
-standoffs, and the back plate. Tall standoffs at the corners, outside the board, join the front
-and back plates. The handset hangs on a tower on the left, its centreline straight above the
+screws and nuts. Layers, front to back: the front plate, which is the switch plate (each switch
+stands in its own 14 mm opening, the keycaps float above it and the display module stands over
+it on its socket), the board hung 2 mm under it, and the back plate. Standoffs outside the
+board join the front and back plates. The handset hangs on a tower on the left, its centreline straight above the
 hook key:
 
 - its mouthpiece cup sits on the ledge of one rocker that turns on an M3 screw between two fixed
   ears, just above the hook key;
 - the handset's weight tips the rocker, and the rocker's tail presses the hook key;
-- the key's own spring lifts the ledge back when the handset is picked up (a heel on the rocker
-  stops it level);
+- the key's own spring lifts the tail back when the handset is picked up;
 - a fixed J-hook at the top keeps the handset upright.
 
 Two flat legs, slotted into the back plate, stand the phone up tilted back 25 degrees;
@@ -57,19 +56,23 @@ OUT = Path(__file__).resolve().parent / "build" / "flatcase"
 
 # --- sheet and stack (mm) ----------------------------------------------------------------------
 T = 3.0                    # sheet thickness (3 mm acrylic or plywood)
-BOARD_STANDOFF = 8.0       # M3 standoffs, board to back plate: clears the jack (4.0) and leads
-COLUMN = 25.0              # M3 standoffs, back plate to front plate (corners and spine)
-KEYCAP_TOP = 20.5          # keycap tops above the board top (measure yours; DSA/relegendable ~20)
-BACK_Z1 = -F.BOARD_T - BOARD_STANDOFF            # back plate's front face
+# The front plate is the switch plate, as on a keyboard: it lies 2 mm over the board, its top at
+# the switches' plate line (5.0 mm over the board, where an MX switch's top housing starts), so
+# each switch stands in its own 14 mm opening and the keycaps float above the plate. The board
+# hangs under it on four 2 mm spacers. Only the piezo and the display socket stand up from the
+# board's top; the USB-C, the ESP32, the jack and the hot-swap sockets are on the bottom.
+PLATE_GAP = 2.0            # M3 spacers, board top to plate (button-head screws fit under it)
+COLUMN = 12.0              # M3 standoffs, back plate to front plate, outside the board
+SWITCH_HOLE = 14.0         # the MX plate opening (Gateron KS-8 and other MX-size switches)
+KEYCAP, KEYCAP_H = 18.0, 10.0      # clear double-layer XDA 1u caps (18 mm square, 10 mm tall)
+KEYCAP_TOP = 20.0          # cap tops over the board: MX stem top 16.6 + ~3.4 (measure yours)
+FRONT_Z0 = PLATE_GAP                             # front plate's back face (board top = 0)
+FRONT_Z1 = FRONT_Z0 + T                          # 5.0: the switches' plate line
+BACK_Z1 = FRONT_Z0 - COLUMN                      # back plate's front face
 BACK_Z0 = BACK_Z1 - T
-FRONT_Z0 = BACK_Z1 + COLUMN                      # front plate's back face
-FRONT_Z1 = FRONT_Z0 + T
+UNDER_BOARD = BACK_Z1 + F.BOARD_T                # 8.4 below the board: the jack's plug and leads
 
-# --- keys and windows -----------------------------------------------------------------------
-KEY_CLEAR = 0.8            # keycap (18 mm) to slot edge, each side
-KEYCAP = 18.0
-SLOT_R = 2.0
-VIEW = (54.0, 28.0)        # e-paper window (the 2.13" panel's view area plus a little)
+PIEZO_HOLE = 13.4          # the piezo (12.2 across, 6.5 tall) stands 1.5 mm out of the plate
 M3 = 3.4                   # clearance hole
 M2 = 2.4
 HOOK_KEY = next((x, F.Y(y)) for x, y, lab in F.SWITCHES if lab == "HOOK")
@@ -77,7 +80,7 @@ HOOK_KEY = next((x, F.Y(y)) for x, y, lab in F.SWITCHES if lab == "HOOK")
 # --- the hook: one rocker, straight above the hook key -----------------------------------------
 HS_X = HOOK_KEY[0]         # the handset's centreline runs through the hook key
 AXLE_Y = HOOK_KEY[1] + 16.0                      # the rocker's screw, just above the hook key
-AXLE_Z = FRONT_Z1 + 7.6
+AXLE_Z = KEYCAP_TOP + 5.5  # the tail runs out level to the hook key's cap
 LEDGE_TOP = AXLE_Y + 5.0   # the mouthpiece cup sits on the rocker's ledge
 LEDGE_REACH = 26.0         # forward from the screw, under the cup
 CUP_R = HS.CUP_D / 2
@@ -128,24 +131,23 @@ def board_y(y):
 
 # ============================================================================== plates
 def front_plate_2d():
+    """The switch plate: a 14 mm opening per switch (the 12 keys and the hook), a hole the piezo
+    stands up through, one for the display's socket, one over the status light, and the board's
+    four screws."""
     s = outline()
-    kx = [x for x, _, lab in F.SWITCHES if lab not in ("HOOK",)]
-    rows = sorted({board_y(y) for _, y, lab in F.SWITCHES if lab != "HOOK"})
-    half = KEYCAP / 2 + KEY_CLEAR
-    for ry in rows:                                   # one long slot per row of six
-        s -= rrect(min(kx) - half, max(kx) + half, ry - half, ry + half, SLOT_R)
-    hx, hy = HOOK_KEY
-    s -= rrect(hx - half, hx + half, hy - half, hy + half, SLOT_R)
-    (_, _, _, _), (wx, wy, _, _) = F.display()
-    s -= rrect(wx - VIEW[0] / 2, wx + VIEW[0] / 2, wy - VIEW[1] / 2, wy + VIEW[1] / 2, 2.0)
+    for x, y, _ in F.SWITCHES:
+        s -= Pos(x, board_y(y)) * RectangleRounded(SWITCH_HOLE, SWITCH_HOLE, 0.3)
+    bx, by = P.BZ1_C[0], board_y(P.BZ1_C[1])
+    s -= Pos(bx, by) * Circle(PIEZO_HOLE / 2)          # the ringer stands through, open to the air
+    jx, jy = P.J3_CENTRE[0], board_y(P.J3_CENTRE[1])
+    s -= Pos(jx, jy) * RectangleRounded(*P.J3_CUT, 0.5)  # the display module plugs in through it
     lx, ly = P.LED[0], board_y(P.LED[1])
     s -= Pos(lx, ly) * Circle(1.6)                    # the status light shows through
-    bx, by = P.BZ1_C[0], board_y(P.BZ1_C[1])
-    for dx in (-4.5, -1.5, 1.5, 4.5):                 # the ringer's sound
-        s -= rrect(bx + dx - 0.9, bx + dx + 0.9, by - 5.0, by + 5.0, 0.85)
+    for x, y in F.HOLES:                              # the board hangs under the plate
+        s -= Pos(x, board_y(y)) * Circle(M3 / 2)
     for x, y in COLUMNS:
         s -= Pos(x, y) * Circle(M3 / 2)
-    for x, y in P.MODULE_FAR_HOLES:                   # the module's far end hangs from the plate
+    for x, y in P.MODULE_FAR_HOLES:                   # the module's far end stands on the plate
         s -= Pos(x, board_y(y)) * Circle(M2 / 2)
     for fx, ys in fin_slots_front():
         for y0, y1 in ys:
@@ -159,8 +161,6 @@ def back_plate_2d():
     s = outline()
     for x, y in COLUMNS:
         s -= Pos(x, y) * Circle(M3 / 2)
-    for x, y in F.HOLES:
-        s -= Pos(x, board_y(y)) * Circle(M3 / 2)
     for x, y, _ in P.BUTTONS:                        # pinholes for RESET and BOOT
         s -= Pos(x, board_y(y)) * Circle(1.0)
     for lx in LEG_X:                                  # the legs' tabs and screws
@@ -243,15 +243,13 @@ def bar(p0, p1, w):
 
 def rocker_2d():
     """The rocker (u = y, v = z), on one screw straight above the hook key: the mouthpiece cup
-    sits on its ledge, its tail rests on the hook key's cap, and a heel against the front plate
-    stops it level when the handset is lifted (the key's spring pushes it there)."""
+    sits on its ledge and its tail rests on the hook key's cap. Lift the handset and the key's
+    spring pushes the tail up to the key's top, which leaves the ledge level."""
     tip_y, tip_z = HOOK_KEY[1] + 3.0, KEYCAP_TOP + 3.5     # the bar's round end rests on the cap
     ledge = poly([(AXLE_Y - 6.0, AXLE_Z - 6.0), (AXLE_Y - 6.0, AXLE_Z + LEDGE_REACH),
                   (LEDGE_TOP, AXLE_Z + LEDGE_REACH), (LEDGE_TOP, AXLE_Z - 6.0)])
-    heel = poly([(AXLE_Y + 2.0, AXLE_Z - 2.0), (LEDGE_TOP, AXLE_Z - 2.0), (LEDGE_TOP, FRONT_Z1),
-                 (AXLE_Y + 2.0, FRONT_Z1)])
     tail = bar((AXLE_Y, AXLE_Z), (tip_y, tip_z), 7.0)  # a straight bar to a rounded tip
-    body = ledge + heel + tail
+    body = ledge + tail
     body -= Pos(AXLE_Y, AXLE_Z) * Circle(1.8)          # turns freely on the screw
     return body
 
@@ -353,7 +351,7 @@ def hardware3d():
     for x, y in COLUMNS:
         h[f"column {x:.0f},{y:.0f}"] = Pos(x, y, BACK_Z1) * Cylinder(3.0, COLUMN, align=(Align.CENTER, Align.CENTER, Align.MIN))
     for x, y in F.HOLES:
-        h[f"standoff {x:.0f}"] = Pos(x, board_y(y), BACK_Z1) * Cylinder(2.75, BOARD_STANDOFF, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        h[f"spacer {x:.0f}"] = Pos(x, board_y(y), 0) * Cylinder(3.0, PLATE_GAP, align=(Align.CENTER, Align.CENTER, Align.MIN))
     x0, x1 = min(EAR_X) - 4.0, max(EAR_X) + 4.0
     h["screw"] = Pos((x0 + x1) / 2, AXLE_Y, AXLE_Z) * Rot(0, 90, 0) * Cylinder(1.5, x1 - x0)
     return h
@@ -367,7 +365,7 @@ def board3d():
     for x, y, _ in F.SWITCHES:
         yy = board_y(y)
         b += Pos(x, yy, 0) * Box(14.0, 14.0, F.MX_HOUSING_TOP, align=(Align.CENTER, Align.CENTER, Align.MIN))
-        caps.append(Pos(x, yy, KEYCAP_TOP - 8.0) * Box(KEYCAP, KEYCAP, 8.0, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+        caps.append(Pos(x, yy, KEYCAP_TOP - KEYCAP_H) * Box(KEYCAP, KEYCAP, KEYCAP_H, align=(Align.CENTER, Align.CENTER, Align.MIN)))
     (mx, my, mw, mh), _ = F.display()
     b += Pos(mx, my, P.STANDOFF_L) * Box(mw, mh, P.MODULE_PCB_T + 1.2, align=(Align.CENTER, Align.CENTER, Align.MIN))
     return b, caps
@@ -449,7 +447,25 @@ def main() -> None:
     print("parts:", ", ".join(f"{n} x{QTY[n]}" for n in p2))
     bb = a["front-plate"].bounding_box()
     print(f"front plate {bb.size.X:.0f} x {bb.size.Y:.0f} mm; stack {FRONT_Z1 - BACK_Z0:.1f} mm deep; "
-          f"keycaps {KEYCAP_TOP - FRONT_Z1:.1f} mm proud of the front")
+          f"keycaps {KEYCAP_TOP - FRONT_Z1:.1f} mm over the plate")
+    check_stack()
+
+
+def check_stack():
+    """The heights that make the switch plate work (board top = 0)."""
+    rim = KEYCAP_TOP - KEYCAP_H - F.MX_TRAVEL          # a cap's rim with the key at the bottom
+    spacer = P.STANDOFF_L - FRONT_Z1
+    bad = []
+    if rim - FRONT_Z1 < 0.5:
+        bad.append(f"a pressed keycap's rim comes {rim - FRONT_Z1:.1f} mm from the plate (want >= 0.5)")
+    if UNDER_BOARD > -8.0:
+        bad.append(f"only {-UNDER_BOARD:.1f} mm under the board for the jack's plug (want >= 8)")
+    if abs(spacer - round(spacer)) > 1e-6:
+        bad.append(f"the display's M2 spacer would be {spacer:.2f} mm (not a stock length)")
+    if bad:
+        raise SystemExit("stack:\n  " + "\n  ".join(bad))
+    print(f"stack: pressed caps clear the plate by {rim - FRONT_Z1:.1f} mm; {-UNDER_BOARD:.1f} mm under "
+          f"the board; display on {spacer:.0f} mm M2 spacers")
 
 
 if __name__ == "__main__":
