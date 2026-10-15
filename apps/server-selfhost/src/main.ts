@@ -114,7 +114,9 @@ export async function start(config: Config) {
       : {}),
     fetch: loopbackFetch,
     now: () => Date.now(),
-    iceServers: () => buildIceServers(config.ice, Date.now()),
+    // coturn's time-limited credentials can't be revoked; a call with an add-on asks for ones
+    // that expire with its longest length.
+    iceServers: (opts) => buildIceServers(config.ice, Date.now(), opts?.ttlSeconds),
     setTimer: (fn, ms) => {
       const t = setTimeout(fn, ms);
       return () => clearTimeout(t);

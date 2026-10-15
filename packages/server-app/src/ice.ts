@@ -31,11 +31,18 @@ export interface IceConfig {
   turnSecret?: string;
 }
 
-export async function buildIceServers(cfg: IceConfig, now: number): Promise<IceServer[]> {
+export async function buildIceServers(
+  cfg: IceConfig,
+  now: number,
+  ttlSeconds?: number,
+): Promise<IceServer[]> {
   const servers: IceServer[] = [];
   if (cfg.stunUrls.length) servers.push({ urls: cfg.stunUrls });
   if (cfg.turnUrls.length && cfg.turnSecret) {
-    servers.push({ urls: cfg.turnUrls, ...(await turnRestCredentials(cfg.turnSecret, now)) });
+    servers.push({
+      urls: cfg.turnUrls,
+      ...(await turnRestCredentials(cfg.turnSecret, now, ttlSeconds)),
+    });
   }
   return servers;
 }

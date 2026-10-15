@@ -125,7 +125,7 @@ const PAIRING_OBJECT = "pairing";
  * ICE servers: short-lived Cloudflare TURN credentials when a TURN key is configured, otherwise
  * STUN only. https://developers.cloudflare.com/realtime/turn/generate-credentials/
  */
-async function iceServers(env: Env): Promise<IceServer[]> {
+async function iceServers(env: Env, ttlSeconds = 6 * 60 * 60): Promise<IceServer[]> {
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
     try {
       const res = await fetch(
@@ -136,7 +136,7 @@ async function iceServers(env: Env): Promise<IceServer[]> {
             authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ ttl: 6 * 60 * 60 }),
+          body: JSON.stringify({ ttl: ttlSeconds }),
         },
       );
       if (!res.ok) throw new Error(`TURN credentials: HTTP ${res.status}`);
@@ -247,7 +247,10 @@ function baseEnv(
     ...(env.PUBLIC_URL ? { publicUrl: env.PUBLIC_URL } : {}),
     ...(env.FED_PRIVATE_KEY ? { federationKey: env.FED_PRIVATE_KEY } : {}),
     now: () => Date.now(),
-    iceServers: () => iceServers(env),
+    iceServers: (opts) => iceServers(env, opts?.ttlSeconds),
+    ...(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN
+      ? { revokeIce: (usernames: string[]) => revokeTurn(env, usernames) }
+      : {}),
     setTimer: (fn, ms) => {
       const t = setTimeout(fn, ms);
       return () => clearTimeout(t);
@@ -255,6 +258,20 @@ function baseEnv(
     log: (level, msg, data) => console[level](msg, data ?? ""),
     ...extra,
   };
+}
+
+/**
+ * Revokes TURN credentials whose call ended (calls with add-ons), so they can't be used for
+ * anything else. https://developers.cloudflare.com/realtime/turn/generate-credentials/
+ */
+async function revokeTurn(env: Env, usernames: string[]): Promise<void> {
+  for (const name of usernames) {
+    const res = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/${encodeURIComponent(name)}/revoke`,
+      { method: "POST", headers: { authorization: `Bearer ${env.TURN_KEY_API_TOKEN}` } },
+    );
+    if (!res.ok && res.status !== 404) throw new Error(`TURN revoke: HTTP ${res.status}`);
+  }
 }
 
 /** Stored with each hibernatable socket. */
