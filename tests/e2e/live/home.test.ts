@@ -331,20 +331,28 @@ describe.runIf(ON)("0.9.4 on the firmware", () => {
     await den.waitFor(/-> \{"t":"call.back","id":"mc_/, 30_000, "call back sent");
     let ringing = await app.next("call.ringing");
     expect(ringing.from).toMatchObject({ label: "Den" });
-    app.send({ t: "call.hangup", callId: ringing.callId });
-    await den.waitFor(/STATE offhook/, 30_000, "back to dial tone");
-    // MENU 8 redials the same (the call back).
+    // Mom declines: the den is offered her voicemail; hanging up leaves it (or drops it).
+    const declined = async () => {
+      app.send({ t: "call.hangup", callId: ringing.callId });
+      await den.waitFor(/"reason":"declined"/, 30_000, "declined");
+      await den.waitFor(/STATE voicemail/, 30_000, "voicemail offered");
+      den.send("hook down");
+      await den.waitFor(/STATE idle/, 30_000, "hung up");
+    };
+    await declined();
+    // MENU 8 with the handset up redials the same (the call back).
+    den.send("hook up");
+    await den.waitFor(/STATE offhook/, 30_000, "dial tone");
     keys(den, "menu", "8");
     await den.waitFor(/REDIAL missed call/, 30_000, "redial");
     ringing = await app.next("call.ringing");
     expect(ringing.from).toMatchObject({ label: "Den" });
-    app.send({ t: "call.hangup", callId: ringing.callId });
+    await declined();
     // MENU 5, 3: cleared everywhere.
     keys(den, "menu", "5", "3");
     await den.waitFor(/-> \{"t":"missed.clear"\}/, 30_000, "clear sent");
     await shows(den, /NO MISSED CALLS\]/);
     keys(den, "menu");
-    den.send("hook down");
     app.ws.close();
   }, 1_800_000);
 });
