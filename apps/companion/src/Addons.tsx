@@ -50,8 +50,31 @@ export function Addons({
       <h3>Add-ons</h3>
       <p className="hint">
         Services you link to your account, like an AI companion or a notes taker. Each gets its own
-        address on your account. Only you, and the connections you choose, can talk to it. Nobody
-        else can call it or knock on it, and kids' phones never reach one.
+        address on your account, and you call it like a person. Only you, and the connections you
+        choose on its card, can talk to it. Nobody else can call it or knock on it, and kids' phones
+        never reach one.
+      </p>
+      <ol className="addon-steps">
+        <li>
+          In the service, choose to connect it to Open Lounge Phone and give it your server's
+          address: <code>{location.host}</code>{" "}
+          <button
+            type="button"
+            className="link"
+            onClick={() => void navigator.clipboard?.writeText(location.host)}
+          >
+            Copy
+          </button>
+        </li>
+        <li>It shows a 6-digit code. Choose Link an add-on below and type it in.</li>
+        <li>Call it from here, or put it on a key of your own phone.</li>
+      </ol>
+      <p className="muted small">
+        The service has to support Open Lounge Phone. You can also{" "}
+        <a href="https://openloungephone.app/how-to/add-ons/" target="_blank" rel="noreferrer">
+          build your own
+        </a>
+        .
       </p>
       {error && (
         <p className="error" role="alert">
@@ -95,7 +118,6 @@ export function Addons({
           <LinkForm
             api={api}
             address={address}
-            people={people}
             onDone={(a) => {
               setLinking(false);
               setNotice(`Linked. ${a.name} is at ${a.address}.`);
@@ -294,19 +316,16 @@ function AllowEditor({
 function LinkForm({
   api,
   address,
-  people,
   onDone,
   onCancel,
 }: {
   api: Api;
   address: string | undefined;
-  people: ConnectionView[];
   onDone(a: AddonView): void;
   onCancel(): void;
 }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [allow, setAllow] = useState<string[]>([]);
   const [problem, setProblem] = useState<{ code?: string; name?: string }>({});
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -321,7 +340,7 @@ function LinkForm({
     setBusy(true);
     setError(undefined);
     try {
-      onDone(await api.linkAddon({ code, name: name.trim().toLowerCase(), allow }));
+      onDone(await api.linkAddon({ code, name: name.trim().toLowerCase(), allow: [] }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -333,7 +352,7 @@ function LinkForm({
     <form className="stack" noValidate onSubmit={(e) => void submit(e)}>
       <h4>Link an add-on</h4>
       <p className="hint">
-        Start linking in the add-on (for example "Connect a phone"). It shows a 6-digit code.
+        Start linking in the service first: it shows a 6-digit code for a few minutes.
       </p>
       <label>
         Code
@@ -355,7 +374,6 @@ function LinkForm({
         <input
           value={name}
           maxLength={30}
-          placeholder="seat"
           aria-invalid={problem.name ? true : undefined}
           onChange={(e) => {
             setName(e.target.value);
@@ -364,10 +382,14 @@ function LinkForm({
         />
         <span className={problem.name ? "hint error" : "hint"}>
           {problem.name ??
-            (preview ? `Its address: ${preview}` : "The part after + in its address.")}
+            (preview
+              ? `Its address: ${preview}`
+              : "A short name for its address, for example seat.")}
         </span>
       </label>
-      <AllowChoices people={people} value={allow} onChange={setAllow} />
+      <p className="muted small">
+        Only you can talk to it at first. To let others, use Who may talk to it on its card after linking.
+      </p>
       {error && (
         <p className="error" role="alert">
           {error}
