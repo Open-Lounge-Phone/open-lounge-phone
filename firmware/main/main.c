@@ -487,7 +487,7 @@ static void render(void) {
   bool keys = n_status > 0 && s_phone.kind == PH_OFFHOOK && !s_phone.held[0] && s_authed &&
               lounge_keys_live(&s_lounge) && s_lounge.challenge < 0 &&
               s_conn == CONN_ONLINE && !s_code[0] && s_menu.screen == MENU_CLOSED &&
-              !selftest_active();
+              !selftest_active() && !lan_busy();  // the house intercom's screen instead
   if (keys && !snake_active() && !s_boot_until) {
     char title[STATUS_MAX + 1] = "SPEED DIAL", footer[96], sig[sizeof s_keys_sig];
     if (s_cfg.owner_mode[0]) strip_owner_line(title, &s_cfg);
@@ -607,8 +607,8 @@ static void render(void) {
     led = LED_ON;
   else if (s_phone.kind == PH_IDLE && s_cfg.missed_count > 0) led = LED_BREATHE;
   else led = LED_DIM;
-  signals_led(led);
-  // The house intercom: ringing here, or a call on it.
+  // The house intercom: ringing here, or a call on it. (One pattern per pass: setting two
+  // restarts the LED's pattern each time.)
   if (lan_ringing()) led = LED_RINGING;
   else if (lan_busy()) led = LED_ON;
   signals_led(led);
