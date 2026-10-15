@@ -590,6 +590,16 @@ export interface VoicemailSettings {
 // biome-ignore lint/suspicious/noExplicitAny: opaque WebAuthn JSON, typed by @simplewebauthn
 export type CeremonyOptions = { challengeId: string; options: any };
 
+/** A phone's home features: each off (null / false) unless set. */
+export interface HomeFeatures {
+  /** Daily check-in by this local time (`HH:MM`). */
+  checkinBy: string | null;
+  /** The words the phone may post as a notice to every phone of the space. */
+  chimeText: string | null;
+  /** The house intercom (hardware phones on the same local network). */
+  intercom: boolean;
+}
+
 /** How the app calls a missed caller back from the space it's in. */
 export type CallBackHint =
   | { kind: "user"; userId: string }
@@ -1054,6 +1064,12 @@ export function createApi(opts: ApiOptions) {
         deviceId ? `/devices/${enc(deviceId)}/call-waiting` : "/call-waiting",
         { on },
       ),
+
+    // A phone's home features (daily check-in, chime, house intercom)
+    homeFeatures: (deviceId: string) =>
+      request<HomeFeatures>("GET", `/devices/${enc(deviceId)}/home`),
+    setHomeFeatures: (deviceId: string, patch: Partial<HomeFeatures>) =>
+      request<HomeFeatures>("PUT", `/devices/${enc(deviceId)}/home`, patch),
 
     // Missed calls (all your spaces) and missed call backs
     missed: async () => (await request<{ missed: MissedCall[] }>("GET", "/missed")).missed,

@@ -13,6 +13,7 @@ import { CallWaitingToggle } from "./CallWaiting.tsx";
 import { hostBadge } from "./connectionGroups.ts";
 import { addressProblem, requiredProblem } from "./fields.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
+import { HomeFeaturesCard } from "./HomeFeatures.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
 import { MODE_TEXT } from "./pairMode.ts";
@@ -143,6 +144,13 @@ export function ManageDevice({
           <GreetingEditor api={api} deviceId={device.id} />
           <h3>Calls</h3>
           <CallWaitingToggle api={api} deviceId={device.id} />
+        </>
+      )}
+
+      {device && (guardian || device.ownerUserId === meId) && device.kind !== "lounge" && (
+        <>
+          <h3>Home features</h3>
+          <HomeFeaturesCard api={api} deviceId={device.id} />
         </>
       )}
 
