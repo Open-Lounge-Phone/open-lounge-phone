@@ -590,6 +590,27 @@ export interface VoicemailSettings {
 // biome-ignore lint/suspicious/noExplicitAny: opaque WebAuthn JSON, typed by @simplewebauthn
 export type CeremonyOptions = { challengeId: string; options: any };
 
+/** How the app calls a missed caller back from the space it's in. */
+export type CallBackHint =
+  | { kind: "user"; userId: string }
+  | { kind: "device"; deviceId: string }
+  | { kind: "connection"; connectionId: string }
+  | { kind: "line"; address: string };
+
+/** A missed call (rang, nobody answered, no message) or a public line's call back not taken. */
+export interface MissedCall {
+  id: string;
+  kind: "call" | "callback";
+  from: string;
+  /** The newest one. */
+  at: number;
+  count: number;
+  /** The space it rang in, when it's another one. */
+  space?: string;
+  /** How to call back from here (none: from the space it rang in). */
+  callBack?: CallBackHint;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   /** The server's machine-readable reason, when it gave one (e.g. `suspended`). */
@@ -1018,6 +1039,10 @@ export function createApi(opts: ApiOptions) {
     recordingAudio: async (id: string) =>
       (await send("GET", `/recordings/${enc(id)}/audio`)).blob(),
     deleteRecording: (id: string) => request<void>("DELETE", `/recordings/${enc(id)}`),
+
+    // Missed calls (all your spaces) and missed call backs
+    missed: async () => (await request<{ missed: MissedCall[] }>("GET", "/missed")).missed,
+    clearMissed: () => request<{ cleared: number }>("POST", "/missed/clear"),
 
     // Voicemail
     voicemails: () => request<VoicemailSummary[]>("GET", "/voicemails"),

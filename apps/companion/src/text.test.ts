@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatLastSeen,
   formatWhen,
+  missedSummary,
   powerWarning,
   transcriptText,
 } from "./text.ts";
@@ -64,5 +65,20 @@ describe("powerWarning", () => {
     expect(powerWarning(undefined)).toBeUndefined();
     expect(powerWarning({ reduced: false })).toBeUndefined();
     expect(powerWarning({ reduced: true })).toMatch(/1\.5 A/);
+  });
+});
+
+describe("a missed call in a line", () => {
+  it("how many, when, and where", () => {
+    const now = new Date(2026, 9, 13, 18, 0).getTime();
+    const at = new Date(2026, 9, 13, 14, 5).getTime();
+    const time = new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    expect(missedSummary({ kind: "call", count: 1, at }, now)).toBe(`Today ${time}`);
+    expect(missedSummary({ kind: "call", count: 2, at, space: "Work" }, now)).toBe(
+      `2 calls · Today ${time} · in Work`,
+    );
+    expect(missedSummary({ kind: "callback", count: 1, at }, now + 86_400_000)).toBe(
+      `Called you back · Yesterday ${time}`,
+    );
   });
 });

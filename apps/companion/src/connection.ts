@@ -111,6 +111,8 @@ export interface Snapshot {
   connectionsSeq?: number;
   /** Latest `voicemail.new` (a phone's) or `voicemail.inbox` (yours); `seq` changes each time. */
   voicemail?: { seq: number; id: string; deviceId?: string; from: string };
+  /** Bumped on every `missed.changed` (reload `GET /api/missed`). */
+  missedSeq?: number;
   /** Latest `room.opened` (a party line with hours just opened); `seq` changes each time. */
   roomOpened?: { seq: number; roomId: string; name: string; closesAt: number };
   /** Latest `account.notice`: your account was signed in to without a passkey. */
@@ -820,6 +822,9 @@ export class Connection {
             ...(msg.expiresAt ? { expiresAt: msg.expiresAt } : {}),
           },
         });
+        return;
+      case "missed.changed":
+        this.set({ missedSeq: (this.snap.missedSeq ?? 0) + 1 });
         return;
       case "voicemail.new":
       case "voicemail.inbox":

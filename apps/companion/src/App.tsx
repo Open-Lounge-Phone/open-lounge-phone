@@ -694,6 +694,15 @@ function SignedIn({
             meId={me?.user.id}
             onAddingPhone={() => setPairingSince(Date.now())}
             api={api}
+            {...(snap.missedSeq ? { missedSeq: snap.missedSeq } : {})}
+            onCallBack={(hint, label) => {
+              if (!conn) return;
+              if (hint.kind === "user") void conn.callUser(hint.userId, label);
+              else if (hint.kind === "device") void conn.dial(hint.deviceId, label);
+              else if (hint.kind === "connection")
+                void conn.callConnection(hint.connectionId, label);
+              else void conn.callLine(hint.address);
+            }}
             onManage={(d) => setRoute({ name: "device", id: d.id })}
             onPair={() => setRoute({ name: "pair" })}
           />

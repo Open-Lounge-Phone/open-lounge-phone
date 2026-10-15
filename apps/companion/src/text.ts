@@ -47,6 +47,24 @@ export function formatLastSeen(ts: number | null | undefined, now: number): stri
   return new Date(ts).toLocaleDateString();
 }
 
+/** One missed call in a line: "2 calls · Today 14:05" (a line's call back: "Called you back"). */
+export function missedSummary(
+  m: { kind: "call" | "callback"; count: number; at: number; space?: string },
+  now: number,
+): string {
+  const d = new Date(m.at);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const day = (t: number) => new Date(t).toDateString();
+  const when =
+    day(m.at) === day(now)
+      ? `Today ${time}`
+      : day(m.at) === day(now - 86_400_000)
+        ? `Yesterday ${time}`
+        : `${d.toLocaleDateString()} ${time}`;
+  const what = m.kind === "callback" ? "Called you back" : m.count > 1 ? `${m.count} calls` : "";
+  return [what, when, m.space ? `in ${m.space}` : ""].filter(Boolean).join(" · ");
+}
+
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);

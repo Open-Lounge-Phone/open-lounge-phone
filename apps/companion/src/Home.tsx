@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { Api, DeviceSummary, User } from "./api.ts";
+import type { Api, CallBackHint, DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
 import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
+import { MissedCalls } from "./MissedCalls.tsx";
 import { Notices } from "./Notices.tsx";
 import { UseOldDeviceHint } from "./Pair.tsx";
 import { offlineHint, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
@@ -23,8 +24,12 @@ interface Props {
   meId: string | undefined;
   /** Called when the user opens a new virtual phone to pair. */
   onAddingPhone(): void;
-  /** For notices to the phones (guardians). */
+  /** For notices to the phones (guardians), and your missed calls. */
   api?: Api;
+  /** Bumped when your missed calls change. */
+  missedSeq?: number;
+  /** Call a missed caller back (from this space). */
+  onCallBack?(hint: CallBackHint, label: string): void;
 }
 
 function useNow(intervalMs: number) {
@@ -52,6 +57,8 @@ export function Home({
   meId,
   onAddingPhone,
   api,
+  missedSeq,
+  onCallBack,
 }: Props) {
   const now = useNow(30_000);
   const myPhone = devices.find((d) => meId && d.ownerUserId === meId);
@@ -60,6 +67,9 @@ export function Home({
   return (
     <section className="stack">
       <h2>{userName ? `Hi, ${userName}` : "Phones"}</h2>
+      {api && onCallBack && (
+        <MissedCalls api={api} {...(missedSeq ? { seq: missedSeq } : {})} onCallBack={onCallBack} />
+      )}
       {meId && (
         <MyPhone
           phone={myPhone}

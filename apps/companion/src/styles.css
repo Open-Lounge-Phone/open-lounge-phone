@@ -1433,3 +1433,11 @@ dl.phone-facts {
   display: grid;
   gap: 0.35rem;
 }
+
+/* Missed calls on Home: who, how many and when, and Call back. */
+.missed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
