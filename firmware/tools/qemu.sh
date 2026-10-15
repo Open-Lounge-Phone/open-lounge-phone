@@ -22,6 +22,9 @@
 #   QEMU_MAC=02:00:00:00:00:0b  this phone's MAC (`fresh` writes it to the eFuse file too); phones
 #                               on one segment need different ones
 #   QEMU_HOSTFWD may hold several forwards separated by spaces ("tcp::8081-10.0.2.16:80").
+#   QEMU_MONITOR=47700          the QEMU monitor on 127.0.0.1:<port> (telnet-style text); the
+#                               phone's network is the netdev "cable": `set_link cable off` pulls
+#                               the cable out of a build for hw v0.901 (tools/qemu_cable.py)
 set -euo pipefail
 FW="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$FW"
@@ -97,6 +100,12 @@ run() {
   local fwd=()
   [ -n "${QEMU_HOSTFWD:-}" ] && fwd=(-nic "user,model=open_eth,hostfwd=${QEMU_HOSTFWD}")
   [ ${#fwd[@]} -eq 0 ] && fwd=(-nic user,model=open_eth)
+  if [ -n "${QEMU_MONITOR:-}" ]; then
+    local user="user,id=cable" f
+    for f in ${QEMU_HOSTFWD:-}; do user="$user,hostfwd=$f"; done
+    fwd=(-netdev "$user" -net nic,model=open_eth,netdev=cable
+      -monitor "tcp:127.0.0.1:${QEMU_MONITOR},server=on,wait=off")
+  fi
   if [ -n "${QEMU_PCAP:-}" ]; then
     # Every frame on the phone's network into a pcap file (the smoke test reads it).
     fwd=(-netdev "user,id=n0${QEMU_HOSTFWD:+,hostfwd=${QEMU_HOSTFWD}}" -net nic,model=open_eth,netdev=n0
