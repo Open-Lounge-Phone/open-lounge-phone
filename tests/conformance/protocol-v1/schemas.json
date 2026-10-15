@@ -478,6 +478,22 @@
         "properties": {
           "t": {
             "type": "string",
+            "const": "notice.chime"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["t"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
             "const": "notice.dismiss"
           },
           "id": {
@@ -1254,6 +1270,51 @@
               }
             },
             "required": ["name", "address", "owner"]
+          },
+          "checkin": {
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              "done": {
+                "type": "boolean"
+              },
+              "alerted": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": ["by", "done"]
+          },
+          "chime": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "required": ["text"]
+          },
+          "intercom": {
+            "type": "object",
+            "properties": {
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 24
+              },
+              "key": {
+                "type": "string",
+                "minLength": 43,
+                "maxLength": 43,
+                "pattern": "^[A-Za-z0-9_-]*$"
+              }
+            },
+            "required": ["room", "key"]
           },
           "houseLine": {
             "type": "boolean"

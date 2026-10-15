@@ -1426,7 +1426,7 @@ describe("0029 missed calls and call waiting", () => {
       endReason: "timeout",
       callId: "call_old",
     });
-    expect(migrate(old.db)).toEqual(["0029_missed_calls.sql"]);
+    expect(migrate(old.db)).toContain("0029_missed_calls.sql");
     expect(await s.getDevice(kid.id)).toMatchObject({ name: "Kid", kind: "kids" });
     // Call waiting is on for everyone until they turn it off.
     expect(await s.callWaiting({ accountId: guardian.accountId })).toBe(true);
@@ -1469,6 +1469,46 @@ describe("0029 missed calls and call waiting", () => {
     await s.sweepExpired(hh.id, "home.test", T0 + 31 * 24 * 60 * 60 * 1000);
     expect(await s.missed.ofAccount(guardian.accountId)).toEqual([]);
     expect(await s.missed.list({ deviceId: kid.id })).toEqual([]);
+    old.db.close();
+  });
+});
+
+describe("0030 home features", () => {
+  it("keeps phones as they were, all off; a check-in alerts once a day; one intercom key", async () => {
+    const old = openBefore("0030");
+    const s = new Store(old.sql);
+    const { household: hh } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const kid = await s.claimPairing({ code, householdId: hh.id, name: "Gran" }, T0);
+    if (!kid) throw new Error("no phone");
+    expect(migrate(old.db)).toEqual(["0030_home_features.sql"]);
+    expect(await s.getDevice(kid.id)).toMatchObject({ name: "Gran", kind: "kids" });
+    expect(await s.home.get(kid.id)).toEqual({
+      checkinBy: null,
+      checkinOkDay: null,
+      checkinAlertDay: null,
+      chimeText: null,
+      intercom: false,
+    });
+    expect(await s.home.checkins(hh.id)).toEqual([]);
+    await s.home.set(kid.id, { checkinBy: "10:00", chimeText: "DINNER'S READY", intercom: true });
+    expect(await s.home.checkins(hh.id)).toEqual([
+      expect.objectContaining({ deviceId: kid.id, checkinBy: "10:00", intercom: true }),
+    ]);
+    expect(await s.home.alerted(kid.id, "2026-10-14")).toBe(true);
+    expect(await s.home.alerted(kid.id, "2026-10-14")).toBe(false);
+    expect(await s.home.alerted(kid.id, "2026-10-15")).toBe(true);
+    await s.home.checkedIn(kid.id, "2026-10-15");
+    expect((await s.home.get(kid.id)).checkinOkDay).toBe("2026-10-15");
+    // A new time starts afresh.
+    await s.home.set(kid.id, { checkinBy: "11:00" });
+    expect((await s.home.get(kid.id)).checkinAlertDay).toBeNull();
+    const key = await s.home.intercomKey(hh.id);
+    expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await s.home.intercomKey(hh.id)).toBe(key);
     old.db.close();
   });
 });

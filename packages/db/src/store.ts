@@ -20,6 +20,7 @@ import {
 } from "./auth.ts";
 import { type Connection, ConnectionStore } from "./connections.ts";
 import { newId, newPairingCode, newToken, sha256 } from "./crypto.ts";
+import { HomeStore } from "./home.ts";
 import { isLineContactId, type LineContact, LineStore } from "./lines.ts";
 import { MissedCallStore } from "./missed.ts";
 import { NoticeStore } from "./notices.ts";
@@ -632,6 +633,8 @@ export class Store {
   readonly addons: AddonStore;
   /** Missed calls of people and household phones. */
   readonly missed: MissedCallStore;
+  /** Phones' home features: daily check-in, chime, house intercom. */
+  readonly home: HomeStore;
 
   constructor(sql: Sql) {
     this.sql = sql;
@@ -644,6 +647,7 @@ export class Store {
     this.auth = new AuthStore(sql);
     this.addons = new AddonStore(sql);
     this.missed = new MissedCallStore(sql);
+    this.home = new HomeStore(sql);
   }
 
   /**

@@ -38,6 +38,7 @@ import type { ServerEnv } from "./env.ts";
 import { capReached } from "./fairUse.ts";
 import { FederationError, fedFetch, ownHost, SOFTWARE } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
+import { homeRoutes } from "./home.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes } from "./leaving.ts";
@@ -910,6 +911,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   voicemailRoutes(api, env, live);
   missedRoutes(api, env, live);
   callWaitingRoutes(api, env);
+  homeRoutes(api, env, live);
   roomRoutes(api, env, live);
 
   return api;

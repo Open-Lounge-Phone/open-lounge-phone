@@ -653,7 +653,9 @@ export const CallBack = z
 
 export const CheckinOk = z
   .object({ t: z.literal("checkin.ok"), ...Ref })
-  .describe("Labs daily check-in: the person at the phone pressed I'm OK today.");
+  .describe(
+    "Daily check-in (`config.checkin`): the person at the phone pressed I'm OK today. The server counts it for the day (the phone's next `config.checkin.done`).",
+  );
 
 export const CheckinMissed = z
   .object({
@@ -665,7 +667,13 @@ export const CheckinMissed = z
       .describe("The time it was due (local HH:MM)."),
   })
   .describe(
-    "Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.",
+    "Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone. Phones with `config.checkin` don't send it: the server watches the time itself.",
+  );
+
+export const NoticeChime = z
+  .object({ t: z.literal("notice.chime"), ...Ref })
+  .describe(
+    "Chime (`config.chime`): the phone posts its chime's words as a notice to every phone of its space (15 minutes, at most once a minute). Answered by the notice itself; refused if the phone has no chime.",
   );
 
 export const NoticeDismiss = z
@@ -696,6 +704,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   CallBack,
   CheckinOk,
   CheckinMissed,
+  NoticeChime,
   NoticeDismiss,
   CallAnswer,
   CallHangup,
@@ -833,6 +842,48 @@ export const Config = z
       .optional()
       .describe(
         "Sent to an add-on only (instead of `owner`): who it is and whose account it belongs to.",
+      ),
+    checkin: z
+      .object({
+        by: z
+          .string()
+          .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+          .describe("Local time (HH:MM) by which someone presses I'm OK."),
+        done: z
+          .boolean()
+          .describe(
+            "Nothing more is asked today (local day): someone pressed I'm OK, or the time was set after today's had passed.",
+          ),
+        alerted: z
+          .literal(true)
+          .optional()
+          .describe("Today's time passed without it: the space's guardians were told."),
+      })
+      .optional()
+      .catch(undefined)
+      .describe(
+        "Daily check-in, set for this phone by its guardians: the ready screen asks for I'm OK (`checkin.ok`) until it's pressed; the server tells the guardians if nobody does by `by`.",
+      ),
+    chime: z
+      .object({
+        text: z.string().min(1).max(40).describe("The notice's words (`\n` between two lines)."),
+      })
+      .optional()
+      .catch(undefined)
+      .describe("This phone may post a chime to every phone of its space (`notice.chime`)."),
+    intercom: z
+      .object({
+        room: z.string().min(1).max(24).describe("This phone's name on the intercom."),
+        key: Base64Url.min(43)
+          .max(43)
+          .describe(
+            "The space's intercom key (32 bytes): control messages carry an HMAC with it and audio is encrypted with keys made from it, so only the space's phones on the network take part.",
+          ),
+      })
+      .optional()
+      .catch(undefined)
+      .describe(
+        "House intercom on for this phone: it calls the space's other phones with it on, on the same local network, with no server in between (hardware phones).",
       ),
     houseLine: z
       .boolean()

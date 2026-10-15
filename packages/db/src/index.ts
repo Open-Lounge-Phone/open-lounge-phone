@@ -2,6 +2,7 @@ export * from "./addons.ts";
 export * from "./auth.ts";
 export * from "./connections.ts";
 export * from "./crypto.ts";
+export * from "./home.ts";
 export * from "./lines.ts";
 export * from "./missed.ts";
 export * from "./notices.ts";

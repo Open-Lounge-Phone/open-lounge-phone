@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `missed-calls`, `call-waiting`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -224,7 +224,7 @@ MENU → Missed → 1 (handset up): call this missed caller back, like dialing: 
 
 ### `checkin.ok`
 
-Labs daily check-in: the person at the phone pressed I'm OK today.
+Daily check-in (`config.checkin`): the person at the phone pressed I'm OK today. The server counts it for the day (the phone's next `config.checkin.done`).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -232,12 +232,20 @@ Labs daily check-in: the person at the phone pressed I'm OK today.
 
 ### `checkin.missed`
 
-Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone.
+Labs daily check-in: nobody pressed I'm OK by `by`. The server tells the space's guardians (an alert in their voicemail inbox), at most once a day per phone. Phones with `config.checkin` don't send it: the server watches the time itself.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `by` | string (`^[0-2][0-9]:[0-5][0-9]$`) | yes | The time it was due (local HH:MM). |
+
+### `notice.chime`
+
+Chime (`config.chime`): the phone posts its chime's words as a notice to every phone of its space (15 minutes, at most once a minute). Answered by the notice itself; refused if the phone has no chime.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
 
 ### `notice.dismiss`
 
@@ -466,6 +474,9 @@ Sent after authentication and whenever guardians change settings.
 | `greeting` | { kind: `"default"` \| `"name"` \| `"custom"`, canRecord: boolean } |  | The phone's voicemail greeting (absent on Lounge phones). |
 | `owner` | { mode: `"kids"` \| `"personal"` \| `"lounge"`, space: string (len ≤64), person?: string (len ≤24) } |  | Who the phone belongs to and how it is used, for the status strip's trust line ("Kids · Smith home", "Jesse's phone", "Lounge · Office"). |
 | `addon` | { name: string (len ≤30), address: string (len ≤300), owner: { name: string (len ≤64), address: string (len ≤300) } } |  | Sent to an add-on only (instead of `owner`): who it is and whose account it belongs to. |
+| `checkin` | { by: string (`^([01]\d|2[0-3]):[0-5]\d$`), done: boolean, alerted?: `true` } |  | Daily check-in, set for this phone by its guardians: the ready screen asks for I'm OK (`checkin.ok`) until it's pressed; the server tells the guardians if nobody does by `by`. |
+| `chime` | { text: string (len ≤40) } |  | This phone may post a chime to every phone of its space (`notice.chime`). |
+| `intercom` | { room: string (len ≤24), key: string (len 43) } |  | House intercom on for this phone: it calls the space's other phones with it on, on the same local network, with no server in between (hardware phones). |
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 | `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |

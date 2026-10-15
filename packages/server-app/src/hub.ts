@@ -9,6 +9,7 @@ import {
   CLOSED_NOTE,
   CONNECTION_LOST_NOTE,
   type Contact,
+  checkinStep,
   controlCheck,
   effectiveHours,
   goesToVoicemail,
@@ -17,6 +18,7 @@ import {
   isQuietAt,
   LINE_ENDED_NOTE,
   localClock,
+  localDay,
   loungeDayEnd,
   MAX_RING_SECONDS,
   type Meeting,
@@ -31,6 +33,7 @@ import {
   nextRoundRobin,
   noQueueOutcome,
   noticeFor,
+  noticeLines,
   opensText,
   type PartyCall,
   pickRecorder,
@@ -388,6 +391,8 @@ export class HouseholdHub {
   private readonly addonPeers = new Map<string, Peer>();
   /** Labs check-in alerts sent, by phone (at most one in 12 hours each). */
   private readonly checkinAlerts = new Map<string, number>();
+  /** Chimes posted, by phone (at most one a minute each). */
+  private readonly chimed = new Map<string, number>();
   private readonly apps = new Map<string, Set<Peer>>();
   private readonly rooms = new Map<string, Room>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -817,7 +822,9 @@ export class HouseholdHub {
         case "voicemail.fetch":
           return this.voicemailFetch(device);
         case "checkin.ok":
-          return; // fine today: nothing to tell anyone
+          return this.checkinOk(device);
+        case "notice.chime":
+          return this.chime(device);
         case "checkin.missed":
           return this.checkinMissed(device, msg.by);
         case "voicemail.heard":
@@ -1061,6 +1068,8 @@ export class HouseholdHub {
     await this.pumpLines();
     // Notices: one that expired leaves the phones.
     await this.updateNotices();
+    // Daily check-ins: a time passed without I'm OK.
+    await this.checkCheckins();
     // Party lines with hours: opening, closing soon, closed.
     await this.checkRoomHours();
     await this.scheduleWake();
@@ -1092,7 +1101,7 @@ export class HouseholdHub {
       (r) => r.state.caller === calleeKey || r.state.callee === calleeKey,
     );
     const r = theirs.length === 1 ? theirs[0] : undefined;
-    if (!r || r.state.phase !== "active" || r.heldBy) return [];
+    if (r?.state.phase !== "active" || r.heldBy) return [];
     const peer = r.state.caller === calleeKey ? r.caller : r.calleePeer;
     if (!peer) return [];
     const can =
@@ -1931,7 +1940,10 @@ export class HouseholdHub {
    * phone it is) gets an alert in their voicemail inbox: a short chime with the words as its
    * transcript; their apps hear about it now and their own phones show it as missed. Once a day.
    */
-  private async checkinMissed(device: DevicePeer, by: string): Promise<void> {
+  private async checkinMissed(
+    device: { id: string; label: string; owner?: string },
+    by: string,
+  ): Promise<void> {
     const { store } = this.env;
     const now = this.env.now();
     const last = this.checkinAlerts.get(device.id) ?? 0;
@@ -2200,13 +2212,14 @@ export class HouseholdHub {
       });
       return;
     }
-    const [buttons, contacts, schedule, missed, greeting, extensions] = await Promise.all([
+    const [buttons, contacts, schedule, missed, greeting, extensions, home] = await Promise.all([
       store.listButtons(peer.id),
       store.listContacts(peer.id),
       this.scheduleFor(peer),
       this.missedFor(peer),
       this.phoneGreeting(peer),
       peer.owner ? this.hasExtensions() : false,
+      this.homeConfig(peer),
     ]);
     const now = new Date(this.env.now());
     const quiet = isQuietAt(schedule, now);
@@ -2245,8 +2258,148 @@ export class HouseholdHub {
           }
         : {}),
       ...(extensions ? { extensions: true } : {}),
+      ...home,
       server: serverInfo(this.env),
     });
+  }
+
+  /** A phone's home features in its config: check-in, chime, intercom (each when it's on). */
+  private async homeConfig(peer: DevicePeer) {
+    const { store } = this.env;
+    const h = await store.home.get(peer.id);
+    const out: Partial<Extract<ServerToDevice, { t: "config" }>> = {};
+    if (h.checkinBy) {
+      const space = await store.getHousehold(this.householdId);
+      const today = localDay(new Date(this.env.now()), space?.timeZone ?? "UTC");
+      const done = h.checkinOkDay === today;
+      out.checkin = {
+        by: h.checkinBy,
+        done,
+        ...(!done && h.checkinAlertDay === today ? { alerted: true as const } : {}),
+      };
+    }
+    if (h.chimeText) out.chime = { text: h.chimeText };
+    if (h.intercom) {
+      out.intercom = {
+        room: peer.label.slice(0, 24),
+        key: await store.home.intercomKey(this.householdId),
+      };
+    }
+    return out;
+  }
+
+  /** Daily check-in: I'm OK, counted for the phone's local day (and its config says so). */
+  private async checkinOk(device: DevicePeer): Promise<void> {
+    const { store } = this.env;
+    const h = await store.home.get(device.id);
+    if (!h.checkinBy) return; // labs phones: nothing to count
+    const space = await store.getHousehold(this.householdId);
+    await store.home.checkedIn(
+      device.id,
+      localDay(new Date(this.env.now()), space?.timeZone ?? "UTC"),
+    );
+    this.env.log("info", "check-in ok", { device: device.id });
+    await this.sendConfig(device, true);
+  }
+
+  /**
+   * Phones whose daily check-in time passed today without I'm OK: their guardians are told (once
+   * a day, kept in the store so a restart doesn't repeat it). Returns when to look again.
+   */
+  private async checkCheckins(): Promise<number | undefined> {
+    const { store } = this.env;
+    const rows = await store.home.checkins(this.householdId);
+    if (!rows.length) return undefined;
+    const now = this.env.now();
+    const space = await store.getHousehold(this.householdId);
+    const tz = space?.timeZone ?? "UTC";
+    const today = localDay(new Date(now), tz);
+    const { minutes } = localClock(new Date(now), tz);
+    let next: number | undefined;
+    for (const r of rows) {
+      const step = checkinStep(r.checkinBy as string, {
+        minutes,
+        done: r.checkinOkDay === today,
+        alerted: r.checkinAlertDay === today,
+      });
+      if (step.alert && (await store.home.alerted(r.deviceId, today))) {
+        const device = await store.getDevice(r.deviceId);
+        if (device) {
+          await this.checkinMissed(
+            {
+              id: device.id,
+              label: device.name,
+              ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
+            },
+            r.checkinBy as string,
+          );
+          const peer = this.devices.get(device.id);
+          if (peer) await this.sendConfig(peer, true);
+        }
+      }
+      const at = now + step.nextInMin * 60_000 + 1000;
+      next = next === undefined ? at : Math.min(next, at);
+    }
+    return next;
+  }
+
+  /** When the next daily check-in could be due (to wake then), without acting on it. */
+  private async nextCheckin(): Promise<number | undefined> {
+    const { store } = this.env;
+    const rows = await store.home.checkins(this.householdId);
+    if (!rows.length) return undefined;
+    const now = this.env.now();
+    const tz = (await store.getHousehold(this.householdId))?.timeZone ?? "UTC";
+    const today = localDay(new Date(now), tz);
+    const { minutes } = localClock(new Date(now), tz);
+    let next: number | undefined;
+    for (const r of rows) {
+      const step = checkinStep(r.checkinBy as string, {
+        minutes,
+        done: r.checkinOkDay === today,
+        alerted: r.checkinAlertDay === today,
+      });
+      const at = step.alert ? now : now + step.nextInMin * 60_000 + 1000;
+      next = next === undefined ? at : Math.min(next, at);
+    }
+    return next;
+  }
+
+  /** Chime: the phone posts its words as a notice to every phone of the space (once a minute). */
+  private async chime(device: DevicePeer): Promise<void> {
+    const { store } = this.env;
+    const h = await store.home.get(device.id);
+    const lines = h.chimeText ? noticeLines(h.chimeText) : undefined;
+    const now = this.env.now();
+    if (!lines || "error" in lines) {
+      device.conn.send({ t: "error", code: "bad_message", message: "this phone has no chime" });
+      return;
+    }
+    if (now - (this.chimed.get(device.id) ?? 0) < 60_000) return; // pressed again: once a minute
+    this.chimed.set(device.id, now);
+    const n = await store.notices.create(
+      {
+        householdId: this.householdId,
+        createdBy: null,
+        authorName: device.label,
+        lines: lines.lines,
+        deviceIds: null,
+        expiresAt: now + CHIME_MINUTES * 60_000,
+      },
+      now,
+    );
+    await store.workplace
+      .audit({
+        householdId: this.householdId,
+        at: now,
+        actorAccount: null,
+        actorName: device.label,
+        action: "notice.post",
+        detail: { noticeId: n.id, minutes: CHIME_MINUTES, chime: true },
+      })
+      .catch(() => {});
+    await this.updateNotices();
+    await this.scheduleWake();
   }
 
   /** A team/org space with extensions: its phones' MENU offers "Dial extension". */
@@ -2311,6 +2464,9 @@ export class HouseholdHub {
       ? await store.lines.nextCallbackDeadline(this.householdId)
       : undefined;
     if (callbackDue !== undefined) at = at === undefined ? callbackDue : Math.min(at, callbackDue);
+    // Daily check-ins: the next time one could be due.
+    const checkinDue = await this.nextCheckin();
+    if (checkinDue !== undefined) at = at === undefined ? checkinDue : Math.min(at, checkinDue);
     this.cancelWakeTimer?.();
     this.cancelWakeTimer = undefined;
     if (at === undefined) {
@@ -6230,6 +6386,9 @@ type Refusal = { reason: EndReason; note?: string; vm?: VmTarget };
 const NO_EXTENSION = NO_EXTENSION_NOTE;
 /** Why a kids' phone's call to a public line is refused (on the phone, before anything else). */
 const KIDS_NO_LINES = "Kids' phones can't call public lines";
+
+/** How long a chime from a phone stays up (a notice). */
+const CHIME_MINUTES = 15;
 /** Why a kids' phone's call to an add-on is refused. */
 const KIDS_NO_ADDONS = "Kids' phones can't call add-ons";
 /** Calls with an add-on stay between two: no 3-way, no transfer. */
