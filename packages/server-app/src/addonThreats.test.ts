@@ -865,6 +865,21 @@ describe("7. across servers", () => {
     // told, not one made up for the call.
     expectStatus(await give(a, jesse, evil.id, "bookclub", `conn:${ids.aSide}`), 201);
     await vi.waitFor(async () => expect(await b.store.addons.received(ids.bSide)).toHaveLength(1));
+    // Even then, never through a guest at one of its Lounge phones, or with a made-up ringing label.
+    for (const extra of [{ guestOf: "c.test" }, { ringLabel: "POLICE" }]) {
+      const res = await fedFetch(a.env, "b.test", "/calls", {
+        json: {
+          callId: `call_g${Object.keys(extra)[0]}`,
+          from: party(),
+          to: { kind: "person", handle: "bob" },
+          addon: "evil",
+          addonShare: { id: "bookclub", label: "Book club" },
+          ...extra,
+        },
+      });
+      expect(await res.json()).toEqual({ state: "ended", reason: "unavailable" });
+    }
+    expect(bobApp.all("call.ringing")).toEqual([]);
     const res = await fedFetch(a.env, "b.test", "/calls", {
       json: {
         callId: "call_x9",
