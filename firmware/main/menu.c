@@ -156,6 +156,9 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       m->screen = MENU_CLOSED;
     }
   } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
+#if CONFIG_OLP_LABS
+    if (digit_of(key) == 2 && !m->lounge) m->screen = MENU_LABS;  // labs: also from here
+#endif
     if (digit_of(key) == 1 && m->setup != SETUP_HIDDEN) {
       if (m->setup == SETUP_CONFIRM && !m->confirm) {
         m->confirm = true;  // a kids' phone: press 1 again

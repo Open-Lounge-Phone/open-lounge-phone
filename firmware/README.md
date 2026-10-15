@@ -19,10 +19,11 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | **Setup network** (see below): "OpenLoungePhone-XXXX" + a captive setup page (Wi-Fi **and** server: your own, or the public hub to try it) when no Wi-Fi is saved; Wi-Fi also from the console (`wifi`) or Kconfig; server also from the console (`server`), MENU → 4, or Kconfig (**default: none**, see "Your keys, your server") | Bluetooth setup from the companion; the QR sticker |
 | WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below; off in source builds): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
 | `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Flash encryption and hardware secure boot (eFuses; planned for production phones) |
-| `deviceStep`: hook, keys → `button`, incoming ring, answer by lifting, hang up by the hook, rooms, busy decline; MENU in a call: hold / resume, blind transfer, mute in a room; **leaving a message** after no answer (beep, record 8 kHz WAV, hang up to send); **listening to voicemail** (MENU 2 → 1 on a person's own phone); **extensions** (MENU 6, and transfer to one from the call screen); **Lounge phones** (takeover code on the e-paper, `PRESS KEY 7` proof, MENU 5 chat / 8 log out, who's here, house-line keys) | Adding a second caller, merge and attended transfer (one call has audio at a time), playing recorded greetings |
+| `deviceStep`: hook, keys → `button`, incoming ring (BACK silences it here), answer by lifting, hang up by the hook, rooms, busy decline; **call waiting** (`WAITING: MOM` / `1 TAKE 2 IGNORE`; taking it ends the call you're in: one call has audio at a time); MENU in a call: 1 hold / resume, 2 blind transfer, 3 **mute** (the codec's mic off, silence sent; `MUTED`, the LED's slow double blink), 9 volume; **missed calls** (MENU 5: call back, next, clear) and **redial** (MENU 8, kept in NVS); `RECONNECTING` when the call's connection drops, `CONNECTION LOST` (`call.hangup` `lost`) if it isn't back in 15 s; **leaving a message** after no answer (beep, record 8 kHz WAV, hang up to send); **listening to voicemail** (MENU 2 → 1 on a person's own phone); **extensions** (MENU 6, and transfer to one from the call screen); **Lounge phones** (takeover code on the e-paper, `PRESS KEY 7` proof, MENU 5 chat / 8 log out, who's here, house-line keys) | Adding a second caller, merge and attended transfer (one call has audio at a time), playing recorded greetings |
 | **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
 | `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Rooms (group calls) have no media on the phone yet |
-| The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume (earpiece, ringer loudness and style), 2 Voicemail (count), 3 Network: Wi-Fi and server (→ 1 change: the setup network; kids' phones ask twice, Lounge phones don't offer it; 4 opens it too), 5 / 8 Lounge, 6 Extension, 7 Phone check (→ 1 self-test), 9 Update now, 0 About (firmware version + the four fingerprint words); the clock on the ready screen; the status LED double-flashes in a recorded call | Spoken prompts |
+| The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume (earpiece, ringer loudness and style), 2 Voicemail (count, play, clear), 3 Network: Wi-Fi and server (→ 1 change: the setup network; kids' phones ask twice, Lounge phones don't offer it), 4 the house intercom or the chime (else Network), 5 Missed calls / 8 Redial (on a Lounge phone in use: 5 chat / 8 log out), 6 Extension, 7 Phone check (the mic's live level with the handset up; → 1 self-test), 9 Update now, 0 About (firmware version + the four fingerprint words); the clock on the ready screen; the daily check-in (`CHECK IN BY 10:00` / `PRESS 1: I'M OK`); the status LED double-flashes in a recorded call | Spoken prompts |
+| **House intercom** (`intercom.c`, `lan.c`, `lan_crypto.c`; see below): phones of one space on the same network call room to room with no server, off unless turned on in the app; control lines HMAC-signed with the space's key, audio AES-128-CTR | Tried in QEMU only: two boards on real Wi-Fi, the codec's audio over it |
 
 ## Build and flash
 
@@ -88,6 +89,29 @@ burned into your phones' eFuses; the project has no say in it.
 **Pin map.** `main/board.h` is generated from `hardware/build/main/gpio_map.json`:
 `make -C hardware build`, then `python3 firmware/tools/gen_board.py` (it also copies the
 fingerprint word list from `packages/core`; `--check` fails on drift).
+
+## House intercom
+
+Moved in from the labs build in 0.9.4. The server's config turns it on per phone
+(`config.intercom`: the room's name and the space's 32-byte key, base64url); the phone keeps both
+in NVS (`olp` / `ic_room`, `ic_key`) so it works without internet, and erases them when a config
+comes without it (turned off, or the phone moved to another space) or on a wipe.
+
+- **Control**: UDP broadcast on port 47100, one line per message (`intercom.c`: `HELLO`, `RING`,
+  `ANSWER`, `BUSY`, `BYE`, `TAKEN`, `CHIME`), each sealed as
+  `OLP2|<unix seconds>|<random 32-bit hex>|<line>|<tag>` with tag = the first 16 bytes of
+  HMAC-SHA256 over the rest, keyed with HMAC(space key, `olp-intercom-control`). Lines are refused
+  when the tag is wrong, when they're more than 60 s off this phone's clock (if both know the
+  time: it comes from the server's config), or when their random number was seen among the last
+  32. Unsigned (labs 0.0.0, `OLP1|…`) lines are ignored.
+- **Audio**: UDP 47101 straight between the two phones: `[seq][AES-128-CTR(G.711 frame)][tag]`,
+  per-call keys from HMAC(space key, `olp-intercom-audio`) and the call's random id; the counter
+  block holds the call id, the direction and the sequence number, so the two directions never
+  share a keystream; the 8-byte tag (HMAC-SHA256) is checked before decrypting; old or repeated
+  sequence numbers are dropped.
+- Not protected: who is on the network can see that phones talk (and how much), and a phone
+  restarted with no internet can't check messages' age until it's back (the replay list still
+  works).
 
 ## Console
 

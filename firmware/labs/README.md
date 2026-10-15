@@ -1,7 +1,17 @@
 # Open Lounge Phone labs firmware (0.0.0)
 
-The phone firmware plus six experiments, built as its own project so `firmware/` (the phone,
+The phone firmware plus its experiments, built as its own project so `firmware/` (the phone,
 0.9.x) stays as it is. It compiles the same phone sources (`../main`) and adds `main/labs*.c`.
+
+**Moved into the phone firmware (0.9.4):** the **house intercom** (`intercom.c`, its sockets and
+audio `lan.c`, now with every control line signed and the audio encrypted with the space's key,
+`lan_crypto.c`), the **chime** (now a notice through the server: MENU 4 on a phone given a chime
+in the app) and the **daily check-in** (its time is set in the app, Manage phone → Home features,
+and the server watches it). Labs reuses them: its `intercom`, `all`, `doorbell` and `chime` keys
+go through the phone's intercom, so they need it turned on for the phone in the app (and the
+phone paired: the key comes from the server); the labs settings' `checkin.by` is no longer used,
+and labs keeps the reminders. See [../README.md](../README.md) "House intercom" and
+[docs/phone-ux.md](../../docs/phone-ux.md).
 
 ```sh
 firmware/labs/labs.sh build            # into firmware/labs/build
@@ -19,17 +29,17 @@ phone has a **mode** that decides its idle screen.
 
 | Idea | How | Needs |
 |---|---|---|
-| House intercom | `intercom` key: lift, press, the other room rings; `all` rings every room, first to lift answers. Talk in G.711 straight phone to phone | The same Wi-Fi. No server, no internet |
+| House intercom keys | `intercom` key: lift, press, the other room rings; `all` rings every room, first to lift answers (the phone's own intercom, 0.9.4) | The same Wi-Fi, the intercom on in the app |
 | Doorbell / front desk | `doorbell` key (or mode `doorbell`: any key rings). The house phones ring with the door's name; whoever lifts talks to whoever lifts the door phone's handset | Same Wi-Fi |
-| Dinner's ready | `chime` key: every phone beeps and shows the words | Same Wi-Fi |
-| Daily check-in | mode `checkin`: key 1 (or a `checkin` key) is I'm OK. Not pressed by the time set: the server puts an alert in every guardian's voicemail inbox ("Grandma didn't check in by 10:00."), their own phones show it missed. Reminders (08:30 PILLS) show from their time until a key is pressed | The phone's server (l1, the hub or your own: `checkin.missed`) |
+| Dinner's ready (LAN) | `chime` key: every phone on the intercom beeps and shows the words (the phone's own chime, MENU 4, is a notice through the server) | The intercom on |
+| Reminders | 08:30 PILLS show from their time until a key is pressed; a `checkin` key is I'm OK for the phone's daily check-in (set in the app) | Nothing |
 | Home panel | `ha` key: calls a Home Assistant service (`scene.turn_on` + `scene.night`); mode `home` shows a status entity ("GARAGE: OPEN", every minute) | Home Assistant + a long-lived token |
 | Dial-a-story | `story` key: plays an 8 kHz 16-bit mono WAV from a URL in the handset (press, then lift: it waits 15 s). 1 again, 2 next, BACK stop | A web server with the files (`ffmpeg -i in.mp3 -ar 8000 -ac 1 -sample_fmt s16 out.wav`) |
 | Macro pad | mode `macro`: the phone is a USB keyboard; `macro` keys send `ctrl+shift+m`, `f13`, `cmd+space`, `mute`, `play`, `volup` | A computer on the USB-C port. In this mode TinyUSB has the port: no USB console, and flashing may need BOOT held |
 
 ## Settings
 
-MENU → 4 LABS shows the phone's address (`OLP-KITCHEN.LOCAL`) and a PIN. Open
+MENU → 4 LABS (or MENU → 3 → 2, when 4 is the phone's house intercom or chime) shows the phone's address (`OLP-KITCHEN.LOCAL`) and a PIN. Open
 `http://olp-kitchen.local` on any device on the same Wi-Fi, enter the PIN (so only someone at the
 phone can change it; 5 wrong tries lock it for a minute) and edit the room name, mode, keys, Home
 Assistant, check-in and doorbell. The Home Assistant token is write-only: the page never shows it
@@ -49,18 +59,15 @@ again. Settings are the JSON in `main/labs_cfg.h`, for example:
 
 ## The intercom on the wire
 
-UDP broadcast on port 47100, one line per message, `OLP1|TYPE|…`: `HELLO|room` every 20 s,
-`RING|id|to|from|call|door` (`to` = a room or `*`), `ANSWER|id|from`, `BUSY|id|from`,
-`BYE|id|from`, `CHIME|from|text`, and `TAKEN|id|room|winner`: when two rooms lift for an
-all-rooms ring at the same instant, the caller keeps the first answer it heard and tells the
-other room, which shows `ANSWERED ELSEWHERE` and goes back to idle. Audio: UDP 47101 straight to the other phone, a 4-byte sequence
-number and 160 bytes of G.711 µ-law (20 ms). It is meant for a home network: anyone on the Wi-Fi
-can ring a room, and the audio isn't encrypted (calls through the server are).
+The phone firmware's ([../README.md](../README.md) "House intercom"): UDP broadcast on port 47100,
+`OLP1|TYPE|…` lines (`HELLO`, `RING`, `ANSWER`, `BUSY`, `BYE`, `CHIME`, `TAKEN`) each sealed as
+`OLP2|time|nonce|line|HMAC`, and encrypted G.711 on UDP 47101. Labs 0.0.0 builds before it sent
+the lines unsigned and the audio in the clear; phones now ignore those.
 
 ## Tests
 
-- Host tests (`make -C firmware/test/host`): settings, the intercom state machine, the check-in
-  schedule, the macro pad's key combos.
+- Host tests (`make -C firmware/test/host`): settings, the reminders, the macro pad's key combos
+  (the intercom's are the phone firmware's now).
 - The labs firmware in QEMU, end to end (opt-in, about 10 minutes, nothing leaves the machine):
 
   ```sh
@@ -68,31 +75,21 @@ can ring a room, and the audio isn't encrypted (calls through the server are).
   ```
 
   It builds the QEMU image (`OLP_QEMU_LABS=1 firmware/tools/qemu.sh build`; `OLP_FW_NO_BUILD=1`
-  reuses it), then runs three parts (`OLP_LABS=intercom,den,checkin` picks some): **intercom**,
-  three phones on one Ethernet segment (each QEMU sends its frames to a small UDP hub in the
-  test; one phone has QEMU's user network and hands out the addresses); **den**, one phone with a
-  fake Home Assistant and a web server with a story on this machine; **checkin**, a phone paired
-  to a self-hosted server started by the test. The console stands in for the keys and the hook,
-  and QEMU's test audio device for the codec. Logs: `firmware/build-qemu-labs/e2e/`.
+  reuses it), then runs **den**: one phone with a fake Home Assistant and a web server with a
+  story on this machine. The console stands in for the keys and the hook, and QEMU's test audio
+  device for the codec. Logs: `firmware/build-qemu-labs/e2e/`. The intercom and the check-in are
+  tested with the phone firmware: `OLP_HOME_QEMU=1 npx vitest run tests/e2e/live/home.test.ts`.
 
 ## Status
 
 Proven in QEMU (the tests above, real firmware):
 
-- **Intercom**: rooms find each other (and a renamed room replaces its old name); room to room
-  ring, lift to answer, G.711 audio both ways (each side hears the other's test tone), busy,
-  hang up on either side; every room rings and the first to lift answers (also when two lift at
-the same instant: the other one is told it was answered elsewhere); a door phone (any key
-  rings the house with the handset down); a doorbell key for one room, ended with BACK; a chime
-  shows the words and beeps on the other phones.
 - **Settings page**: the PIN (wrong PIN refused, five wrong tries lock it for a minute), saving,
   and the Home Assistant token never comes back (a blank one keeps it).
 - **Home panel**: the status entity is read with the token every minute and shown; an `ha` key
   calls the service.
 - **Dial-a-story**: downloads the WAV and plays it to the earpiece to the end; press then lift;
   1 again, 2 next, BACK stops.
-- **Daily check-in**: missing the time sends the alert once it can (it waits while offline) and
-  the guardian finds it in their voicemail; key 1 is I'm OK.
 - **Games**: MENU ten times; Snake moves, turns and ends at the wall; Memory's rounds grow and a
   wrong digit ends it with the score.
 

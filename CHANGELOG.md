@@ -12,7 +12,42 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 ## 0.7.0 (unreleased)
 
-On `main`, not tagged yet.
+On `main`, not tagged yet. Phones: firmware 0.9.4 ([firmware/CHANGELOG.md](firmware/CHANGELOG.md))
+and the browser phone show what's new here; [docs/phone-ux.md](docs/phone-ux.md) has every screen.
+
+- **Mute everywhere**: MENU 3 in a call on the phones (the browser phone disables the mic track;
+  the hardware phone switches the codec's mic off), `MUTED` on the screen and a slow double blink
+  on the light; the call screen keeps one digit per action (1 hold, 2 transfer, 3 mute, 9 volume;
+  rooms move to 3). The app: **M** toggles Mute.
+- **Mic check and audio choices in the app**: a live microphone level and a plain warning when it
+  sends nothing for four seconds while you're not muted; pick the microphone and speaker (where
+  the browser can) and the other person's volume, remembered on the device.
+- **Reconnecting, not silence**: when a call's connection drops, apps and phones say
+  `Reconnecting…` / `RECONNECTING` while the side that offered restarts ICE; after 20 s the call
+  ends for both with "The connection was lost" (`call.hangup` `lost`, additive). A **poor
+  connection** note from packet loss and jitter (apps and the browser phone).
+- **Call waiting**: a second call to someone in a call rings softly where they're talking
+  (`call.ringing` `waiting`): answer it (your call goes on hold) or let it go to voicemail at the
+  usual time. On by default; a person's setting (Account) and a household phone's (Manage phone).
+  Phones get it only if they say so (`hello.features`). The callee's server decides, so it works
+  across servers with no federation change; servers without it stay busy.
+- **Missed calls**: calls that rang and nobody answered, with no message, are kept (migration
+  0029) per person (all their phones and apps, every space) or per household phone; a message
+  left afterwards moves one to voicemail. Phones list them (MENU 5) with call back (`call.back`,
+  as a key would dial: allow-lists and quiet hours apply), redial (MENU 8) and clear; the app has
+  Missed calls on Home (call back, clear all), `GET /api/missed`, `POST /api/missed/clear`,
+  `missed.changed`. `config.missed` items say their kind; the export has `missedCalls`.
+- **Phones' home features** (migration 0030, all off by default, Manage phone → Home features):
+  the **daily check-in** (the server watches the time and tells the guardians, even about an
+  unplugged phone), the **chime** (`notice.chime`: a phone posts its words as a notice) and the
+  **house intercom** key (`config.intercom`: the hardware phones' LAN intercom, signed and
+  encrypted with the space's key).
+- **Phones**: BACK silences a ringing call here; a notice's recording loops while the handset is
+  up; a late hang-up no longer gets a second ended (it could end the sender's next call).
+- Protocol (additive): `call.hangup.lost`, `call.ringing.waiting`, `hello.features`,
+  `config.missed[].{kind,at,count,id}`, `call.back`, `missed.changed`, `config.checkin`,
+  `config.chime`, `config.intercom`, `notice.chime`; device features `missed-calls`,
+  `call-waiting`, `checkin`, `chime`, `intercom`.
 
 ## 0.6.0 (2026-10-14, `server-v0.6.0`)
 

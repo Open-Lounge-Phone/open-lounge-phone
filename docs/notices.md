@@ -13,6 +13,10 @@ are never sent to other households or servers.
 Members can't post. In the companion app a guardian or admin finds **Notice to the phones** on the
 Home screen.
 
+A **phone** posts one when its guardians gave it a **chime** (Manage phone → Home features →
+Chime: the words, e.g. "Dinner's ready"): MENU 4 on the phone sends it (`notice.chime`) to every
+phone of the space for 15 minutes, at most once a minute. The audit trail names the phone.
+
 ## What a notice is
 
 | | |

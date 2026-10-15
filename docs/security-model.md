@@ -168,6 +168,18 @@ passkey's public key.
   rate limits.
 - **Lounge:** signing in needs a physical key press (proximity proof). Nothing stays on the phone,
   and the server keeps only who, where and when.
+- **House intercom** (built, off by default): phones of one space on the same Wi-Fi call each
+  other without the server. A guardian turns it on per phone; the server then gives that phone
+  its room name and the home's intercom key (random, one per space, in `config`, kept in the
+  phone's encrypted storage so it works while the internet is down; turning it off makes the
+  phone forget it). Every control message is sealed with an HMAC of that key, carries a time
+  and a random nonce, and is refused outside a 60-second window or when repeated, so a
+  neighbour's phone or a recorded message can't ring or answer; each call's audio is encrypted
+  (AES-128-CTR with a per-call key and an 8-byte tag per packet). Limits: room names, who calls
+  whom and when are visible on the local network; until the phone knows the time (it learns it
+  from the server) only the list of recent nonces stops replays; kids' allow-lists and quiet
+  hours don't apply (it is the home's own network, like an intercom on the wall), so guardians
+  decide which phones join.
 - **Data minimisation:** retention settings with automatic expiry, per space and per person (see
   below). Transcription can be switched off per space; on Cloudflare it runs on Workers AI.
 - **Hub operators can see metadata** (who called whom, and when), never call audio. For full

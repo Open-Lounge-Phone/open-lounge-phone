@@ -1,5 +1,51 @@
 # Firmware changelog
 
+## 0.9.4 — 2026-10-15: mute, call waiting, missed calls, redial, the house intercom
+
+Needs a server 0.7.0 for missed calls, call waiting, the check-in, the chime and the intercom (an
+older server leaves them out; the phone behaves as 0.9.3 there).
+
+- **Mute**: MENU 3 in a call (and in a room, which moves from 1 to 3): the codec's mic is switched
+  off and silence is sent; the screen says `MUTED 01:23` (`REC MUTED` when recorded) and the LED
+  blinks slowly in pairs. The call screen keeps one digit per action: 1 hold / resume, 2
+  transfer, 3 mute / unmute, 9 volume. The second line shows `MENU 3: MUTE` (`MENU 3: UNMUTE`) in
+  turn with the name.
+- **Call waiting**: a second call while you're in one shows `WAITING: MOM` / `1 TAKE 2 IGNORE`
+  with a soft beep in the earpiece. One call has audio at a time on this phone, so 1 ends the
+  call you're in and answers the new one (the browser phone and the app hold the first instead);
+  2 lets it go to voicemail at the usual time; hanging up makes it ring. The phone says it shows
+  call waiting (`hello.features`); without that a second call is busy, as before.
+- **Missed calls** (MENU 5): calls that rang and nobody answered, with no message, and public
+  lines' call backs, one at a time (`MISSED 1 OF 3` / who / `2 CALLS 14:05`): 1 calls back
+  (`call.back`; a kids' phone only people on its allow-list, within its quiet hours), 2 next,
+  3 clears them everywhere. The ready screen points one at MENU 5. MENU 2's Clear now clears
+  messages only.
+- **Redial** (MENU 8): the last key, extension or call back again, kept across restarts. Not on
+  Lounge phones (5 and 8 stay chat and log out there).
+- **Reconnecting**: when the call's connection drops after it was up, the phone waits: after 2 s
+  `RECONNECTING`, and after 15 s it hangs up with `lost` (`CONNECTION LOST` on both sides). The
+  other side hanging up (its DTLS close comes ~0.3 s before the server's ended) is no longer shown
+  as `CALL FAILED` with a busy tone, and a repeated ended for a finished call is ignored.
+  `esp_peer` 1.5.6 can't restart ICE: an offer mid-call (another side's restart) is ignored.
+- **Remote candidates**: Chrome sends ~16 (IPv6, TCP, many relays) and `esp_peer` keeps 8: the
+  phone pools them for 400 ms after the other side's SDP and gives it the best (IPv4 UDP only;
+  host, then server-reflexive, then relay; mDNS names last).
+- **BACK while ringing** silences the ringer on this phone (`BACK: SILENCE` in turn on the
+  second line); lifting still answers; the call still goes to voicemail at the usual time.
+- **Notices**: a recording plays over and over while the handset is up, until it goes down or a
+  key clears the notice.
+- **The phone check** (MENU 7) shows the handset mic's live level and peak with the handset up
+  (the mic is on only then), for tuning `audio gain` (README, BRINGUP).
+- **Moved in from labs**: the **house intercom** (MENU 4: the rooms heard, 0 every room; off
+  unless turned on in the app; control lines HMAC-signed and audio encrypted with the space's
+  key, see README "House intercom"), the **chime** (MENU 4, or 9 on the intercom: posts the
+  phone's words as a notice to every phone of the space), and the **daily check-in**
+  (`CHECK IN BY 10:00` / `PRESS 1: I'M OK`; the server watches the time and tells the guardians).
+- Text screens hold six lines (the root menu uses up to five rows: `1 VOLUME 2 VOICEMAIL` /
+  `3 NETWORK 4 INTERCOM` / `5 MISSED 6 EXT` / `7 CHECK 8 REDIAL` / `0 ABOUT 9 UPDATE`).
+- From the board test of 0.9.3 (in 49762b4): the mic reads one slot (calls and voicemail no longer
+  mush), `audio gain`, no Wi-Fi power save, `JOINING WI-FI` and `WI-FI DROPPED`.
+
 ## 0.9.3 — 2026-10-14: add-on callers
 
 - **Add-ons** (services someone linked to their account, such as an AI companion): when one calls,

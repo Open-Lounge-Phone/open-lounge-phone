@@ -240,6 +240,33 @@ fetches their greeting with a signed `POST /fed/v1/greeting` and delivers the me
 `POST /fed/v1/voicemail`; the other server checks the connection (and, for a phone, its
 allow-list) itself.
 
+**Missed calls.** A call that rang a person (any of their apps and phones) or a household phone
+and wasn't answered, with no message, is a **missed call** (`missed_calls`, migration 0029): the
+hub records it when the room ends unanswered (`timeout`, or the caller gave up while it rang;
+not declined, not for a branch of a call another household here owns, public lines, ring groups
+or Lounge phones), and `depositVoicemail` marks it seen if the caller then leaves a message (it's
+voicemail now). A person's are account-wide (their phones' `config.missed`, the app's
+`GET /api/missed`), a household phone's its own. Phones list them only if their `hello.features`
+say they can (`missed-calls`); `call.back {id}` dials one back with the phone's own rights (a
+household phone: its allow-list and quiet hours via `dialContact`; a person's own phone: as its
+owner, like a Lounge phone in use); `missed.clear` marks them seen (seen rows stay as proof for
+call backs until the space's history setting removes them). Apps hear `missed.changed`.
+
+**Call waiting.** When the callee is busy, `waitingRing` in the hub looks for the session in
+their one answered, unheld 1:1 call (an app, or a phone listing `call-waiting`) and their setting
+(`accounts.call_waiting`, `devices.call_waiting`, on by default); if there is one, the call rings
+there softly (`call.ringing` `waiting`) instead of `busy`. `call.answer` on it holds the current
+call first (`hold` with the waiting room excluded from the control check). It covers calls to a
+person (app, phone, another household or server: the callee's hub decides, so federation needs
+nothing new) and to a phone; ring groups, lines and extensions stay busy.
+
+**Reconnecting.** `CallMedia` (packages/client) watches its peer connection (`callHealth.ts`):
+when it drops, the party that offered restarts ICE (`createOffer({iceRestart: true})`, relayed
+as any `rtc.sdp`) every few seconds; after 20 s the client hangs up with `lost`, and the hub ends
+the call for everyone as `error` with the note "The connection was lost". The firmware can't
+restart ICE (`esp_peer` 1.5.6): it waits 15 s for the connection to come back, then does the
+same. `getStats` (loss over 10 s, jitter) drives the "poor connection" note.
+
 **Greetings.** Three kinds per person and per kids' phone: the spoken default ("<Name> can't take
 your call. Leave a message after the tone."), a recorded **name** (≤ 3 s) inside that sentence,
 or a **custom** greeting (≤ 30 s), stored as blobs. The companion records, plays back and resets
