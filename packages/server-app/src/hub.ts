@@ -7,6 +7,7 @@ import {
   CALLBACK_KEEP_MS,
   CALLBACK_RING_MS,
   CLOSED_NOTE,
+  CONNECTION_LOST_NOTE,
   type Contact,
   controlCheck,
   effectiveHours,
@@ -1624,6 +1625,11 @@ export class HouseholdHub {
       // A ring-group member declining stops only their ringing.
       if (party === "callee" && room.hunt && !room.calleePeer && room.state.phase === "ringing") {
         return this.groupDecline(room, peer);
+      }
+      // The audio connection dropped and couldn't be restored: everyone hears why it ended.
+      if (msg.lost && (room.state.phase === "connecting" || room.state.phase === "active")) {
+        room.endNote = CONNECTION_LOST_NOTE;
+        return this.apply(room, { type: "fail" });
       }
       const by = party === "caller" ? room.state.caller : room.state.callee;
       await this.apply(room, { type: "hangup", by });

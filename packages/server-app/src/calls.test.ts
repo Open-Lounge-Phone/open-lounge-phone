@@ -1,4 +1,4 @@
-import type { Weekday } from "@openloungephone/core";
+import { CONNECTION_LOST_NOTE, type Weekday } from "@openloungephone/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STREAM_IDLE_MS } from "./fedStream.ts";
 import { expectStatus, type FakeConn, Network, type TestServer } from "./testkit.ts";
@@ -91,6 +91,18 @@ describe("calls across servers", () => {
     expect(await b.store.callLog(bob.account.id, "jesse@a.test")).toMatchObject([
       { direction: "in", peerLabel: "Jesse", answered: true, durationMs: 90_000 },
     ]);
+  });
+
+  it("a lost connection ends the call for both, saying why, across servers", async () => {
+    const jApp = await a.connectApp(jesse.token);
+    const bApp = await b.connectApp(bob.token);
+    jApp.write({ t: "call.connection", connectionId: ids.aSide });
+    const ringing = await bApp.next("call.ringing");
+    await talk(jApp, bApp, ringing.callId);
+    bApp.write({ t: "call.hangup", callId: ringing.callId, lost: true });
+    const lost = { reason: "error", note: CONNECTION_LOST_NOTE };
+    expect(await jApp.nextState("ended")).toMatchObject(lost);
+    expect(await bApp.nextState("ended")).toMatchObject(lost);
   });
 
   it("closes the idle stream after a minute, and reopens it for the next call", async () => {

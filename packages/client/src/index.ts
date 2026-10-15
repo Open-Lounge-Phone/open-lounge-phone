@@ -1,4 +1,5 @@
 export * from "./audioPrefs.ts";
+export * from "./callHealth.ts";
 export * from "./callRecorder.ts";
 export * from "./media.ts";
 export * from "./micCheck.ts";

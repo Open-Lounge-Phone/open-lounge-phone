@@ -255,6 +255,7 @@ Leave (or decline) a call.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
+| `lost` | `true` |  | The call's audio connection dropped and couldn't be restored (reconnecting gave up): the call ends for everyone as `error` with the note `The connection was lost`, so the other side says so too. |
 
 ### `call.hold`
 
@@ -846,6 +847,7 @@ Leave (or decline) a call.
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `callId` | string (len ≤64) | yes |  |
+| `lost` | `true` |  | The call's audio connection dropped and couldn't be restored (reconnecting gave up): the call ends for everyone as `error` with the note `The connection was lost`, so the other side says so too. |
 
 ### `call.hold`
 

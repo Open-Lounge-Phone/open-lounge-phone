@@ -505,6 +505,10 @@
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "lost": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": ["t", "callId"]
@@ -2672,6 +2676,10 @@
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "lost": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": ["t", "callId"]

@@ -75,6 +75,12 @@ export function controlCheck(calls: readonly PartyCall[], action: ControlAction)
   }
 }
 
+/**
+ * The note on `call.state ended` (reason `error`) when a call's audio connection dropped and
+ * couldn't be restored (`call.hangup` with `lost`): apps say it, phones show `CONNECTION LOST`.
+ */
+export const CONNECTION_LOST_NOTE = "The connection was lost";
+
 /** What the call and room prompts say (the browser phone speaks them; hardware plays the ids). */
 export const CALL_PROMPT_TEXT: Record<CallPrompt, string> = {
   "hold.tone": "",

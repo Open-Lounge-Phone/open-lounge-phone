@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CONNECTION_LOST_NOTE } from "./callControl.ts";
 import {
   callActionDigit,
   callActions,
@@ -521,5 +522,38 @@ describe("an add-on calling", () => {
     ]);
     expect(state).toEqual({ kind: "incoming", callId: "c1", from: "seat", addon: true });
     expect(run([ringing("c2")]).state).toEqual({ kind: "incoming", callId: "c2", from: "Mom" });
+  });
+});
+
+describe("a call whose connection is lost", () => {
+  const active: DeviceInput = {
+    type: "server",
+    msg: { t: "call.state", callId: "c1", state: "active" },
+  };
+  const inCall = [hook("up"), button(0), callState("c1", "ringing"), active];
+
+  it("ends it, saying so, when reconnecting gave up", () => {
+    const { state } = run(inCall);
+    const r = deviceStep(state, { type: "lost" });
+    expect(r.send).toEqual([{ t: "call.hangup", callId: "c1", lost: true }]);
+    expect(r.state).toEqual({ kind: "offhook", lastEnd: "error", lost: true });
+    expect(soundFor(r.state)).toBe("busy");
+    // Nothing to lose outside a call.
+    expect(deviceStep({ kind: "offhook" }, { type: "lost" }).send).toEqual([]);
+  });
+
+  it("the other side gave up first: their note says it was lost", () => {
+    const { state } = run(inCall);
+    const r = deviceStep(state, {
+      type: "server",
+      msg: {
+        t: "call.state",
+        callId: "c1",
+        state: "ended",
+        reason: "error",
+        note: CONNECTION_LOST_NOTE,
+      },
+    });
+    expect(r.state).toEqual({ kind: "offhook", lastEnd: "error", lost: true });
   });
 });

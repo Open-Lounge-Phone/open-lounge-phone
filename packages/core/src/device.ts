@@ -5,6 +5,7 @@ import type {
   ServerToDevice,
   VoicemailOffer,
 } from "@openloungephone/protocol";
+import { CONNECTION_LOST_NOTE } from "./callControl.ts";
 import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
 
 /**
@@ -20,8 +21,16 @@ export type DeviceState =
    * Handset up, waiting for a key. `held`: a call this phone put on hold (MENU → Add caller).
    * `callback`: you just asked a public line to call you back (your place is kept).
    * `signIn`: a Lounge phone with nobody signed in tried a public line (`SIGN IN TO CALL`).
+   * `lost`: the last call's audio connection dropped and couldn't be restored (`CONNECTION LOST`).
    */
-  | { kind: "offhook"; lastEnd?: EndReason; held?: string; callback?: true; signIn?: true }
+  | {
+      kind: "offhook";
+      lastEnd?: EndReason;
+      held?: string;
+      callback?: true;
+      signIn?: true;
+      lost?: true;
+    }
   /**
    * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
    * line, whether key 1 leaves a voicemail instead, and whether key 2 asks for a call back).
@@ -72,6 +81,8 @@ export type DeviceInput =
   | { type: "action"; action: CallAction }
   /** MENU → Dial extension (team/org spaces): the handset is up and the digits are in. */
   | { type: "extension"; number: string }
+  /** The call's audio connection dropped and reconnecting gave up: end it, saying why. */
+  | { type: "lost" }
   | {
       type: "server";
       msg: Extract<
@@ -190,6 +201,13 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
   }
 
   if (input.type === "action") return action(s, input.action);
+  if (input.type === "lost") {
+    if (s.kind !== "incall") return stay(s);
+    return stay(
+      { kind: "offhook", lastEnd: "error", lost: true, ...(s.held ? { held: s.held } : {}) },
+      { t: "call.hangup", callId: s.callId, lost: true },
+    );
+  }
   if (input.type === "extension") {
     if (s.kind !== "offhook") return stay(s);
     return stay(
@@ -282,7 +300,8 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
           );
         }
         const held = s.held ? { held: s.held } : {};
-        return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held });
+        const lost = msg.note === CONNECTION_LOST_NOTE ? { lost: true as const } : {};
+        return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held, ...lost });
       }
       if (msg.state === "active") {
         const { heldByThem: _h, ...rest } = s;

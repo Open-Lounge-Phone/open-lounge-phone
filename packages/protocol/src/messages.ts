@@ -23,7 +23,17 @@ export const CallAnswer = z
   .describe("Accept an incoming call.");
 
 export const CallHangup = z
-  .object({ t: z.literal("call.hangup"), ...Ref, callId: Id })
+  .object({
+    t: z.literal("call.hangup"),
+    ...Ref,
+    callId: Id,
+    lost: z
+      .literal(true)
+      .optional()
+      .describe(
+        "The call's audio connection dropped and couldn't be restored (reconnecting gave up): the call ends for everyone as `error` with the note `The connection was lost`, so the other side says so too.",
+      ),
+  })
   .describe("Leave (or decline) a call.");
 
 export const RtcSdp = z
