@@ -300,50 +300,98 @@ for the server's operators ([federation.md](federation.md)).
 
 ## Add-ons
 
-An add-on ([add-ons.md](add-ons.md)) is a service someone links to their own account, such as an
-AI companion. It hears what's said to it, so the rules are strict and the defaults closed.
+An add-on ([add-ons.md](add-ons.md)) is any service that serves live voice over a call: a voice
+assistant, a radio station, a notes taker, a doorbell. The server can't know which, so **every
+add-on is treated as untrusted code that holds a valid add-on key**. The rules below are what
+stands between it and everyone else; each has a test that fails when its guard is removed
+(`packages/server-app/src/addonThreats.test.ts`, with `HostileAddon`, an add-on that sends
+whatever it likes).
 
-1. **Off unless the server's operator turns it on** (`ADDONS=on`; Cloudflare `--addons`). Off
-   means no linking, linked add-ons can't connect (they're refused before the challenge) or be
-   called, and the server doesn't advertise the `addons` federation feature, so other servers
-   never offer it add-on calls.
-2. **Its own key.** It links like a phone pairs: it shows a 6-digit code, its owner enters it in
-   the companion, and its Ed25519 public key is stored. Every connection answers a signed
-   challenge; no person's session token is ever given to it. A phone's code can't link an add-on
-   and an add-on's code can't pair as a phone. Removing it deletes the link at once, closes its
-   socket and tells it to forget the link (also when it next connects, after proving its key).
-   Its owner leaving the space it was linked in deletes the link too: nobody can call it from
-   then on, and it's told the next time it calls out or connects.
-3. **Default deny, both ways.** Its own address (`handle+name@host`) is its owner's alone: only
-   they call it there, and it calls only them without naming a share. Nothing else reaches it:
-   no knocks (an address with `+` is never a person's), no directory, no public line, no ring
-   group. Every refusal answers `unavailable`, the same as for an address that doesn't exist.
-   Calls with an add-on can't be merged or transferred, and keys pressed in a call reach only an
-   add-on.
-4. **Shares: the add-on defines them, the server enforces who.** An add-on says which parts of
-   itself can be shared (`addon.shares`); it can't open itself up as a whole. Its owner gives a
-   share to specific people: their connections (here or on servers that list `addon-shares`) or
-   people in their spaces. Each share has its own address, `handle+name+share@host`, and the
-   **add-on's server** decides every call into it: a grant for that share held by the caller's
-   stable account id, the share still offered, the caller still the owner's active connection
-   (or, on the same server, in one of the owner's spaces), not blocked, add-ons on, the owner not
-   suspended. A call out within a share goes only to its owner or a holder. Revoking a grant, or
-   the add-on dropping the share, ends that person's calls into it at once. Another server only
-   learns which shares its people hold (`/fed/v1/addon-shares`, for listing and keys); it never
-   decides access, and a list from anyone but the owner's own server, about an active
-   connection, is ignored. A share holder gets voice access through the share, nothing more: the
-   add-on is told the share and grant on every call (`call.ringing.share`), and keeping the
-   conversation inside that scope is **the add-on's job**, best enforced by its own permissions
-   (the server can't see inside it). Nobody but the owner and the holders sees a share.
-5. **Kids' phones never.** An add-on's (or a share's) address can't be put on a kids' phone's key, a kids' phone
-   that dials one anyway is refused, a call through a kids' phone (another server's `viaPhone`)
-   never reaches one, and an add-on calls people only (never a phone of a space).
-6. **It knows who it's talking to, and people know it's an add-on.** Every call tells it the
-   caller's verified address and name; calls from it carry its address and an add-on label in
-   the apps and on phones (`SEAT · ADD-ON`, or the share: `SEAT · BOOK CLUB`). There is no
-   spoken warning: people link add-ons and accept shares knowingly.
-7. **Accountable.** Its call minutes count against its owner's fair-use allowance; linking,
-   granting and revoking shares, share requests and their results, and removing it are in the
-   space's audit trail (names, ids and counts, never content, and never the add-on's own
-   words). What an add-on does with what it hears is up to its owner and its
-   maker, outside this server.
+**Off unless the operator turns it on** (`ADDONS=on`; Cloudflare `--addons`). Off means no
+linking, linked add-ons can't connect (refused before the challenge) or be called, and the server
+doesn't advertise the `addons`, `addon-shares` and `addon-leave` features, so other servers never
+offer it add-on calls.
+
+**Its own key.** It links like a phone pairs (a 6-digit code its owner enters in the app; its
+Ed25519 public key is stored) and answers a signed challenge on every connection. No person's
+session token is ever given to it. A phone's code can't link an add-on and an add-on's code
+can't pair as a phone. A second connection with the same key replaces the first; a connection
+that names another add-on's id can't answer its challenge.
+
+### The threats and the answers
+
+1. **It sends messages it shouldn't.** Once signed in, an add-on may send only `ping`,
+   `addon.about`, `addon.shares`, `addon.share.created`, `addon.share.refused`,
+   `call.address`, `call.answer`, `call.hangup`, `rtc.sdp` and `rtc.ice` (without `peer`). That
+   list is an explicit allow-list (`ADDON_MESSAGES`): every other message of the device protocol
+   (hooks, keys, notices and chimes, rooms, extensions, hold, merge, transfer, greetings,
+   voicemail, check-ins, Lounge, status), and every message type added later, is answered with
+   an `error` and changes nothing, not even during a live call. A message of a type the server
+   doesn't know, malformed JSON or a frame over 16 KiB gets an `error` and nothing else. Call
+   messages for a call it isn't part of do nothing; only the callee answers a call. More than
+   600 messages a minute closes its socket (and ends its calls). Before signing in it can only
+   finish the handshake.
+2. **It reaches people it shouldn't.** Its own address (`handle+name@host`) is its owner's alone:
+   only they call it there, and without naming a share it calls only them. Anyone else needs a
+   **share** the add-on offers and its owner gave them (below); the add-on's server checks the
+   grant on every call, both ways, by the caller's or callee's server and stable account id. It
+   never reaches another add-on, a public line, an extension, a ring group, a room, a phone of a
+   space (so never a kids' phone), a Lounge guest, or anyone by a guessed address, share id,
+   grant id or request id: nothing can point at an add-on but an address (an extension, group
+   member or key can't name its id, and it isn't a phone). Every refusal answers `unavailable`,
+   the same as for an address that doesn't exist. Removing it, its owner leaving the space it
+   was linked in, the space or the account going, or its owner being suspended cuts it off at
+   once: its socket closes and its live calls end; removed, it's told to forget its link (now,
+   or when it next proves its key); suspended, it can't connect until the suspension is lifted.
+   Revoking a grant, the holder giving a share back, or the add-on dropping a share ends the
+   calls within it at once.
+3. **It floods.** It places one call at a time, at most 10 an hour and 6 a day to any one person
+   (its owner included), so it can't ring all its holders like a broadcast; past a limit the
+   call ends `denied` with a plain note, and its owner's audit trail says so once per limit (no
+   content). One person may call one add-on 30 times an hour. It may send its share list 60
+   times an hour, and connect 120 times an hour (counted only after it proves its key, so nobody
+   else can use up its allowance); share requests are answered only while open and only by the
+   add-on that was asked.
+4. **It holds lines open.** It takes one call at a time unless it says otherwise
+   (`addon.about.lines`), and never more than 10 at once (a small radio's listeners); more
+   callers hear busy. A call with an add-on ends after 4 hours at most, so a forgotten or
+   endless stream stops counting against its owner. Every minute of every call counts against
+   its owner's fair-use allowance, whoever placed it. TURN credentials exist only once a call is
+   answered, and for a call with an add-on they expire with its longest length; on Cloudflare
+   they are revoked when the call ends. (coturn's time-limited credentials can't be revoked
+   early; self-hosters who want that run their TURN with a shorter lifetime.)
+5. **It passes for someone else.** Everything shown about it is marked as an add-on: apps show
+   the "add-on" badge, phones `RADIO · ADD-ON` (`RADIO - ADD-ON` in the hardware phone's font),
+   and a call within a share keeps `ADD-ON CALLING` under the share's label; in a call and while
+   waiting a long name is shortened, never shown alone. Words it chooses (share labels, its
+   summary, a refusal, what it says it runs) are plain text: control, format (right-to-left
+   overrides), private-use and line-break characters are refused, spaces collapsed. Its name is
+   chosen by its owner. Before a share is given, the app says that the add-on learns the
+   holder's name and address when they call, and hears what they say.
+6. **It calls a holder who doesn't want it.** A holder can **stop its calls** (they can still
+   call it) and **give a share back**, without its owner. Their **own server** enforces
+   stopping its calls, so it holds even against a server in bad faith. Giving a share back
+   deletes the grant (on another server, through `POST /fed/v1/addon-shares/leave`, feature
+   `addon-leave`; a server without it is still refused the add-on's calls within that share by
+   the holder's server). The owner sees the holder gone, and it is audited.
+7. **Another server lies.** The add-on's server decides every call into a share by its own
+   grants; another server only learns which shares its people hold, from the owner's own server
+   about an active connection. Calls from another server's add-on to someone here ring only
+   within a share that server told us they hold, with the label it told us then, and never
+   after they stopped its calls. A server can speak only for its own accounts: a share given
+   back, a grant claimed, an add-on calling all name the signing server. Servers that don't
+   list `addon-shares` get no grants and no calls into shares.
+
+**What the add-on says it does** (`addon.about`) is enforced where the server can enforce it
+(whether it may be called, may call, offers shares, takes keys, how many calls at once) and shown
+as its own words where it can't (what it does with what it hears, whether it transcribes).
+
+**What the server can't see.** What an add-on does with what it hears, and whether it keeps a
+conversation within a share's scope, happen inside the add-on, outside this server. It is told
+the caller's verified address and name and the share and grant on every call; keeping to a
+share's scope is its job, best done by its own permissions. Its owner and its maker answer for
+the rest.
+
+**Accountable.** Linking, granting and revoking, a holder giving a share back, share requests and
+their results, limits reached and removing it are in the space's audit trail (names, ids and
+counts, never content, and never the add-on's own words).
