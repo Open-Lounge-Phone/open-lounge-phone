@@ -9,9 +9,9 @@
 #          never pull the pin HIGH at reset (a key or hook switch to GND, a transistor base, an
 #          LED): the required strap value is the default low (GPIO45 3.3 V flash, GPIO46 any).
 #          GPIO0 keeps its internal weak pull-up (SPI boot); BOOT pulls it low.
-# Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: IO43 (TXD0, ROM log).
+# Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: none (hw v0.901: IO45 = ETH_MISO).
 gpio:
-  0:  {net: BOOT, strap: true, note: "BOOT button to GND; internal weak pull-up = SPI boot (p13)"}
+  0:  {net: ETH_CS, strap: true, note: "W5500 chip select (10k pull-up = SPI boot) + BOOT button through 1k (0.30 V at reset)"}
   1:  {net: STATUS_LED, note: "front side, far left: LED at the band's front-left"}
   2:  {net: HOOK, rtc: true, note: "MX switch under the hook plunger: low = handset on the hook; RTC = deep-sleep wake"}
   3:  {net: KEY_1, strap: true, low_only: true, note: "JTAG-source strap, ignored unless EFUSE_STRAP_JTAG_SEL is burned (p15)"}
@@ -43,7 +43,7 @@ gpio:
   42: {net: KEY_8}
   43: {net: KEY_6, note: "TXD0: the ROM boot log drives it for a moment after reset; a key held then only loses the log (burn EFUSE_UART_PRINT_CONTROL to silence it)"}
   44: {net: KEY_7, note: "RXD0 (input at boot)"}
-  45: {net: null, note: "free (VDD_SPI strap: only low-only circuits may use it)"}
+  45: {net: ETH_MISO, low_only: true, note: "W5500 MISO: Hi-Z while ETH_CS is high (W5500 p10), 10k pull-down; VDD_SPI strap must read low"}
   46: {net: KEY_2, strap: true, low_only: true, note: "boot-mode strap (default low); a key can only pull it low"}
   47: {net: EPD_CS}
   48: {net: EPD_BUSY}

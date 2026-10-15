@@ -63,7 +63,7 @@ def main() -> int:
     keys["HOOK"] = {"gpio": by_net["HOOK"], "net": "HOOK", "switch": switch_of("HOOK"),
                     "active": "low = handset on the hook (internal pull-up)", "rtc": True}
     data = {
-        "board": "Open Lounge Phone main board", "rev": "A (M3)",
+        "board": "Open Lounge Phone main board", "rev": "v0.901 (rev A + RJ45/PoE)",
         "module": "ESP32-S3-WROOM-1U-N16R8 (16 MB flash, 8 MB octal PSRAM)",
         "sources": ["hardware/schematic/pin_table.yaml", "hardware/build/main/main.net"],
         "gpio": gpio,
@@ -87,9 +87,17 @@ def main() -> int:
             "usb": {"d_minus": by_net["USB_DN"], "d_plus": by_net["USB_DP"],
                     "use": "native USB: flashing + USB-Serial-JTAG console"},
             "buzzer": {"gpio": by_net["BUZZER"],
-                       "drive": "NPN (MMBT3904) switches the piezo from VBUS; ~4 kHz square wave"},
+                       "drive": "NPN (MMBT3904) switches the piezo from V5 (USB or PoE); ~4 kHz square wave"},
             "status_led": {"gpio": by_net["STATUS_LED"], "active": "high", "current_mA": 1.5},
-            "boot_button": {"gpio": by_net["BOOT"], "active": "low"},
+            "boot_button": {"gpio": by_net["ETH_CS"], "active": "low",
+                            "note": "through 1k: GPIO0 is also the W5500's chip select (10k pull-up); "
+                                    "not readable while the Ethernet driver owns it"},
+            "ethernet": {"chip": "W5500 (U4), SPI, polled (no INT, no RST GPIO; power-on RC + MR.RST)",
+                         "spi": {"sclk": by_net["EPD_CLK"], "mosi": by_net["EPD_DIN"],
+                                 "miso": by_net["ETH_MISO"], "cs": by_net["ETH_CS"],
+                                 "shared_with": "display (separate CS)", "max_hz": 20000000},
+                         "mac": "none on the chip: use esp_read_mac(ESP_MAC_ETH)",
+                         "power": "RJ45 J4 with 802.3af PoE (PS1); USB and PoE diode-OR'd"},
             "reset_button": "EN (SW1), RC 10k/1uF",
         },
         "reserved": [g for g, r in table["gpio"].items() if r.get("net") is None

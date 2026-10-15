@@ -60,6 +60,15 @@ J3_PIN1 = (DISP_X0 + 1.93, DISP_Y0 + DISP_H / 2 + 1.5 * 2.54)     # BUSY, outer 
 STANDOFFS = [(DISP_X0 + DISP_W - 2.8, DISP_Y0 + 2.8), (DISP_X0 + DISP_W - 2.8, DISP_Y0 + DISP_H - 2.8)]
 
 HOOK = (16.0, YF)                # 13th MX switch, band front-left
+# hw v0.901 wired network, in the strip between MENU and BACK at the right end (top side: the
+# RJ45 and the PoE module under a raised lid; bottom: the W5500 and the PoE parts)
+J4_AT = (148.7, 49.5)            # RJ45: midpoint of its locating holes; mouth 3.5 mm past the
+                                 # right edge (flush with the case wall), PoE pins toward the rear
+PS1_PIN1 = (154.4, 26.46)        # PoE module, top side: outputs (pins 1-4) on the rear row,
+                                 # inputs (5-8) toward the RJ45's PoE pins
+U4_AT = (121.0, 48.5)            # W5500 on the bottom, PHY pins (1-6) toward the RJ45
+U5_AT = (108.5, 57.5)            # its LDO, south-west of it (VDD pin 28 is on its west side; the
+                                 # SPI lines come in from the north-west)
 U1_AT = (10.4, 44.0)             # module: antenna end 0.5 mm from the left edge
 HOLES = [(152.5, 3.5), (152.5, 84.5), (3.5, 84.5), (31.0, 31.0)]
 
@@ -98,7 +107,29 @@ PAIRS = {
     # neighbour 4.7k holds the earpiece line at 0 V DC
     "R8": (13.0, 4.0, "up"), "C13": (13.0, 7.3, "down"), "R9": (13.0, 10.7, "up"),
     "R7": (11.2, 16.6, "up"),
+    # hw v0.901: the USB OR diode on the VBUS line (cathode toward the LDO) and the BOOT
+    # button's series resistor next to SW2
+    "D3": (22.1, 14.5, "down"), "R14": (29.6, 52.75, "left"),
+    # PoE input side, bottom, one row under the module's input half: the TVS (cathode toward
+    # VIN+ pins 5/6), then the bridges (BR1/BR2: BRIDGES below)
+    "D4": (135.85, 33.55, "left"),
+    # PoE output side, bottom, between the MENU switch and the module's output row
+    "C34": (151.5, 17.6, "right"), "R28": (151.5, 22.9, "right"),
+    # W5500: TX terminations north-east of its PHY pins, the reset RC north of pin 37, the RJ45
+    # LED resistors beside the LED pins at the right edge
+    "R21": (127.0, 43.4, "down"), "R20": (128.7, 43.4, "down"),
+    "R19": (117.6, 41.4, "down"), "C28": (119.3, 41.4, "down"),
+    "R25": (155.0, 45.2, "up"), "R26": (155.0, 51.6, "down"),
+    # PHY: RX AC coupling in line (C30 RX-, C29 RX+), terminations south of the RX pair (R23 RX-,
+    # R22 RX+, C31 the centre), the centre-tap feed R24 + C32, EXRES R15 at its pin
+    "C30": (131.6, 51.55, "right"), "C29": (134.8, 52.4, "right"),
+    "R23": (130.05, 55.7, "up"), "R22": (131.75, 55.7, "up"), "C31": (133.6, 58.15, "left"),
+    "R24": (135.1, 54.8, "down"), "C32": (136.8, 54.8, "up"), "R15": (127.05, 51.3, "up"),
+    "D5": (141.8, 19.0, "left"), "C35": (141.8, 23.0, "right"), "R27": (137.0, 23.8, "left"),
 }
+# MB10S bridges, AC pins (3, 4) toward the RJ45's side of the row (left), DC pins right
+BRIDGES = {"BR2": (144.0, 33.55)}             # mode B, under the module's input half
+BR1_AT = (134.5, 43.0)            # mode A, rotated, west of the RJ45's PoE pins: + under PS1 pin 5
 
 # auto-placed small parts: ref -> (targets, search box). targets = [(pad, "REF:PAD"), ...]:
 # the part goes where the sum of pad-to-target distances is smallest (no courtyard overlap,
@@ -108,6 +139,9 @@ REAR = (0.5, 0.5, 36.0, 34.2)
 EAR = (7.0, 9.5, 12.0, 25.0)                  # OUTP -> 22 uF -> 22 R -> jack ring 1
 MIC = (11.2, 3.0, 14.4, 26.0)                 # bias + coupling column right of it
 DRV = (14.2, 10.0, 17.6, 34.2)                # ringer driver: left of the USB lines
+ETH = (100.0, 34.0, 129.5, 62.8)              # hw v0.901: the W5500 and its parts
+PHY = (125.0, 51.5, 138.0, 62.8)              # its PHY terminations, toward the RJ45's chip pins
+SHIELD = (138.0, 56.0, 156.0, 62.8)           # the RJ45 shield cap, at its front tab
 AUTO = [
     # module decoupling at pin 2, EN RC at pin 3; RESET left of the jack-detect line
     ("C4", [("1", "U1:2")], REAR), ("C3", [("1", "U1:2")], REAR),
@@ -126,6 +160,28 @@ AUTO = [
     # status LED left of the hook line (its light hole shows through the lid)
     ("D2", [("2", "U1:=STATUS_LED")], (0.5, 57.0, 4.4, 66.0)),
     ("R13", [("1", "U1:=STATUS_LED"), ("2", "D2:2")], (0.5, 53.9, 4.4, 66.0)),
+] + [
+    # ---- hw v0.901: Ethernet (bottom, around U4; DESIGN.md §12a). Boxes keep each part on its
+    # side of the W5500 so the hand-routed SPI fan (west), PHY pairs (east) and the PoE side stay
+    # clear; the router joins them.
+    # the W5500's own pin capacitors first (closest to their pins), then the supplies' parts
+    ("C24", [("1", "U4:20")], (118.0, 53.9, 121.5, 60.0)),         # TOCAP
+    ("C25", [("1", "U4:22")], (115.5, 53.9, 120.5, 60.0)),         # 1V2O
+    ("C22", [("1", "U4:17")], (120.5, 53.9, 125.5, 60.0)),         # AVDD south (15/17)
+    ("C21", [("1", "U4:15")], (120.5, 53.9, 127.5, 60.0)),         # AVDD (bulk side)
+    ("C23", [("1", "U4:21")], (113.0, 53.9, 120.5, 60.0)),         # AVDD south (21)
+    ("C19", [("1", "U4:28")], (104.0, 52.0, 112.5, 56.0)),         # VDD 100 nF
+    ("C16", [("1", "U5:3")], (100.0, 54.0, 116.0, 62.6)),          # U5 C_IN (V5)
+    ("C17", [("1", "U5:2")], (100.0, 54.0, 116.0, 62.6)),          # U5 C_OUT
+    ("FB1", [("1", "U5:2")], (104.0, 52.0, 118.0, 62.6)),          # ETH_3V3 -> ETH_3V3A
+    ("C20", [("1", "FB1:2")], (104.0, 52.0, 120.0, 62.6)),         # AVDD bulk
+    ("C18", [("1", "U5:2")], (100.0, 52.0, 112.0, 62.6)),          # VDD bulk
+    ("C26", [("1", "Y1:1")], (100.5, 46.0, 112.2, 56.5)), ("C27", [("1", "Y1:3")], (100.5, 46.0, 112.2, 56.5)),
+    ("R16", [("1", "Y1:1"), ("2", "Y1:3")], (100.5, 46.0, 112.2, 56.5)),
+    ("R17", [("1", "U4:32")], (100.0, 44.9, 108.0, 47.0)),         # CS pull-up, under the SPI bundle
+    ("R18", [("1", "U4:34")], (100.0, 39.5, 108.0, 42.2)),         # MISO pull-down, above it
+    # PHY: RX coupling caps + termination on the chip side, the centre-tap feed, the shield cap
+    ("C33", [("1", "J4:SH")], SHIELD),
 ]
 # M3 routing adjustments, applied after the automatic placement: ref -> (x, y[, pad-1 side])
 # - R1 (CC1 5.1 k) 0.5 mm left so the D- track runs straight down from the receptacle
@@ -138,7 +194,13 @@ MOVES = {"R1": (17.75, 10.525), "C3": (1.675, 32.125, "down"), "C4": (3.475, 32.
 LANES = [(20.8, 21.5, 37.0, 27.3), (20.8, 21.5, 27.3, 44.0),     # rear keys
          (20.8, 43.5, 44.0, 50.0),                                # display
          (5.2, 57.5, 37.0, 65.5), (5.2, 52.7, 13.0, 65.5)]        # front keys
+# hw v0.901: where parts outside the PoE input side may not go (3 mm around its copper) and
+# the bottom screw heads of the display standoffs H5/H6
+POE_KEEP = [(130.6, 27.6, 156.0, 41.2),       # the module's input half + its input pins
+            (128.5, 38.5, 146.4, 51.2)]       # BR1 and the RJ45's PoE pins (7-10)
+SCREWS = [(124.0, 24.85, 130.4, 31.25), (124.0, 56.75, 130.4, 63.15)]
 GRID = 0.25
+WIN = 8.0                        # auto placement: search window around the targets in large boxes
 GAP = 0.0                        # extra courtyard gap (courtyards already carry 0.25 mm)
 
 RULE_SEVERITIES = {
@@ -152,9 +214,14 @@ RULE_SEVERITIES = {
 }
 NETCLASSES = {  # name: (track, clearance), patterns
     "Default": (0.2, 0.15, []),
-    "Power": (0.6, 0.2, ["VBUS", "3V3"]),
+    "Power": (0.6, 0.2, ["VBUS", "3V3", "V5", "POE_5V", "ETH_3V3", "ETH_3V3A"]),
     "USB": (0.3, 0.15, ["USB_DP", "USB_DN"]),
     "Audio": (0.25, 0.2, ["HS_EAR", "HS_MIC", "EAR_AC", "DAC_OUTP", "MIC1P", "MIC1N", "MIC_BIAS"]),
+    # hw v0.901 wired network: the PHY pairs; the isolated PoE input (fab-common.kicad_dru keeps
+    # it 3 mm from everything else); the RJ45 shield
+    "Eth": (0.25, 0.15, ["ETH_TXP", "ETH_TXN", "ETH_RXP", "ETH_RXN", "ETH_RDP_J", "ETH_RDN_J"]),
+    "PoE": (0.5, 0.25, ["POE_VA1", "POE_VA2", "POE_VB1", "POE_VB2", "POE_VIN_P", "POE_VIN_N"]),
+    "Chassis": (0.5, 0.25, ["ETH_SHIELD"]),
 }
 
 
@@ -435,6 +502,10 @@ def auto_place(board, fp, targets, box, obstacles, pads, segs):
     """Grid search in `box`: the pose with the smallest pad-to-target distance plus the
     straight-line crossings its pads would add to the nets placed so far."""
     tgt = [(pad, pad_xy(board, spec)) for pad, spec in targets]
+    if (box[2] - box[0]) * (box[3] - box[1]) > 300:      # large box: search near the targets
+        cx = sum(t[1][0] for t in tgt) / len(tgt)
+        cy = sum(t[1][1] for t in tgt) / len(tgt)
+        box = (max(box[0], cx - WIN), max(box[1], cy - WIN), min(box[2], cx + WIN), min(box[3], cy + WIN))
     cands = []
     for rot in (0, 90, 180, 270):
         place(fp, 0, 0, rot, "bottom")
@@ -512,12 +583,31 @@ def build() -> Path:
     for ref, (x, y) in zip(stand, STANDOFFS):
         place(fps[ref], x, y)
     place_module(fps["U1"])
+    # hw v0.901: RJ45 (mouth to the right edge, pin 1 to the rear-front side), PoE module,
+    # W5500 (PHY pins toward the RJ45)
+    place_oriented(fps["J4"], *J4_AT, "top",
+                   lambda f, x, y: pad_at(f, "1")[0] < x and pad_at(f, "1")[1] > y
+                   and pad_at(f, "11")[0] > x)
+    place_oriented(fps["PS1"], *PS1_PIN1, "top",
+                   lambda f, x, y: pad_at(f, "4")[0] < x - 10 and pad_at(f, "5")[1] > y + 10)
+    place_oriented(fps["U5"], *U5_AT, "bottom",       # Ethernet LDO: its tab toward the W5500
+                   lambda f, x, y: max(unP(q.GetPosition())[0] for q in f.Pads()
+                                       if q.GetNumber() == "2") > x + 2)
+    place_oriented(fps["Y1"], 112.5, 51.0, "bottom",   # crystal south-west of XI/XO (30/31):
+                   lambda f, x, y: pad_at(f, "3")[0] > x and pad_at(f, "3")[1] < y)   # XO NE
+    place_oriented(fps["BR1"], *BR1_AT, "bottom",       # DC pads north, AC pads south
+                   lambda f, x, y: pad_at(f, "1")[1] < y - 2)
+    for ref, (x, y) in BRIDGES.items():
+        place_oriented(fps[ref], x, y, "bottom", lambda f, x, y: pad_at(f, "3")[0] < x
+                       and pad_at(f, "1")[1] < y)
+    place_oriented(fps["U4"], *U4_AT, "bottom",
+                   lambda f, x, y: sum(pad_at(f, str(k))[0] for k in range(1, 7)) / 6 > x + 3)
 
     # obstacles on the bottom: courtyards of bottom parts + every through hole
     for ref, (x, y, d) in PAIRS.items():
         place_pad1(fps[ref], x, y, d)
-    placed_auto = {r for r, _, _ in AUTO}
-    obstacles = list(LANES)
+    placed_auto = {e[0] for e in AUTO}
+    obstacles = list(LANES) + list(SCREWS)
     for ref, fp in fps.items():
         if ref in placed_auto:
             continue
@@ -525,9 +615,10 @@ def build() -> Path:
             obstacles.append(crt_box(fp))
         obstacles += hole_boxes(fp)
     placed = [r for r in fps if r not in placed_auto]
-    for ref, targets, box in AUTO:
+    for ref, targets, box, *kind in AUTO:
         pads = net_pads(fps, placed)
-        auto_place(board, fps[ref], targets, box, obstacles, pads, straight_segments(pads))
+        obs = obstacles if kind == ["poe"] else obstacles + POE_KEEP
+        auto_place(board, fps[ref], targets, box, obs, pads, straight_segments(pads))
         placed.append(ref)
         obstacles.append(crt_box(fps[ref]))
         obstacles += hole_boxes(fps[ref])
@@ -558,6 +649,18 @@ def place_pad1(fp, x, y, direction) -> None:
                 "right": px > x + 0.1}[direction]:
             return
     raise SystemExit(f"cannot orient {fp.GetReference()}")
+
+
+def pad_at(fp, num):
+    return next(unP(p.GetPosition()) for p in fp.Pads() if p.GetNumber() == num)
+
+
+def place_oriented(fp, x, y, side, pred) -> None:
+    for rot in (0, 90, 180, 270):
+        place(fp, x, y, rot, side)
+        if pred(fp, x, y):
+            return
+    raise SystemExit(f"no pose for {fp.GetReference()}")
 
 
 def place_module(fp) -> None:
@@ -595,7 +698,7 @@ def tidy_refs(fps) -> None:
                 item.SetLayer(fab)
 
 
-REV = "rev A (M3)"
+REV = "v0.901 (PoE)"
 # J3 = the WeAct module's header order (DESIGN.md §6): odd pins in the outer column
 J3_NAMES = {"1": "BUSY", "2": "RES", "3": "DC", "4": "CS", "5": "SCL", "6": "SDA", "7": "GND",
             "8": "VCC"}
@@ -611,6 +714,8 @@ def marking(board) -> None:
     # connectors: the USB-C and the handset jack sit under the rear edge (bottom side)
     text(board, F, "USB-C 5V", FIXED["J1"][0], 1.35, 0.8, 0.15)
     text(board, F, "HANDSET", FIXED["J2"][0], 1.35, 0.8, 0.15)
+    # hw v0.901: the wired network's connector, beside its mouth
+    text(board, F, "LAN / PoE", J4_AT[0] - 4.0, J4_AT[1] + 11.4, 0.8, 0.15)
     # display socket: name + pin order beside each column
     jx, jy = J3_PIN1
     text(board, F, "J3 DISPLAY", jx + 1.27, jy - 3 * 2.54 - 2.3, 0.8, 0.15)

@@ -9,6 +9,10 @@ Only parts with no suitable official KiCad footprint live here (official library
   pins 3.0 @ (-3.81,-2.54)/(2.54,-5.08)) and the widely used Kailh socket land
   (2.55 x 2.5 pads @ (-7.085,-2.54)/(5.842,-5.08)) - [UNVERIFIED] against the -2 suffix drawing.
   Used for the 12 keys and the hook switch.
+- RJ45_HanRun_HR871150C (hw v0.901): RJ45 with PoE magnetics and 2 LEDs, drawn from HanRun's
+  recommended PCB layout (component side view, rev 00 p3); origin = midpoint of the two
+  locating holes, +y toward the rear, the mouth at y -10.80 (it overhangs the board edge). Pin 6
+  is not fitted. Pads 5 and 7 (chip side / PoE side neighbours) are 1.3 mm for a wider gap.
 - openloungephone_name_F: the board name "Open Lounge Phone" as front silkscreen text (the
   signature logo footprints come from hardware/art/make_logo.py).
 """
@@ -151,6 +155,44 @@ def hotswap() -> str:
     return s
 
 
+def rj45() -> str:
+    """HanRun HR871150C, component side (top). Rows: odd pins y 8.89, even pins y 6.35 (1.27 mm
+    stagger), LED pins y -4.08, shield tabs (+-7.745, 3.05), locating holes (+-5.715, 0); body
+    16.0 x 21.2 x 13.3 mm from y -10.80 (front) to 10.40 (rear)."""
+    s = header("RJ45_HanRun_HR871150C",
+               "HanRun HR871150C RJ45, 10/100 PoE magnetics, 2 LEDs (rev 00 p3 layout)",
+               "RJ45 PoE magjack HanRun", attr="through_hole", ref_at=(0, 12.0), val_at=(0, 13.5))
+    for x in (-5.715, 5.715):
+        s += npth(x, 0, 3.25)
+    odd = {1: 5.715, 3: 3.175, 5: 0.635, 7: -1.905, 9: -4.445}
+    even = {2: 4.445, 4: 1.905, 8: -3.175, 10: -5.715}
+    for num, x in odd.items():
+        s += tht(str(num), x, 8.89, 1.3 if num in (5, 7) else 1.4, 0.89,
+                 "rect" if num == 1 else "circle")
+    for num, x in even.items():
+        s += tht(str(num), x, 6.35, 1.4, 0.89)
+    for num, x in ((14, -6.625), (13, -4.085), (12, 4.085), (11, 6.625)):
+        s += tht(str(num), x, -4.08, 1.6, 1.02)
+    for x in (-7.745, 7.745):
+        s += tht("SH", x, 3.05, 2.3, 1.63)
+    s += rect(-8.0, -10.8, 8.0, 10.4, "F.Fab", 0.1)
+    s += line(-8.0, -10.8, 8.0, -10.8, "F.Fab", 0.3)          # the mouth
+    s += rect(-9.25, -11.05, 9.25, 10.65, "F.CrtYd", 0.05)
+    s += line(-8.1, 10.5, 8.1, 10.5, "F.SilkS")                # rear edge of the body
+    s += line(-8.1, 4.6, -8.1, 10.5, "F.SilkS")
+    s += line(8.1, 4.6, 8.1, 10.5, "F.SilkS")
+    s += text("${REFERENCE}", 0, 2.0, "F.Fab", 1.0)
+    s += model("RJ45_HanRun_HR871150C.wrl")
+    s += "\t(embedded_fonts no)\n)\n"
+    wrl_box(MODELS / "RJ45_HanRun_HR871150C.wrl", [
+        (0, -0.2, 6.65, 16.0, 21.2, 13.3, (0.75, 0.75, 0.75)),
+        (0, -10.75, 6.0, 11.6, 0.2, 7.8, (0.15, 0.15, 0.15)),      # the plug opening
+        (-5.3, -10.75, 1.6, 2.6, 0.25, 1.4, (0.9, 0.85, 0.1)),     # yellow LED (left)
+        (5.3, -10.75, 1.6, 2.6, 0.25, 1.4, (0.1, 0.8, 0.2)),       # green LED (right)
+    ])
+    return s
+
+
 def name_text() -> str:
     """'Open Lounge Phone' on F.SilkS: 3.0 mm text, 0.45 mm strokes (>= every fab's minimum)."""
     s = header("openloungephone_name_F", "Board name Open Lounge Phone, front silkscreen",
@@ -165,7 +207,8 @@ def name_text() -> str:
 def main() -> None:
     LIB.mkdir(parents=True, exist_ok=True)
     MODELS.mkdir(parents=True, exist_ok=True)
-    fps = {"Kailh_MX_Hotswap_CPG151101S11": hotswap(), "openloungephone_name_F": name_text()}
+    fps = {"Kailh_MX_Hotswap_CPG151101S11": hotswap(), "openloungephone_name_F": name_text(),
+           "RJ45_HanRun_HR871150C": rj45()}
     for name, text_ in fps.items():
         (LIB / f"{name}.kicad_mod").write_text(text_)
 

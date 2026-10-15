@@ -52,7 +52,16 @@ def board_h(m: dict) -> str:
     define("PIN_JACK_DET", n2g["JACK_DET"], "high = plug in (internal pull-up)")
     define("PIN_BUZZER", n2g["BUZZER"], "piezo via NPN, ~4 kHz")
     define("PIN_STATUS_LED", n2g["STATUS_LED"], "active high")
-    define("PIN_BOOT", n2g["BOOT"])
+    define("PIN_BOOT", p["boot_button"]["gpio"],
+           "through 1k; also the W5500's CS (hw v0.901)" if "ETH_CS" in n2g else "")
+    if "ethernet" in p:                  # hw v0.901: W5500 on the display's SPI bus
+        e = p["ethernet"]["spi"]
+        out.append("")
+        define("BOARD_HAS_ETHERNET", 1, "W5500, polled (no INT / RST GPIO)")
+        define("PIN_ETH_CS", e["cs"], "10k pull-up; BOOT through 1k")
+        define("PIN_ETH_MISO", e["miso"], "strap GPIO45, 10k pull-down")
+        define("PIN_ETH_SCLK", e["sclk"], "shared with the display")
+        define("PIN_ETH_MOSI", e["mosi"], "shared with the display")
     out.append("")
     d = p["display"]
     define("PIN_EPD_CLK", d["spi"]["clk"])

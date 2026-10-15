@@ -12,7 +12,9 @@ TITLE = "3V3 LDO: start-up vs EN, Wi-Fi burst load step, dropout at low VBUS"
 # Board values (schematic/board_main.py). Effective MLCC capacitance at DC bias (assumption):
 # 0603 10 uF/10 V at 5 V ~ 45 %, 0603 2.2 uF/16 V at 3.3 V ~ 70 %, 0805 22 uF/25 V at 3.3 V
 # ~ 55 %, 1 uF/100 nF ~ 85 %.
-C_IN = 10e-6 * 0.45
+# hw v0.901: USB VBUS reaches the LDO through the OR diode D3 (B5819W) and C_IN is 4.7 uF
+# (0603 4.7 uF/16 V at ~4.5 V ~ 55 %)
+C_IN = 4.7e-6 * 0.55
 C_OUT_LDO = 2.2e-6 * 0.70
 C_MODULE = 22e-6 * 0.55 + 0.1e-6 * 0.85
 C_OTHER = (1e-6 * 0.85) + 2 * 0.1e-6 * 0.85   # ES8311 AVDD 1 uF, PVDD/DVDD 100 nF
@@ -26,8 +28,11 @@ def netlist(vbus: float, r_cable: float, gm: float, load: str, fp: float = 300e3
 Vsrc src 0 PWL(0 0 100u {vbus})
 Rcab src vbus_c {r_cable}
 Lcab vbus_c vbus 1u
-Cin vbus 0 {C_IN}
-X1 vbus v3 0 SGM2212_BEH PARAMS: GM={gm} FP={fp}
+* D3 B5819W: 0.30 V at 0.1 A, 0.45 V at 0.5 A, ~0.55 V at 1 A (datasheet max 0.6 V at 1 A)
+D3 vbus vin DOR
+.model DOR D(IS=4.05e-5 N=1.6 RS=0.12)
+Cin vin 0 {C_IN}
+X1 vin v3 0 SGM2212_BEH PARAMS: GM={gm} FP={fp}
 Cout v3 0 {C_OUT_LDO}
 Rtr v3 vm {TRACE_R}
 Cmod vm 0 {C_MODULE}
@@ -52,7 +57,9 @@ def run(ctx: Ctx) -> Bench:
               assumptions=[
                   "VBUS 4.40 V at the receptacle (USB 2.0 low-power port minimum) and a 5.0 V "
                   "source behind a 0.3 ohm / 1 uH cable (hot-plug).",
-                  "Effective MLCC capacitance after DC bias: 10 uF@5 V 45 %, 2.2 uF 70 %, "
+                  "hw v0.901: the USB OR diode (B5819W, fitted to 0.30 V / 0.1 A, 0.45 V / "
+                  "0.5 A, ~0.55 V / 1 A) between VBUS and the LDO; C_IN 4.7 uF.",
+                  "Effective MLCC capacitance after DC bias: 4.7 uF@4.5 V 55 %, 2.2 uF 70 %, "
                   "22 uF 55 %; 20 mohm LDO-to-module trace.",
                   "Loop GM 5 A/V (from p7) with a 300 kHz loop pole, and a pessimistic corner "
                   "GM 2.5 A/V with a 100 kHz pole; VREF at the low accuracy limit 3.251 V for "
@@ -77,15 +84,15 @@ def run(ctx: Ctx) -> Bench:
     for gm, fp in ((5, 300e3), (2.5, 100e3)):
         net = netlist(4.40, 0.0, gm, burst, fp).replace(
             f"SGM2212_BEH PARAMS: GM={gm}", f"SGM2212_BEH PARAMS: GM={gm} VREF=3.251")
-        r = ctx.sim("b01", f"burst_gm{gm}", net, "tran 0.1u 4m 0 0.1u", ["v(vm)", "v(vbus)"])
+        r = ctx.sim("b01", f"burst_gm{gm}", net, "tran 0.1u 4m 0 0.1u", ["v(vm)", "v(vin)"])
         v = window(r, "v(vm)", 1.5e-3, 4e-3)
         lo, hi = float(v.min()), float(v.max())
         b.add(f"3V3 at the module during a {si(I_IDLE, 'A')} -> {si(I_BURST, 'A')} burst, VBUS "
               f"4.40 V, GM {gm} A/V, loop pole {si(fp, 'Hz')}", f"{lo:.3f}-{hi:.3f} V", f"{V_MIN}-{V_MAX} V",
               lo >= V_MIN and hi <= V_MAX)
-        head = float(window(r, "v(vbus)", 2.5e-3, 2.9e-3).mean()) - float(
+        head = float(window(r, "v(vin)", 2.5e-3, 2.9e-3).mean()) - float(
             window(r, "v(vm)", 2.5e-3, 2.9e-3).mean())
         if gm == 5:
-            b.add("LDO headroom during the burst (VIN - 3V3)", f"{head * 1000:.0f} mV",
+            b.add("LDO headroom during the burst (VIN after the OR diode - 3V3)", f"{head * 1000:.0f} mV",
                   ">= 380 mV (dropout max at 500 mA, p6)", head >= 0.38)
     return b

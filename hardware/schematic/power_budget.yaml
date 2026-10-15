@@ -1,7 +1,9 @@
-# Power budget of the minimal board, checked by checks.check_power_budget on every build.
-# Currents in mA. One 3.3 V LDO from USB VBUS; the ringer runs from VBUS directly.
+# Power budget of the board, checked by checks.check_power_budget on every build.
+# Currents in mA. hw v0.901: two 5 V sources (USB VBUS, the PoE module) each through a Schottky
+# into V5; two 3.3 V LDOs from V5 (U2: module, codec, display; U5: the W5500); the ringer runs
+# from V5 directly.
 
-ldo:
+ldo:                            # both regulators are this part
   part: SGM2212-3.3
   vout_v: 3.3
   rated_ma: 800                 # SGM2212 rev A.2 p1 (current limit >= 810 mA, p6)
@@ -9,27 +11,57 @@ ldo:
   theta_ja_c_per_w: 117         # SOT-223-3, p3 (JEDEC board; our copper pour only helps)
   tj_max_c: 125                 # operating range p3; thermal shutdown at 165 C, p6
 
+regulators:                     # ref -> the 3.3 V rail it makes
+  U2: 3V3
+  U5: ETH_3V3
+
 # The module must be fed by a supply able to deliver >= 0.5 A (WROOM-1 datasheet v1.8 p27)
 module_supply_min_ma: 500
 
-source:
-  name: "USB default power (5.1k Rd, no PD)"
-  limit_ma: 500                 # USB 2.0 default; Type-C "Default USB Power"
-  vbus_min_v: 4.40              # worst case at the device receptacle (USB 2.0 low-power port)
-  vbus_max_v: 5.25
-  cable_ohm: 0.0                # already inside vbus_min_v
+sources:
+  usb:
+    name: "USB default power (5.1k Rd, no PD)"
+    limit_ma: 500               # USB 2.0 default; Type-C "Default USB Power"
+    v_min: 4.40                 # worst case at the device receptacle (USB 2.0 low-power port)
+    v_max: 5.25
+    diode: B5819W               # D3; Vf from the B5819W curve (0.6 V at 1 A max)
+    vf_v: {100: 0.30, 500: 0.45, 1000: 0.60}
+    vf_min_v: 0.20
+  poe:
+    name: "PoE (DP9900LP-5V, 802.3af class 0)"
+    limit_ma: 1400              # DP9900LP-5V p6
+    min_load_ma: 100            # below this the module whines and the PSE may drop it (p6 note 2)
+    v_min: 5.00                 # 5.27 V with ADJ 100 k (p4), -5 %
+    v_max: 5.55
+    diode: SS34                 # D5; 0.55 V at 3 A max
+    vf_v: {100: 0.25, 500: 0.38, 1000: 0.45}
+    vf_min_v: 0.20
 
 ambient_max_c: 40               # inside the enclosure, warm room
-margin: 0.20                    # peak must stay 20 % below the LDO rating
+margin: 0.20                    # peaks must stay 20 % below the LDO rating
 
-loads_3v3:
-  # peak: worst simultaneous; avg: a call in progress (Wi-Fi on, audio both ways, display on)
-  esp32_s3_module: {peak_ma: 355, avg_ma: 150}   # TX 802.11b 20.5 dBm 355 mA peak (p28); avg EST: RX 95 mA (p28) + CPU
-  es8311_and_earpiece: {peak_ma: 30, avg_ma: 8}  # 14 mW codec (ES8311 p1) + 1 Vrms full scale into 32+22 ohm (p9)
-  display_module: {peak_ma: 60, avg_ma: 40}      # allowance: e-paper refresh ~8 mA; small OLED/TFT alternatives up to ~60 mA with backlight
-  mic_bias: {peak_ma: 1, avg_ma: 1}              # electret 0.5 mA typ through 1k + 2.2k
-  pullups_and_led: {peak_ma: 3, avg_ma: 2}       # I2C 2 x 0.7 mA, EN 0.33 mA, status LED 1.3 mA
+# Operating modes (firmware chooses; DESIGN.md §2): which sources may run each mode
+modes:
+  wifi: {sources: [usb, poe], what: "Wi-Fi uplink; the W5500 PHY in power-down (PHYCFGR) between cable checks"}
+  ethernet: {sources: [usb, poe], what: "wired uplink; the Wi-Fi radio off"}
+  both: {sources: [poe], what: "Wi-Fi and Ethernet at once: allowed on PoE power only"}
+  phy_idle: {sources: [usb, poe], what: "Wi-Fi uplink with the PHY left on and no cable (firmware without Ethernet support)", warn_only: true}
 
-loads_vbus:
-  piezo_ringer: {peak_ma: 6, avg_ma: 0}          # 5 V across the 1k (TDK PS p2 circuit) while the NPN is on
-  ldo_quiescent: {peak_ma: 2, avg_ma: 0}         # IGND 1.6 mA max at 800 mA, p6
+# peak: worst simultaneous in that mode; avg: a call in progress. A plain number = every mode.
+loads:
+  3V3:
+    # TX 802.11b 20.5 dBm 355 mA peak (p28); avg EST: RX 95 mA (p28) + CPU. Radio off: CPU 240 MHz
+    # dual core + octal PSRAM, EST from the S3 datasheet's modem-sleep figures (+ margin)
+    esp32_s3_module: {peak: {wifi: 355, ethernet: 130, both: 355, phy_idle: 355}, avg: {wifi: 150, ethernet: 90, both: 150, phy_idle: 150}}
+    es8311_and_earpiece: {peak: 30, avg: 8}   # 14 mW codec (ES8311 p1) + 1 Vrms full scale into 32+22 ohm (p9)
+    display_module: {peak: 60, avg: 40}       # allowance: e-paper refresh ~8 mA; small OLED/TFT alternatives up to ~60 mA with backlight
+    mic_bias: {peak: 1, avg: 1}               # electret 0.5 mA typ through 1k + 2.2k
+    pullups_and_led: {peak: 4, avg: 3}        # I2C 2 x 0.7 mA, EN 0.33 mA, status LED 1.3 mA, ETH_CS/MISO 10 k 0.33 mA
+  ETH_3V3:
+    # W5500 p59-60: 132 mA 100M TX, 128 mA 100M link, 65 mA auto-negotiation (no link), 13 mA PHY
+    # power-down; no maximum given: 150 budgeted
+    w5500: {peak: {wifi: 13, ethernet: 150, both: 150, phy_idle: 65}, avg: {wifi: 13, ethernet: 130, both: 130, phy_idle: 65}}
+    rj45_leds: {peak: {wifi: 0, ethernet: 8, both: 8, phy_idle: 0}, avg: {wifi: 0, ethernet: 6, both: 6, phy_idle: 0}}   # 2 x (3.3 - 2.0) V / 330 R
+  V5:
+    piezo_ringer: {peak: 6, avg: 0}           # 5 V across the 1k (TDK PS p2 circuit) while the NPN is on
+    ldo_quiescent: {peak: 4, avg: 0}          # IGND 1.6 mA max at 800 mA (p6), two LDOs

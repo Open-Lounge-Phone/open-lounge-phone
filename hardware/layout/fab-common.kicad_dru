@@ -53,3 +53,18 @@
 (rule "waiver: MX hot-swap NPTH spacing"
 	(condition "A.memberOfFootprint('OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11') && B.memberOfFootprint('OpenLoungePhone:Kailh_MX_Hotswap_CPG151101S11')")
 	(constraint hole_to_hole (min 0.45mm)))
+
+# ---- safety (hw v0.901): the PoE input side is isolated (IEEE 802.3: 1500 V) ----
+# Net class PoE = the RJ45's cable-side centre taps, the bridges, the TVS and the PoE module's
+# input. 3 mm to everything else (Silvertel Ag9900 layout guidance: >= 3 mm across the barrier),
+# on both layers and for zone fills; the RJ45 shield (class Chassis) is coupled to both sides
+# through 2 kV capacitors and is not part of either side.
+(rule "safety: PoE isolation 3 mm"
+	(condition "A.NetClass == 'PoE' && B.NetClass != 'PoE' && B.NetClass != 'Chassis'")
+	(constraint clearance (min 3mm)))
+
+# Inside the RJ45's own footprint the magjack's pin grid sets the spacing (HanRun HR871150C:
+# 2.54 mm pitch across its chip/PoE boundary, its 1500 Vrms rating includes it)
+(rule "safety: PoE isolation inside the RJ45"
+	(condition "A.NetClass == 'PoE' && B.NetClass != 'PoE' && A.intersectsCourtyard('J4') && B.intersectsCourtyard('J4')")
+	(constraint clearance (min 1mm)))

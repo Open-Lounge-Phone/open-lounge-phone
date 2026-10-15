@@ -12,7 +12,8 @@ headset.
 
 1. Before the module is powered: no short between 3V3 and GND (> 1 kΩ).
 2. Plug USB-C: 3V3 = 3.25-3.35 V at the LDO output. Current with the firmware idle: < 150 mA.
-3. `idf.py -p <port> flash monitor`. If the port doesn't appear: hold BOOT, press RESET, release.
+3. `idf.py -p <port> flash monitor`. If the port doesn't appear: hold BOOT, press RESET, release
+   (hw v0.901: hold BOOT while plugging USB in instead, §8.2).
 4. The boot log shows `Open Lounge Phone firmware`, `fingerprint: …`, the display draws.
 
 ## 1. Keys, hook, jack, ringer, LED
@@ -114,7 +115,37 @@ Only on a board meant to stay a phone: a release build burns an eFuse key on its
 4. `esptool.py read_flash 0x9000 0x6000 nvs.bin`: the Wi-Fi name and password don't appear in it.
 5. Remove the phone in the app: `WIPE: NVS partition erased`, a new pairing code, Wi-Fi kept.
 
-## 8. What to record
+## 8. hw v0.901 only: wired network and PoE
+
+The v0.901 board adds an RJ45 (J4) with PoE magnetics, a W5500 (U4) on the display's SPI bus and
+an isolated 802.3af PoE module (PS1), diode-OR'd with USB into the 5 V rail V5 (`DESIGN.md` §12a).
+Firmware needs the W5500 driver first (ESP-IDF esp_eth, polling mode: `int_gpio_num = -1`,
+`poll_period_ms > 0`, `reset_gpio_num = -1`; MAC from `esp_read_mac(ESP_MAC_ETH)`, the W5500 has
+none). Until then the PHY idles at ~65 mA in auto-negotiation (USB peak 526 mA vs 500 in the
+budget: fine on any real charger, but note it).
+
+1. **Straps, before anything else.** USB only, no Ethernet cable. Measure GPIO45 (U4 pin 34,
+   ETH_MISO) and GPIO0 (U4 pin 32, ETH_CS) at power-up and while RESET is held: GPIO45 < 0.4 V,
+   GPIO0 > 3.0 V. The boot log must show the flash and PSRAM as before (a 1.8 V VDD_SPI shows up
+   as a flash ID failure).
+2. **Download mode with BOOT.** Hold BOOT and plug USB in (a power-up, so the W5500 is still in
+   reset when the straps latch): the port appears in download mode, `esptool.py flash_id` reads the
+   3.3 V flash. Holding BOOT and pressing only RESET is the one case where the W5500 is not reset;
+   prefer a power cycle (or the USB-JTAG auto-download, which never uses GPIO0). A BOOT press while
+   the phone runs can't select the W5500: the GPIO drives CS high against the 1 kΩ (3.3 mA).
+3. **5 V OR.** USB only: V5 ≈ VBUS − 0.4 V. PoE only (a PoE switch or injector, USB unplugged):
+   POE_5V ≈ 5.27 V at PS1, V5 ≈ 4.9 V, VBUS at an open receptacle may float a little through D3's leakage (harmless, no current). Both:
+   V5 follows the higher source, nothing gets warm, the USB console still works.
+4. **PoE classification.** On the switch: class 0, ~3 W drawn in a call. The module must not
+   whine at idle (< 100 mA load): if it does, fit R29 (51 Ω 2512).
+5. **Isolation.** Unpowered, PS1 and J4 in place: > 10 MΩ from J4's PoE pins (7-10) and BR1/BR2
+   to GND at 500 V DC if a megger is at hand; never connect the PoE side to the USB ground.
+6. **Link.** Cable to a switch: the RJ45's green LED (link) lights, yellow (activity) flickers;
+   firmware gets an address by DHCP and a call works with Wi-Fi off. Unplug: Wi-Fi takes over.
+7. **Display + Ethernet.** A full e-paper refresh while a call streams over Ethernet: no audio
+   underruns beyond the usual, the picture is clean (the two share SCLK/MOSI).
+
+## 9. What to record
 
 Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the chosen cap,
 `miclevel` for speech and for silence, the PGA gain used, call setup time (`RTC CONNECTED … ms`),

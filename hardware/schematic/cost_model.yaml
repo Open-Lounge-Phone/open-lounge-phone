@@ -18,7 +18,7 @@ assembly:   # JLCPCB "Economic" PCBA, ONE side (all SMD parts on the bottom, see
   per_joint_usd: 0.0017
   tht_setup_usd: 3.50       # through-hole soldering (header, piezo), per order
   tht_per_joint_usd: 0.0173
-  tht_refs_prefix: [BZ, J3] # THT parts (J3 = display header); the rest is SMD
+  tht_refs_prefix: [BZ, J3, J4, PS] # THT parts (J3 display header, J4 RJ45, PS1 PoE module); the rest is SMD
 
 # Off-board parts per phone (not on the PCB), EST: at-scale / retail single unit
 off_board:

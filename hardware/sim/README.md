@@ -30,13 +30,13 @@ puts the pole at 100 kHz. It checks supply margins, not loop stability (the data
 ceramic-capacitor guidance on p4/p10 covers that).
 
 <!-- RESULTS -->
-Last full run: 2026-09-29, ngspice-45.2 shared library.
+Last full run: 2026-10-15, ngspice-45.2 shared library.
 
 | Check | Value | Limit | Verdict |
 |---|---|---|---|
-| b01: 3V3 inside 3.0 V before EN releases the chip | 3V3 at 77.8 µs, EN at 13.9 ms | 3V3 first (tSU >= 0, WROOM-1 p14) | PASS |
+| b01: 3V3 inside 3.0 V before EN releases the chip | 3V3 at 87 µs, EN at 13.9 ms | 3V3 first (tSU >= 0, WROOM-1 p14) | PASS |
 | b01: 3V3 overshoot at hot-plug | 3.442 V | <= 3.6 V | PASS |
 | b01: 3V3 at the module during a 60 mA -> 400 mA burst, VBUS 4.40 V, GM 5 A/V, loop pole 300 kHz | 3.184-3.308 V | 3.0-3.6 V | PASS |
-| b01: LDO headroom during the burst (VIN - 3V3) | 1157 mV | >= 380 mV (dropout max at 500 mA, p6) | PASS |
+| b01: LDO headroom during the burst (VIN after the OR diode - 3V3) | 728 mV | >= 380 mV (dropout max at 500 mA, p6) | PASS |
 | b01: 3V3 at the module during a 60 mA -> 400 mA burst, VBUS 4.40 V, GM 2.5 A/V, loop pole 100 kHz | 3.128-3.365 V | 3.0-3.6 V | PASS |
 <!-- /RESULTS -->
