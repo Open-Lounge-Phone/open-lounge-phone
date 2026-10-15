@@ -2,7 +2,7 @@
 
 A notice is a short message from a space to its phones: "Bus is here", "Dinner's ready",
 "Kitchen closes at 10". Every phone shows it on its ready screen with a chime; lifting the
-handset plays a recording if there is one; a key clears it. Notices stay inside the space: they
+handset plays its recording, if it has one, over and over; a key clears it. Notices stay inside the space: they
 are never sent to other households or servers.
 
 ## Who posts
@@ -33,8 +33,9 @@ A newer notice replaces an older one on the phones it reaches.
 - **Ready screen:** the notice's lines, over the time and missed calls, with a short chime
   (short, short, long on the hardware's piezo). No chime during quiet hours, during a call or
   with the handset up; the text still shows.
-- **Lift the handset:** a recorded notice plays in the earpiece (the phone then has its dial
-  tone as usual). Hanging up stops it.
+- **Lift the handset:** a recorded notice plays in the earpiece, over and over, until the
+  handset goes down or a key clears the notice (that key doesn't dial). Without a recording, the
+  phone has its dial tone as usual.
 - **Any key** on the ready screen (BACK too) dismisses it on that phone; MENU still opens the
   menu. A dismissed notice doesn't come back on that phone, even after it reconnects.
 - When the notice expires or is taken down it leaves every phone.
