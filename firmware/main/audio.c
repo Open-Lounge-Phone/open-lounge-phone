@@ -8,6 +8,8 @@
 #include "audio_dev.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "jbuf.h"
+#include "plc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -15,15 +17,14 @@
 
 static const char *TAG = "audio";
 #define NS "olp"
-#define RING 4000             // 500 ms of received audio
-#define START_FILL 480        // start playing after 60 ms buffered (jitter)
-#define MAX_FILL 2400         // over 300 ms buffered: drop down to START_FILL (latency cap)
+#define RING 4000             // the loopback test's delay line (500 ms)
 #define TONE_AMP 6000         // per sine: -18 dBFS each, like the web phone's quiet tones
 
 static const audio_dev_t *s_dev;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // Shared state (s_lock).
+static jbuf_t s_jb;  // the call's received packets (docs/audio.md item 4)
 static int16_t s_ring[RING];
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
@@ -70,12 +71,6 @@ static void ring_push(const int16_t *pcm, size_t n) {
     s_ring[(s_head + s_fill) % RING] = pcm[i];
     s_fill++;
   }
-  if (s_fill > MAX_FILL) {
-    size_t drop = s_fill - START_FILL;
-    s_head = (s_head + drop) % RING;
-    s_fill -= drop;
-    s_stats.drops += drop;
-  }
 }
 
 /** Pops a frame if playing; returns false (silence) while buffering or on underrun. */
@@ -90,7 +85,6 @@ static bool ring_pop(int16_t *pcm, size_t n, size_t start_fill) {
     ok = true;
   } else if (s_playing) {
     s_playing = false;  // underrun: buffer up again
-    s_stats.underruns++;
   }
   taskEXIT_CRITICAL(&s_lock);
   return ok;
@@ -103,23 +97,41 @@ static void ring_reset(void) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
-void audio_rx_ulaw(const uint8_t *data, size_t n) {
-  int16_t pcm[DSP_FRAME];
-  while (n > 0) {
-    size_t k = n > DSP_FRAME ? DSP_FRAME : n;
-    dsp_ulaw_decode_buf(data, pcm, k);
-    taskENTER_CRITICAL(&s_lock);
-    if (s_call) {
-      ring_push(pcm, k);
-      s_stats.rx_bytes += k;
-    }
-    taskEXIT_CRITICAL(&s_lock);
-    data += k;
-    n -= k;
-  }
+void audio_rx_packet(const uint8_t *data, size_t n, uint32_t pts_ms) {
+  int64_t now = esp_timer_get_time() / 1000;
   taskENTER_CRITICAL(&s_lock);
-  if (s_call) s_stats.rx_frames++;
+  if (s_call) {
+    jb_put(&s_jb, pts_ms, data, n, now);
+    s_stats.rx_bytes += n;
+    s_stats.rx_frames++;
+  }
   taskEXIT_CRITICAL(&s_lock);
+}
+
+/** The next 20 ms of the call: a packet decoded, or a lost one concealed (PCMU: plc.c). */
+static plc_t s_plc;
+static bool call_frame(int16_t *out) {
+  uint8_t pkt[JB_MAX_PACKET];
+  size_t len = 0;
+  taskENTER_CRITICAL(&s_lock);
+  jb_out_t o = jb_get(&s_jb);
+  if (o.kind == JB_PACKET) {
+    len = o.len;
+    memcpy(pkt, o.data, len);
+  }
+  taskEXIT_CRITICAL(&s_lock);
+  if (o.kind == JB_WAIT) {
+    memset(out, 0, DSP_FRAME * sizeof *out);
+    return false;
+  }
+  if (o.kind == JB_LOST) {
+    plc_lost(&s_plc, out, DSP_FRAME);
+    return true;
+  }
+  int16_t pcm[DSP_FRAME] = {0};
+  dsp_ulaw_decode_buf(pkt, pcm, len < DSP_FRAME ? len : DSP_FRAME);
+  plc_good(&s_plc, pcm, out, DSP_FRAME);
+  return true;
 }
 
 static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
@@ -325,7 +337,7 @@ static void task(void *arg) {
       taskEXIT_CRITICAL(&s_lock);
       ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
     } else if (call) {
-      if (ring_pop(out, DSP_FRAME, START_FILL)) measure(&s_rx_meter, out, DSP_FRAME, true);
+      if (call_frame(out)) measure(&s_rx_meter, out, DSP_FRAME, true);
       if (held) memset(out, 0, sizeof out);
     }
     if (play) {
@@ -345,11 +357,13 @@ static void task(void *arg) {
       if (now - last_log >= 5000) {
         last_log = now;
         audio_stats_t st = audio_stats();
-        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu miclevel=%.1f agc=%.1f "
-                 "speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
+        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu conceal=%lu late=%lu jb=%d "
+                 "jit=%.0f miclevel=%.1f agc=%.1f speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
                  (unsigned long)st.tx_frames, (unsigned long)st.rx_frames,
-                 (unsigned long)st.rx_bytes, (unsigned long)st.underruns, st.mic_dbfs,
-                 st.agc_gain_db, st.speech_out_dbfs, st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs);
+                 (unsigned long)st.rx_bytes, (unsigned long)st.underruns,
+                 (unsigned long)st.concealed, (unsigned long)st.late, st.jb_target_ms,
+                 st.jitter_ms, st.mic_dbfs, st.agc_gain_db, st.speech_out_dbfs, st.rx_dbfs,
+                 st.watch_hz, st.rx_tone_dbfs);
       }
     }
   }
@@ -397,6 +411,8 @@ void audio_call(bool on, audio_sender_t sender) {
   s_call = on;
   s_sender = on ? sender : NULL;
   if (changed && on) {
+    jb_init(&s_jb);
+    plc_init(&s_plc, DSP_RATE);
     s_stats.tx_frames = s_stats.rx_frames = s_stats.rx_bytes = 0;
     s_stats.underruns = s_stats.drops = 0;
     s_stats.mic_dbfs = s_stats.rx_dbfs = s_stats.rx_tone_dbfs = -100;
@@ -439,6 +455,12 @@ void audio_loopback(int delay_ms) {
 
 audio_stats_t audio_stats(void) {
   taskENTER_CRITICAL(&s_lock);
+  s_stats.concealed = s_jb.concealed;
+  s_stats.late = s_jb.late;
+  s_stats.underruns = s_jb.rebuffers;
+  s_stats.drops = s_jb.dropped;
+  s_stats.jb_target_ms = s_jb.target_ms;
+  s_stats.jitter_ms = s_jb.jitter_ms;
   audio_stats_t st = s_stats;
   taskEXIT_CRITICAL(&s_lock);
   return st;
@@ -455,11 +477,12 @@ void audio_print_status(void) {
   audio_stats_t st = audio_stats();
   audio_test_sink_t sink = audio_test_sink();
   printf("AUDIO device=%s call=%d volume=%d/%d(%.0fdBFS) tx=%lu rx=%lu rxbytes=%lu under=%lu "
-         "drops=%lu miclevel=%.1f micpeak=%.1f agc=%.1f(%s) speechin=%.1f speech=%.1f "
+         "drops=%lu conceal=%lu late=%lu jb=%d jit=%.0f miclevel=%.1f micpeak=%.1f agc=%.1f(%s) speechin=%.1f speech=%.1f "
          "rxlevel=%.1f rx%.0fHz=%.1f",
          audio_device_name(), st.in_call, s_volume, VOLUME_MAX, audio_volume_db(s_volume),
          (unsigned long)st.tx_frames, (unsigned long)st.rx_frames, (unsigned long)st.rx_bytes,
-         (unsigned long)st.underruns, (unsigned long)st.drops, st.mic_dbfs, st.mic_peak_dbfs,
+         (unsigned long)st.underruns, (unsigned long)st.drops, (unsigned long)st.concealed,
+         (unsigned long)st.late, st.jb_target_ms, st.jitter_ms, st.mic_dbfs, st.mic_peak_dbfs,
          st.agc_gain_db, s_agc_on ? "on" : "off", st.speech_in_dbfs, st.speech_out_dbfs,
          st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs);
   if (s_dev == &audio_dev_test)

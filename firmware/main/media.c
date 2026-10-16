@@ -104,14 +104,27 @@ static int on_msg(esp_peer_msg_t *msg, void *ctx) {
   return 0;
 }
 
+static const char *codec_name(esp_peer_audio_codec_t c) {
+  return c == ESP_PEER_AUDIO_CODEC_OPUS    ? "opus"
+         : c == ESP_PEER_AUDIO_CODEC_G711U ? "pcmu"
+         : c == ESP_PEER_AUDIO_CODEC_G711A ? "pcma"
+                                           : "none";
+}
+
 static int on_audio_info(esp_peer_audio_stream_info_t *info, void *ctx) {
   ESP_LOGI(TAG, "remote audio: codec %d, %lu Hz, %d ch", info->codec, (unsigned long)info->sample_rate,
            info->channel);
+  ESP_LOGI(TAG, "CODEC send=%s recv=%s", "pcmu", codec_name(info->codec));
   return 0;
 }
 
+static int s_rx_logged;
 static int on_audio_data(esp_peer_audio_frame_t *frame, void *ctx) {
-  if (frame->data && frame->size > 0) audio_rx_ulaw(frame->data, (size_t)frame->size);
+  if (frame->data && frame->size > 0) audio_rx_packet(frame->data, (size_t)frame->size, frame->pts);
+  if (s_rx_logged < 5) {
+    s_rx_logged++;
+    ESP_LOGI(TAG, "RTP in: pts %lu, %d bytes", (unsigned long)frame->pts, frame->size);
+  }
   return 0;
 }
 
@@ -222,6 +235,7 @@ static void start_peer(const char *ice_json, bool offerer) {
   };
   s_started_ms = now_ms();
   s_connected_ms = 0;
+  s_rx_logged = 0;
   ESP_LOGI(TAG, "RTC start: %s, ICE %s [%s], G.711 PCMU", offerer ? "offerer" : "answerer",
            ice_mode_name(s_ice_mode), s_servers_log);
   esp_peer_handle_t peer = NULL;

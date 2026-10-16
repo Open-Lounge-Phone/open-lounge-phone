@@ -1,7 +1,8 @@
-// The test audio device: the "mic" is a 1 kHz tone at about -12 dBFS and the "earpiece" measures
+// The test audio device: the "mic" is a tone (1 kHz unless `audio source <hz>`) at about -15 dBFS and the "earpiece" measures
 // what it is given (level, and the power at a watched frequency, once a second). Time is paced
 // with the RTOS tick, 20 ms per frame, like the I2S DMA on the board. Used by the simulator build
 // and by `audio test` on a board for bring-up without a handset.
+#include <math.h>
 #include <string.h>
 
 #include "audio_dev.h"
@@ -9,7 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static tone_gen_t s_src;
+static float s_src_hz = 1000, s_src_phase;
 static bool s_mic_on, s_speaker_on;
 static float s_volume_db;
 static TickType_t s_last;
@@ -18,7 +19,6 @@ static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static audio_test_sink_t s_sink = {.rms_dbfs = -100, .tone_dbfs = -100, .watch_hz = 440};
 
 static esp_err_t init(void) {
-  tone_start(&s_src, TONE_TEST, 8192);  // 8192/32768 peak → -15 dBFS RMS
   s_last = xTaskGetTickCount();
   return ESP_OK;
 }
@@ -30,7 +30,12 @@ static void volume_db(float db) { s_volume_db = db; }
 static int read_pcm(int16_t *pcm, size_t n) {
   memset(pcm, 0, n * sizeof *pcm);
   if (!s_mic_on) return 0;
-  tone_mix(&s_src, pcm, n);
+  float step = 6.2831853f * s_src_hz / DSP_RATE;
+  for (size_t i = 0; i < n; i++) {
+    pcm[i] = (int16_t)(8192.0f * sinf(s_src_phase));  // 8192/32768 peak → -15 dBFS RMS
+    s_src_phase += step;
+    if (s_src_phase > 6.2831853f) s_src_phase -= 6.2831853f;
+  }
   return (int)n;
 }
 
@@ -57,6 +62,8 @@ static void write_pcm(const int16_t *pcm, size_t n) {
   if (xTaskGetTickCount() - s_last > 5 * period) s_last = xTaskGetTickCount();
   if (xTaskDelayUntil(&s_last, period) == pdFALSE) vTaskDelay(1);
 }
+
+void audio_test_source(float hz) { s_src_hz = hz > 0 && hz < DSP_RATE / 2 ? hz : 1000; }
 
 void audio_test_watch(float hz) {
   taskENTER_CRITICAL(&s_lock);

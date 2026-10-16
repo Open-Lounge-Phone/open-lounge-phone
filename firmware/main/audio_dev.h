@@ -39,4 +39,6 @@ typedef struct {
   float watch_hz;
 } audio_test_sink_t;
 void audio_test_watch(float hz);
+/** The test device's "mic": a tone at `hz` (default 1 kHz). */
+void audio_test_source(float hz);
 audio_test_sink_t audio_test_sink(void);

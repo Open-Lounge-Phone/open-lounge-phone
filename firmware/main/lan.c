@@ -168,7 +168,7 @@ static void audio_task(void *arg) {
     if (!lan_audio_open(&s_call_keys, 1 - s_dir, pkt, (size_t)n, &seq, frame, &len)) continue;
     if (seq <= s_rx_last && s_rx_last - seq < 1000) continue;  // old or repeated
     s_rx_last = seq;
-    audio_rx_ulaw(frame, len);
+    audio_rx_packet(frame, len, seq * 20);  // 20 ms frames, numbered
   }
 }
 

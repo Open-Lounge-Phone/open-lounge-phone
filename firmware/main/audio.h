@@ -45,8 +45,9 @@ void audio_listen(bool on);
 /** The mic's automatic gain control (on by default: CONFIG_OLP_MIC_AGC); `audio agc`. */
 void audio_agc(bool on);
 bool audio_agc_on(void);
-/** A received mu-law frame (any length) from the call. Safe from any task. */
-void audio_rx_ulaw(const uint8_t *data, size_t n);
+/** A received packet of the call (20 ms of mu-law) with its timestamp in ms; any order. Goes
+ * into the jitter buffer (jbuf.h). Safe from any task. */
+void audio_rx_packet(const uint8_t *data, size_t n, uint32_t pts_ms);
 
 /** Volume 0-10 (saved); 10 = the cap (Kconfig OLP_EARPIECE_MAX_DB), 3 dB per step. */
 void audio_set_volume(int level);
@@ -59,7 +60,12 @@ void audio_force_tone(tone_t tone);
 void audio_loopback(int delay_ms);
 
 typedef struct {
-  uint32_t tx_frames, rx_frames, rx_bytes, underruns, drops;
+  uint32_t tx_frames, rx_frames, rx_bytes;
+  // The receive buffer (jbuf.h): buffered up again, frames dropped (too deep), concealed (lost
+  // or missing: the poor-connection signal), arrived too late; its target depth and the jitter.
+  uint32_t underruns, drops, concealed, late;
+  int jb_target_ms;
+  float jitter_ms;
   float mic_dbfs;       // last second of mic audio
   float mic_peak_dbfs;  // …its loudest sample
   float rx_dbfs;        // last second of received (decoded) audio
