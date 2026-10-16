@@ -35,7 +35,15 @@ export function loadLastDial(
 ): LastDial | undefined {
   try {
     const v = JSON.parse(storage?.getItem(lastDialKey(profile)) ?? "null") as LastDial | null;
-    if (v?.kind === "button" && Number.isInteger(v.index) && v.index >= 0 && v.index < 16) return v;
+    if (
+      v?.kind === "button" &&
+      Number.isInteger(v.index) &&
+      v.index >= 0 &&
+      v.index < 10 &&
+      (v.page === undefined || (Number.isInteger(v.page) && v.page >= 1 && v.page <= 10))
+    ) {
+      return v;
+    }
     if (v?.kind === "extension" && /^\d{2,6}$/.test(v.number)) return v;
     if (v?.kind === "back" && typeof v.id === "string" && v.id) return v;
   } catch {}

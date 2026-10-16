@@ -599,4 +599,33 @@ describe("the daily check-in on the ready screen", () => {
       "MISSED MOM",
     );
   });
+
+  it("speed-dial pages: the page shown and how to turn it, within 16 characters", () => {
+    const config: DeviceConfig = {
+      buttons: [{ index: 0, label: "Mom" }],
+      pages: [
+        { page: 2, buttons: [{ index: 3, label: "Ben" }] },
+        { page: 4, buttons: [{ index: 9, label: "Cy" }] },
+      ],
+      quiet: false,
+    };
+    expect(lines({ config, deviceState: { kind: "offhook" } })).toEqual([
+      "PAGE 1/4",
+      "BACK: NEXT PAGE",
+    ]);
+    expect(lines({ config, deviceState: { kind: "offhook", page: 4 } })).toEqual([
+      "PAGE 4/4",
+      "BACK: NEXT PAGE",
+    ]);
+    // A call that didn't go through says so first; one page: as before.
+    expect(lines({ config, deviceState: { kind: "offhook", lastEnd: "busy" } })).toEqual([
+      "BUSY",
+      "PRESS A KEY",
+    ]);
+    expect(lines({ deviceState: { kind: "offhook" } })).toEqual(["PRESS A KEY"]);
+    const ten = { ...config, pages: [{ page: 10, buttons: [{ index: 0, label: "Z" }] }] };
+    for (const l of lines({ config: ten, deviceState: { kind: "offhook", page: 10 } })) {
+      expect(l.length).toBeLessThanOrEqual(STATUS_WIDTH);
+    }
+  });
 });

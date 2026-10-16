@@ -28,6 +28,7 @@ import {
   RECORDING_MAX_MS,
   redialInput,
   repeatedEnd,
+  shownPages,
   soundFor,
   WORKPLACE_PROMPT_TEXT,
 } from "@openloungephone/core";
@@ -58,7 +59,7 @@ import {
   MARQUEE_STEP_MS,
   paint,
 } from "./epaper.ts";
-import { keyGrid } from "./grid.ts";
+import { keyAt, keyGrid } from "./grid.ts";
 import {
   forgetIdentity,
   getDeviceId,
@@ -311,7 +312,7 @@ const socket = new ProtocolSocket<ServerToDevice, DeviceToServer>({
       display: displayMode === "segments" ? "seg14" : displayMode,
       ...(deviceId ? { deviceId } : {}),
       // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
-      features: ["missed-calls", "call-waiting"],
+      features: ["missed-calls", "call-waiting", "key-pages"],
     };
     raw(hello);
     log("→", hello);
@@ -387,6 +388,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
     case "config": {
       const next: DeviceConfig = {
         buttons: msg.buttons,
+        ...(msg.pages ? { pages: msg.pages } : {}),
         quiet: msg.quiet,
         ...(msg.quietUntil ? { quietUntil: msg.quietUntil } : {}),
         ...(msg.missed ? { missed: msg.missed } : {}),
@@ -646,9 +648,12 @@ function labelFor(index: number): string | undefined {
   return config?.buttons.find((b) => b.index === index)?.label;
 }
 
-/** Who a key calls, as the display shows it while calling: an add-on marked as one. */
+/**
+ * Who a key calls (its stored index, `(page - 1) * 10 + slot`), as the display shows it while
+ * calling: an add-on marked as one.
+ */
 function callLabelFor(index: number): string | undefined {
-  const b = config?.buttons.find((x) => x.index === index);
+  const b = keyAt(config, index);
   return b?.addon ? addonLabel(b.label) : b?.label;
 }
 
@@ -1079,6 +1084,10 @@ function pressKey(key: KeyId): void {
     else if (notice && deviceState.kind === "idle") dismissNotice();
     // Ringing: BACK silences the ringer on this phone (lifting still answers).
     else if (deviceState.kind === "incoming") step({ type: "silence" });
+    // The speed-dial screen with more than one page of keys: the next page (wrapping).
+    else if (deviceState.kind === "offhook" && hookUp) {
+      step({ type: "page", pages: shownPages(config) });
+    }
     return;
   }
   const digit = Number(key);
@@ -1566,7 +1575,7 @@ function renderDisplay(): void {
     !pairingCode &&
     !lounge.challenge &&
     !(loungeLive && !lounge.session && !lounge.houseLine && !view)
-      ? keyGrid(config, view)
+      ? keyGrid(config, view, deviceState.kind === "offhook" ? (deviceState.page ?? 1) : 1)
       : undefined;
   const text = JSON.stringify([lines, displayMode === "eink" ? grid : null, qr]);
   if (text === lastStatusText) return;

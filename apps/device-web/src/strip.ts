@@ -1,4 +1,4 @@
-import type { DeviceState } from "@openloungephone/core";
+import { type DeviceState, pageLabel, shownPages } from "@openloungephone/core";
 import type { EndReason } from "@openloungephone/protocol";
 import type { Connection, DeviceConfig } from "./leds.ts";
 
@@ -190,7 +190,11 @@ export function statusLines(input: StatusInput): StatusLines {
       // A free Lounge phone tried a public line: only someone signed in can call one.
       if (s.signIn) return ["SIGN IN TO CALL", "PRESS A KEY"];
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
-      return text ? [text, "PRESS A KEY"] : ["PRESS A KEY"];
+      if (text) return [text, "PRESS A KEY"];
+      // More than one page of keys: which page is on screen, and how to turn it.
+      const pages = shownPages(config);
+      if (pages.length > 1) return [pageLabel(pages, s.page ?? 1), "BACK: NEXT PAGE"];
+      return ["PRESS A KEY"];
     }
     case "voicemail": {
       const stage = input.leave?.stage ?? "greeting";

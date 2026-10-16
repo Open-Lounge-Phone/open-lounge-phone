@@ -21,6 +21,8 @@ export type Connection = "connecting" | "online" | "offline";
 export interface DeviceConfig {
   /** `addon`: the key calls an add-on (shown as one while calling). */
   buttons: { index: number; label: string; addon?: true }[];
+  /** Speed-dial pages after the first (`config.pages`): BACK with the handset up turns to them. */
+  pages?: { page: number; buttons: { index: number; label: string; addon?: true }[] }[];
   quiet: boolean;
   /** Local "HH:MM" when current quiet hours end. */
   quietUntil?: string;

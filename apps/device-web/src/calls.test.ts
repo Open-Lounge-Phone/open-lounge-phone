@@ -45,7 +45,11 @@ describe("redial", () => {
     saveLastDial(s, "b", { kind: "extension", number: "204" });
     expect(loadLastDial(s, "a")).toEqual({ kind: "button", index: 3 });
     expect(loadLastDial(s, "b")).toEqual({ kind: "extension", number: "204" });
+    saveLastDial(s, "a", { kind: "button", index: 3, page: 4 });
+    expect(loadLastDial(s, "a")).toEqual({ kind: "button", index: 3, page: 4 });
     s.setItem("olp-last-dial:a", JSON.stringify({ kind: "button", index: 99 }));
+    expect(loadLastDial(s, "a")).toBeUndefined();
+    s.setItem("olp-last-dial:a", JSON.stringify({ kind: "button", index: 3, page: 11 }));
     expect(loadLastDial(s, "a")).toBeUndefined();
     forgetLastDial(s, "b");
     expect(loadLastDial(s, "b")).toBeUndefined();

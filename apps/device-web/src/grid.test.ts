@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyGrid } from "./grid.ts";
+import { keyAt, keyGrid, pageKeys } from "./grid.ts";
 
 describe("keyGrid", () => {
   const config = {
@@ -33,5 +33,18 @@ describe("keyGrid", () => {
 
   it("is blank but still shaped without config", () => {
     expect(keyGrid(undefined).flat().filter(Boolean)).toEqual(["Menu", "Back"]);
+  });
+
+  it("shows the page on screen: page 2's keys in the same rows", () => {
+    const paged = { ...config, pages: [{ page: 2, buttons: [{ index: 1, label: "Ben" }] }] };
+    expect(keyGrid(paged, undefined, 2)).toEqual([
+      ["", "Ben", "", "", "", "Menu"],
+      ["", "", "", "", "", "Back"],
+    ]);
+    expect(keyGrid(paged, undefined, 3).flat().filter(Boolean)).toEqual(["Menu", "Back"]);
+    expect(pageKeys(paged, 1)).toBe(paged.buttons);
+    expect(keyAt(paged, 11)?.label).toBe("Ben");
+    expect(keyAt(paged, 9)?.label).toBe("Nana");
+    expect(keyAt(paged, 21)).toBeUndefined();
   });
 });
