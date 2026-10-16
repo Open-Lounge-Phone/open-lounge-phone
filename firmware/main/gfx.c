@@ -39,7 +39,9 @@ static void pixel(uint8_t *fb, int w, int h, int x, int y) {
   fb[(y * w + x) / 8] |= 0x80 >> ((y * w + x) % 8);
 }
 
-static void glyph(uint8_t *fb, int w, int h, int x0, int y0, char c, int scale) {
+// Used by one of the two screen styles (the other draws with gfx_text_at).
+__attribute__((unused)) static void glyph(uint8_t *fb, int w, int h, int x0, int y0, char c,
+                                          int scale) {
   c = (char)toupper((unsigned char)c);
   if (c < 0x20 || c > 0x5F) c = '?';
   const uint8_t *g = FONT[c - 0x20];

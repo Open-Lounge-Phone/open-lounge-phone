@@ -67,7 +67,8 @@ typedef struct {
 } kept_t;
 
 void storage_wipe(bool keep_wifi) {
-  kept_t kept[] = {{"ssid"}, {"pass"}, {"server"}, {"ota_url"}};  // namespace "net"
+  kept_t kept[] = {{"ssid", {0}, false}, {"pass", {0}, false}, {"server", {0}, false},
+                   {"ota_url", {0}, false}};  // namespace "net"
   const int n = sizeof kept / sizeof kept[0];
   if (keep_wifi) {
     nvs_handle_t h;
