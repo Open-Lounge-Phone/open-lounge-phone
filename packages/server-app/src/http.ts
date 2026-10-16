@@ -54,7 +54,7 @@ import { peopleRoutes, publicPeopleRoutes } from "./people.ts";
 import { publicRecordingRoutes, recordingRoutes } from "./recordings.ts";
 import { roomRoutes } from "./roomsApi.ts";
 import { publicRecoveryRoutes, sessionOptions, sessionRoutes } from "./sessions.ts";
-import { sweepSpace, timelineRoutes } from "./timeline.ts";
+import { phoneActivityRoutes, sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
 import { voicemailRoutes } from "./voicemail.ts";
 import { workplaceRoutes } from "./workplace.ts";
@@ -915,6 +915,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   missedRoutes(api, env, live);
   callWaitingRoutes(api, env);
   homeRoutes(api, env, live);
+  phoneActivityRoutes(api, env);
   roomRoutes(api, env, live);
 
   return api;

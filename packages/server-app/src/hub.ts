@@ -71,6 +71,7 @@ import {
 import {
   type Account,
   type Addon,
+  type CallRefusal,
   type Device,
   deviceMode,
   type HouseLineKey,
@@ -313,6 +314,17 @@ interface RoomLeg {
   payer?: string;
 }
 
+/** A call to or from a kids' phone being placed (see `HouseholdHub.kidCall`). */
+interface KidCall {
+  deviceId: string;
+  direction: "in" | "out";
+  /** The other side as the call log names it (`user:<id>`, `handle@host`), '' if unknown. */
+  peer: string;
+  label: string;
+  /** Why it's refused, when the reason alone doesn't say (quiet hours on a call out). */
+  why?: CallRefusal;
+}
+
 type LoungeEndReason = "logout" | "left" | "idle" | "replaced" | "removed" | "offline";
 type LoungeFail = "expired" | "wrong_key" | "timeout" | "busy" | "not_found";
 
@@ -458,6 +470,12 @@ export class HouseholdHub {
   private readonly devices = new Map<string, DevicePeer>();
   /** Connected add-ons of this household (docs/add-ons.md), by add-on id. */
   private readonly addonPeers = new Map<string, Peer>();
+  /**
+   * A call to or from a kids' phone being placed right now (set by the dial paths, read by
+   * `refuse`): if it's refused, the phone's call activity gets a row saying why. The hub's queue
+   * runs one piece of work at a time, so it belongs to the work in progress.
+   */
+  private kidCall: KidCall | undefined;
   /** Test connection: tests waiting for their add-on's `addon.test.ok`, by test id. */
   private readonly addonTests = new Map<
     string,
@@ -1283,6 +1301,10 @@ export class HouseholdHub {
     note?: string,
     vm?: Room["vm"],
   ): Promise<void> {
+    const kid = this.kidCall;
+    this.kidCall = undefined;
+    // (A caller who is on another call themselves didn't reach the phone at all.)
+    if (kid && note !== CALLER_BUSY_NOTE) await this.logKidRefusal(kid, reason, note);
     const voicemail = vm ? await this.offer(vm, reason, this.env.now()) : undefined;
     peer.conn.send({
       t: "call.state",
@@ -1383,15 +1405,40 @@ export class HouseholdHub {
     if (!this.canDial(device)) return;
     if (device.lounge) return this.loungeDial(device, index);
     const { store } = this.env;
-    const allowance = await this.allowance(device);
-    if (allowance.note) return this.refuse(device, "denied", allowance.note);
     const [buttons, contacts, schedule] = await Promise.all([
       store.listButtons(device.id),
       store.listContacts(device.id),
       this.scheduleFor(device),
     ]);
     const contact = resolveButton(buttons, new Map(contacts.map((c) => [c.id, c])), index);
-    return this.dialContact(device, contact, schedule, allowance);
+    // A kids' phone's call activity: who it tried to call, if it's refused.
+    if (this.isKidsPhone(device)) {
+      this.kidCall = {
+        deviceId: device.id,
+        direction: "out",
+        peer: contact ? await this.contactPeer(device.id, contact) : "",
+        label: contact?.label ?? `Key ${(index % KEYS_PER_PAGE) + 1}`,
+      };
+    }
+    try {
+      const allowance = await this.allowance(device);
+      if (allowance.note) return await this.refuse(device, "denied", allowance.note);
+      return await this.dialContact(device, contact, schedule, allowance);
+    } finally {
+      this.kidCall = undefined;
+    }
+  }
+
+  /** How the call log names an allow-list entry: a person here, or a connection's address. */
+  private async contactPeer(deviceId: string, contact: Contact): Promise<string> {
+    if (isRemoteContactId(contact.id)) {
+      const r = (await this.env.store.listRemoteContacts(deviceId)).find(
+        (x) => x.id === contact.id,
+      );
+      return r ? `${r.connection.peerHandle}@${r.connection.peerHost || ownHost(this.env)}` : "";
+    }
+    if (isRoomContactId(contact.id) || isLineContactId(contact.id)) return "";
+    return `user:${contact.id}`;
   }
 
   /** A phone dials an allow-list entry (a speed-dial key, or a transfer from this phone). */
@@ -1405,7 +1452,12 @@ export class HouseholdHub {
       quietHours: schedule,
       now: new Date(this.env.now()),
     });
-    if (decision.decision === "deny" || !contact) return this.refuse(device, "denied");
+    if (decision.decision === "deny" || !contact) {
+      if (this.kidCall && decision.decision === "deny" && decision.reason === "quiet_hours") {
+        this.kidCall.why = "quiet_hours";
+      }
+      return this.refuse(device, "denied");
+    }
     if (isRoomContactId(contact.id)) return this.joinFromPhone(device, contact.id);
     if (isLineContactId(contact.id)) {
       const entry = await this.env.store.lines.contact(device.id, contact.id);
@@ -1460,6 +1512,24 @@ export class HouseholdHub {
     }
     // Nobody answers for the phone of someone who left: it never rings.
     if (deviceMode(device) === "left") return this.refuse(user, "denied", LEFT_PHONE_NOTE);
+    // A kids' phone's call activity: who tried to call it, if it's refused.
+    if (deviceMode(device) === "kids") {
+      this.kidCall = { deviceId, direction: "in", peer: `user:${as.id}`, label: as.label };
+    }
+    try {
+      return await this.appDialPhone(user, device, as);
+    } finally {
+      this.kidCall = undefined;
+    }
+  }
+
+  private async appDialPhone(
+    user: Peer,
+    device: Device,
+    as: { id: string; label: string },
+  ): Promise<void> {
+    const { store } = this.env;
+    const deviceId = device.id;
     const [contact, schedule] = await Promise.all([
       store.getContact(deviceId, as.id),
       device.ownerUserId
@@ -3230,6 +3300,40 @@ export class HouseholdHub {
     }
   }
 
+  /**
+   * A call to or from a kids' phone that never rang: a row in the phone's call activity, with
+   * why in a word (and the words the caller got). Nothing else about it is kept.
+   */
+  private async logKidRefusal(kid: KidCall, reason: EndReason, note?: string): Promise<void> {
+    const refused: CallRefusal =
+      kid.why ??
+      (reason === "voicemail"
+        ? "quiet_hours"
+        : reason === "busy"
+          ? "busy"
+          : reason === "unreachable"
+            ? "offline"
+            : reason === "unavailable"
+              ? "unavailable"
+              : reason === "denied" && !note
+                ? "not_allowed"
+                : "other");
+    await this.env.store.logCall({
+      householdId: this.householdId,
+      accountId: null,
+      deviceId: kid.deviceId,
+      peer: kid.peer,
+      peerLabel: kid.label.slice(0, 64),
+      direction: kid.direction,
+      startedAt: this.env.now(),
+      answered: false,
+      durationMs: 0,
+      endReason: reason,
+      refused,
+      note: note ?? null,
+    });
+  }
+
   // --- add-ons (docs/add-ons.md) ------------------------------------------------------------
 
   /**
@@ -4199,6 +4303,19 @@ export class HouseholdHub {
       }
       const device = await store.getDevice(req.target.deviceId);
       if (!device || device.householdId !== this.householdId) return end("denied");
+      // A kids' phone's call activity: who tried to call it from elsewhere, if it's refused.
+      const refused = async (reason: "denied" | "voicemail" | "busy" | "unreachable") => {
+        if (deviceMode(device) === "kids") {
+          const kid: KidCall = {
+            deviceId: device.id,
+            direction: "in",
+            peer: req.address ?? "",
+            label: req.label,
+          };
+          await this.logKidRefusal(kid, reason);
+        }
+        return end(reason);
+      };
       const [contact, schedule] = await Promise.all([
         store.getContact(device.id, req.target.contactId),
         device.ownerUserId
@@ -4209,12 +4326,12 @@ export class HouseholdHub {
         quietHours: schedule,
         now: new Date(this.env.now()),
       });
-      if (decision.decision === "deny" || !contact) return end("denied");
-      if (decision.decision === "voicemail") return end("voicemail");
+      if (decision.decision === "deny" || !contact) return refused("denied");
+      if (decision.decision === "voicemail") return refused("voicemail");
       const peer = this.devices.get(device.id);
-      if (!peer) return end("unreachable");
+      if (!peer) return refused("unreachable");
       const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
-      if ((this.busy(peer.key) || peer.hook === "up") && !waiting) return end("busy");
+      if ((this.busy(peer.key) || peer.hook === "up") && !waiting) return refused("busy");
       const room = this.openRoom(
         remote,
         peer.key,

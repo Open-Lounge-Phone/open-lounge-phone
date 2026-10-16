@@ -6,6 +6,7 @@ import {
   type Account,
   type CallLogEntry,
   type Connection,
+  deviceMode,
   LOCAL_HOST,
   RETENTION_DAYS,
   type Recording,
@@ -207,4 +208,65 @@ export function timelineRoutes(api: Hono<Vars>, env: ServerEnv): void {
     await sweepAccount(env, account.id);
     return c.body(null, 204);
   });
+}
+
+/** Routes that need the member of the active space (registered after its middleware). */
+export function phoneActivityRoutes(api: Hono<Vars>, env: ServerEnv): void {
+  const { store } = env;
+  /**
+   * A kids' phone's call activity, for its guardians: every call in and out (answered, not
+   * answered, missed, refused and why), newest first, a page at a time (`before` = the last
+   * row's `cursor`). Within the space's history retention; no content.
+   */
+  api.get("/devices/:id/calls", async (c) => {
+    const user = c.get("user");
+    const device = await store.getDevice(c.req.param("id"));
+    if (!device || device.householdId !== user.householdId || user.role !== "guardian") {
+      return c.json({ error: "not found" }, 404);
+    }
+    if (deviceMode(device) !== "kids") return c.json({ error: "only for kids' phones" }, 404);
+    const q = PageQuery.safeParse({
+      before: c.req.query("before"),
+      limit: c.req.query("limit"),
+    });
+    if (!q.success) return c.json({ error: "before is <time>.<id>, limit 1-100" }, 400);
+    const limit = q.data.limit ?? 50;
+    await sweepSpace(env, user.householdId);
+    const rows = await store.deviceCallLog(device.id, limit + 1, q.data.before);
+    const page = rows.slice(0, limit);
+    return c.json({
+      calls: page.map(activityView),
+      more: rows.length > limit,
+    });
+  });
+}
+
+const PageQuery = z.object({
+  before: z
+    .string()
+    .regex(/^\d{1,16}\.[A-Za-z0-9_-]{1,64}$/)
+    .transform((v) => {
+      const dot = v.indexOf(".");
+      return { at: Number(v.slice(0, dot)), id: v.slice(dot + 1) };
+    })
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+/** One row of a kids' phone's call activity, as the app shows it (no content). */
+function activityView(r: CallLogEntry) {
+  return {
+    id: r.id ?? "",
+    cursor: `${r.startedAt}.${r.id ?? ""}`,
+    at: r.startedAt,
+    direction: r.direction,
+    who: r.peerLabel,
+    answered: r.answered,
+    durationMs: r.durationMs,
+    /** How it ended (`hangup`, `declined`, `timeout`, …) or, if it never rang, why. */
+    ended: r.endReason,
+    ...(r.refused ? { refused: r.refused } : {}),
+    ...(r.note ? { note: r.note } : {}),
+    voicemail: !!r.voicemailId,
+  };
 }

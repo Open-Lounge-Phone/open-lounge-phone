@@ -1415,19 +1415,11 @@ describe("0029 missed calls and call waiting", () => {
     const { code } = await s.createPairing(KEY, T0);
     const kid = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
     if (!kid) throw new Error("no phone");
-    await s.logCall({
-      householdId: hh.id,
-      accountId: guardian.accountId,
-      deviceId: null,
-      peer: `device:${kid.id}`,
-      peerLabel: "Kid",
-      direction: "in",
-      startedAt: T0,
-      answered: false,
-      durationMs: 0,
-      endReason: "timeout",
-      callId: "call_old",
-    });
+    // A call-log row as servers before 0029 wrote it.
+    old.db.exec(`INSERT INTO call_log (id, household_id, account_id, device_id, peer, peer_label,
+      direction, started_at, answered, duration_ms, end_reason, call_id) VALUES ('cl_old',
+      '${hh.id}', '${guardian.accountId}', NULL, 'device:${kid.id}', 'Kid', 'in', ${T0}, 0, 0,
+      'timeout', 'call_old')`);
     expect(migrate(old.db)).toContain("0029_missed_calls.sql");
     expect(await s.getDevice(kid.id)).toMatchObject({ name: "Kid", kind: "kids" });
     // Call waiting is on for everyone until they turn it off.

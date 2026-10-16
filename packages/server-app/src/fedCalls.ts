@@ -3,7 +3,7 @@
 // peer; the callee's server authorizes on its own terms and opens the matching room. Signaling
 // flows between the two rooms: directly between hubs here, over the server-pair stream otherwise.
 import { ADDON_NOT_LINKED_NOTE, ADDONS_OFF_NOTE, CANT_CALL_NOTE } from "@openloungephone/core";
-import { isRemoteContactId, LOCAL_HOST } from "@openloungephone/db";
+import { deviceMode, isRemoteContactId, LOCAL_HOST } from "@openloungephone/db";
 import {
   type CallBody,
   CallResult,
@@ -326,7 +326,25 @@ export class FedCalls implements CallLinks {
     const entry = (await store.listRemoteContacts(device.id)).find(
       (r) => r.connection.peerHost === host && r.connection.peerAccount === from.id,
     );
-    if (!entry) return deny;
+    if (!entry) {
+      // A kids' phone's call activity: someone not on its list tried to call it.
+      if (deviceMode(device) === "kids") {
+        await store.logCall({
+          householdId: device.householdId,
+          accountId: null,
+          deviceId: device.id,
+          peer: `${from.handle}@${host || ownHost(this.env)}`,
+          peerLabel: from.name.slice(0, 64),
+          direction: "in",
+          startedAt: this.env.now(),
+          answered: false,
+          durationMs: 0,
+          endReason: "denied",
+          refused: "not_allowed",
+        });
+      }
+      return deny;
+    }
     await this.register(host, body.callId, device.householdId);
     return this.live.ringRemote(device.householdId, {
       callId: body.callId,

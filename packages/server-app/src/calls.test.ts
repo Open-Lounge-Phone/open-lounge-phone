@@ -354,6 +354,21 @@ describe("calls across servers", () => {
     expect(
       await receiveVoicemail(b.env, b.gateway, { ...carolParty, host: "a.test" }, deviceId, rec),
     ).toBe(false);
+    // Bob sees all of it on the phone's call activity: the calls, and the ones that never rang
+    // (not on its list, quiet hours), with who and why. (All at one moment of the test clock.)
+    const activity = (await b.http(`/devices/${deviceId}/calls`, { token: bob.token })).json;
+    type Row = { direction: string; who: string; ended: string; refused?: string };
+    expect(
+      activity.calls.map((c: Row) => `${c.direction} ${c.who}: ${c.refused ?? c.ended}`).sort(),
+    ).toEqual(
+      [
+        "in Carol: not_allowed",
+        "in Aunt Jesse: quiet_hours",
+        "out Aunt Jesse: declined",
+        "in Aunt Jesse: hangup",
+        "in Jesse: not_allowed",
+      ].sort(),
+    );
     // Listed but not allowed to call the phone: no voicemail either.
     await b.http(`/devices/${deviceId}/remote-contacts/${ids.bSide}`, {
       method: "PUT",

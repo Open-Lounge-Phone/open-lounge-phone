@@ -138,7 +138,20 @@ export interface CallLogEntry {
   /** The call's id in its hub (links a recording made of it). */
   callId?: string | null;
   recordingId?: string | null;
+  /** A call that never rang (a kids' phone's log): why, in a word (see `CallRefusal`). */
+  refused?: CallRefusal | null;
+  /** The plain words the caller was given, if any. */
+  note?: string | null;
 }
+
+/** Why a call never rang, for a kids' phone's call activity (migration 0036). */
+export type CallRefusal =
+  | "not_allowed"
+  | "quiet_hours"
+  | "busy"
+  | "offline"
+  | "unavailable"
+  | "other";
 
 /** 'YYYY-MM' (UTC) for a time. */
 export const monthOf = (now: number): string => new Date(now).toISOString().slice(0, 7);
@@ -916,8 +929,9 @@ export class Store {
     const id = newId("cl");
     await this.sql.run(
       `INSERT INTO call_log (id, household_id, account_id, device_id, peer, peer_label, direction,
-         started_at, answered, duration_ms, end_reason, voicemail_id, expires_at, call_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         started_at, answered, duration_ms, end_reason, voicemail_id, expires_at, call_id, refused,
+         note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       entry.householdId,
       entry.accountId,
@@ -932,8 +946,39 @@ export class Store {
       entry.voicemailId ?? null,
       entry.expiresAt ?? null,
       entry.callId ?? null,
+      entry.refused ?? null,
+      entry.note ?? null,
     );
     return id;
+  }
+
+  /**
+   * A phone's own call log (a kids' phone's call activity), newest first: `limit` rows after
+   * `before` (the last row of the page before: its start and id). The caller sweeps expired rows
+   * first.
+   */
+  async deviceCallLog(
+    deviceId: string,
+    limit = 50,
+    before?: { at: number; id: string },
+  ): Promise<CallLogEntry[]> {
+    const at = before?.at ?? Number.MAX_SAFE_INTEGER;
+    const rows = await this.sql.all<{ id: string }>(
+      `SELECT id FROM call_log WHERE device_id = ? AND account_id IS NULL
+         AND (started_at < ? OR (started_at = ? AND id < ?))
+       ORDER BY started_at DESC, id DESC LIMIT ?`,
+      deviceId,
+      at,
+      at,
+      before?.id ?? "",
+      limit,
+    );
+    const out: CallLogEntry[] = [];
+    for (const r of rows) {
+      const entry = await this.callLogEntry(r.id);
+      if (entry) out.push(entry);
+    }
+    return out;
   }
 
   /** An account's calls with one peer (newest first), or all of its calls. */
@@ -1020,6 +1065,8 @@ export class Store {
       expires_at: number | null;
       call_id: string | null;
       recording_id: string | null;
+      refused: CallRefusal | null;
+      note: string | null;
     }>("SELECT * FROM call_log WHERE id = ?", id);
     return (
       r && {
@@ -1038,6 +1085,8 @@ export class Store {
         expiresAt: r.expires_at,
         callId: r.call_id ?? null,
         recordingId: r.recording_id ?? null,
+        refused: r.refused ?? null,
+        note: r.note ?? null,
       }
     );
   }
