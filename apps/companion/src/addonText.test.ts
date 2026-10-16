@@ -14,6 +14,7 @@ import {
   linkedText,
   removalText,
   shareRequestText,
+  stoppedText,
 } from "./addonText.ts";
 
 describe("add-on words", () => {
@@ -182,17 +183,18 @@ describe("goneText", () => {
       "seat was removed and its address stopped working.",
     );
   });
+});
 
-  it("tells a holder their share is gone", () => {
-    expect(
-      goneText({
-        id: "g3",
-        what: "share",
-        addon: "seat",
-        at: 0,
-        owner: "Jesse (jesse@a.test)",
-        label: "Book club",
-      }),
-    ).toBe('Jesse (jesse@a.test)\'s seat: your share "Book club" is gone.');
+describe("stoppedText", () => {
+  it("says why a share you hold stopped, or went, in plain words", () => {
+    expect(stoppedText("not_connected", "Jesse")).toBe(
+      "Stopped: you're no longer connected with Jesse.",
+    );
+    expect(stoppedText("suspended", "Jesse")).toBe("Stopped: Jesse's account is suspended.");
+    expect(stoppedText("addons_off_there", "Jesse")).toBe(
+      "Stopped: add-ons are off on that server.",
+    );
+    expect(stoppedText("removed", "Jesse")).toBe("Gone: Jesse removed the add-on.");
+    expect(stoppedText("taken_back", "Jesse")).toBe("Gone: Jesse took it back.");
   });
 });

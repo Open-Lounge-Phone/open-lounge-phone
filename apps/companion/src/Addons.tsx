@@ -17,6 +17,7 @@ import {
   linkedText,
   removalText,
   shareRequestText,
+  stoppedText,
 } from "./addonText.ts";
 import type {
   AddonContact,
@@ -24,7 +25,6 @@ import type {
   AddonShareView,
   AddonView,
   Api,
-  ConnectionView,
   DeviceSummary,
   HeldShare,
   ShareRequestView,
@@ -43,10 +43,14 @@ interface Held {
   title: string;
   /** The add-on's name. */
   addon: string;
+  /** Whose add-on it is (their name). */
+  ownerName: string;
   shareLabel: string;
   address: string;
   muted: boolean;
   about?: HeldShare["about"] | undefined;
+  stopped?: HeldShare["stopped"];
+  goneId?: string | undefined;
 }
 
 type View = { name: "list" } | { name: "addon"; id: string } | { name: "link" };
@@ -90,14 +94,13 @@ export function Addons({
     Promise.all([
       api.addons(),
       api.addonsShared().catch(() => ({ held: [] as HeldShare[] })),
-      api.connections().catch(() => undefined),
       api.addonContacts().catch(() => [] as AddonContact[]),
       api.addonsGone().catch(() => [] as GoneNote[]),
     ]).then(
-      ([mine, shared, conns, cs, g]) => {
+      ([mine, shared, cs, g]) => {
         setInfo(mine);
         setGone(g);
-        setHeld([...heldHere(shared.held), ...heldElsewhere(conns?.connections ?? [])]);
+        setHeld(shared.held.map(heldView));
         setContacts(cs);
         setError(undefined);
       },
@@ -292,28 +295,19 @@ export function Addons({
   );
 }
 
-const heldHere = (list: HeldShare[]): Held[] =>
-  list.map((h) => ({
-    key: h.grantId,
-    title: heldShareLabel(h.owner.name, h.addon, h.share.label),
-    addon: h.addon,
-    shareLabel: h.share.label,
-    address: h.address,
-    muted: !!h.muted,
-    about: h.about,
-  }));
-
-const heldElsewhere = (conns: ConnectionView[]): Held[] =>
-  conns.flatMap((c) =>
-    (c.addonShares ?? []).map((x) => ({
-      key: `${c.id}:${x.addon}:${x.share}`,
-      title: heldShareLabel(c.name || c.address, x.addon, x.label),
-      addon: x.addon,
-      shareLabel: x.label,
-      address: x.address,
-      muted: !!x.muted,
-    })),
-  );
+/** Owner names from the server's note ("Jesse (jesse@a.test)") are shown as they come. */
+const heldView = (h: HeldShare): Held => ({
+  key: h.key,
+  title: heldShareLabel(h.owner.name, h.addon, h.share.label),
+  addon: h.addon,
+  ownerName: h.owner.name,
+  shareLabel: h.share.label,
+  address: h.address,
+  muted: !!h.muted,
+  about: h.about,
+  stopped: h.stopped,
+  goneId: h.goneId,
+});
 
 interface Shared {
   api: Api;
@@ -713,6 +707,41 @@ function HeldRow({ h, ...s }: Shared & { h: Held }) {
       s.onError((e as Error).message);
     }
   };
+  const giveBack = () => {
+    if (h.goneId) {
+      void act(
+        () => s.api.dismissAddonGone(h.goneId as string),
+        `${h.shareLabel} is off your list.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Give ${h.shareLabel} back? You can't call it any more, and it can't call you within it.`,
+      )
+    ) {
+      return;
+    }
+    void act(() => s.api.leaveShare(h.address), `You gave ${h.shareLabel} back.`);
+  };
+  if (h.stopped) {
+    return (
+      <li className="card stack held stopped">
+        <div className="row wrap">
+          <strong>{h.title}</strong> <span className="badge">add-on</span>
+        </div>
+        {h.address && <code className="small">{h.address}</code>}
+        <p className="warning small" role="status">
+          {stoppedText(h.stopped, h.ownerName)}
+        </p>
+        <div className="row wrap">
+          <button type="button" className="danger" onClick={giveBack}>
+            Give it back
+          </button>
+        </div>
+      </li>
+    );
+  }
   return (
     <li className="card stack held">
       <div className="row wrap">
@@ -755,20 +784,7 @@ function HeldRow({ h, ...s }: Shared & { h: Held }) {
         >
           {h.muted ? "Let it call me" : "Stop its calls"}
         </button>
-        <button
-          type="button"
-          className="danger"
-          onClick={() => {
-            if (
-              !window.confirm(
-                `Give ${h.shareLabel} back? You can't call it any more, and it can't call you within it.`,
-              )
-            ) {
-              return;
-            }
-            void act(() => s.api.leaveShare(h.address), `You gave ${h.shareLabel} back.`);
-          }}
-        >
+        <button type="button" className="danger" onClick={giveBack}>
           Give it back
         </button>
       </div>

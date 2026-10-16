@@ -166,21 +166,52 @@ export function removalText(a: {
 }
 
 /** A note that something went (`GET /addons/gone`). */
-export type GoneNote =
-  | {
-      id: string;
-      what: "removed";
-      addon: string;
-      at: number;
-      shares: { label: string; holders: string[] }[];
-    }
-  | { id: string; what: "share"; addon: string; at: number; owner: string; label: string };
+export interface GoneNote {
+  id: string;
+  what: "removed";
+  addon: string;
+  at: number;
+  shares: { label: string; holders: string[] }[];
+}
+
+/**
+ * Why a share you hold doesn't work (or went), as the server says it: add-ons off here or on the
+ * add-on's server, its owner suspended, not connected any more, or why it went.
+ */
+export type HeldStopped =
+  | "addons_off_here"
+  | "addons_off_there"
+  | "suspended"
+  | "not_connected"
+  | "removed"
+  | "taken_back"
+  | "not_offered"
+  | "gone";
+
+/** The plain reason under a stopped share ("You're no longer connected with Jesse."). */
+export function stoppedText(why: HeldStopped, owner: string): string {
+  switch (why) {
+    case "addons_off_here":
+      return "Stopped: add-ons are off on this server.";
+    case "addons_off_there":
+      return "Stopped: add-ons are off on that server.";
+    case "suspended":
+      return `Stopped: ${owner}'s account is suspended.`;
+    case "not_connected":
+      return `Stopped: you're no longer connected with ${owner}.`;
+    case "removed":
+      return `Gone: ${owner} removed the add-on.`;
+    case "taken_back":
+      return `Gone: ${owner} took it back.`;
+    case "not_offered":
+      return "Gone: the add-on doesn't offer it any more.";
+    case "gone":
+      return `Gone: ${owner}'s server doesn't list it any more.`;
+  }
+}
 
 /** "seat was removed. Its share Book club went; Ana and Bob no longer have it." */
 export function goneText(n: GoneNote): string {
-  if (n.what === "share") {
-    return `${n.owner}'s ${n.addon}: your share ${n.label ? `"${n.label}" ` : ""}is gone.`;
-  }
   const given = n.shares.filter((s) => s.holders.length);
   const parts = [`${n.addon} was removed and its address stopped working.`];
   if (n.shares.length) {

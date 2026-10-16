@@ -11,8 +11,10 @@ import {
   type AddonGrant,
   type AddonSelf,
   LOCAL_HOST,
+  type ShareGoneWhy,
   type ShareHolder,
   type ShareRequest,
+  WHOLE_SERVER,
 } from "@openloungephone/db";
 import { ADDON_NAME_RE, formatAddonAddress, parseAddonAddress } from "@openloungephone/federation";
 import type {
@@ -244,6 +246,47 @@ export async function addonAccess(
 }
 
 /**
+ * Why a share someone holds doesn't work (shown under Add-ons → Shared with you, with Give it
+ * back): add-ons are off on this server or on the add-on's, its owner is suspended, they're no
+ * longer connected with its owner, or (a note of a share that went) why it went.
+ */
+export type HeldStopped =
+  | "addons_off_here"
+  | "addons_off_there"
+  | "suspended"
+  | "not_connected"
+  | ShareGoneWhy;
+
+/** One share of someone else's add-on you hold, as the app lists it. */
+export interface HeldView {
+  /** The grant (here), the connection's share, or the note of one that went. */
+  key: string;
+  /** On this server (else on a connection's server, or a note). */
+  here: boolean;
+  owner: { name: string; address: string };
+  addon: string;
+  share: { id: string; label: string };
+  address: string;
+  muted: boolean;
+  about?: ReturnType<typeof publicAbout>;
+  stopped?: HeldStopped;
+  /** A share that went: its note (Give it back dismisses it). */
+  goneId?: string;
+}
+
+/** Why a share of an add-on here that `who` holds doesn't work now, if it doesn't. */
+async function heldHereStopped(
+  env: ServerEnv,
+  addon: Addon,
+  who: Who,
+): Promise<HeldStopped | undefined> {
+  if (!env.addons) return "addons_off_here";
+  const owner = await env.store.getAccount(addon.accountId);
+  if (!owner || owner.suspendedAt !== null) return "suspended";
+  return (await stillReachable(env, addon.accountId, who)) ? undefined : "not_connected";
+}
+
+/**
  * A holder still counts: not blocked by the owner, and the owner's active connection, or (on this
  * server) in one of the owner's spaces.
  */
@@ -317,6 +360,7 @@ export async function noteShareGone(
   addon: Pick<Addon, "name" | "accountId">,
   grant: Pick<AddonGrant, "host" | "accountId">,
   label: string,
+  why: ShareGoneWhy,
 ): Promise<void> {
   if (grant.host !== LOCAL_HOST) return;
   const owner = await env.store.getAccount(addon.accountId);
@@ -328,6 +372,7 @@ export async function noteShareGone(
       addon: addon.name,
       owner: `${owner.name} (${owner.handle}@${ownHost(env)})`,
       label,
+      why,
     },
     env.now(),
   );
@@ -361,7 +406,8 @@ export async function unlinkAddon(env: ServerEnv, live: Coordinator, addon: Addo
     env.now(),
   );
   for (const g of grants) {
-    await noteShareGone(env, addon, g, shares.find((sh) => sh.id === g.shareId)?.label ?? "");
+    const label = shares.find((sh) => sh.id === g.shareId)?.label ?? "";
+    await noteShareGone(env, addon, g, label, "removed");
   }
   await store.addons.delete(addon.id);
   await store.recordRemovedDevices(
@@ -644,10 +690,13 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
   });
 
   /**
-   * What went, so nothing disappears silently: add-ons of yours that were removed (with the
-   * shares and holders that went with them), and shares you held that went.
+   * What went, so nothing disappears silently: add-ons of yours that were removed, with the
+   * shares and holders that went with them. (Shares you held that went are listed with the ones
+   * you hold, `GET /addons/shared`.)
    */
-  api.get("/addons/gone", async (c) => c.json(await store.addons.gone(c.get("account").id)));
+  api.get("/addons/gone", async (c) =>
+    c.json((await store.addons.gone(c.get("account").id)).filter((n) => n.what === "removed")),
+  );
 
   api.delete("/addons/gone/:id", async (c) => {
     const ok = await store.addons.dismissGone(c.get("account").id, c.req.param("id"));
@@ -694,29 +743,77 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
    * What you can call of other people's add-ons here: the shares of them you hold (on this
    * server; shares from other servers come with that connection). Only shares that work now.
    */
+  /**
+   * Every share of someone else's add-on given to you: on this server (`here`) or on a
+   * connection's server. One that stopped working stays listed with why (`stopped`), and so does
+   * one that went (`goneId`: its note), until you give it back.
+   */
   api.get("/addons/shared", async (c) => {
     const account = c.get("account");
-    if (!env.addons) return c.json({ held: [] });
-    const held = [];
+    const held: HeldView[] = [];
     for (const h of await store.addons.heldBy(account.id)) {
       const addon = await store.addons.get(h.addonId);
       if (!addon) continue;
-      const may = await addonAccess(
-        env,
-        addon,
-        { host: LOCAL_HOST, accountId: account.id, handle: account.handle },
-        h.shareId,
-      );
-      if (!may) continue;
       const mute = { host: LOCAL_HOST, ownerAccount: addon.accountId, name: addon.name };
+      const stopped = await heldHereStopped(env, addon, {
+        host: LOCAL_HOST,
+        accountId: account.id,
+        handle: account.handle,
+      });
       held.push({
-        grantId: h.id,
+        key: h.id,
+        here: true,
         owner: { name: h.ownerName, address: `${h.ownerHandle}@${ownHost(env)}` },
         addon: h.addonName,
         share: { id: h.shareId, label: h.label },
         address: shareAddress(env, h.ownerHandle, h.addonName, h.shareId),
         muted: await store.addons.muted(account.id, mute),
         ...(addon.about ? { about: publicAbout(addon.about) } : {}),
+        ...(stopped ? { stopped } : {}),
+      });
+    }
+    for (const r of await store.connections.list(account.id)) {
+      if (r.peerHost === LOCAL_HOST || r.peerHandle === WHOLE_SERVER) continue;
+      const received = await store.addons.received(r.id);
+      if (!received.length) continue;
+      const stopped: HeldStopped | undefined = !env.addons
+        ? "addons_off_here"
+        : r.state !== "active" || !r.peerAccount
+          ? "not_connected"
+          : !(await peerSupports(env, r.peerHost, "addons").catch(() => true))
+            ? "addons_off_there"
+            : undefined;
+      for (const x of received) {
+        held.push({
+          key: `${r.id}:${x.addon}:${x.share}`,
+          here: false,
+          owner: { name: r.peerName || r.peerHandle, address: `${r.peerHandle}@${r.peerHost}` },
+          addon: x.addon,
+          share: { id: x.share, label: x.label },
+          address: `${r.peerHandle}+${x.addon}+${x.share}@${r.peerHost}`,
+          muted: r.peerAccount
+            ? await store.addons.muted(account.id, {
+                host: r.peerHost,
+                ownerAccount: r.peerAccount,
+                name: x.addon,
+              })
+            : false,
+          ...(stopped ? { stopped } : {}),
+        });
+      }
+    }
+    for (const n of await store.addons.gone(account.id)) {
+      if (n.what !== "share") continue;
+      held.push({
+        key: n.id,
+        here: false,
+        owner: { name: n.owner, address: "" },
+        addon: n.addon,
+        share: { id: "", label: n.label },
+        address: "",
+        muted: false,
+        stopped: n.why,
+        goneId: n.id,
       });
     }
     return c.json({ held });
@@ -734,8 +831,9 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
       const addon = await store.addons.byAddress(a.handle, a.name);
       return addon ? { a, host, ownerAccount: addon.accountId, addon } : undefined;
     }
+    // Any state: a share whose connection stopped can still be given back (or muted).
     const conn = await store.connections.find(account.id, host, a.handle);
-    if (conn?.state !== "active" || !conn.peerAccount) return undefined;
+    if (!conn?.peerAccount) return undefined;
     return { a, host, ownerAccount: conn.peerAccount, conn };
   };
 
@@ -929,7 +1027,7 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     if (!addon || grant?.addonId !== addon.id) return c.json({ error: "not found" }, 404);
     const label = (await store.addons.share(addon.id, grant.shareId))?.label ?? "";
     await store.addons.revoke(grant.id);
-    await noteShareGone(env, addon, grant, label);
+    await noteShareGone(env, addon, grant, label, "taken_back");
     await live.endAddonShareCalls(addon.householdId, addon.id, { grantIds: [grant.id] });
     await tellHolder(env, notify, addon.accountId, grant);
     await auditAddon(env, addon, "addon.revoke", {

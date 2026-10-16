@@ -887,9 +887,9 @@ export async function addonsAcross(jesse: Person, bob: Person) {
     await new Promise((r) => setTimeout(r, 100));
   }
   expect(await bobsShares()).toEqual([]);
-  // His server kept a note that it went, for his Add-ons tab.
-  expect((await api(bob, "/addons/gone")).json).toMatchObject([
-    { what: "share", addon: "seat", label: "Book club" },
+  // His server keeps it on his Add-ons tab as gone, with why, until he gives it back.
+  expect((await api(bob, "/addons/shared")).json.held).toMatchObject([
+    { addon: "seat", share: { label: "Book club" }, stopped: "gone" },
   ]);
 
   expect((await api(jesse, `/addons/${deviceId}`, { method: "DELETE" })).status).toBe(204);

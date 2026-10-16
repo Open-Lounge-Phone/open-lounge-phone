@@ -39,7 +39,7 @@ import {
 } from "@openloungephone/federation";
 import { Hono } from "hono";
 import { z } from "zod";
-import { holderLeft } from "./addons.ts";
+import { holderLeft, noteShareGone } from "./addons.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import { primaryHousehold, receiveGuestDial } from "./fedCalls.ts";
@@ -113,6 +113,33 @@ export class Connections {
     return this.live.notifyAccount(accountId, { t: "connections.changed" }).catch((e) => {
       this.env.log("warn", "connections: notify failed", { error: String(e) });
     });
+  }
+
+  /**
+   * A connection is about to go: add-on shares that came through it go with it, never silently.
+   * Its account gets a note for each share it held through it (another server's add-ons), and a
+   * holder here of one of its add-ons' shares given through it gets one too.
+   */
+  private async noteSharesGoing(row: Connection): Promise<void> {
+    const { store } = this;
+    const host = row.peerHost || ownHost(this.env);
+    for (const x of await store.addons.received(row.id)) {
+      await store.addons.noteGone(
+        row.accountId,
+        {
+          what: "share",
+          addon: x.addon,
+          owner: `${row.peerName || row.peerHandle} (${row.peerHandle}@${host})`,
+          label: x.label,
+          why: "not_connected",
+        },
+        this.env.now(),
+      );
+    }
+    for (const g of await store.addons.heldThrough(row.id)) {
+      const addon = { name: g.addonName, accountId: g.ownerAccountId };
+      await noteShareGone(this.env, addon, g, g.label, "not_connected");
+    }
   }
 
   // --- receiving (from a local account, or verified from another server) ---------------
@@ -198,6 +225,7 @@ export class Connections {
     const row = await this.store.connections.findPeer(account.id, from.host, from);
     // Your own decline or block stays.
     if (!row || (row.state !== "active" && row.state !== "requested")) return;
+    await this.noteSharesGoing(row);
     await this.store.connections.delete(row.id);
     await this.changed(account.id);
   }
@@ -333,6 +361,7 @@ export class Connections {
   /** Disconnect, cancel a knock, forget a request, or unblock. */
   async remove(me: Account, c: Connection): Promise<void> {
     const wasShared = c.state === "active" || (c.state === "requested" && c.direction === "out");
+    await this.noteSharesGoing(c);
     await this.store.connections.delete(c.id);
     if (wasShared) await this.sendQuietly(c, "remove", me);
   }
@@ -770,6 +799,7 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
           addon: old.addon,
           owner: `${row.peerName || row.peerHandle} (${row.peerHandle}@${r.host})`,
           label: old.label,
+          why: "gone",
         },
         env.now(),
       );

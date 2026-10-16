@@ -450,6 +450,42 @@ describe("sharing add-ons on one server", () => {
     seat = await linkAddon(a, jesse);
   });
 
+  it("a share that stopped working is shown with why, and given back", async () => {
+    await declare(a, seat, [BOOK_CLUB]);
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${anaConn}`), 201);
+    const held = async () => (await a.http("/addons/shared", { token: ana.token })).json.held;
+    expect((await held())[0].stopped).toBeUndefined();
+    // Its owner is suspended.
+    const boss = await a.person("boss", "Boss");
+    a.env.operators = [boss.account.id];
+    const suspend = (suspended: boolean) =>
+      a.http(`/admin/accounts/${jesse.account.id}/suspend`, {
+        token: boss.token,
+        body: { suspended },
+      });
+    expectStatus(await suspend(true), 204);
+    expect(await held()).toMatchObject([{ addon: "seat", stopped: "suspended" }]);
+    expectStatus(await suspend(false), 204);
+    expect((await held())[0].stopped).toBeUndefined();
+    // They're no longer connected (it was given through the connection): a note, not silence.
+    const jessesRow = (await a.http("/connections", { token: jesse.token })).json.connections.find(
+      (c: { address: string }) => c.address === "ana@a.test",
+    );
+    expectStatus(
+      await a.http(`/connections/${jessesRow.id}`, { method: "DELETE", token: jesse.token }),
+      204,
+    );
+    const after = await held();
+    expect(after).toMatchObject([
+      { addon: "seat", share: { label: "Book club" }, stopped: "not_connected" },
+    ]);
+    expectStatus(
+      await a.http(`/addons/gone/${after[0].goneId}`, { method: "DELETE", token: ana.token }),
+      204,
+    );
+    expect(await held()).toEqual([]);
+  });
+
   it("a share's address reaches it only for the people holding that share (default deny)", async () => {
     const anaApp = await a.connectApp(ana.token);
     const tryShare = async () => {
@@ -586,7 +622,17 @@ describe("sharing add-ons on one server", () => {
     await a.store.deleteUser(deeInTeam.id, net.timers.now);
     deeApp.write({ t: "call.address", address: "jesse+seat+bookclub@a.test" });
     expect(await deeApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
-    // …and it's no longer listed for her.
+    // …and it shows as stopped, with why, for her to give back.
+    expect((await a.http("/addons/shared", { token: dee.token })).json.held).toMatchObject([
+      { addon: "seat", share: { label: "Book club" }, stopped: "not_connected" },
+    ]);
+    expectStatus(
+      await a.http("/addons/leave", {
+        token: dee.token,
+        body: { address: "jesse+seat+bookclub@a.test" },
+      }),
+      204,
+    );
     expect((await a.http("/addons/shared", { token: dee.token })).json.held).toEqual([]);
   });
 
@@ -734,7 +780,8 @@ describe("sharing add-ons on one server", () => {
     expect((await exported(cyToken)).addons).toEqual([]);
     expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([
       {
-        grantId: grant.json.grantId,
+        key: grant.json.grantId,
+        here: true,
         owner: { name: "Jesse", address: "jesse@a.test" },
         addon: "seat",
         share: BOOK_CLUB,
@@ -755,8 +802,16 @@ describe("sharing add-ons on one server", () => {
         ).status,
       ).toBe(404);
     }
-    // A share that went is gone from her list too.
+    // A share that went stays on her list as gone, with why, until she gives it back.
     await declare(a, seat, [{ id: "garden", label: "Garden" }]);
+    const went = (await a.http("/addons/shared", { token: ana.token })).json.held;
+    expect(went).toMatchObject([
+      { addon: "seat", share: { label: "Book club" }, stopped: "not_offered", goneId: went[0].key },
+    ]);
+    expectStatus(
+      await a.http(`/addons/gone/${went[0].goneId}`, { method: "DELETE", token: ana.token }),
+      204,
+    );
     expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([]);
   });
 
@@ -883,7 +938,10 @@ describe("sharing add-ons on one server", () => {
     const anaApp = await a.connectApp(ana.token);
     anaApp.write({ t: "call.address", address: "jesse+seat+bookclub@a.test" });
     expect(await anaApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
-    expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([]);
+    // Shown, not hidden: stopped because add-ons are off here.
+    expect((await a.http("/addons/shared", { token: ana.token })).json.held).toMatchObject([
+      { address: "jesse+seat+bookclub@a.test", stopped: "addons_off_here" },
+    ]);
   });
 });
 
@@ -918,24 +976,86 @@ describe("sharing add-ons across servers", () => {
     expect(await gone(a, jesse.token)).toMatchObject([
       { what: "removed", addon: "seat", shares: [{ label: "Book club", holders: ["Ana", "Bob"] }] },
     ]);
-    const anas = await gone(a, ana.token);
+    // A holder's note is with the shares they hold, stopped, saying why.
+    const held = async (s: TestServer, token: string) =>
+      (await s.http("/addons/shared", { token })).json.held;
+    const anas = await held(a, ana.token);
     expect(anas).toMatchObject([
-      { what: "share", addon: "seat", owner: "Jesse (jesse@a.test)", label: "Book club" },
+      {
+        addon: "seat",
+        owner: { name: "Jesse (jesse@a.test)" },
+        share: { label: "Book club" },
+        stopped: "removed",
+      },
     ]);
+    expect(await gone(a, ana.token)).toEqual([]);
     // Bob's server learned it went (the share list it was sent no longer has it).
-    expect(await gone(b, bob.token)).toMatchObject([
-      { what: "share", addon: "seat", owner: "Jesse (jesse@a.test)", label: "Book club" },
+    expect(await held(b, bob.token)).toMatchObject([
+      {
+        addon: "seat",
+        owner: { name: "Jesse (jesse@a.test)" },
+        share: { label: "Book club" },
+        stopped: "gone",
+      },
     ]);
-    // Each dismisses their own, nobody else's.
+    // Each gives back (dismisses) their own, nobody else's.
     expectStatus(
-      await a.http(`/addons/gone/${anas[0].id}`, { method: "DELETE", token: jesse.token }),
+      await a.http(`/addons/gone/${anas[0].goneId}`, { method: "DELETE", token: jesse.token }),
       404,
     );
     expectStatus(
-      await a.http(`/addons/gone/${anas[0].id}`, { method: "DELETE", token: ana.token }),
+      await a.http(`/addons/gone/${anas[0].goneId}`, { method: "DELETE", token: ana.token }),
       204,
     );
-    expect(await gone(a, ana.token)).toEqual([]);
+    expect(await held(a, ana.token)).toEqual([]);
+  });
+
+  it("a holder elsewhere sees a stopped share with why, and gives it back", async () => {
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`), 201);
+    await settle(a);
+    const held = async () => (await b.http("/addons/shared", { token: bob.token })).json.held;
+    expect(await held()).toMatchObject([
+      { here: false, address: "jesse+seat+bookclub@a.test", owner: { address: "jesse@a.test" } },
+    ]);
+    expect((await held())[0].stopped).toBeUndefined();
+    // Add-ons are off on the add-on's server (it stopped listing them).
+    await net.advertise("a.test", (doc) => ({
+      ...doc,
+      features: (doc.features as string[]).filter((f) => f !== "addons"),
+    }));
+    expect(await held()).toMatchObject([{ stopped: "addons_off_there" }]);
+    // …or here.
+    b.env.addons = false;
+    expect(await held()).toMatchObject([{ stopped: "addons_off_here" }]);
+    b.env.addons = true;
+    // Bob blocks Jesse: no longer connected.
+    expectStatus(
+      await b.http(`/connections/${ids.bSide}/block`, { method: "POST", token: bob.token }),
+      204,
+    );
+    expect(await held()).toMatchObject([{ stopped: "not_connected" }]);
+    // Bob gives it back while it's stopped: gone here.
+    expectStatus(
+      await b.http("/addons/leave", {
+        token: bob.token,
+        body: { address: "jesse+seat+bookclub@a.test" },
+      }),
+      204,
+    );
+    expect(await held()).toEqual([]);
+  });
+
+  it("a holder elsewhere who's no longer connected gets a note with why", async () => {
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`), 201);
+    await settle(a);
+    expectStatus(
+      await a.http(`/connections/${ids.aSide}`, { method: "DELETE", token: jesse.token }),
+      204,
+    );
+    await settle(a);
+    expect((await b.http("/addons/shared", { token: bob.token })).json.held).toMatchObject([
+      { addon: "seat", share: { label: "Book club" }, stopped: "not_connected" },
+    ]);
   });
 
   it("a share taken back: its holder gets a note", async () => {
@@ -951,8 +1071,8 @@ describe("sharing add-ons across servers", () => {
       }),
       204,
     );
-    expect((await a.http("/addons/gone", { token: ana.token })).json).toMatchObject([
-      { what: "share", label: "Book club" },
+    expect((await a.http("/addons/shared", { token: ana.token })).json.held).toMatchObject([
+      { share: { label: "Book club" }, stopped: "taken_back" },
     ]);
     // Nothing for the owner (they did it, and the add-on is still there).
     expect((await a.http("/addons/gone", { token: jesse.token })).json).toEqual([]);

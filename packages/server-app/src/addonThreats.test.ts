@@ -420,7 +420,9 @@ describe("2. who it can reach", () => {
       expect(await anaApp.nextState("ended")).toBeTruthy();
       expect(evil.conn.all("wipe")).toHaveLength(1);
       expect(evil.conn.closed).toBeDefined();
-      expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([]);
+      expect((await a.http("/addons/shared", { token: ana.token })).json.held).toMatchObject([
+        { addon: "evil", stopped: "removed" },
+      ]);
       // It comes back with its key: told to forget again, nothing more.
       const back = a.openDevice();
       back.write({ ...SAMPLES.hello, deviceId: evil.id });

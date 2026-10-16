@@ -1,5 +1,5 @@
 /** Typed client for the Open Lounge Phone REST API (`/api/*`). */
-import type { GoneNote } from "./addonText.ts";
+import type { GoneNote, HeldStopped } from "./addonText.ts";
 import type { SpaceType } from "./spaces.ts";
 
 export type Role = "guardian" | "contact";
@@ -355,15 +355,23 @@ export interface AddonPerson {
 
 /** A share of someone else's add-on (on this server) that they gave you. */
 export interface HeldShare {
-  grantId: string;
+  /** The grant (here), the connection's share, or the note of one that went. */
+  key: string;
+  /** Its add-on is on this server. */
+  here: boolean;
   owner: { name: string; address: string };
   addon: string;
   share: { id: string; label: string };
+  /** '' for one that went. */
   address: string;
   /** You stopped its calls. */
   muted?: boolean;
-  /** What it said it does (when it said). */
+  /** What it said it does (when it said; add-ons here only). */
   about?: AddonAbout;
+  /** It doesn't work now, or it went: why. */
+  stopped?: HeldStopped;
+  /** It went: its note (Give it back dismisses it). */
+  goneId?: string;
 }
 
 /** An add-on (or a share of one) in your contacts. */

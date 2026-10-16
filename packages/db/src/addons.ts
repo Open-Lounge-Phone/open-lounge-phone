@@ -334,6 +334,15 @@ export class AddonStore {
    * account, with the add-on and its owner.
    */
   async heldBy(accountId: string): Promise<HeldShare[]> {
+    return this.held("g.host = '' AND g.account_id = ?", accountId);
+  }
+
+  /** Grants given through one connection of their add-ons' owner (they go with it). */
+  async heldThrough(connectionId: string): Promise<HeldShare[]> {
+    return this.held("g.connection_id = ?", connectionId);
+  }
+
+  private async held(where: string, param: string): Promise<HeldShare[]> {
     const rows = await this.sql.all<
       GrantRow & {
         label: string;
@@ -350,9 +359,9 @@ export class AddonStore {
        JOIN addon_shares s ON s.addon_id = g.addon_id AND s.share_id = g.share_id
        JOIN addons a ON a.id = g.addon_id
        JOIN accounts o ON o.id = a.account_id
-       WHERE g.host = '' AND g.account_id = ?
+       WHERE ${where}
        ORDER BY o.name, a.name, s.position`,
-      accountId,
+      param,
     );
     return rows.map((r) => ({
       ...toGrant(r),
@@ -511,10 +520,10 @@ export class AddonStore {
     accountId: string,
     note:
       | { what: "removed"; addon: string; shares: { label: string; holders: string[] }[] }
-      | { what: "share"; addon: string; owner: string; label: string },
+      | { what: "share"; addon: string; owner: string; label: string; why: ShareGoneWhy },
     now: number,
   ): Promise<void> {
-    const detail = note.what === "removed" ? note.shares : { label: note.label };
+    const detail = note.what === "removed" ? note.shares : { label: note.label, why: note.why };
     await this.sql.run(
       `INSERT INTO addon_gone (id, account_id, what, addon, owner, detail, at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -551,6 +560,7 @@ export class AddonStore {
             at: r.at,
             owner: r.owner,
             label: (JSON.parse(r.detail) as { label: string }).label,
+            why: (JSON.parse(r.detail) as { why?: ShareGoneWhy }).why ?? "gone",
           },
     );
   }
@@ -644,7 +654,13 @@ export class AddonStore {
   }
 }
 
-/** Something an add-on offers for sharing (`addon.shares`). */
+/**
+ * Why a share someone held went: its add-on was removed, its owner took it back, the add-on
+ * stopped offering it, they're no longer connected with its owner, or (told by another server
+ * whose list no longer has it) just that it went.
+ */
+export type ShareGoneWhy = "removed" | "taken_back" | "not_offered" | "not_connected" | "gone";
+
 /** A note that something went (`removed`: your add-on; `share`: a share you held). */
 export type AddonGone =
   | {
@@ -654,7 +670,17 @@ export type AddonGone =
       at: number;
       shares: { label: string; holders: string[] }[];
     }
-  | { id: string; what: "share"; addon: string; at: number; owner: string; label: string };
+  | {
+      id: string;
+      what: "share";
+      addon: string;
+      at: number;
+      owner: string;
+      label: string;
+      why: ShareGoneWhy;
+    };
+
+/** Something an add-on offers for sharing (`addon.shares`). */
 
 export interface AddonShare {
   id: string;

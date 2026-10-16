@@ -3443,7 +3443,7 @@ export class HouseholdHub {
     // Holders here of a share it stopped offering get a note that it went.
     for (const g of revoked) {
       const label = before.find((b) => b.id === g.shareId)?.label ?? "";
-      await noteShareGone(this.env, addon, g, label);
+      await noteShareGone(this.env, addon, g, label, "not_offered");
     }
     const told = new Set<string>();
     for (const g of revoked) {
