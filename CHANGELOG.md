@@ -10,9 +10,9 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
-## 0.9.0 (unreleased)
+## 0.9.0 (2026-10-16, `server-v0.9.0`)
 
-On `main`, not tagged yet. **Update everything together** (server, apps, phones' firmware, add-on
+**Update everything together** (server, apps, phones' firmware, add-on
 bridge): this release changes shapes without keeping older ones working (a phone's `config.owner`
 mode `left`, `addon.test`, the `GET /addons/shared` list, `/fed/v1/addons/test`). A holder testing
 an add-on on a server still on 0.8.0 is told "You can't reach it now."
