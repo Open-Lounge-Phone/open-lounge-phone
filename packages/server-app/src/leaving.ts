@@ -1,7 +1,7 @@
 // Leaving a server: take your data with you (export), then delete your account. See
 // docs/export.md for the export format and docs/privacy.md for what is kept.
 import { ownedSpacesBlockingDelete } from "@openloungephone/core";
-import type { Account } from "@openloungephone/db";
+import type { Account, Device } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { unlinkAddon, unlinkAddonsOf } from "./addons.ts";
@@ -168,6 +168,35 @@ export async function spacesToHandOn(
 }
 
 /**
+ * Removes a phone and has it wipe itself (now if it's connected, else when it next connects):
+ * its voicemail goes, and connections that could call it learn it's gone.
+ */
+export async function removeAndWipe(env: ServerEnv, live: Coordinator, device: Device) {
+  // Voicemail and greeting rows cascade with the phone; their audio lives in the blob store.
+  await dropVoicemailBlobs(env, { deviceId: device.id });
+  const shared = (await env.store.listRemoteContacts(device.id)).map((r) => r.connectionId);
+  await env.store.recordRemovedDevices([device], env.now());
+  await env.store.deleteDevice(device.id);
+  await live.forgetDevice(device.householdId, device.id);
+  for (const id of shared) await new Connections(env, live).sharePhones(id);
+}
+
+/**
+ * Someone leaves a space (or is removed): their own phones there go with them, wiped. A phone
+ * never changes whose it is, so it can't stay behind as the space's phone; and in a team or
+ * organization an ownerless phone would be a kids' phone, which only homes have.
+ */
+export async function wipeOwnPhones(
+  env: ServerEnv,
+  live: Coordinator,
+  user: { id: string; householdId: string },
+) {
+  for (const d of await env.store.listDevices(user.householdId)) {
+    if (d.ownerUserId === user.id) await removeAndWipe(env, live, d);
+  }
+}
+
+/**
  * Deletes a space and everything in it: its phones wipe themselves (now, or when they next
  * connect) and its voicemail audio goes.
  */
@@ -212,6 +241,7 @@ export async function deleteAccountEverywhere(
       continue;
     }
     await dropVoicemailBlobs(env, { userId: user.id });
+    await wipeOwnPhones(env, live, user);
     await store.deleteUser(user.id, now);
     // A Lounge phone they were using forgets them now.
     for (const d of await store.listDevices(household.id)) {

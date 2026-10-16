@@ -149,6 +149,58 @@ describe("remove = wipe", () => {
   });
 });
 
+describe("someone's own phones go with them", () => {
+  /** Ann: her own home, and a member of Acme's team with her own desk phone there. */
+  async function annAtAcme() {
+    const ann = await s.person("ann", "Ann");
+    const acme = await s.person("acme", "Acme", "team");
+    const there = await s.store.createUser(
+      { householdId: acme.household.id, name: "Ann", role: "contact", accountId: ann.account.id },
+      s.timers.now,
+    );
+    const token = await s.store.createAccountSession(ann.account.id, there.id, s.timers.now);
+    const phone = await unpaired("personal");
+    expectStatus(await pair(token, phone.code), 201);
+    const { deviceId } = await phone.conn.next("pair.done");
+    const conn = await signIn(deviceId, phone.key.pair);
+    await conn.next("config");
+    return { ann, acme, there, token, deviceId, conn };
+  }
+
+  it("wiped when they leave, never left behind as the space's phone", async () => {
+    const { acme, token, deviceId, conn } = await annAtAcme();
+    expectStatus(
+      await s.http("/space/leave", { method: "POST", token, household: acme.household.id }),
+      200,
+    );
+    expect(await conn.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
+    expect(await s.store.getDevice(deviceId)).toBeUndefined();
+    expect((await s.http("/devices", { token: acme.token })).json).toEqual([]);
+  });
+
+  it("wiped when they're removed", async () => {
+    const { acme, there, deviceId, conn } = await annAtAcme();
+    expectStatus(await s.http(`/users/${there.id}`, { method: "DELETE", token: acme.token }), 200);
+    expect(await conn.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
+    expect(await s.store.getDevice(deviceId)).toBeUndefined();
+  });
+
+  it("wiped when their account goes with the space it was their only one", async () => {
+    const { mom, dad } = await home();
+    const phone = await unpaired("personal");
+    expectStatus(await pair(dad.token, phone.code), 201);
+    const { deviceId } = await phone.conn.next("pair.done");
+    expectStatus(
+      await s.http(`/users/${dad.user.id}`, { method: "DELETE", token: mom.token }),
+      200,
+    );
+    expect(await s.store.getDevice(deviceId)).toBeUndefined();
+    // …and it learns to wipe itself when it comes back.
+    const back = await signIn(deviceId, phone.key.pair);
+    expect(await back.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
+  });
+});
+
 describe("Lounge phones: session length and idle options", () => {
   async function loungeSpace() {
     const h = await home();

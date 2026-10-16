@@ -42,7 +42,7 @@ import type { Coordinator } from "./gateway.ts";
 import { homeRoutes } from "./home.ts";
 import { body, guardianOnly, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
-import { leavingRoutes } from "./leaving.ts";
+import { leavingRoutes, removeAndWipe } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
 import { lineRoutes } from "./lines.ts";
 import { memberRoutes } from "./members.ts";
@@ -56,7 +56,7 @@ import { roomRoutes } from "./roomsApi.ts";
 import { publicRecoveryRoutes, sessionOptions, sessionRoutes } from "./sessions.ts";
 import { sweepSpace, timelineRoutes } from "./timeline.ts";
 import { publicVoicemailRoutes } from "./vmTickets.ts";
-import { dropVoicemailBlobs, voicemailRoutes } from "./voicemail.ts";
+import { voicemailRoutes } from "./voicemail.ts";
 import { workplaceRoutes } from "./workplace.ts";
 
 /** What a recovery code's session may do: make a passkey, see who it is, or sign out. */
@@ -600,14 +600,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const user = c.get("user");
     const device = await manageable(user, c.req.param("id"));
     if (!device) return c.json({ error: "not found" }, 404);
-    // Voicemail and greeting rows cascade with the phone; their audio lives in the blob store.
-    await dropVoicemailBlobs(env, { deviceId: device.id });
-    const shared = (await store.listRemoteContacts(device.id)).map((r) => r.connectionId);
     // Remove = wipe: the phone is told now (if connected) or when it next connects.
-    await store.recordRemovedDevices([device], env.now());
-    await store.deleteDevice(device.id);
-    await live.forgetDevice(user.householdId, device.id);
-    for (const id of shared) await new Connections(env, live).sharePhones(id);
+    await removeAndWipe(env, live, device);
     await auditFrom(env, c, "phone.remove", { deviceId: device.id, name: device.name });
     return c.body(null, 204);
   });
