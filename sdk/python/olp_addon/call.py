@@ -149,7 +149,7 @@ class Call:
     async def _on_rtc_config(self, msg: p.Message) -> None:
         servers = []
         for s in msg.get("iceServers") or []:
-            urls = s.get("urls")
+            urls = udp_ice_urls(s.get("urls"))
             if not urls:
                 continue
             servers.append(
@@ -251,3 +251,24 @@ class Call:
 
 class CallEnded(Exception):
     """The call ended before it was answered or connected; `args[0]` is why."""
+
+
+def udp_ice_urls(urls: object) -> list[str]:
+    """STUN and TURN over UDP only. aiortc gathers every server before it answers, and TURN over
+    TCP or TLS can take 15 s or more to give up (some networks), so an answer came too late for
+    the caller; phones and browsers reach the relay over UDP anyway."""
+    if isinstance(urls, str):
+        urls = [urls]
+    if not isinstance(urls, list):
+        return []
+    keep = []
+    for u in urls:
+        if not isinstance(u, str):
+            continue
+        low = u.lower()
+        if low.startswith("stun:"):
+            keep.append(u)
+        elif low.startswith("turn:") and "transport=tcp" not in low:
+            keep.append(u)
+    return keep
+

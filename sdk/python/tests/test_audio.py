@@ -104,5 +104,24 @@ class CallSendTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(call._out._buf), 0)  # nothing queued after the end
 
 
+class IceUrlsTest(unittest.TestCase):
+    def test_keeps_stun_and_udp_turn_only(self) -> None:
+        from olp_addon.call import udp_ice_urls
+
+        cf = [
+            "turn:turn.cloudflare.com:3478?transport=udp",
+            "turn:turn.cloudflare.com:3478?transport=tcp",
+            "turn:turn.cloudflare.com:80?transport=tcp",
+            "turns:turn.cloudflare.com:443?transport=tcp",
+            "turn:turn.example:3478",
+        ]
+        self.assertEqual(
+            udp_ice_urls(cf),
+            ["turn:turn.cloudflare.com:3478?transport=udp", "turn:turn.example:3478"],
+        )
+        self.assertEqual(udp_ice_urls("stun:stun.cloudflare.com:3478"), ["stun:stun.cloudflare.com:3478"])
+        self.assertEqual(udp_ice_urls(None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

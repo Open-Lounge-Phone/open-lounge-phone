@@ -40,6 +40,9 @@ On `main`, not tagged yet.
 - **Someone's own phones go with them**: leaving a space, being removed from it or deleting the
   account now removes and wipes the person's own phones there. Before, such a phone stayed as
   an ownerless household phone in kids' mode (even in a team), out of every list of own phones.
+- Add-on bridge: an add-on uses STUN and TURN over UDP only. aiortc gathers every relay before
+  it answers a call, and TURN over TCP/TLS could hold the answer back 15 s or more, past the
+  caller's patience.
 
 ## 0.8.0 (2026-10-16, `server-v0.8.0`)
 
