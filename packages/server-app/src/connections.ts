@@ -758,6 +758,21 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     const account = await env.store.accountByHandle(to);
     const row = account && (await env.store.connections.findPeer(account.id, r.host, from));
     if (!account || row?.state !== "active" || row.peerAccount !== from.id) return accepted();
+    // Shares they held that aren't on the new list went: a note for them, as for shares here.
+    const kept = new Set(shares.map((x) => `${x.addon}+${x.share}`));
+    for (const old of await env.store.addons.received(row.id)) {
+      if (kept.has(`${old.addon}+${old.share}`)) continue;
+      await env.store.addons.noteGone(
+        account.id,
+        {
+          what: "share",
+          addon: old.addon,
+          owner: `${row.peerName || row.peerHandle} (${row.peerHandle}@${r.host})`,
+          label: old.label,
+        },
+        env.now(),
+      );
+    }
     await env.store.addons.setReceived(row.id, shares);
     await live.notifyAccount(account.id, { t: "connections.changed" });
     return accepted();

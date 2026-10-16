@@ -906,6 +906,58 @@ describe("sharing add-ons across servers", () => {
     await declare(a, seat, [BOOK_CLUB]);
   });
 
+  it("when it's removed, its owner and every holder get a note of what went", async () => {
+    const ana = await a.person("ana", "Ana");
+    const anaConn = (await connect(a, jesse, a, ana)).aSide;
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${anaConn}`), 201);
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`), 201);
+    expectStatus(await a.http(`/addons/${seat.id}`, { method: "DELETE", token: jesse.token }), 204);
+    await settle(a);
+    const gone = async (s: TestServer, token: string) =>
+      (await s.http("/addons/gone", { token })).json;
+    expect(await gone(a, jesse.token)).toMatchObject([
+      { what: "removed", addon: "seat", shares: [{ label: "Book club", holders: ["Ana", "Bob"] }] },
+    ]);
+    const anas = await gone(a, ana.token);
+    expect(anas).toMatchObject([
+      { what: "share", addon: "seat", owner: "Jesse (jesse@a.test)", label: "Book club" },
+    ]);
+    // Bob's server learned it went (the share list it was sent no longer has it).
+    expect(await gone(b, bob.token)).toMatchObject([
+      { what: "share", addon: "seat", owner: "Jesse (jesse@a.test)", label: "Book club" },
+    ]);
+    // Each dismisses their own, nobody else's.
+    expectStatus(
+      await a.http(`/addons/gone/${anas[0].id}`, { method: "DELETE", token: jesse.token }),
+      404,
+    );
+    expectStatus(
+      await a.http(`/addons/gone/${anas[0].id}`, { method: "DELETE", token: ana.token }),
+      204,
+    );
+    expect(await gone(a, ana.token)).toEqual([]);
+  });
+
+  it("a share taken back: its holder gets a note", async () => {
+    const g = await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`);
+    const ana = await a.person("ana", "Ana");
+    const anaConn = (await connect(a, jesse, a, ana)).aSide;
+    const ga = await give(a, jesse, seat.id, "bookclub", `conn:${anaConn}`);
+    void g;
+    expectStatus(
+      await a.http(`/addons/${seat.id}/grants/${ga.json.grantId}`, {
+        method: "DELETE",
+        token: jesse.token,
+      }),
+      204,
+    );
+    expect((await a.http("/addons/gone", { token: ana.token })).json).toMatchObject([
+      { what: "share", label: "Book club" },
+    ]);
+    // Nothing for the owner (they did it, and the add-on is still there).
+    expect((await a.http("/addons/gone", { token: jesse.token })).json).toEqual([]);
+  });
+
   const bobsShares = async () =>
     (await b.http("/connections", { token: bob.token })).json.connections.find(
       (c: { id: string }) => c.id === ids.bSide,

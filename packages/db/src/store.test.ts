@@ -1743,7 +1743,7 @@ describe("0033 speed-dial pages", () => {
     await s.setButton(device.id, 9, ln);
     // Before: nothing past 15.
     await expect(s.setButton(device.id, 16, guardian.id)).rejects.toThrow();
-    expect(migrate(old.db)).toEqual(["0033_key_pages.sql"]);
+    expect(migrate(old.db)).toContain("0033_key_pages.sql");
     expect([...(await s.listButtons(device.id))]).toEqual([
       [0, guardian.id],
       [5, rk],

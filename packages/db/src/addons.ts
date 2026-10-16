@@ -504,6 +504,67 @@ export class AddonStore {
     );
   }
 
+  // --- what went (docs/add-ons.md "When an add-on or a share goes") ----------------------
+
+  /** Notes that an add-on or a share went, for the person concerned (see migration 0034). */
+  async noteGone(
+    accountId: string,
+    note:
+      | { what: "removed"; addon: string; shares: { label: string; holders: string[] }[] }
+      | { what: "share"; addon: string; owner: string; label: string },
+    now: number,
+  ): Promise<void> {
+    const detail = note.what === "removed" ? note.shares : { label: note.label };
+    await this.sql.run(
+      `INSERT INTO addon_gone (id, account_id, what, addon, owner, detail, at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      newId("gone"),
+      accountId,
+      note.what,
+      note.addon,
+      note.what === "share" ? note.owner : "",
+      JSON.stringify(detail),
+      now,
+    );
+  }
+
+  /** The notes of what went, newest first (at most 20). */
+  async gone(accountId: string): Promise<AddonGone[]> {
+    const rows = await this.sql.all<{
+      id: string;
+      what: "removed" | "share";
+      addon: string;
+      owner: string;
+      detail: string;
+      at: number;
+    }>(
+      "SELECT * FROM addon_gone WHERE account_id = ? ORDER BY at DESC, rowid DESC LIMIT 20",
+      accountId,
+    );
+    return rows.map((r) =>
+      r.what === "removed"
+        ? { id: r.id, what: "removed", addon: r.addon, at: r.at, shares: JSON.parse(r.detail) }
+        : {
+            id: r.id,
+            what: "share",
+            addon: r.addon,
+            at: r.at,
+            owner: r.owner,
+            label: (JSON.parse(r.detail) as { label: string }).label,
+          },
+    );
+  }
+
+  /** Dismisses one; answers whether it was theirs. */
+  async dismissGone(accountId: string, id: string): Promise<boolean> {
+    const { changes } = await this.sql.run(
+      "DELETE FROM addon_gone WHERE id = ? AND account_id = ?",
+      id,
+      accountId,
+    );
+    return changes === 1;
+  }
+
   // --- shares other servers' people gave us (`/fed/v1/addon-shares`) -----------------------
 
   /** Replaces the shares of add-ons on the other side of a connection that we hold. */
@@ -584,6 +645,17 @@ export class AddonStore {
 }
 
 /** Something an add-on offers for sharing (`addon.shares`). */
+/** A note that something went (`removed`: your add-on; `share`: a share you held). */
+export type AddonGone =
+  | {
+      id: string;
+      what: "removed";
+      addon: string;
+      at: number;
+      shares: { label: string; holders: string[] }[];
+    }
+  | { id: string; what: "share"; addon: string; at: number; owner: string; label: string };
+
 export interface AddonShare {
   id: string;
   label: string;

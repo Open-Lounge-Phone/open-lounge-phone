@@ -311,6 +311,28 @@ export async function tellHolder(
   }
 }
 
+/** A holder here lost a share (its add-on went, or the share did): a note for them. */
+export async function noteShareGone(
+  env: ServerEnv,
+  addon: Pick<Addon, "name" | "accountId">,
+  grant: Pick<AddonGrant, "host" | "accountId">,
+  label: string,
+): Promise<void> {
+  if (grant.host !== LOCAL_HOST) return;
+  const owner = await env.store.getAccount(addon.accountId);
+  if (!owner) return;
+  await env.store.addons.noteGone(
+    grant.accountId,
+    {
+      what: "share",
+      addon: addon.name,
+      owner: `${owner.name} (${owner.handle}@${ownHost(env)})`,
+      label,
+    },
+    env.now(),
+  );
+}
+
 /**
  * Unlinks an add-on (its owner removed it, left the space it was linked in, or the space or their
  * account went): the row goes with its shares and grants, its socket closes with its calls, it
@@ -320,6 +342,27 @@ export async function tellHolder(
 export async function unlinkAddon(env: ServerEnv, live: Coordinator, addon: Addon): Promise<void> {
   const { store } = env;
   const grants = await store.addons.grants(addon.id);
+  const shares = await store.addons.shares(addon.id);
+  // Nothing goes silently: its owner gets a note of what went, and so does each holder here
+  // (holders on other servers get theirs from their server when it's told).
+  await store.addons.noteGone(
+    addon.accountId,
+    {
+      what: "removed",
+      addon: addon.name,
+      shares: shares.map((sh) => ({
+        label: sh.label,
+        holders: grants
+          .filter((g) => g.shareId === sh.id)
+          .map((g) => g.name)
+          .sort((x, y) => x.localeCompare(y)),
+      })),
+    },
+    env.now(),
+  );
+  for (const g of grants) {
+    await noteShareGone(env, addon, g, shares.find((sh) => sh.id === g.shareId)?.label ?? "");
+  }
   await store.addons.delete(addon.id);
   await store.recordRemovedDevices(
     [{ id: addon.id, publicKey: addon.publicKey, keyAlg: addon.keyAlg }],
@@ -558,7 +601,8 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     };
   };
 
-  const view = async (addon: Addon, handle: string) => {
+  const view = async (addon: Addon, owner: Pick<Account, "handle" | "name">) => {
+    const handle = owner.handle;
     const [shares, grants] = await Promise.all([
       store.addons.shares(addon.id),
       store.addons.grants(addon.id),
@@ -572,6 +616,9 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
       fw: addon.fw,
       createdAt: addon.createdAt,
       space: (await store.getHousehold(addon.householdId))?.name ?? "",
+      // Whose account it's linked to, on which server (an add-on's own UI shows the same).
+      owner: { name: owner.name, address: `${handle}@${ownHost(env)}` },
+      server: ownHost(env),
       shares: shares.map((s) => ({
         id: s.id,
         label: s.label,
@@ -592,8 +639,19 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     const addons = await store.addons.list(account.id);
     return c.json({
       enabled: env.addons === true,
-      addons: await Promise.all(addons.map((a) => view(a, account.handle))),
+      addons: await Promise.all(addons.map((a) => view(a, account))),
     });
+  });
+
+  /**
+   * What went, so nothing disappears silently: add-ons of yours that were removed (with the
+   * shares and holders that went with them), and shares you held that went.
+   */
+  api.get("/addons/gone", async (c) => c.json(await store.addons.gone(c.get("account").id)));
+
+  api.delete("/addons/gone/:id", async (c) => {
+    const ok = await store.addons.dismissGone(c.get("account").id, c.req.param("id"));
+    return ok ? c.body(null, 204) : c.json({ error: "not found" }, 404);
   });
 
   /** Who you can give a share to: your active connections and the people in your spaces. */
@@ -831,7 +889,7 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     if (linked === "no_code") return c.json({ error: "unknown or expired code" }, 404);
     await live.notifyPaired(b.code, { id: linked.id, householdId: linked.householdId });
     await auditAddon(env, linked, "addon.link", {});
-    return c.json(await view(linked, account.handle), 201);
+    return c.json(await view(linked, account), 201);
   });
 
   /** The one-time note that the old "who may talk to it" entries were removed: seen. */
@@ -869,7 +927,9 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     const addon = await own(account.id, c.req.param("id"));
     const grant = addon && (await store.addons.getGrant(c.req.param("grant")));
     if (!addon || grant?.addonId !== addon.id) return c.json({ error: "not found" }, 404);
+    const label = (await store.addons.share(addon.id, grant.shareId))?.label ?? "";
     await store.addons.revoke(grant.id);
+    await noteShareGone(env, addon, grant, label);
     await live.endAddonShareCalls(addon.householdId, addon.id, { grantIds: [grant.id] });
     await tellHolder(env, notify, addon.accountId, grant);
     await auditAddon(env, addon, "addon.revoke", {

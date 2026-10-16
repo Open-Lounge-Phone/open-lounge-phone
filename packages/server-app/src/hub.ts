@@ -120,6 +120,7 @@ import {
   addonCallsOutLimited,
   answerShareRequest,
   cleanText,
+  noteShareGone,
   rulesOf,
   selfOf,
   tellHolder,
@@ -3413,8 +3414,14 @@ export class HouseholdHub {
     addon: Addon,
     shares: { id: string; label: string }[],
   ): Promise<void> {
+    const before = await this.env.store.addons.shares(addon.id);
     const { revoked, removed } = await this.env.store.addons.setShares(addon.id, shares);
     if (removed.length) await this.endShareCalls(addon.id, { shareIds: removed });
+    // Holders here of a share it stopped offering get a note that it went.
+    for (const g of revoked) {
+      const label = before.find((b) => b.id === g.shareId)?.label ?? "";
+      await noteShareGone(this.env, addon, g, label);
+    }
     const told = new Set<string>();
     for (const g of revoked) {
       const key = `${g.host}|${g.accountId}`;
