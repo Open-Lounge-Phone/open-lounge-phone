@@ -5,7 +5,7 @@ import { AvailabilityToggle, GrownUps } from "./GrownUps.tsx";
 import { MissedCalls } from "./MissedCalls.tsx";
 import { Notices } from "./Notices.tsx";
 import { UseOldDeviceHint } from "./Pair.tsx";
-import { offlineHint, shareLink, virtualPhoneUrl } from "./phoneLed.ts";
+import { offlineHint, shareLink, VIRTUAL_MODEL, virtualPhoneUrl } from "./phoneLed.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
@@ -61,9 +61,14 @@ export function Home({
   onCallBack,
 }: Props) {
   const now = useNow(30_000);
-  const myPhone = devices.find((d) => meId && d.ownerUserId === meId);
-  // Household phones (e.g. kids'); people's own phones live in their "My phone" card.
+  // Every phone of mine (a person can have several: a desk phone, a virtual one…).
+  const mine = devices.filter((d) => !!meId && d.ownerUserId === meId && d.kind !== "lounge");
+  // Household phones (e.g. kids'), and other people's own phones (guardians manage those too).
   const household = devices.filter((d) => !d.ownerUserId && d.kind !== "lounge");
+  const theirs = devices.filter(
+    (d) => !!d.ownerUserId && d.ownerUserId !== meId && d.kind !== "lounge",
+  );
+  const ownerName = (id: string) => people.find((u) => u.id === id)?.name ?? "Someone";
   return (
     <section className="stack">
       <h2>{userName ? `Hi, ${userName}` : "Phones"}</h2>
@@ -72,8 +77,8 @@ export function Home({
       )}
       {meId && (
         <MyPhone
-          phone={myPhone}
-          live={myPhone ? live[myPhone.id] : undefined}
+          phones={mine}
+          live={live}
           householdPhones={household.length}
           meId={meId}
           userName={userName ?? "My"}
@@ -145,6 +150,42 @@ export function Home({
           );
         })}
       </ul>
+      {guardian && theirs.length > 0 && (
+        <>
+          <h3>People's own phones</h3>
+          <ul className="devices">
+            {theirs.map((d) => {
+              const l = live[d.id];
+              const online = l?.online ?? d.online;
+              return (
+                <li key={d.id} className="card device">
+                  <div className="device-main">
+                    <span
+                      className={`dot ${online ? "on" : "off"}`}
+                      role="img"
+                      aria-label={online ? "online" : "offline"}
+                    />
+                    <div>
+                      <div className="device-name">{d.name}</div>
+                      <div className="muted small">
+                        {ownerName(d.ownerUserId as string)}'s phone ·{" "}
+                        {online
+                          ? "online"
+                          : `offline · last seen ${formatLastSeen(l?.lastSeen ?? d.lastSeen, now)}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="device-actions">
+                    <button type="button" onClick={() => onManage(d)}>
+                      Manage
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
       <button type="button" className="add" onClick={onPair}>
         {guardian ? "+ Pair a phone" : "+ Pair my phone"}
       </button>
@@ -155,7 +196,7 @@ export function Home({
 }
 
 function MyPhone({
-  phone,
+  phones,
   live,
   householdPhones,
   meId,
@@ -164,8 +205,9 @@ function MyPhone({
   onManage,
   onAdding,
 }: {
-  phone: DeviceSummary | undefined;
-  live: DeviceLive | undefined;
+  /** Every phone of mine here: desk phones and the virtual one. */
+  phones: DeviceSummary[];
+  live: Record<string, DeviceLive>;
   /** Phones here that belong to the household, not to anyone: none of them is "my" phone. */
   householdPhones: number;
   meId: string;
@@ -178,7 +220,7 @@ function MyPhone({
     if (pair) onAdding();
     window.open(virtualPhoneUrl(meId, userName, pair), `olp-phone-${meId}`);
   };
-  if (!phone) {
+  if (phones.length === 0) {
     return (
       <div className="card stack my-phone" id="my-phone">
         <div className="device-name">My phone</div>
@@ -195,37 +237,60 @@ function MyPhone({
       </div>
     );
   }
-  const online = live?.online ?? phone.online;
+  const hasVirtual = phones.some(isVirtual);
   return (
-    <div className="card device my-phone" id="my-phone">
-      <div className="device-main">
-        <span
-          className={`dot ${online ? "on" : "off"}`}
-          role="img"
-          aria-label={online ? "online" : "offline"}
-        />
-        <div>
-          <div className="device-name">{phone.name}</div>
-          <div className="muted small">
-            {online
-              ? "Your phone · online"
-              : `Your phone · offline · last seen ${formatLastSeen(live?.lastSeen ?? phone.lastSeen, now)}`}
-            {live?.battery && ` · 🔋 ${formatBattery(live.battery)}`}
-          </div>
-          {!online && <p className="hint offline-hint">{offlineHint(phone)}</p>}
-        </div>
-      </div>
-      <div className="device-actions">
-        <button type="button" onClick={() => onManage(phone)}>
-          Manage
+    <div className="card stack my-phone" id="my-phone">
+      <div className="device-name">{phones.length > 1 ? "My phones" : "My phone"}</div>
+      <ul className="devices">
+        {phones.map((phone) => {
+          const l = live[phone.id];
+          const online = l?.online ?? phone.online;
+          return (
+            <li key={phone.id} className="device">
+              <div className="device-main">
+                <span
+                  className={`dot ${online ? "on" : "off"}`}
+                  role="img"
+                  aria-label={online ? "online" : "offline"}
+                />
+                <div>
+                  <div className="device-name">{phone.name}</div>
+                  <div className="muted small">
+                    {isVirtual(phone) ? "Virtual phone" : "Your phone"} ·{" "}
+                    {online
+                      ? "online"
+                      : `offline · last seen ${formatLastSeen(l?.lastSeen ?? phone.lastSeen, now)}`}
+                    {l?.battery && ` · 🔋 ${formatBattery(l.battery)}`}
+                  </div>
+                  {!online && <p className="hint offline-hint">{offlineHint(phone)}</p>}
+                </div>
+              </div>
+              <div className="device-actions">
+                <button type="button" onClick={() => onManage(phone)}>
+                  Manage
+                </button>
+                {isVirtual(phone) && (
+                  <button type="button" className="primary" onClick={() => open(false)}>
+                    Open my phone
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {!hasVirtual && (
+        <button type="button" className="link" onClick={() => open(true)}>
+          Add a virtual phone too
         </button>
-        <button type="button" className="primary" onClick={() => open(false)}>
-          Open my phone
-        </button>
-      </div>
+      )}
       <OpenElsewhere meId={meId} userName={userName} />
     </div>
   );
+}
+
+function isVirtual(d: DeviceSummary): boolean {
+  return d.model === VIRTUAL_MODEL;
 }
 
 /** Share/copy the virtual phone's link so it can live on a laptop or tablet. */

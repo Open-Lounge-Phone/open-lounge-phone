@@ -26,8 +26,11 @@ export function pickPhone(
   devices: readonly PhoneRef[],
   meId: string | undefined,
   guardian: boolean,
+  live: Readonly<Record<string, { online: boolean }>> = {},
 ): { device: PhoneRef; mine: boolean } | undefined {
-  const mine = devices.find((d) => meId && d.ownerUserId === meId);
+  // Of my phones (a desk phone, a virtual one…), one that's online if any is.
+  const mineAll = devices.filter((d) => meId && d.ownerUserId === meId);
+  const mine = mineAll.find((d) => live[d.id]?.online ?? d.online) ?? mineAll[0];
   if (mine) return { device: mine, mine: true };
   const household = guardian ? devices.find((d) => !d.ownerUserId) : undefined;
   return household ? { device: household, mine: false } : undefined;
@@ -46,7 +49,7 @@ export interface PhoneLedInput {
 }
 
 export function phoneLed(input: PhoneLedInput): PhoneLed {
-  const picked = pickPhone(input.devices, input.meId, input.guardian);
+  const picked = pickPhone(input.devices, input.meId, input.guardian, input.live);
   if (!picked) return { color: "grey", pulse: false, label: "No phone yet", mine: false };
   const { device, mine } = picked;
   const who = device.name;

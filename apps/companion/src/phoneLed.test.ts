@@ -27,6 +27,17 @@ describe("pickPhone", () => {
     expect(pickPhone([kid], "me", false)).toBeUndefined();
     expect(pickPhone([{ ...mine, ownerUserId: "other" }], "me", true)).toBeUndefined();
   });
+
+  it("of several phones of yours, shows one that's online", () => {
+    const desk = { ...mine, id: "d3", name: "Desk phone", online: false };
+    expect(pickPhone([desk, mine], "me", true)?.device).toBe(mine);
+    // Live state wins over the listed one.
+    expect(
+      pickPhone([desk, mine], "me", true, { d3: { online: true }, d1: { online: false } })?.device,
+    ).toBe(desk);
+    // None online: the first.
+    expect(pickPhone([desk, { ...mine, online: false }], "me", true)?.device).toBe(desk);
+  });
 });
 
 describe("phoneLed", () => {
