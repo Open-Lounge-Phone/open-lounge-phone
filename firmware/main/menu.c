@@ -154,6 +154,8 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     if (digit_of(key) == 1) {
       app_post(EV_SELFTEST, 0, NULL);
       m->screen = MENU_CLOSED;
+    } else if (digit_of(key) == 2) {
+      app_post(EV_ECHO_TEST, 0, NULL);  // the page stays: it shows the result
     }
   } else if (m->screen == MENU_WIFI || m->screen == MENU_SERVER) {
 #if CONFIG_OLP_LABS
@@ -179,6 +181,8 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
       signals_ring_preview();
     } else if (d == 6) {  // sidetone: off, low, normal, round again
       audio_set_sidetone((sidetone_t)((audio_sidetone() + 1) % SIDETONE_LEVELS));
+    } else if (d == 7) {  // the echo canceller, from the next call
+      audio_set_echo_cancel(!audio_echo_cancel());
     }
   }
   return true;
@@ -308,7 +312,7 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
     }
     case MENU_CHECK:  // drawn as a page (main.c); these lines are the fallback
       snprintf(out[0], 25, "PHONE CHECK");
-      snprintf(out[1], 25, "1 SELF-TEST");
+      snprintf(out[1], 25, "1 SELF-TEST 2 ECHO");
       return 2;
     case MENU_VOICEMAIL:
       if (m->voicemail > 0) snprintf(out[0], 25, "%d NEW VOICEMAIL", m->voicemail);
@@ -329,7 +333,8 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       snprintf(out[4], 25, "6 SIDETONE %s", audio_sidetone() == SIDETONE_OFF ? "OFF"
                                               : audio_sidetone() == SIDETONE_LOW ? "LOW"
                                                                                  : "NORMAL");
-      return 5;
+      snprintf(out[5], 25, "7 ECHO CANCEL %s", audio_echo_cancel() ? "ON" : "OFF");
+      return 6;
     }
     case MENU_ABOUT: {
       const char *const *w = identity_fingerprint();

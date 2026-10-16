@@ -671,17 +671,26 @@ static void draw_check(int w, int h, int64_t now) {
     snprintf(mic, sizeof mic, "SPEAK NOW: %.0f DB %s",
              audio_agc_on() ? st.speech_out_dbfs : st.speech_in_dbfs,
              agc_verdict(st.speech_in_dbfs, st.mic_peak_dbfs));
+  // The echo test (2, handset up): how much of the earpiece comes back in the mic, and how late.
+  char echo[40];
+  echo_result_t er;
+  int ets = audio_echo_test_state(&er);
+  if (ets == 1 || ets == 2) snprintf(echo, sizeof echo, "TESTING...");
+  else if (ets == 3 && er.heard)
+    snprintf(echo, sizeof echo, "%.0f DB %s, %.0f MS", er.erl_db, echo_word(er.erl_db), er.delay_ms);
+  else if (ets == 3) snprintf(echo, sizeof echo, "OVER %.0f DB %s", er.erl_db, echo_word(er.erl_db));
+  else snprintf(echo, sizeof echo, s_hook_up ? "PRESS 2" : "LIFT, PRESS 2");
   const char *rows[][2] = {
       {net_label, wifi},     {"ADDRESS", ip[0] ? ip : "-"}, {"SERVER", server},
       {"LAST ISSUE", issue}, {"HANDSET", handset},          {"MIC", mic},
-      {"RUNNING", up},       {"MEMORY", mem},
+      {"ECHO", echo},        {"RUNNING", up},               {"MEMORY", mem},
   };
-  screen_page(fb, w, h, "PHONE CHECK", rows, 8, "1 SELF-TEST      BACK: MENU");
+  screen_page(fb, w, h, "PHONE CHECK", rows, 9, "1 SELF-TEST 2 ECHO  BACK: MENU");
   display_pixels(fb);
   free(fb);
   ESP_LOGI(TAG, "CHECK wifi=[%s] ip=%s server=[%s] issue=[%s] handset=[%s] mic=[%s] up=[%s] mem=[%s] "
-           "miclevel=%.1f micpeak=%.1f speechin=%.1f agc=%.1f",
-           wifi, ip[0] ? ip : "-", server, issue, handset, mic, up, mem, st.mic_dbfs,
+           "echo=[%s] miclevel=%.1f micpeak=%.1f speechin=%.1f agc=%.1f",
+           wifi, ip[0] ? ip : "-", server, issue, handset, mic, up, mem, echo, st.mic_dbfs,
            st.mic_peak_dbfs, st.speech_in_dbfs, st.agc_gain_db);
 }
 
@@ -1590,6 +1599,11 @@ void app_main(void) {
 #else
           free(ev.data);   // only the labs build posts these
 #endif
+          break;
+        case EV_ECHO_TEST:
+          // The handset up on the phone check, not in a call: a sweep in the earpiece.
+          if (s_hook_up && s_phone.kind == PH_OFFHOOK && !s_phone.held[0] && audio_echo_test())
+            s_check_drawn = 0;  // show TESTING now
           break;
         case EV_SELFTEST:
           if (s_phone.kind == PH_IDLE || (s_phone.kind == PH_OFFHOOK && !s_phone.held[0])) {

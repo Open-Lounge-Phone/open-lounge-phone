@@ -31,6 +31,9 @@ int audio_volume(void) { return s_volume; }
 static sidetone_t s_sidetone = SIDETONE_NORMAL;
 void audio_set_sidetone(sidetone_t level) { s_sidetone = level; }
 sidetone_t audio_sidetone(void) { return s_sidetone; }
+static bool s_echo;
+void audio_set_echo_cancel(bool on) { s_echo = on; }
+bool audio_echo_cancel(void) { return s_echo; }
 int signals_ring_level(void) { return 2; }
 void signals_set_ring_level(int level) { (void)level; }
 ring_style_t signals_ring_style(void) { return RING_CLASSIC; }
@@ -350,8 +353,14 @@ TEST(menu_volume_cycles_the_sidetone) {
   menu_key(&m, 10, 0);
   menu_key(&m, 0, 0);  // 1 VOLUME
   CHECK(m.screen == MENU_VOLUME);
-  CHECK(menu_lines(&m, out) == 5);
+  CHECK(menu_lines(&m, out) == 6);
   CHECK_STR(out[4], "6 SIDETONE NORMAL");
+  CHECK_STR(out[5], "7 ECHO CANCEL OFF");
+  menu_key(&m, 6, 0);  // 7: the echo canceller on
+  menu_lines(&m, out);
+  CHECK_STR(out[5], "7 ECHO CANCEL ON");
+  menu_key(&m, 6, 0);
+  CHECK(!audio_echo_cancel());
   menu_key(&m, 5, 0);  // 6: normal → off
   menu_lines(&m, out);
   CHECK_STR(out[4], "6 SIDETONE OFF");

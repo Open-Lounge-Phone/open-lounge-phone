@@ -196,6 +196,15 @@ config OLP_AUDIO_BLOCK
         between a block in and the blocks queued out (three DMA buffers), so its delay is about
         3 blocks plus the codec's filters: under 5 ms with 1 ms blocks.
 
+config OLP_ECHO_CANCEL
+    bool "Echo canceller on by default"
+    default n
+    help
+        SpeexDSP's echo canceller (64 ms tail) and residual echo suppressor on the handset mic.
+        Off by default until the reference handsets' echo is measured (docs/audio.md item 5):
+        each phone can turn it on (MENU 1 7), and the phone check's echo test turns it on
+        when it measures a poor echo loss. The echo is measured in every call either way.
+
 config OLP_MIC_AGC
     bool "Automatic gain control on the handset mic"
     default y

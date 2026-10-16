@@ -32,7 +32,7 @@ static int read_pcm(int16_t *pcm, size_t n) {
   if (!s_mic_on) return 0;
   float step = 6.2831853f * s_src_hz / DSP_RATE;
   for (size_t i = 0; i < n; i++) {
-    pcm[i] = (int16_t)(8192.0f * sinf(s_src_phase));  // 8192/32768 peak → -15 dBFS RMS
+    pcm[i] = s_src_hz > 0 ? (int16_t)(8192.0f * sinf(s_src_phase)) : 0;  // -15 dBFS RMS; 0 Hz: none
     s_src_phase += step;
     if (s_src_phase > 6.2831853f) s_src_phase -= 6.2831853f;
   }
@@ -63,7 +63,7 @@ static void write_pcm(const int16_t *pcm, size_t n) {
   if (xTaskDelayUntil(&s_last, period) == pdFALSE) vTaskDelay(1);
 }
 
-void audio_test_source(float hz) { s_src_hz = hz > 0 && hz < DSP_RATE / 2 ? hz : 1000; }
+void audio_test_source(float hz) { s_src_hz = hz >= 0 && hz < DSP_RATE / 2 ? hz : 1000; }
 
 void audio_test_watch(float hz) {
   taskENTER_CRITICAL(&s_lock);

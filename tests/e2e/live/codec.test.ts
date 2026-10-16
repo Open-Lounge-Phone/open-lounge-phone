@@ -7,6 +7,8 @@
 //   2. the same with Opus taken out of the companion's offer: PCMU (no 5 kHz: telephone band)
 //   3. the phone calls the companion: its offer has Opus and PCMU, the answer picks Opus
 //      (negotiation only: see the case)
+//   4. the phone check's echo test (MENU 7 2): it runs, and finds no echo (none in QEMU)
+// The echo canceller is on for call 1.
 //
 //   OLP_CODEC_E2E=1 PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core [CHROME=/path/to/chrome] \
 //     npx vitest run tests/e2e/live/codec.test.ts
@@ -269,6 +271,10 @@ beforeAll(async () => {
   expect(res.status, JSON.stringify(res.json)).toBe(201);
   await phone.waitFor(/SIGNED IN as dev_/, 180_000, "signed in");
   phone.send(`audio source ${PHONE_HZ}`);
+  // The echo canceller on for the first call: it runs on the call's mic (the test device has no
+  // echo to remove). QEMU runs it several times slower than the chip, too slow for the earpiece to
+  // keep up, so the other calls go without it.
+  phone.send("audio echo on");
   phone.send(`audio watch ${COMPANION_HZ}`);
 }, 900_000);
 
@@ -348,6 +354,7 @@ it.skipIf(!ON || !want("2"))(
   async () => {
     const p = phone as QemuPhone;
     await companionCodec("PCMU");
+    p.send("audio echo off");
     const start = p.log.length;
     await g.tab("Home");
     await g.page
@@ -410,4 +417,32 @@ it.skipIf(!ON || !want("3"))(
     }
   },
   300_000,
+);
+
+it.skipIf(!ON || !want("4"))(
+  "4: the phone check's echo test",
+  async () => {
+    const p = phone as QemuPhone;
+    p.send("audio source 0"); // a quiet mic: only an echo would be heard
+    p.send("hook up");
+    await p.waitFor(/STATE offhook/, 10_000);
+    for (const k of ["menu", "7", "2"]) p.send(`key ${k}`);
+    try {
+      await p.waitFor(/ECHOTEST started/, 20_000, "echo test started");
+      const r = await p.waitFor(
+        /ECHOTEST heard=(\d) erl=(-?[\d.]+) delay=/,
+        30_000,
+        "echo test result",
+      );
+      expect(r[1]).toBe("0"); // the test device's earpiece doesn't reach its mic
+      expect(Number(r[2])).toBeGreaterThan(30);
+      await p.waitFor(/CHECK [^\n]*echo=\[OVER \d+ DB GOOD\]/, 20_000, "the check page");
+    } finally {
+      p.send("key menu");
+      p.send("hook down");
+      p.send(`audio source ${PHONE_HZ}`);
+      await p.waitFor(/STATE idle/, 20_000);
+    }
+  },
+  120_000,
 );

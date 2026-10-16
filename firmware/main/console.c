@@ -156,13 +156,16 @@ static int cmd_audio(int argc, char **argv) {
     audio_set_sidetone(l);
     printf("sidetone %s (%.0f dB), mic to ear about %.1f ms\n", sidetone_name(l), dsp_sidetone_db(l),
            audio_sidetone_latency_ms());
+  } else if (argc >= 3 && !strcmp(argv[1], "echo")) {
+    if (!strcmp(argv[2], "test")) printf("echo test %s\n", audio_echo_test() ? "started" : "can't start now");
+    else audio_set_echo_cancel(!strcmp(argv[2], "on"));
   } else if (argc >= 3 && !strcmp(argv[1], "source")) {
     audio_test_source((float)atof(argv[2]));  // the test device's mic tone (simulator, e2e)
   } else if (argc >= 3 && !strcmp(argv[1], "agc")) {
     audio_agc(strcmp(argv[2], "off") != 0);
   } else if (argc > 1) {
     printf("usage: audio [tone <dialtone|ringback|busy|hold|test|none>] [loop <ms>|off] "
-           "[watch <hz>] [gain <pga 0-30 dB> [scale-up 0-42 dB]] [agc on|off] [sidetone off|low|normal] [source <hz>]\n");
+           "[watch <hz>] [gain <pga 0-30 dB> [scale-up 0-42 dB]] [agc on|off] [sidetone off|low|normal] [echo on|off|test] [source <hz>]\n");
     return 1;
   }
   audio_print_status();

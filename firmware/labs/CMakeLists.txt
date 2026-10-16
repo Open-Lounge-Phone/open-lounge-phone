@@ -8,5 +8,6 @@ set(PROJECT_VER "0.0.0")
 if(NOT DEFINED SDKCONFIG_DEFAULTS)   # a simulator build passes its own (adds ../sdkconfig.qemu)
   set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/../sdkconfig.defaults;${CMAKE_CURRENT_LIST_DIR}/sdkconfig.labs")
 endif()
+set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")  # speexdsp
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(openloungephone-labs)

@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "dsp.h"
+#include "echo.h"
 #include "voice.h"
 
 #define VOLUME_MAX 10
@@ -65,6 +66,18 @@ sidetone_t audio_sidetone(void);
 const char *sidetone_name(sidetone_t level);
 /** The sidetone path's delay, mic to earpiece, as built (ms). */
 float audio_sidetone_latency_ms(void);
+/** The echo test measured that path over 5 ms: the sidetone stays off. */
+bool audio_sidetone_slow(void);
+
+/** The echo canceller (MENU 1 7), from the next call; saved. Default CONFIG_OLP_ECHO_CANCEL;
+ * the echo test turns it on when the echo is poor. */
+void audio_set_echo_cancel(bool on);
+bool audio_echo_cancel(void);
+/** The phone check's echo test (MENU 7 2, handset up, not in a call): a 2 s sweep in the
+ * earpiece, the mic measured. False if it can't start now. */
+bool audio_echo_test(void);
+/** 0 never run, 1-2 running, 3 done (`r` filled). */
+int audio_echo_test_state(echo_result_t *r);
 
 /** Bring-up: play `tone` to the earpiece even on the hook (TONE_NONE = back to normal). */
 void audio_force_tone(tone_t tone);

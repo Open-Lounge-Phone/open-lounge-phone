@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "echo.h"
 #include "fifo.h"
 #include "jbuf.h"
 #include "resample.h"
@@ -44,6 +45,17 @@ static int s_volume = VOLUME_DEFAULT;
 static bool s_volume_dirty = true;
 static int s_loop_ms;
 static sidetone_t s_sidetone = SIDETONE_NORMAL;
+static bool s_sidetone_slow;  // the echo test measured more than 5 ms mic to ear: no sidetone
+#if CONFIG_OLP_ECHO_CANCEL
+static bool s_echo_cancel = true;
+#else
+static bool s_echo_cancel = false;
+#endif
+// The phone check's echo test (MENU 7 2): a sweep out, the mic and what was played kept.
+static volatile int s_et_state;  // 0 idle, 1 running, 2 measuring, 3 done
+static int16_t *s_et_mic, *s_et_ref;
+static size_t s_et_len, s_et_got, s_et_played;
+static echo_result_t s_et_result;
 static tone_t s_forced_tone;  // bring-up: `audio tone` (plays even on the hook)
 static audio_stats_t s_stats = {.mic_dbfs = -100, .mic_peak_dbfs = -100, .rx_dbfs = -100,
                                 .rx_tone_dbfs = -100, .watch_hz = 440, .speech_in_dbfs = -100,
@@ -54,7 +66,10 @@ static tone_gen_t s_tone;
 static voice_tx_t s_vtx;  // the call's codec, both ways (voice.h)
 static voice_rx_t s_vrx;
 static rs_t s_rec_rs, s_play_rs;  // 16 ↔ 8 kHz for voicemail and greetings
+static echo_t s_echo;             // the call's echo meter and (when on) canceller
+static bool s_echo_open;
 static uint32_t s_enc_us, s_enc_max_us, s_dec_us, s_dec_max_us, s_codec_frames;
+static uint32_t s_aec_us, s_aec_max_us;
 static agc_t s_agc;  // the mic's automatic gain (item 1 of docs/audio.md)
 static bool s_agc_on = CONFIG_OLP_MIC_AGC;
 static int s_speech_frames;             // speech frames in the current one-second window…
@@ -145,13 +160,21 @@ static bool call_frame(int16_t *out) {
   return true;
 }
 
-/** The Opus states in internal RAM when there's room (faster than PSRAM). */
+/** The Opus states (about 40 KB) in PSRAM: internal RAM is what the call's network needs. */
 void *voice_alloc(size_t size) {
-  void *p = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  void *p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   return p ? p : heap_caps_malloc(size, MALLOC_CAP_8BIT);
 }
 
 void voice_free(void *p) { heap_caps_free(p); }
+
+/** The echo canceller's states (tens of KB) in PSRAM: internal RAM is for the network. */
+void *echo_alloc(size_t size) {
+  void *p = heap_caps_calloc(1, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  return p ? p : heap_caps_calloc(1, size, MALLOC_CAP_8BIT);
+}
+
+void echo_free(void *p) { heap_caps_free(p); }
 
 static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   taskENTER_CRITICAL(&s_lock);
@@ -347,6 +370,10 @@ static void pump(void *arg) {
 static void speaker_frame(int16_t *out, const int16_t *mic, bool call, bool held, bool play,
                           int loop_ms) {
   memset(out, 0, DSP_FRAME * sizeof *out);
+  if (s_et_state == 1) {  // the echo test's sweep, nothing else
+    for (int i = 0; i < DSP_FRAME; i++) out[i] = echo_test_sample(s_et_played++, DSP_RATE);
+    return;
+  }
   if (loop_ms > 0) {
     if (!s_ring) s_ring = heap_caps_calloc(RING, sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_ring) s_ring = calloc(RING, sizeof(int16_t));
@@ -376,6 +403,45 @@ static void speaker_frame(int16_t *out, const int16_t *mic, bool call, bool held
   tone_mix(&s_tone, out, DSP_FRAME);
 }
 
+/** The echo test: keeps the mic and what was played, side by side. */
+static void echo_test_keep(const int16_t *mic, const int16_t *ref) {
+  size_t n = s_et_len - s_et_got < DSP_FRAME ? s_et_len - s_et_got : DSP_FRAME;
+  memcpy(s_et_mic + s_et_got, mic, n * sizeof *mic);
+  memcpy(s_et_ref + s_et_got, ref, n * sizeof *ref);
+  s_et_got += n;
+  if (s_et_got >= s_et_len) s_et_state = 2;  // measured below (the task, between frames)
+}
+
+/** The test's numbers, from what was kept: the loss, the delay, and what follows from them. */
+static void echo_test_finish(void) {
+  // The sweep reached the earpiece a little after it was made (the earpiece's queue): line the
+  // kept audio up with the test's timeline first.
+  size_t q = (size_t)DSP_RATE * ECHO_TEST_QUIET_MS / 1000, first = 0;
+  while (first < s_et_got && !s_et_ref[first]) first++;
+  size_t shift = first > q ? first - q : 0;
+  size_t n = s_et_got - shift;
+  s_et_result = echo_test_measure(s_et_ref + shift, s_et_mic + shift, n, DSP_RATE);
+  heap_caps_free(s_et_mic);
+  heap_caps_free(s_et_ref);
+  s_et_mic = s_et_ref = NULL;
+  echo_result_t r = s_et_result;
+  ESP_LOGI(TAG, "ECHOTEST heard=%d erl=%.1f delay=%.1fms noise=%.1f (%s)", r.heard, r.erl_db,
+           r.delay_ms, r.noise_dbfs, echo_word(r.erl_db));
+  // Earpiece to mic is the sidetone's path too: over 5 ms it would sound like an echo.
+  if (r.heard && r.delay_ms > 5.0f) {
+    s_sidetone_slow = true;
+    ESP_LOGW(TAG, "sidetone off: %.1f ms mic to ear (over 5 ms)", r.delay_ms);
+  }
+  if (r.erl_db < ECHO_POOR_DB && !s_echo_cancel) audio_set_echo_cancel(true);
+  nvs_handle_t h;
+  if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "st_slow", s_sidetone_slow);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+  s_et_state = 3;
+}
+
 static void task(void *arg) {
   int16_t mic[DSP_FRAME], ref[DSP_FRAME], out[DSP_FRAME];
   uint8_t pkt[VOICE_MAX_PACKET];
@@ -403,8 +469,9 @@ static void task(void *arg) {
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
     // Muted (MENU 3): the codec's mic is switched off too, not just left out.
-    bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec || listen;
-    bool speaker_want = offhook || loop_ms > 0 || forced || play;
+    bool testing = s_et_state == 1;
+    bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec || listen || testing;
+    bool speaker_want = offhook || loop_ms > 0 || forced || play || testing;
     if (mic_want != mic_now) {
       s_pump_mic = false;  // the pump stops reading before the codec's mic changes
       s_dev->mic(mic_want);
@@ -424,9 +491,22 @@ static void task(void *arg) {
       s_pump_speaker = speaker_now;
     }
     // Sidetone: your own voice in the earpiece, only in a connected call, never while muted.
-    s_sidetone_q15 = call && mic_now && !muted && !held && speaker_now
+    s_sidetone_q15 = call && mic_now && !muted && !held && speaker_now && !s_sidetone_slow
                          ? dsp_gain_q15(dsp_sidetone_db(sidetone))
                          : 0;
+    // The echo meter (and canceller) for a call's mic.
+    bool want_echo = call && mic_now;
+    if (want_echo && !s_echo_open) {
+      if (!echo_open(&s_echo, DSP_RATE, DSP_FRAME, s_echo_cancel)) {
+        ESP_LOGW(TAG, "echo canceller: no memory; measuring only");
+        echo_open(&s_echo, DSP_RATE, DSP_FRAME, false);
+      }
+      s_echo_open = true;
+      ESP_LOGI(TAG, "echo canceller %s", s_echo.aec ? "on" : "off (measuring the echo only)");
+    } else if (!want_echo && s_echo_open) {
+      echo_close(&s_echo);
+      s_echo_open = false;
+    }
     if (vol_dirty) s_dev->volume_db(audio_volume_db(volume));
     if (want != tone_now) {
       tone_start(&s_tone, want, TONE_AMP);
@@ -472,6 +552,17 @@ static void task(void *arg) {
         fifo_write(&s_spk_fifo, out, DSP_FRAME);
       }
       measure(&s_mic_meter, mic, DSP_FRAME, false);  // the level from the ADC (before the AGC)
+      // The reference as the earpiece played it: after the codec's volume.
+      float vg = powf(10.0f, audio_volume_db(volume) / 20.0f);
+      for (int i = 0; i < DSP_FRAME; i++) ref[i] = (int16_t)lrintf((float)ref[i] * vg);
+      if (s_et_state == 1 && s_et_mic) echo_test_keep(mic, ref);
+      if (s_echo_open) {
+        int64_t t0 = esp_timer_get_time();
+        echo_process(&s_echo, mic, ref);  // before the AGC: the echo path is linear there
+        uint32_t us = (uint32_t)(esp_timer_get_time() - t0);
+        s_aec_us += us;
+        if (us > s_aec_max_us) s_aec_max_us = us;
+      }
       mic_gain(mic, DSP_FRAME);
       if (rec) {
         int16_t nb[NB_FRAME];  // voicemail is 8 kHz WAV
@@ -501,6 +592,7 @@ static void task(void *arg) {
       pts += DSP_FRAME * 1000 / DSP_RATE;
     }
 
+    if (s_et_state == 2) echo_test_finish();
     if (call) {
       int64_t now = esp_timer_get_time() / 1000;
       if (now - last_log >= 5000) {
@@ -510,7 +602,8 @@ static void task(void *arg) {
         // CPU per 20 ms frame: encode (the mic) and decode (the call), average and worst.
         ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu conceal=%lu fec=%lu late=%lu "
                  "jb=%d jit=%.0f miclevel=%.1f agc=%.1f speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f "
-                 "codec=%s/%s enc=%lu/%luus dec=%lu/%luus stack=%u dry=%lu",
+                 "codec=%s/%s enc=%lu/%luus dec=%lu/%luus aec=%lu/%luus erl=%.0f erlbest=%.0f "
+                 "erle=%.0f aecreset=%lu stack=%u dry=%lu heap=%u",
                  (unsigned long)st.tx_frames, (unsigned long)st.rx_frames,
                  (unsigned long)st.rx_bytes, (unsigned long)st.underruns,
                  (unsigned long)st.concealed, (unsigned long)s_vrx.fec_frames,
@@ -519,8 +612,12 @@ static void task(void *arg) {
                  voice_codec_name(s_vtx.codec), voice_codec_name(s_vrx.codec),
                  (unsigned long)(s_enc_us / frames), (unsigned long)s_enc_max_us,
                  (unsigned long)(s_dec_us / frames), (unsigned long)s_dec_max_us,
-                 (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned long)s_pump_under);
+                 (unsigned long)(s_aec_us / frames), (unsigned long)s_aec_max_us, s_echo.erl_db,
+                 s_echo.erl_best_db, s_echo.erle_db, (unsigned long)echo_warnings(),
+                 (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned long)s_pump_under,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
         s_enc_us = s_enc_max_us = s_dec_us = s_dec_max_us = s_codec_frames = 0;
+        s_aec_us = s_aec_max_us = 0;
       }
     }
   }
@@ -535,6 +632,8 @@ void audio_start(bool force_test_device) {
     uint8_t v;
     if (nvs_get_u8(h, "volume", &v) == ESP_OK && v <= VOLUME_MAX) s_volume = v;
     if (nvs_get_u8(h, "sidetone", &v) == ESP_OK && v < SIDETONE_LEVELS) s_sidetone = (sidetone_t)v;
+    if (nvs_get_u8(h, "echo", &v) == ESP_OK) s_echo_cancel = v != 0;
+    if (nvs_get_u8(h, "st_slow", &v) == ESP_OK) s_sidetone_slow = v != 0;
     nvs_close(h);
   }
   ESP_LOGI(TAG, "audio device: %s; volume %d/%d (%.0f dBFS, cap %d dBFS)", s_dev->name, s_volume,
@@ -543,11 +642,12 @@ void audio_start(bool force_test_device) {
   fifo_init(&s_ref_fifo, s_ref_buf, FIFO_CAP);
   fifo_init(&s_spk_fifo, s_spk_buf, FIFO_CAP);
   // Opus encodes on this task's stack (libopus's scratch arrays): AUDIO stack= shows what's left.
-  xTaskCreatePinnedToCore(task, "audio", 40960, NULL, 7, &s_dsp_task, 1);
+  xTaskCreatePinnedToCore(task, "audio", 36864, NULL, 7, &s_dsp_task, 1);
   xTaskCreatePinnedToCore(pump, "audio_io", 3072, NULL, 12, NULL, 1);
-  ESP_LOGI(TAG, "sidetone %s (%.0f dB; %d-sample blocks, about %.1f ms mic to ear)",
-           sidetone_name(s_sidetone), dsp_sidetone_db(s_sidetone), (int)s_dev->block,
-           audio_sidetone_latency_ms());
+  ESP_LOGI(TAG, "sidetone %s (%.0f dB; %d-sample blocks, about %.1f ms mic to ear%s); echo "
+           "canceller %s", sidetone_name(s_sidetone), dsp_sidetone_db(s_sidetone),
+           (int)s_dev->block, audio_sidetone_latency_ms(),
+           s_sidetone_slow ? "; off: measured over 5 ms" : "", s_echo_cancel ? "on" : "off");
 }
 
 void audio_set_offhook(bool up) {
@@ -581,6 +681,7 @@ void audio_call(bool on, voice_codec_t codec, audio_sender_t sender) {
   if (changed && on) {
     jb_init(&s_jb);
     s_pump_under = 0;
+    s_echo.erl_db = s_echo.erl_best_db = -1;
     s_stats.tx_frames = s_stats.rx_frames = s_stats.rx_bytes = 0;
     s_stats.underruns = s_stats.drops = 0;
     s_stats.mic_dbfs = s_stats.rx_dbfs = s_stats.rx_tone_dbfs = -100;
@@ -631,6 +732,49 @@ void audio_set_sidetone(sidetone_t level) {
 }
 
 sidetone_t audio_sidetone(void) { return s_sidetone; }
+bool audio_sidetone_slow(void) { return s_sidetone_slow; }
+
+void audio_set_echo_cancel(bool on) {
+  s_echo_cancel = on;  // from the next call
+  nvs_handle_t h;
+  if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "echo", on);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+  ESP_LOGI(TAG, "ECHO CANCEL %s (from the next call)", on ? "on" : "off");
+}
+
+bool audio_echo_cancel(void) { return s_echo_cancel; }
+
+bool audio_echo_test(void) {
+  if (s_et_state == 1 || s_et_state == 2) return false;
+  taskENTER_CRITICAL(&s_lock);
+  bool busy = s_call;
+  taskEXIT_CRITICAL(&s_lock);
+  if (busy) return false;
+  s_et_len = echo_test_len(DSP_RATE) + DSP_RATE / 10;  // and the earpiece's queue
+  s_et_mic = heap_caps_malloc(s_et_len * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  s_et_ref = heap_caps_malloc(s_et_len * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!s_et_mic) s_et_mic = malloc(s_et_len * sizeof(int16_t));
+  if (!s_et_ref) s_et_ref = malloc(s_et_len * sizeof(int16_t));
+  if (!s_et_mic || !s_et_ref) {
+    heap_caps_free(s_et_mic);
+    heap_caps_free(s_et_ref);
+    s_et_mic = s_et_ref = NULL;
+    return false;
+  }
+  s_et_got = s_et_played = 0;
+  s_sidetone_slow = false;  // measured afresh
+  s_et_state = 1;
+  ESP_LOGI(TAG, "ECHOTEST started");
+  return true;
+}
+
+int audio_echo_test_state(echo_result_t *r) {
+  if (r) *r = s_et_result;
+  return s_et_state;
+}
 
 float audio_sidetone_latency_ms(void) {
   // A block coming in, the blocks queued for the DMA going out, and the codec's ADC and DAC
@@ -674,13 +818,14 @@ void audio_print_status(void) {
   audio_test_sink_t sink = audio_test_sink();
   printf("AUDIO device=%s call=%d volume=%d/%d(%.0fdBFS) tx=%lu rx=%lu rxbytes=%lu under=%lu "
          "drops=%lu conceal=%lu late=%lu jb=%d jit=%.0f miclevel=%.1f micpeak=%.1f agc=%.1f(%s) speechin=%.1f speech=%.1f "
-         "rxlevel=%.1f rx%.0fHz=%.1f",
+         "rxlevel=%.1f rx%.0fHz=%.1f aecon=%d erl=%.0f erle=%.0f sidetone=%s",
          audio_device_name(), st.in_call, s_volume, VOLUME_MAX, audio_volume_db(s_volume),
          (unsigned long)st.tx_frames, (unsigned long)st.rx_frames, (unsigned long)st.rx_bytes,
          (unsigned long)st.underruns, (unsigned long)st.drops, (unsigned long)st.concealed,
          (unsigned long)st.late, st.jb_target_ms, st.jitter_ms, st.mic_dbfs, st.mic_peak_dbfs,
          st.agc_gain_db, s_agc_on ? "on" : "off", st.speech_in_dbfs, st.speech_out_dbfs,
-         st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs);
+         st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs, s_echo_open && s_echo.aec, s_echo.erl_db,
+         s_echo.erle_db, s_sidetone_slow ? "off(slow)" : sidetone_name(s_sidetone));
   if (s_dev == &audio_dev_test)
     printf(" earpiece=%.1f earpiece%.0fHz=%.1f", sink.rms_dbfs, sink.watch_hz, sink.tone_dbfs);
   printf("\n");
