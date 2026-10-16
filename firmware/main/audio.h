@@ -58,6 +58,14 @@ void audio_set_volume(int level);
 int audio_volume(void);
 float audio_volume_db(int level);
 
+/** Sidetone (MENU 1 6): your own voice in the earpiece in a call, off / low (-26 dB) / normal
+ * (-20 dB, the default); never while muted. Saved. */
+void audio_set_sidetone(sidetone_t level);
+sidetone_t audio_sidetone(void);
+const char *sidetone_name(sidetone_t level);
+/** The sidetone path's delay, mic to earpiece, as built (ms). */
+float audio_sidetone_latency_ms(void);
+
 /** Bring-up: play `tone` to the earpiece even on the hook (TONE_NONE = back to normal). */
 void audio_force_tone(tone_t tone);
 /** Bring-up: mic → earpiece after `delay_ms` (0 = off). Works on the hook too. */

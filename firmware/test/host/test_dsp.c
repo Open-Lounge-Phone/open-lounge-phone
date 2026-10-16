@@ -118,3 +118,29 @@ TEST(meter_matches_block_functions) {
   for (int i = 0; i < 50; i++) dsp_meter_feed(&m, z, DSP_FRAME);
   CHECK(m.rms_dbfs == -100 && m.tone_dbfs == -100);
 }
+
+TEST(sidetone_mix_levels_and_off) {
+  int16_t mic[DSP_FRAME], out[DSP_FRAME];
+  tone_gen_t g;
+  memset(mic, 0, sizeof mic);
+  tone_start(&g, TONE_TEST, 16384);
+  tone_mix(&g, mic, DSP_FRAME);
+  float in = dsp_rms_dbfs(mic, DSP_FRAME);
+  // Normal is 20 dB under the mic, low 26 dB; off (and muted: gain 0) adds nothing.
+  static const struct { sidetone_t level; float db; } cases[] = {
+      {SIDETONE_NORMAL, -20}, {SIDETONE_LOW, -26}};
+  for (int i = 0; i < 2; i++) {
+    memset(out, 0, sizeof out);
+    dsp_sidetone_mix(out, mic, DSP_FRAME, dsp_gain_q15(dsp_sidetone_db(cases[i].level)));
+    CHECK_NEAR(dsp_rms_dbfs(out, DSP_FRAME) - in, cases[i].db, 0.2);
+  }
+  for (int i = 0; i < DSP_FRAME; i++) out[i] = (int16_t)i;
+  dsp_sidetone_mix(out, mic, DSP_FRAME, dsp_gain_q15(dsp_sidetone_db(SIDETONE_OFF)));
+  CHECK(out[100] == 100 && out[319] == 319);
+  // It mixes (adds to the call's audio) and saturates rather than wrapping.
+  for (int i = 0; i < DSP_FRAME; i++) out[i] = 32000;
+  dsp_sidetone_mix(out, mic, DSP_FRAME, dsp_gain_q15(0));
+  int16_t lo = 32767;
+  for (int i = 0; i < DSP_FRAME; i++) lo = out[i] < lo ? out[i] : lo;
+  CHECK(lo > 15000);
+}

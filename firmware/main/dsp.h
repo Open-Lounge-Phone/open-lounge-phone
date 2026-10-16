@@ -57,3 +57,11 @@ void dsp_meter_init(dsp_meter_t *m, float hz, uint32_t len);
 bool dsp_meter_feed(dsp_meter_t *m, const int16_t *pcm, size_t n);
 /** Scale by a gain in dB (<= 0 attenuates), saturating. */
 void dsp_gain(int16_t *pcm, size_t n, float db);
+
+// --- Sidetone (docs/audio.md item 3) ---------------------------------------------------------
+typedef enum { SIDETONE_OFF, SIDETONE_LOW, SIDETONE_NORMAL, SIDETONE_LEVELS } sidetone_t;
+/** The level's gain in dB (OFF: -100). */
+float dsp_sidetone_db(sidetone_t level);
+/** Adds `mic` x `gain` (linear, Q15) into `out`, saturating. gain 0 = nothing. */
+void dsp_sidetone_mix(int16_t *out, const int16_t *mic, size_t n, int32_t gain_q15);
+int32_t dsp_gain_q15(float db);

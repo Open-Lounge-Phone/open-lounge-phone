@@ -80,6 +80,8 @@ audio_test_sink_t audio_test_sink(void) {
 
 const audio_dev_t audio_dev_test = {
     .name = "test",
+    .block = DSP_FRAME,
+    .tx_blocks = 1,
     .init = init,
     .speaker = speaker,
     .mic = mic,

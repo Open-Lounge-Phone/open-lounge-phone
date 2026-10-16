@@ -150,3 +150,20 @@ void dsp_gain(int16_t *pcm, size_t n, float db) {
   int32_t g = (int32_t)(powf(10, db / 20) * 4096);  // Q12
   for (size_t i = 0; i < n; i++) pcm[i] = sat(((int32_t)pcm[i] * g) >> 12);
 }
+
+// --- sidetone -------------------------------------------------------------------------------
+
+float dsp_sidetone_db(sidetone_t level) {
+  return level == SIDETONE_NORMAL ? -20.0f : level == SIDETONE_LOW ? -26.0f : -100.0f;
+}
+
+int32_t dsp_gain_q15(float db) {
+  if (db <= -99) return 0;
+  float g = powf(10, db / 20) * 32768.0f;
+  return g > 32768.0f ? 32768 : (int32_t)lrintf(g);
+}
+
+void dsp_sidetone_mix(int16_t *out, const int16_t *mic, size_t n, int32_t gain_q15) {
+  if (!gain_q15) return;
+  for (size_t i = 0; i < n; i++) out[i] = sat(out[i] + (((int32_t)mic[i] * gain_q15) >> 15));
+}

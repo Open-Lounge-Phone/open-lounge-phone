@@ -187,6 +187,15 @@ config OLP_CALL_OPUS
         The phone offers and accepts Opus (16 kHz mono, about 24 kbit/s, in-band FEC) and PCMU.
         Off: PCMU (8 kHz G.711) only, as firmware up to 0.9.5.
 
+config OLP_AUDIO_BLOCK
+    int "Codec DMA block (samples at 16 kHz)"
+    range 16 320
+    default 16
+    help
+        The I2S DMA block the audio pump reads and writes: 16 = 1 ms. The sidetone is mixed
+        between a block in and the blocks queued out (three DMA buffers), so its delay is about
+        3 blocks plus the codec's filters: under 5 ms with 1 ms blocks.
+
 config OLP_MIC_AGC
     bool "Automatic gain control on the handset mic"
     default y

@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "fifo.h"
 #include "jbuf.h"
 #include "resample.h"
 #include "voice.h"
@@ -42,6 +43,7 @@ static voice_codec_t s_tx_codec, s_rx_codec;  // what the call sends / receives
 static int s_volume = VOLUME_DEFAULT;
 static bool s_volume_dirty = true;
 static int s_loop_ms;
+static sidetone_t s_sidetone = SIDETONE_NORMAL;
 static tone_t s_forced_tone;  // bring-up: `audio tone` (plays even on the hook)
 static audio_stats_t s_stats = {.mic_dbfs = -100, .mic_peak_dbfs = -100, .rx_dbfs = -100,
                                 .rx_tone_dbfs = -100, .watch_hz = 440, .speech_in_dbfs = -100,
@@ -292,8 +294,90 @@ static void open_codecs(voice_codec_t tx, voice_codec_t rx) {
            voice_codec_name(s_vrx.codec));
 }
 
-static void task(void *arg) {
+// --- the pump: the I2S side, a block at a time --------------------------------------------
+// The codec's DMA runs in small blocks (1 ms on the board) so the sidetone, mixed in here, stays
+// under 5 ms: a 20 ms frame would be heard as an echo. The pump hands the mic to the audio task
+// and plays what it's given, through FIFOs; the audio task does everything 20 ms at a time.
+
+#define FIFO_CAP 2048                 // samples (128 ms at 16 kHz), a power of two
+// Keep 15 ms queued for the earpiece (the audio task's slack); a device with 20 ms blocks (the
+// test device) needs a whole block more.
+#define SPK_TARGET (s_dev->block >= DSP_FRAME ? 2 * DSP_FRAME : DSP_FRAME * 3 / 4)
+static int16_t s_mic_buf[FIFO_CAP], s_ref_buf[FIFO_CAP], s_spk_buf[FIFO_CAP];
+static fifo_t s_mic_fifo, s_ref_fifo, s_spk_fifo;  // pump → task (mic, what it played), task → pump
+static TaskHandle_t s_dsp_task;
+// What the pump does (set by the audio task).
+static volatile bool s_pump_mic, s_pump_speaker;
+static volatile int32_t s_sidetone_q15;  // 0 = none
+static volatile uint32_t s_pump_under;   // blocks the earpiece ran dry (while it played)
+static int64_t s_silence_at_us;          // muted / on hold: the next silent packet
+
+static void pump(void *arg) {
+  const size_t B = s_dev->block;
   int16_t mic[DSP_FRAME], out[DSP_FRAME];
+  bool notified_low = false;
+  for (;;) {
+    bool mic_on = s_pump_mic, spk_on = s_pump_speaker;
+    if (!mic_on && !spk_on) {
+      vTaskDelay(pdMS_TO_TICKS(20));  // the DMA plays silence by itself
+      continue;
+    }
+    if (mic_on) s_dev->read(mic, B);  // paces the loop (one block)
+    uint32_t got = fifo_read(&s_spk_fifo, out, (uint32_t)B);
+    if (got < B) {
+      memset(out + got, 0, (B - got) * sizeof *out);
+      if (spk_on) s_pump_under++;
+    }
+    if (mic_on) {
+      // The pair the echo canceller needs: what was heard and what was played, block by block.
+      fifo_write(&s_mic_fifo, mic, (uint32_t)B);
+      fifo_write(&s_ref_fifo, out, (uint32_t)B);
+      dsp_sidetone_mix(out, mic, B, s_sidetone_q15);
+    }
+    s_dev->write(out, B);  // paces the loop when the mic is off
+    bool low = fifo_level(&s_spk_fifo) < SPK_TARGET;
+    if ((mic_on && fifo_level(&s_mic_fifo) >= DSP_FRAME) || (low && !notified_low)) {
+      xTaskNotifyGive(s_dsp_task);
+    }
+    notified_low = low;
+  }
+}
+
+/** The earpiece's next 20 ms: the call (or the loopback test), a voicemail, a tone. */
+static void speaker_frame(int16_t *out, const int16_t *mic, bool call, bool held, bool play,
+                          int loop_ms) {
+  memset(out, 0, DSP_FRAME * sizeof *out);
+  if (loop_ms > 0) {
+    if (!s_ring) s_ring = heap_caps_calloc(RING, sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_ring) s_ring = calloc(RING, sizeof(int16_t));
+    if (s_ring && mic) {
+      taskENTER_CRITICAL(&s_lock);
+      ring_push(mic, DSP_FRAME);
+      taskEXIT_CRITICAL(&s_lock);
+      ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
+    }
+  } else if (call) {
+    if (call_frame(out)) measure(&s_rx_meter, out, DSP_FRAME, true);
+    if (held) memset(out, 0, DSP_FRAME * sizeof *out);
+  }
+  if (play) {
+    int16_t nb[NB_FRAME] = {0};  // voicemail is 8 kHz WAV
+    taskENTER_CRITICAL(&s_lock);
+    bool first = s_play_pos == 0;
+    if (s_play_buf) {
+      size_t n = s_play_len - s_play_pos < NB_FRAME ? s_play_len - s_play_pos : NB_FRAME;
+      memcpy(nb, s_play_buf + s_play_pos, n * sizeof(int16_t));
+      s_play_pos += n;
+    }
+    taskEXIT_CRITICAL(&s_lock);
+    if (first) rs_init(&s_play_rs);
+    rs_up(&s_play_rs, nb, NB_FRAME, out);
+  }
+  tone_mix(&s_tone, out, DSP_FRAME);
+}
+
+static void task(void *arg) {
+  int16_t mic[DSP_FRAME], ref[DSP_FRAME], out[DSP_FRAME];
   uint8_t pkt[VOICE_MAX_PACKET];
   uint32_t pts = 0;
   bool codecs_open = false;
@@ -302,6 +386,7 @@ static void task(void *arg) {
   bool mic_now = false, speaker_now = false;
   int64_t last_log = 0;
   for (;;) {
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
     taskENTER_CRITICAL(&s_lock);
     bool call = s_call, offhook = s_offhook, vol_dirty = s_volume_dirty, held = s_held;
     bool muted = s_muted, listen = s_listen;
@@ -312,26 +397,36 @@ static void task(void *arg) {
     audio_sender_t sender = s_sender;
     voice_codec_t tx_want = s_tx_codec, rx_want = s_rx_codec;
     int loop_ms = s_loop_ms, volume = s_volume;
+    sidetone_t sidetone = s_sidetone;
     s_volume_dirty = false;
     taskEXIT_CRITICAL(&s_lock);
 
     // Privacy: the mic is on only in a call with media (or the explicit loopback test).
     // Muted (MENU 3): the codec's mic is switched off too, not just left out.
     bool mic_want = (call && !held && !muted) || loop_ms > 0 || rec || listen;
+    bool speaker_want = offhook || loop_ms > 0 || forced || play;
     if (mic_want != mic_now) {
+      s_pump_mic = false;  // the pump stops reading before the codec's mic changes
       s_dev->mic(mic_want);
       mic_now = mic_want;
+      fifo_reset(&s_mic_fifo);
+      fifo_reset(&s_ref_fifo);
       if (mic_now) {
         agc_init(&s_agc, DSP_RATE);  // learns this call's noise floor afresh
         s_speech_frames = 0;
         s_speech_in = s_speech_out = 0;
       }
+      s_pump_mic = mic_now;
     }
-    bool speaker_want = offhook || loop_ms > 0 || forced || play;
     if (speaker_want != speaker_now) {
       s_dev->speaker(speaker_want);
       speaker_now = speaker_want;
+      s_pump_speaker = speaker_now;
     }
+    // Sidetone: your own voice in the earpiece, only in a connected call, never while muted.
+    s_sidetone_q15 = call && mic_now && !muted && !held && speaker_now
+                         ? dsp_gain_q15(dsp_sidetone_db(sidetone))
+                         : 0;
     if (vol_dirty) s_dev->volume_db(audio_volume_db(volume));
     if (want != tone_now) {
       tone_start(&s_tone, want, TONE_AMP);
@@ -347,14 +442,35 @@ static void task(void *arg) {
       voice_rx_close(&s_vrx);
       codecs_open = false;
     }
+    if (!mic_now && !speaker_now) continue;
 
-    if (!mic_now && !speaker_now) {
-      // Hung up and nothing to play: sleep (the I2S DMA plays silence by itself).
-      vTaskDelay(pdMS_TO_TICKS(20));
+    // The earpiece first (decoding is quick), so it never runs dry while the mic is coded.
+    if (!mic_now) {
+      while (speaker_now && fifo_level(&s_spk_fifo) < SPK_TARGET) {
+        speaker_frame(out, NULL, call, held, play, loop_ms);
+        fifo_write(&s_spk_fifo, out, DSP_FRAME);
+      }
+      // A call muted or on hold has no mic: its packets still go out (silence), 20 ms apart.
+      int64_t now_us = esp_timer_get_time();
+      if (call && sender && now_us >= s_silence_at_us) {
+        s_silence_at_us = now_us + 20000;
+        memset(mic, 0, sizeof mic);
+        size_t n = voice_encode(&s_vtx, mic, pkt, sizeof pkt);
+        if (n) sender(pkt, n, pts);
+        pts += DSP_FRAME * 1000 / DSP_RATE;
+        taskENTER_CRITICAL(&s_lock);
+        s_stats.tx_frames++;
+        taskEXIT_CRITICAL(&s_lock);
+      }
       continue;
     }
-    if (mic_now) {
-      s_dev->read(mic, DSP_FRAME);
+    while (fifo_level(&s_mic_fifo) >= DSP_FRAME) {
+      fifo_read(&s_mic_fifo, mic, DSP_FRAME);
+      fifo_read(&s_ref_fifo, ref, DSP_FRAME);
+      if (fifo_level(&s_spk_fifo) < SPK_TARGET + DSP_FRAME) {
+        speaker_frame(out, mic, call, held, play, loop_ms);
+        fifo_write(&s_spk_fifo, out, DSP_FRAME);
+      }
       measure(&s_mic_meter, mic, DSP_FRAME, false);  // the level from the ADC (before the AGC)
       mic_gain(mic, DSP_FRAME);
       if (rec) {
@@ -368,55 +484,25 @@ static void task(void *arg) {
         }
         taskEXIT_CRITICAL(&s_lock);
       }
-    }
-    if (call && sender) {
-      // On hold or muted: silence keeps the connection alive.
-      if (held || muted || !mic_now) memset(mic, 0, sizeof mic);
-      int64_t t0 = esp_timer_get_time();
-      size_t n = voice_encode(&s_vtx, mic, pkt, sizeof pkt);
-      uint32_t us = (uint32_t)(esp_timer_get_time() - t0);
-      s_enc_us += us;
-      if (us > s_enc_max_us) s_enc_max_us = us;
-      s_codec_frames++;
-      if (n) sender(pkt, n, pts);
-      taskENTER_CRITICAL(&s_lock);
-      s_stats.tx_frames++;
-      taskEXIT_CRITICAL(&s_lock);
-    }
-    pts += DSP_FRAME * 1000 / DSP_RATE;
-
-    memset(out, 0, sizeof out);
-    if (loop_ms > 0) {
-      if (!s_ring) s_ring = heap_caps_calloc(RING, sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-      if (!s_ring) s_ring = calloc(RING, sizeof(int16_t));
-      if (s_ring) {
+      if (call && sender) {
+        // On hold or muted: silence keeps the connection alive.
+        if (held || muted) memset(mic, 0, sizeof mic);
+        int64_t t0 = esp_timer_get_time();
+        size_t n = voice_encode(&s_vtx, mic, pkt, sizeof pkt);
+        uint32_t us = (uint32_t)(esp_timer_get_time() - t0);
+        s_enc_us += us;
+        if (us > s_enc_max_us) s_enc_max_us = us;
+        s_codec_frames++;
+        if (n) sender(pkt, n, pts);
         taskENTER_CRITICAL(&s_lock);
-        ring_push(mic, DSP_FRAME);
+        s_stats.tx_frames++;
         taskEXIT_CRITICAL(&s_lock);
-        ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
       }
-    } else if (call) {
-      if (call_frame(out)) measure(&s_rx_meter, out, DSP_FRAME, true);
-      if (held) memset(out, 0, sizeof out);
+      pts += DSP_FRAME * 1000 / DSP_RATE;
     }
-    if (play) {
-      taskENTER_CRITICAL(&s_lock);
-      int16_t nb[NB_FRAME] = {0};  // voicemail is 8 kHz WAV
-      bool first = s_play_pos == 0;
-      if (s_play_buf) {
-        size_t n = s_play_len - s_play_pos < NB_FRAME ? s_play_len - s_play_pos : NB_FRAME;
-        memcpy(nb, s_play_buf + s_play_pos, n * sizeof(int16_t));
-        s_play_pos += n;
-      }
-      taskEXIT_CRITICAL(&s_lock);
-      if (first) rs_init(&s_play_rs);
-      rs_up(&s_play_rs, nb, NB_FRAME, out);
-    }
-    tone_mix(&s_tone, out, DSP_FRAME);
-    s_dev->write(out, DSP_FRAME);  // blocks ~20 ms
 
     if (call) {
-      int64_t now = (int64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
+      int64_t now = esp_timer_get_time() / 1000;
       if (now - last_log >= 5000) {
         last_log = now;
         audio_stats_t st = audio_stats();
@@ -424,7 +510,7 @@ static void task(void *arg) {
         // CPU per 20 ms frame: encode (the mic) and decode (the call), average and worst.
         ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu conceal=%lu fec=%lu late=%lu "
                  "jb=%d jit=%.0f miclevel=%.1f agc=%.1f speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f "
-                 "codec=%s/%s enc=%lu/%luus dec=%lu/%luus stack=%u",
+                 "codec=%s/%s enc=%lu/%luus dec=%lu/%luus stack=%u dry=%lu",
                  (unsigned long)st.tx_frames, (unsigned long)st.rx_frames,
                  (unsigned long)st.rx_bytes, (unsigned long)st.underruns,
                  (unsigned long)st.concealed, (unsigned long)s_vrx.fec_frames,
@@ -433,7 +519,7 @@ static void task(void *arg) {
                  voice_codec_name(s_vtx.codec), voice_codec_name(s_vrx.codec),
                  (unsigned long)(s_enc_us / frames), (unsigned long)s_enc_max_us,
                  (unsigned long)(s_dec_us / frames), (unsigned long)s_dec_max_us,
-                 (unsigned)uxTaskGetStackHighWaterMark(NULL));
+                 (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned long)s_pump_under);
         s_enc_us = s_enc_max_us = s_dec_us = s_dec_max_us = s_codec_frames = 0;
       }
     }
@@ -448,12 +534,20 @@ void audio_start(bool force_test_device) {
   if (nvs_open(NS, NVS_READONLY, &h) == ESP_OK) {
     uint8_t v;
     if (nvs_get_u8(h, "volume", &v) == ESP_OK && v <= VOLUME_MAX) s_volume = v;
+    if (nvs_get_u8(h, "sidetone", &v) == ESP_OK && v < SIDETONE_LEVELS) s_sidetone = (sidetone_t)v;
     nvs_close(h);
   }
   ESP_LOGI(TAG, "audio device: %s; volume %d/%d (%.0f dBFS, cap %d dBFS)", s_dev->name, s_volume,
            VOLUME_MAX, audio_volume_db(s_volume), CONFIG_OLP_EARPIECE_MAX_DB);
+  fifo_init(&s_mic_fifo, s_mic_buf, FIFO_CAP);
+  fifo_init(&s_ref_fifo, s_ref_buf, FIFO_CAP);
+  fifo_init(&s_spk_fifo, s_spk_buf, FIFO_CAP);
   // Opus encodes on this task's stack (libopus's scratch arrays): AUDIO stack= shows what's left.
-  xTaskCreatePinnedToCore(task, "audio", 40960, NULL, 7, NULL, 1);
+  xTaskCreatePinnedToCore(task, "audio", 40960, NULL, 7, &s_dsp_task, 1);
+  xTaskCreatePinnedToCore(pump, "audio_io", 3072, NULL, 12, NULL, 1);
+  ESP_LOGI(TAG, "sidetone %s (%.0f dB; %d-sample blocks, about %.1f ms mic to ear)",
+           sidetone_name(s_sidetone), dsp_sidetone_db(s_sidetone), (int)s_dev->block,
+           audio_sidetone_latency_ms());
 }
 
 void audio_set_offhook(bool up) {
@@ -486,6 +580,7 @@ void audio_call(bool on, voice_codec_t codec, audio_sender_t sender) {
   if (on) s_tx_codec = codec;
   if (changed && on) {
     jb_init(&s_jb);
+    s_pump_under = 0;
     s_stats.tx_frames = s_stats.rx_frames = s_stats.rx_bytes = 0;
     s_stats.underruns = s_stats.drops = 0;
     s_stats.mic_dbfs = s_stats.rx_dbfs = s_stats.rx_tone_dbfs = -100;
@@ -515,6 +610,34 @@ void audio_set_volume(int level) {
 }
 
 int audio_volume(void) { return s_volume; }
+
+const char *sidetone_name(sidetone_t level) {
+  static const char *names[] = {"off", "low", "normal"};
+  return level < SIDETONE_LEVELS ? names[level] : "?";
+}
+
+void audio_set_sidetone(sidetone_t level) {
+  if (level >= SIDETONE_LEVELS) level = SIDETONE_NORMAL;
+  taskENTER_CRITICAL(&s_lock);
+  s_sidetone = level;
+  taskEXIT_CRITICAL(&s_lock);
+  nvs_handle_t h;
+  if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "sidetone", (uint8_t)level);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+  ESP_LOGI(TAG, "SIDETONE %s (%.0f dB)", sidetone_name(level), dsp_sidetone_db(level));
+}
+
+sidetone_t audio_sidetone(void) { return s_sidetone; }
+
+float audio_sidetone_latency_ms(void) {
+  // A block coming in, the blocks queued for the DMA going out, and the codec's ADC and DAC
+  // filters (about 1 ms together at 16 kHz). The echo test measures the real thing.
+  if (!s_dev) return 0;
+  return 1000.0f * (float)(s_dev->block * (1 + s_dev->tx_blocks)) / DSP_RATE + 1.0f;
+}
 
 void audio_loopback(int delay_ms) {
   if (delay_ms < 0) delay_ms = 0;

@@ -9,6 +9,10 @@
 
 typedef struct {
   const char *name;
+  /** Samples per read/write (the DMA block): 16 (1 ms) on the codec, a 20 ms frame on the test
+   * device. The sidetone's delay is a block in and `tx_blocks` blocks queued out. */
+  size_t block;
+  size_t tx_blocks;
   esp_err_t (*init)(void);
   /** Earpiece path on/off (off = DAC muted, clocks may stop). */
   void (*speaker)(bool on);
@@ -16,7 +20,7 @@ typedef struct {
   void (*mic)(bool on);
   /** Earpiece volume in dB (<= 0; the caller applies the cap). */
   void (*volume_db)(float db);
-  /** Blocks until `n` mic samples are read (paces the audio task). Returns the count read. */
+  /** Blocks until `n` mic samples are read (paces the pump). Returns the count read. */
   int (*read)(int16_t *pcm, size_t n);
   /** Plays `n` samples to the earpiece. */
   void (*write)(const int16_t *pcm, size_t n);

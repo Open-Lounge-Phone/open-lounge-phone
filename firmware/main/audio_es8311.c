@@ -112,8 +112,10 @@ static esp_err_t init(void) {
 
   // I2S first: the codec runs from our MCLK.
   i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  chan.dma_desc_num = 4;
-  chan.dma_frame_num = DSP_FRAME;
+  // Small DMA blocks (CONFIG_OLP_AUDIO_BLOCK samples, 1 ms by default): the sidetone is mixed in
+  // the pump between reading a block and writing one, so the queue out must stay short.
+  chan.dma_desc_num = 3;
+  chan.dma_frame_num = CONFIG_OLP_AUDIO_BLOCK;
   chan.auto_clear = true;  // underflow plays silence, not the last buffer again
   err = i2s_new_channel(&chan, &s_tx, &s_rx);
   if (err != ESP_OK) return err;
@@ -192,6 +194,8 @@ static void write_pcm(const int16_t *pcm, size_t n) {
 
 const audio_dev_t audio_dev_es8311 = {
     .name = "es8311",
+    .block = CONFIG_OLP_AUDIO_BLOCK,
+    .tx_blocks = 2,  // dma_desc_num - 1
     .init = init,
     .speaker = speaker,
     .mic = mic,

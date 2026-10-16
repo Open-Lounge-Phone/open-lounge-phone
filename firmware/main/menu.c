@@ -177,6 +177,8 @@ bool menu_key(menu_t *m, int key, int64_t now_ms) {
     } else if (d == 5) {  // ring style
       signals_set_ring_style((ring_style_t)((signals_ring_style() + 1) % RING_STYLES));
       signals_ring_preview();
+    } else if (d == 6) {  // sidetone: off, low, normal, round again
+      audio_set_sidetone((sidetone_t)((audio_sidetone() + 1) % SIDETONE_LEVELS));
     }
   }
   return true;
@@ -324,7 +326,10 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       snprintf(out[2], 25, "RING %s %s", levels[signals_ring_level()],
                signals_ring_style_name(signals_ring_style()));
       snprintf(out[3], 25, "4 RING 5 STYLE");
-      return 4;
+      snprintf(out[4], 25, "6 SIDETONE %s", audio_sidetone() == SIDETONE_OFF ? "OFF"
+                                              : audio_sidetone() == SIDETONE_LOW ? "LOW"
+                                                                                 : "NORMAL");
+      return 5;
     }
     case MENU_ABOUT: {
       const char *const *w = identity_fingerprint();

@@ -28,6 +28,9 @@ const esp_app_desc_t *esp_app_get_description(void) {
 static int s_volume = 6;
 void audio_set_volume(int level) { s_volume = level; }
 int audio_volume(void) { return s_volume; }
+static sidetone_t s_sidetone = SIDETONE_NORMAL;
+void audio_set_sidetone(sidetone_t level) { s_sidetone = level; }
+sidetone_t audio_sidetone(void) { return s_sidetone; }
 int signals_ring_level(void) { return 2; }
 void signals_set_ring_level(int level) { (void)level; }
 ring_style_t signals_ring_style(void) { return RING_CLASSIC; }
@@ -339,4 +342,22 @@ TEST(menu_network_screen_on_the_cable) {
   CHECK(s_ev_type == EV_PROV_OPEN);
   s_net_uplink = NET_WIFI;
   s_cable_line = NULL;
+}
+
+TEST(menu_volume_cycles_the_sidetone) {
+  menu_t m = {0};
+  char out[MENU_LINES][25];
+  menu_key(&m, 10, 0);
+  menu_key(&m, 0, 0);  // 1 VOLUME
+  CHECK(m.screen == MENU_VOLUME);
+  CHECK(menu_lines(&m, out) == 5);
+  CHECK_STR(out[4], "6 SIDETONE NORMAL");
+  menu_key(&m, 5, 0);  // 6: normal → off
+  menu_lines(&m, out);
+  CHECK_STR(out[4], "6 SIDETONE OFF");
+  menu_key(&m, 5, 0);
+  menu_lines(&m, out);
+  CHECK_STR(out[4], "6 SIDETONE LOW");
+  menu_key(&m, 5, 0);
+  CHECK(audio_sidetone() == SIDETONE_NORMAL);
 }
