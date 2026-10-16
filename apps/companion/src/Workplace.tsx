@@ -42,6 +42,8 @@ interface Props {
 
 export function Workplace({ api, conn, onBack }: Props) {
   const [dir, setDir] = useState<Directory>();
+  /** The whole directory, whatever the search: admin lists and pickers must show everyone. */
+  const [all, setAll] = useState<Directory>();
   const [q, setQ] = useState("");
   const [dial, setDial] = useState("");
   const [dialProblem, setDialProblem] = useState<string>();
@@ -49,7 +51,9 @@ export function Workplace({ api, conn, onBack }: Props) {
 
   const load = useCallback(async () => {
     try {
-      setDir(await api.directory(q));
+      const found = await api.directory(q);
+      setDir(found);
+      setAll(q.trim() ? await api.directory("") : found);
       setError(undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -213,7 +217,7 @@ export function Workplace({ api, conn, onBack }: Props) {
               </li>
             ))}
           </DirList>
-          {admin && <Admin api={api} dir={dir} onChanged={load} onError={setError} />}
+          {admin && all && <Admin api={api} dir={all} onChanged={load} onError={setError} />}
         </>
       )}
     </section>
