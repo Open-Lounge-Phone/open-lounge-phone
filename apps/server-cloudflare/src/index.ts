@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { type Device, Store } from "@openloungephone/db";
 import { d1Sql } from "@openloungephone/db/d1";
 import {
+  type AddonTestResult,
   type FedSignal,
   HOST_RE,
   type LineCallbackMissedResult,
@@ -486,6 +487,10 @@ export class HouseholdObject extends GatewayObject {
     return this.gateway.addonShareRequest(this.householdId, addonId, msg);
   }
 
+  addonTest(addonId: string): Promise<AddonTestResult> {
+    return this.gateway.addonTest(this.householdId, addonId);
+  }
+
   endAddonShareCalls(
     addonId: string,
     which: { grantIds?: string[]; shareIds?: string[] },
@@ -645,6 +650,7 @@ function coordinator(env: Env): Coordinator {
     lineCallbackMissed: (hh, req) => env.HOUSEHOLD.getByName(hh).lineCallbackMissed(req),
     addonShareRequest: (hh, addonId, msg) =>
       env.HOUSEHOLD.getByName(hh).addonShareRequest(addonId, msg),
+    addonTest: (hh, addonId) => env.HOUSEHOLD.getByName(hh).addonTest(addonId),
     endAddonShareCalls: (hh, addonId, which) =>
       env.HOUSEHOLD.getByName(hh).endAddonShareCalls(addonId, which),
     closeApps: (hh, userId, filter) => env.HOUSEHOLD.getByName(hh).closeApps(userId, filter),

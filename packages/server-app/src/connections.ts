@@ -18,6 +18,7 @@ import {
   AcceptBody,
   AddonLeaveBody,
   AddonSharesBody,
+  AddonTestBody,
   CallBody,
   GreetingBody,
   HOST_RE,
@@ -39,7 +40,7 @@ import {
 } from "@openloungephone/federation";
 import { Hono } from "hono";
 import { z } from "zod";
-import { holderLeft, noteShareGone } from "./addons.ts";
+import { holderLeft, noteShareGone, TOO_MANY_TESTS, testAddon } from "./addons.ts";
 import type { ServerEnv } from "./env.ts";
 import { fairUseProblem } from "./fairUse.ts";
 import { primaryHousehold, receiveGuestDial } from "./fedCalls.ts";
@@ -777,6 +778,23 @@ export function federationApp(env: ServerEnv, live: Coordinator): Hono {
     if (r instanceof Response) return r;
     await service.receivePhones({ ...r.body.from, host: r.host }, r.body.to, r.body.phones);
     return accepted();
+  });
+
+  /** Test connection by someone there who holds a share of one of our add-ons. */
+  app.post("/fed/v1/addons/test", async (c) => {
+    const r = await signed(c.req.raw, AddonTestBody);
+    if (r instanceof Response) return r;
+    if (!env.addons) return c.json({ state: "unavailable" });
+    const { from, to, addon: name, share } = r.body;
+    const addon = await env.store.addons.byAddress(to, name);
+    const who = { host: r.host, accountId: from.id, handle: from.handle };
+    const result = await testAddon(env, live, addon, who, share);
+    if (result === "limited") {
+      return c.json({ error: "rate_limited", message: TOO_MANY_TESTS }, 429, {
+        "retry-after": "3600",
+      });
+    }
+    return c.json(result);
   });
 
   /** Feature `addon-shares`: which shares of their add-ons someone there gave one of ours. */

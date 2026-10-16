@@ -16,7 +16,12 @@ import {
   type ShareRequest,
   WHOLE_SERVER,
 } from "@openloungephone/db";
-import { ADDON_NAME_RE, formatAddonAddress, parseAddonAddress } from "@openloungephone/federation";
+import {
+  ADDON_NAME_RE,
+  AddonTestResult,
+  formatAddonAddress,
+  parseAddonAddress,
+} from "@openloungephone/federation";
 import type {
   AddonAbout,
   DeviceToServer,
@@ -27,7 +32,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import { audit } from "./audit.ts";
 import type { AddonRules, ServerEnv } from "./env.ts";
-import { fedFetch, ownHost } from "./federation.ts";
+import { FederationError, fedFetch, ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { limitsOf } from "./limits.ts";
@@ -63,6 +68,7 @@ export const ADDON_MESSAGES: ReadonlySet<DeviceToServer["t"]> = new Set<DeviceTo
   "addon.shares",
   "addon.share.created",
   "addon.share.refused",
+  "addon.test.ok",
   "call.address",
   "call.answer",
   "call.hangup",
@@ -127,6 +133,33 @@ const DAY_MS = 24 * HOUR_MS;
 export const TOO_MANY_CALLS_TO = "Too many calls to this add-on. Try again later.";
 /** An add-on over its limit of calls out. */
 export const TOO_MANY_CALLS_FROM = "This add-on has made too many calls. It can call again later.";
+
+/** Test connection: someone over their hourly tests of one add-on. */
+export const TOO_MANY_TESTS = "Too many tests of this add-on. Try again later.";
+
+/**
+ * Test connection for someone allowed to reach `addon` (its owner, or within `share` a holder,
+ * here or on another server): counted per person and add-on, then the add-on is asked
+ * (`addon.test`). Anyone else gets `unavailable`, the same whatever is there. `limited`: over
+ * the hourly limit (nothing is sent).
+ */
+export async function testAddon(
+  env: ServerEnv,
+  live: Coordinator,
+  addon: Addon | undefined,
+  who: Who,
+  share?: string,
+): Promise<AddonTestResult | "limited"> {
+  if (!addon || !(await addonAccess(env, addon, who, share))) return { state: "unavailable" };
+  const ok = await env.store.connections.hit(
+    `addon-test:${addon.id}:${who.host}:${who.accountId}`,
+    HOUR_MS,
+    limitsOf(env).addonTestsPerHour,
+    env.now(),
+  );
+  if (!ok) return "limited";
+  return live.addonTest(addon.householdId, addon.id);
+}
 
 /** Counts one event; over the limit, audits the first refusal of the window (no content). */
 async function counted(
@@ -919,6 +952,50 @@ export function addonRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator):
     await store.addons.setMuted(account.id, who, b.muted, env.now());
     await notify(account.id, { t: "connections.changed" });
     return c.body(null, 204);
+  });
+
+  /** Test connection, by its owner: asks the add-on and says how it went (no call). */
+  api.post("/addons/:id/test", async (c) => {
+    const account = c.get("account");
+    const addon = await own(account.id, c.req.param("id"));
+    if (!addon) return c.json({ error: "not found" }, 404);
+    if (!env.addons) return c.json({ error: ADDONS_OFF }, 403);
+    const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+    const r = await testAddon(env, live, addon, who);
+    return r === "limited" ? c.json({ error: TOO_MANY_TESTS }, 429) : c.json(r);
+  });
+
+  /**
+   * Test connection for a share you hold (by its address), here or on a connection's server
+   * (`POST /fed/v1/addons/test`).
+   */
+  api.post("/addons/test", async (c) => {
+    const account = c.get("account");
+    const b = await body(c.req.raw, LeaveBody);
+    if (b instanceof Response) return b;
+    if (!env.addons) return c.json({ error: ADDONS_OFF }, 403);
+    const held = await heldAddon(account, b.address);
+    const share = held?.a.share;
+    if (!held || !share) return c.json({ state: "unavailable" });
+    if (held.host === LOCAL_HOST) {
+      const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
+      const r = await testAddon(env, live, held.addon, who, share);
+      return r === "limited" ? c.json({ error: TOO_MANY_TESTS }, 429) : c.json(r);
+    }
+    if (held.conn?.state !== "active" || !federates(env)) return c.json({ state: "unavailable" });
+    try {
+      const res = await fedFetch(env, held.host, "/addons/test", {
+        json: { from: partyOf(account), to: held.a.handle, addon: held.a.name, share },
+      });
+      const r = AddonTestResult.safeParse(await res.json());
+      return c.json(r.success ? r.data : { state: "unavailable" });
+    } catch (e) {
+      if (e instanceof FederationError && e.status === 429) {
+        return c.json({ error: TOO_MANY_TESTS }, 429);
+      }
+      env.log("warn", "add-on test not delivered", { host: held.host, error: String(e) });
+      return c.json({ state: "unavailable" });
+    }
   });
 
   /** A holder gives a share back: they lose it, and their calls within it end. */

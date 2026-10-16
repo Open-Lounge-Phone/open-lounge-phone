@@ -6,6 +6,8 @@ import {
   Accepted,
   AddonLeaveBody,
   AddonSharesBody,
+  AddonTestBody,
+  AddonTestResult,
   CallBody,
   CallResult,
   GreetingBody,
@@ -210,6 +212,22 @@ export const FED_ENDPOINTS: FedEndpoint[] = [
     rules: [
       "Only the grant held by `from` (the signing server's account) for that share goes.",
       "Sent only to servers that list `addon-leave`; the holder's server forgets the share either way.",
+    ],
+  },
+  {
+    method: "POST",
+    path: "/fed/v1/addons/test",
+    signed: true,
+    summary:
+      "Feature `addon-shares`: `from` tests their share of `to`'s add-on end to end (Test connection), without a call.",
+    body: AddonTestBody,
+    responses: [
+      { status: 200, schema: AddonTestResult, note: "How it went." },
+      { status: 429, note: "Too many tests from that person for that add-on (`Retry-After`)." },
+    ],
+    rules: [
+      "`unavailable` unless `from` holds that share and could call it now; nothing else is told apart.",
+      "The receiver sends the add-on `addon.test` and waits up to 5 seconds for `addon.test.ok`.",
     ],
   },
   {

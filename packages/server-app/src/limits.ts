@@ -51,6 +51,8 @@ export interface Limits {
   addonCallsInPerCallerPerHour: number;
   /** Share lists (`addon.shares`) one add-on may send per hour. */
   addonShareUpdatesPerHour: number;
+  /** Test connection: tests one person may run of one add-on per hour (its owner or a holder). */
+  addonTestsPerHour: number;
   /** Times one add-on may connect (and sign in) per hour: a reconnect storm is cut off. */
   addonConnectsPerHour: number;
   /** Messages one add-on connection may send per minute (more closes it). */
@@ -82,6 +84,7 @@ export const DEFAULT_LIMITS: Limits = {
   addonCallsOutPerPersonPerDay: 6,
   addonCallsInPerCallerPerHour: 30,
   addonShareUpdatesPerHour: 60,
+  addonTestsPerHour: 30,
   addonConnectsPerHour: 120,
   addonMessagesPerMinute: 600,
   keyPages: 10,

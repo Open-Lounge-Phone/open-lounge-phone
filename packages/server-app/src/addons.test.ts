@@ -1284,3 +1284,115 @@ describe("making an add-on easy to reach", () => {
     await seat.conn.next("call.ringing");
   });
 });
+
+describe("Test connection", () => {
+  let net: Net;
+  let a: TestServer;
+  let b: TestServer;
+  let jesse: Person;
+  let ana: Person;
+  let bob: Person;
+  let seat: Linked;
+  beforeEach(async () => {
+    net = new Network();
+    a = await net.server("a.test", { env: { addons: true } });
+    b = await net.server("b.test", { env: { addons: true } });
+    jesse = await a.person("jesse", "Jesse");
+    ana = await a.person("ana", "Ana");
+    bob = await b.person("bob", "Bob");
+    seat = await linkAddon(a, jesse);
+    await declare(a, seat, [BOOK_CLUB]);
+  });
+
+  const ownerTest = () => a.http(`/addons/${seat.id}/test`, { method: "POST", token: jesse.token });
+
+  it("its owner tests it: the add-on is asked and answers, no call is placed", async () => {
+    const radio = await linkAddon(a, jesse, "radio");
+    const pending = ownerTest();
+    const ask = await seat.conn.next("addon.test");
+    // Another add-on can't answer for it.
+    radio.conn.write({ t: "addon.test.ok", testId: ask.testId, version: "radio/9" });
+    net.timers.advance(42);
+    seat.conn.write({
+      t: "addon.test.ok",
+      testId: ask.testId,
+      version: "seat/1.4",
+      uptimeS: 3600,
+      calls: 0,
+    });
+    const res = await pending;
+    expectStatus(res, 200);
+    expect(res.json).toEqual({ state: "ok", ms: 42, version: "seat/1.4", uptimeS: 3600, calls: 0 });
+    expect(seat.conn.all("call.ringing")).toEqual([]);
+    // A late or stray answer does nothing (and isn't an error).
+    seat.conn.write({ t: "addon.test.ok", testId: ask.testId });
+    seat.conn.write({ t: "ping" });
+    await seat.conn.next("pong");
+    expect(seat.conn.all("error")).toEqual([]);
+  });
+
+  it("says when it didn't answer in 5 s, and when it isn't connected", async () => {
+    const pending = ownerTest();
+    await seat.conn.next("addon.test");
+    net.timers.advance(4999);
+    net.timers.advance(1);
+    expect((await pending).json).toEqual({ state: "timeout" });
+    seat.conn.close(1000, "bye");
+    expect((await ownerTest()).json).toEqual({ state: "offline" });
+  });
+
+  it("is for its owner and the people holding a share; nobody else learns anything", async () => {
+    // Not Ana's add-on.
+    expectStatus(
+      await a.http(`/addons/${seat.id}/test`, { method: "POST", token: ana.token }),
+      404,
+    );
+    const tryShare = () =>
+      a.http("/addons/test", { token: ana.token, body: { address: "jesse+seat+bookclub@a.test" } });
+    expect((await tryShare()).json).toEqual({ state: "unavailable" });
+    expect(seat.conn.all("addon.test")).toEqual([]);
+    // Given the share, she can test it.
+    const anaConn = (await connect(a, jesse, a, ana)).aSide;
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${anaConn}`), 201);
+    const pending = tryShare();
+    const ask = await seat.conn.next("addon.test");
+    seat.conn.write({ t: "addon.test.ok", testId: ask.testId });
+    expect((await pending).json).toEqual({ state: "ok", ms: 0 });
+    // Add-ons off: the app says so.
+    a.env.addons = false;
+    expectStatus(await ownerTest(), 403);
+  });
+
+  it("is rate limited per person and add-on", async () => {
+    a.env.limits = { addonTestsPerHour: 2 };
+    for (let i = 0; i < 2; i++) {
+      const pending = ownerTest();
+      const ask = await seat.conn.next("addon.test");
+      seat.conn.write({ t: "addon.test.ok", testId: ask.testId });
+      expectStatus(await pending, 200);
+    }
+    const over = await ownerTest();
+    expectStatus(over, 429);
+    expect(over.json.error).toBe("Too many tests of this add-on. Try again later.");
+    expect(seat.conn.all("addon.test")).toHaveLength(2);
+  });
+
+  it("works for a holder on another server", async () => {
+    const ids = await connect(a, jesse, b, bob);
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`), 201);
+    const pending = b.http("/addons/test", {
+      token: bob.token,
+      body: { address: "jesse+seat+bookclub@a.test" },
+    });
+    const ask = await seat.conn.next("addon.test");
+    seat.conn.write({ t: "addon.test.ok", testId: ask.testId, calls: 1 });
+    expect((await pending).json).toEqual({ state: "ok", ms: 0, calls: 1 });
+    // Not a share he holds: unavailable, and the add-on isn't asked.
+    const other = await b.http("/addons/test", {
+      token: bob.token,
+      body: { address: "jesse+seat+garden@a.test" },
+    });
+    expect(other.json).toEqual({ state: "unavailable" });
+    expect(seat.conn.all("addon.test")).toHaveLength(1);
+  });
+});

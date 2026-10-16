@@ -1,5 +1,6 @@
 import type { Addon, Device } from "@openloungephone/db";
 import type {
+  AddonTestResult,
   FedSignal,
   LineCallbackMissedResult,
   RoomJoinResult,
@@ -153,6 +154,8 @@ export interface Coordinator {
   lineCallbackMissed(householdId: string, req: CallbackMissed): Promise<LineCallbackMissedResult>;
   /** Sends one of the household's add-ons its owner's share request; false if it's offline. */
   addonShareRequest(householdId: string, addonId: string, msg: ServerToDevice): Promise<boolean>;
+  /** Test connection: asks the add-on (if connected) and says how it went. */
+  addonTest(householdId: string, addonId: string): Promise<AddonTestResult>;
   /** Ends calls with one of the household's add-ons through these grants or within these shares. */
   endAddonShareCalls(
     householdId: string,
@@ -333,6 +336,10 @@ export class Gateway implements Coordinator {
     msg: ServerToDevice,
   ): Promise<boolean> {
     return (await this.hubs.get(householdId)?.addonShareRequest(addonId, msg)) ?? false;
+  }
+
+  async addonTest(householdId: string, addonId: string): Promise<AddonTestResult> {
+    return (await this.hubs.get(householdId)?.addonTest(addonId)) ?? { state: "offline" };
   }
 
   async endAddonShareCalls(

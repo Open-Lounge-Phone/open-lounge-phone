@@ -189,6 +189,30 @@ export const AddonShareRefused = z
   })
   .describe("Server feature `addon-shares`, from an add-on: it won't make that share.");
 
+export const AddonTestOk = z
+  .object({
+    t: z.literal("addon.test.ok"),
+    ...Ref,
+    testId: Id.describe("The `addon.test` this answers."),
+    version: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .optional()
+      .describe("Its software and version (plain text), e.g. `seat/1.4`."),
+    uptimeS: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Seconds since it started (its process, not this connection)."),
+    calls: z.number().int().min(0).max(100).optional().describe("Calls it's on right now."),
+  })
+  .describe(
+    "From an add-on: the answer to `addon.test`, sent at once (the bridge does it by itself). The server measures the time from its `addon.test` to this.",
+  );
+
 /** What an add-on does with what people say to it (`addon.about.hears`). */
 export const AddonHears = z
   .enum(["nothing", "live", "keeps"])
@@ -815,6 +839,7 @@ export const DeviceToServer = z.discriminatedUnion("t", [
   AddonSharesMsg,
   AddonShareCreated,
   AddonShareRefused,
+  AddonTestOk,
   AddonAbout,
   PairBegin,
   AuthProof,
@@ -1382,6 +1407,16 @@ export const AddonShareRequest = z
     'Server feature `addon-shares`, to an add-on: its owner asks for a new shared scope ("Ask it for a new share…"). Make it, send `addon.shares` with it, then `addon.share.created`; or `addon.share.refused`. Unanswered after a minute, the request lapses.',
   );
 
+export const AddonTest = z
+  .object({
+    t: z.literal("addon.test"),
+    ...Ref,
+    testId: Id,
+  })
+  .describe(
+    "To an add-on: its owner (or someone holding one of its shares) pressed Test connection. Answer `addon.test.ok` with the same `testId` at once; no call is placed. Unanswered within 5 seconds, the test says it didn't answer.",
+  );
+
 export const ServerToDevice = z.discriminatedUnion("t", [
   AuthChallenge,
   PairCode,
@@ -1401,6 +1436,7 @@ export const ServerToDevice = z.discriminatedUnion("t", [
   CallStateMsg,
   CallKey,
   AddonShareRequest,
+  AddonTest,
   RtcConfig,
   RtcSdp,
   RtcIce,

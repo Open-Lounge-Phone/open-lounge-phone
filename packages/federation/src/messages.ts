@@ -255,6 +255,34 @@ export const AddonLeaveBody = z.object({
 export type AddonLeaveBody = z.infer<typeof AddonLeaveBody>;
 
 /**
+ * `POST /fed/v1/addons/test`: `from` (holding a share of `to`'s add-on `addon` there) pressed Test
+ * connection. The receiver checks the grant, asks the add-on (`addon.test`) and answers how it
+ * went (`AddonTestResult`).
+ */
+export const AddonTestBody = z.object({
+  from: Party,
+  to: Handle.describe("The add-on's owner on the receiving server."),
+  addon: Handle.describe("The add-on's name."),
+  share: ShareId,
+});
+export type AddonTestBody = z.infer<typeof AddonTestBody>;
+
+/**
+ * How a Test connection went: `ok` (it answered, in `ms`, with what it said about itself),
+ * `offline` (not connected now), `timeout` (connected but no answer within 5 seconds), or
+ * `unavailable` (you can't reach it now: no grant, add-ons off, its owner suspended; nothing
+ * there is told apart).
+ */
+export const AddonTestResult = z.object({
+  state: z.enum(["ok", "offline", "timeout", "unavailable"]),
+  ms: z.number().int().min(0).optional(),
+  version: z.string().max(64).optional(),
+  uptimeS: z.number().int().min(0).optional(),
+  calls: z.number().int().min(0).optional(),
+});
+export type AddonTestResult = z.infer<typeof AddonTestResult>;
+
+/**
  * `POST /fed/v1/lounge/claim`: the sending server vouches that `from` (its account) scanned this
  * server's Lounge phone; `directory` is their speed-dial there (their connections).
  */

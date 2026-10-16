@@ -90,6 +90,7 @@ import {
 } from "@openloungephone/db";
 import {
   type AddonAddress,
+  type AddonTestResult,
   type CallBody,
   type FedSignal,
   formatAddonAddress,
@@ -457,6 +458,11 @@ export class HouseholdHub {
   private readonly devices = new Map<string, DevicePeer>();
   /** Connected add-ons of this household (docs/add-ons.md), by add-on id. */
   private readonly addonPeers = new Map<string, Peer>();
+  /** Test connection: tests waiting for their add-on's `addon.test.ok`, by test id. */
+  private readonly addonTests = new Map<
+    string,
+    { addonId: string; sentAt: number; done(r: AddonTestResult): void }
+  >();
   /** Labs check-in alerts sent, by phone (at most one in 12 hours each). */
   private readonly checkinAlerts = new Map<string, number>();
   /** Chimes posted, by phone (at most one a minute each). */
@@ -3319,6 +3325,8 @@ export class HouseholdHub {
         return this.addonShareAnswer(peer, msg);
       case "addon.about":
         return this.addonAbout(peer, msg);
+      case "addon.test.ok":
+        return this.addonTestAnswer(peer, msg);
       default:
         break;
     }
@@ -3501,6 +3509,47 @@ export class HouseholdHub {
   }
 
   /** Sends one of our add-ons its owner's share request; false when it isn't connected. */
+  /**
+   * Test connection: asks one of our add-ons `addon.test` and waits (outside the hub's queue) up
+   * to `ADDON_TEST_TIMEOUT_MS` for its `addon.test.ok`. No call is placed.
+   */
+  addonTest(addonId: string): Promise<AddonTestResult> {
+    return new Promise((resolve) => {
+      void this.run(() => {
+        const peer = this.addonPeers.get(addonId);
+        if (!peer) return resolve({ state: "offline" });
+        const testId = newId("at");
+        const cancel = this.env.setTimer(() => {
+          if (this.addonTests.delete(testId)) resolve({ state: "timeout" });
+        }, ADDON_TEST_TIMEOUT_MS);
+        this.addonTests.set(testId, {
+          addonId,
+          sentAt: this.env.now(),
+          done: (r) => {
+            cancel();
+            resolve(r);
+          },
+        });
+        peer.conn.send({ t: "addon.test", testId });
+      });
+    });
+  }
+
+  /** An add-on answered a test: how long it took and what it said. A late or stray one: nothing. */
+  private addonTestAnswer(peer: Peer, msg: Extract<DeviceToServer, { t: "addon.test.ok" }>): void {
+    const test = this.addonTests.get(msg.testId);
+    if (!test || test.addonId !== peer.id) return;
+    this.addonTests.delete(msg.testId);
+    const version = msg.version === undefined ? null : cleanText(msg.version, 64);
+    test.done({
+      state: "ok",
+      ms: Math.max(0, this.env.now() - test.sentAt),
+      ...(version ? { version } : {}),
+      ...(msg.uptimeS !== undefined ? { uptimeS: msg.uptimeS } : {}),
+      ...(msg.calls !== undefined ? { calls: msg.calls } : {}),
+    });
+  }
+
   addonShareRequest(addonId: string, msg: ServerToDevice): Promise<boolean> {
     return this.run(() => {
       const peer = this.addonPeers.get(addonId);
@@ -6908,6 +6957,8 @@ const KIDS_NO_LINES = "Kids' phones can't call public lines";
 const CHIME_MINUTES = 15;
 /** Why a kids' phone's call to an add-on is refused. */
 const KIDS_NO_ADDONS = "Kids' phones can't call add-ons";
+/** Test connection: how long an add-on has to answer `addon.test`. */
+export const ADDON_TEST_TIMEOUT_MS = 5000;
 /** Calls with an add-on stay between two: no 3-way, no transfer. */
 const ADDON_ONE_TO_ONE = "a call with an add-on can't be merged or transferred";
 const REMOTE_TRANSFER =
