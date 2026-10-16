@@ -1,6 +1,6 @@
 ---
 title: Voicemail & greetings
-description: When a call isn't answered, the caller hears a greeting and leaves a message. Record your name or a whole greeting, set how long calls ring, and let a child record their phone's greeting.
+description: When a call isn't answered, the caller hears a greeting and leaves a message. Record your name or a whole greeting, set how long calls ring, and set a kid's phone's greeting.
 sidebar:
   order: 6
 ---
@@ -49,12 +49,10 @@ server asks yours for it, and yours checks the connection first.
 
 ## A kid's phone's greeting
 
-Guardians find the same card on the phone's **Manage** page. On the browser phone the child can
-also record it on the phone itself: **MENU → Voicemail → 4 Greeting**, then **1** to record their
-name, **2** for a whole greeting (press **BACK** when done), or **3** for the standard greeting.
-The phone speaks the steps. (Recording the greeting on the hardware phone is planned.) To keep it in
-grown-up hands, turn off **Let the child record the greeting on the phone**: the phone then doesn't
-offer it.
+Guardians set it on the phone's **Manage** page, recording it in the app. A kids' phone never
+records the child: the child can't record its greeting on the phone, and a call the child makes
+that isn't answered ends without a message (there's nothing to leave). Messages left **for** the
+child's phone by the people allowed to call it work as usual; guardians hear them in the app.
 
 ## How long it's kept, and transcripts
 

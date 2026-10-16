@@ -245,18 +245,10 @@ export function GreetingEditor({ api, deviceId }: { api: Api; deviceId?: string 
         </select>
       </label>
       {deviceId && (
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={settings.childGreeting ?? true}
-            onChange={(e) =>
-              void act(() =>
-                api.setVoicemailSettings({ childGreeting: e.target.checked }, deviceId),
-              )
-            }
-          />
-          Let the child record the greeting on the phone (MENU → Voicemail)
-        </label>
+        <p className="hint">
+          A kids' phone never records the child: no voicemail from it, and its greeting is recorded
+          here.
+        </p>
       )}
       {error && (
         <p className="error" role="alert">

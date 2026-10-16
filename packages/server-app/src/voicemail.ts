@@ -484,7 +484,7 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     const g = await greetingOf(env, owner, false);
     return c.json({
       ringSeconds: prefs.ringSeconds,
-      childGreeting: prefs.childGreeting,
+      childGreeting: false, // a kids' phone never records the child (COPPA)
       greeting: {
         kind: g.kind,
         ...(g.durationMs !== undefined ? { durationMs: g.durationMs } : {}),

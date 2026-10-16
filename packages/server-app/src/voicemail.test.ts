@@ -203,26 +203,17 @@ describe("kids' phones", () => {
       ...{},
     });
 
-  it("a phone as the caller: no answer, the message lands in the grown-up's inbox", async () => {
-    const { jesse, deviceId, phone, jApp } = await kidPhone();
+  it("a kids' phone as the caller never leaves a voicemail: a child's voice isn't recorded", async () => {
+    const { jesse, phone, jApp } = await kidPhone();
     phone.write({ t: "hook", state: "up" });
     phone.write({ t: "button", index: 0 }); // key 1 = Jesse (the guardian who paired it)
     await jApp.next("call.ringing");
     s.timers.advance(RING_TIMEOUT_MS);
     const end = await phone.nextState("ended");
-    expect(end).toMatchObject({ reason: "timeout", voicemail: { name: "Jesse" } });
+    expect(end).toMatchObject({ reason: "timeout" });
+    expect(end.voicemail).toBeUndefined();
     await jApp.nextState("ended");
-    expectStatus(await leave(s, end.voicemail?.ticket as string), 201);
-    expect(await jApp.next("voicemail.inbox")).toMatchObject({ from: "Lily" });
-    const inbox = await s.http("/voicemails", { token: jesse.token });
-    expect(inbox.json).toMatchObject([
-      {
-        toUser: jesse.user.id,
-        fromLabel: "Lily",
-        fromUser: null,
-        fromAddress: `device:${deviceId}`,
-      },
-    ]);
+    expect((await s.http("/voicemails", { token: jesse.token })).json).toEqual([]);
   });
 
   it("quiet hours: a caller on the allow-list goes straight to voicemail for the guardians", async () => {
@@ -291,47 +282,24 @@ describe("kids' phones", () => {
     expect(quiet.voicemail).toBeUndefined();
   });
 
-  it("the phone records its greeting (MENU → Voicemail), if the guardians let the child", async () => {
-    const { jesse, bob, bobToken, deviceId, phone } = await kidPhone();
-    await allow(deviceId, bob.id, "Uncle Bob", {});
-    phone.write({ t: "greeting.begin", kind: "custom" });
-    const t = await phone.next("greeting.ticket");
-    expect(t).toMatchObject({ kind: "custom", maxMs: 30_000 });
-    const saved = await s.http(`/vm/greeting?ticket=${t.ticket}&durationMs=4000`, {
-      raw: new Uint8Array([1, 2, 3]),
-      type: "audio/webm",
-    });
-    expectStatus(saved, 201);
-    let config = await phone.next("config");
-    while (config.greeting?.kind !== "custom") config = await phone.next("config");
-    expect(config.greeting).toEqual({ kind: "custom", canRecord: true });
-    // A caller whose call goes unanswered hears it.
-    phone.write({ t: "hook", state: "up" });
-    const bApp2 = await s.connectApp(bobToken);
-    bApp2.write({ t: "call.dial", deviceId });
-    const end = await ended(bApp2);
-    expect(await greeting(s, end.voicemail?.ticket as string)).toMatchObject({
-      status: 200,
-      kind: "custom",
-      bytes: new Uint8Array([1, 2, 3]),
-    });
-    // A greeting ticket isn't a voicemail ticket, and it's single use.
-    expectStatus(await leave(s, t.ticket), 404);
-    // The guardians turn it off: the phone may no longer change it.
+  it("a kids' phone never records its greeting: the child isn't recorded, even if allowed before", async () => {
+    const { jesse, bobToken, deviceId, phone } = await kidPhone();
+    // The old "let the child record" setting changes nothing.
     expectStatus(
       await s.http(`/devices/${deviceId}/voicemail`, {
         method: "PATCH",
         token: jesse.token,
-        body: { childGreeting: false },
+        body: { childGreeting: true },
       }),
       204,
     );
-    phone.write({ t: "greeting.begin", kind: "name" });
+    phone.write({ t: "greeting.begin", kind: "custom" });
     expect(await phone.next("greeting.done")).toEqual({
       t: "greeting.done",
       result: "not_allowed",
-      kind: "custom",
+      kind: "default",
     });
+    expect(phone.all("greeting.ticket")).toEqual([]);
     phone.write({ t: "greeting.reset" });
     expect(await phone.next("greeting.done")).toMatchObject({ result: "not_allowed" });
     // Guardians reset it from the app.

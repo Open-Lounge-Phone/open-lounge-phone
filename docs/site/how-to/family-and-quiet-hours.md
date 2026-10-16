@@ -77,9 +77,11 @@ Whatever else you set, a kids' phone:
 ## Voicemail for kids' phones
 
 When an allowed caller isn't answered (or it's quiet hours), they hear the phone's greeting and
-can leave a message. You decide on the phone's **Manage** page how long it rings first, whether
-your child may record its greeting, and what the greeting says (see
-[Voicemail & greetings](/how-to/voicemail/)).
+can leave a message. You decide on the phone's **Manage** page how long it rings first and what
+the greeting says, recorded in the app (see [Voicemail & greetings](/how-to/voicemail/)).
+
+The phone never records your child: no voicemail from it when a call isn't answered, no greeting
+recorded on it, and no call recording.
 
 ## A daily check-in for someone you look after
 

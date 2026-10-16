@@ -14,6 +14,10 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **A kids' phone never records the child** (COPPA): a call it makes that isn't answered gets no
+  voicemail offer, and the child can't record the phone's greeting (guardians record it in the
+  app; the "let the child record" setting is gone and `childGreeting` always reads false).
+
 - **Everything that exists shows in the app** (an audit of what the server keeps against what the
   app lets people see, act on and remove):
   - **Operator → This server**: every setting that isn't a secret, in plain words with what it

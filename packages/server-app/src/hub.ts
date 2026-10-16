@@ -1306,6 +1306,9 @@ export class HouseholdHub {
       return { userId, ...(payer ? { payer } : {}), label, address: `user:${peer.id}` };
     }
     if (peer.kind !== "device") return undefined;
+    // A child's voice is never recorded (COPPA): a kids' phone's unanswered call gets no
+    // voicemail offer.
+    if (this.isKidsPhone(peer)) return undefined;
     let person: string | undefined;
     if (peer.lounge) {
       const session = peer.lounge.session;
@@ -1963,8 +1966,9 @@ export class HouseholdHub {
   // --- greetings recorded on the phone ------------------------------------------------
 
   /**
-   * Whose greeting a phone records from MENU → Voicemail: its owner's (a person's own phone) or
-   * its own (a kids' phone, if its guardians let the child). Lounge phones have none.
+   * Whose greeting a phone records from MENU → Voicemail: its owner's (a person's own phone).
+   * A kids' phone never records the child (COPPA); its guardians record its greeting in the app.
+   * Lounge phones have none.
    */
   private async phoneGreeting(
     device: DevicePeer,
@@ -1974,9 +1978,7 @@ export class HouseholdHub {
       const user = await this.env.store.getUser(device.owner);
       return user ? { owner: { accountId: user.accountId }, canRecord: true } : undefined;
     }
-    const owner = { deviceId: device.id };
-    const prefs = await this.env.store.voicemailPrefs(owner);
-    return { owner, canRecord: prefs.childGreeting };
+    return { owner: { deviceId: device.id }, canRecord: false };
   }
 
   private async greetingFromPhone(

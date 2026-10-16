@@ -16,7 +16,7 @@ own infrastructure.
 | Presence you chose to share | showing your connections if you're available | the latest value only |
 | Call log: who called whom, when, how long, how it ended — **never the audio** | your call history and each buddy's timeline | as long as you choose: per connection, or your account default; else the space's default (30 days, 1 year or forever; forever unless someone changes it) |
 | Voicemail audio and its transcript | voicemail — for a phone (its guardians' inbox) or for you (your own inbox) | until deleted, or until the retention runs out: yours by your setting for that person (else the space's voicemail default), a phone's by the space's |
-| Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
+| Your voicemail greeting (a recorded name or greeting) and ring time; a kid's phone's greeting (recorded by its guardians in the app: a kids' phone never records the child) | what callers hear when you can't answer | until you replace or reset it, or delete the account or phone |
 | Call recordings (only where a space turned recording on, always announced; never in a home with kids' phones or with a kids' phone on the call) and their transcripts where the space transcribes | the space's record of its calls | by the history retention of whoever recorded it (per connection, account, then the space's history setting) |
 | Team and org spaces: extensions, ring groups and their hours, the shared voicemail boxes | the workplace phone system | until removed |
 | Every space's audit trail: who changed what and when (phones, allow-lists, quiet hours, invites, roles, privacy, notices, the space's name and time zone…), with ids and names only — never what was said or written, no tokens, no IP addresses | so the people running a space can see who changed it; only its guardians (or owner and admins) read it | by the space's history setting |
@@ -45,6 +45,11 @@ end-to-end room encryption (SFrame) is planned. The server records nothing itsel
 turned recording on, the recording is made by that side's own app or phone (for a room, a
 participant's), announced to everyone first, and uploaded like a voicemail.
 There are no ads, no trackers, no text chat, and no connection to the phone network — ever.
+
+**A child's voice is never kept.** A kids' phone doesn't record the child: a call it makes that
+isn't answered ends without a voicemail, its greeting is recorded by its guardians in the app, and
+its calls are never recorded. Messages left *for* the child by the people allowed to call it are
+kept like any voicemail, for the guardians.
 
 ## Who can see what
 
