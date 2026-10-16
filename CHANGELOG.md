@@ -10,6 +10,10 @@ Server releases are git tags `server-vX.Y.Z`. The version is `version` in the ro
 redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md](docs/protocol.md)
 (phones and apps) and §9 of [docs/federation-spec.md](docs/federation-spec.md) (servers).
 
+## 0.9.0 (unreleased)
+
+On `main`, not tagged yet.
+
 ## 0.8.0 (2026-10-16, `server-v0.8.0`)
 
 - **Speed-dial pages**: more than ten people on a phone's keys, in pages of ten (up to 10 pages,

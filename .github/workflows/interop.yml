@@ -26,7 +26,7 @@ env:
   WRANGLER_SEND_METRICS: "false"
   # The previous released server (tags `server-vX.Y.Z`, see CONTRIBUTING.md "Releases"). After
   # tagging a new release, pin it here.
-  OLP_BASELINE_REF: server-v0.7.0
+  OLP_BASELINE_REF: server-v0.8.0
 
 jobs:
   selfhost:
