@@ -190,6 +190,12 @@ static int cmd_rtc(int argc, char **argv) {
            argc > 2 && !strcmp(argv[2], "on") ? "on" : "off");
     return 0;
   }
+  if (argc > 2 && !strcmp(argv[1], "dtls")) {
+    media_set_dtls_client(strcmp(argv[2], "auto") != 0);
+    printf("calls this phone places: %s from the next call\n",
+           media_dtls_client() ? "DTLS client (setup:active)" : "setup:actpass (0.9.6)");
+    return 0;
+  }
   media_print_status();
   return 0;
 }

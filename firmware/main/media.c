@@ -49,6 +49,11 @@ static bool s_offerer;
 // `audio codec pcmu` (console, not saved): every call as in 0.9.5, PCMU alone, for comparing on a
 // board. Opus (the default) offers and answers with both codecs, sending Opus.
 static bool s_opus = true;
+// A call the phone places offers `a=setup:active`: the phone is the DTLS client, as when it
+// answers (the case that connects). As DTLS server (`actpass` answered `active`) the phone
+// logged "SRTP connected OK" but the other side never finished its handshake, the phone never
+// reported connected and stopped answering consent checks. `rtc dtls auto` puts actpass back.
+static bool s_dtls_client = true;
 #if CONFIG_OLP_ICE_PREFER_TLS
 #define PREFER_TLS true
 #else
@@ -116,6 +121,7 @@ static int on_msg(esp_peer_msg_t *msg, void *ctx) {
   char *sdp = sdp_with_opus_params(raw);
   if (sdp) free(raw);
   else sdp = raw;
+  if (s_offerer && s_dtls_client) sdp_offer_dtls_client(sdp);
   app_post(EV_RTC_SDP, 0, sdp);  // the app sends it as rtc.sdp (offer or answer)
   return 0;
 }
@@ -402,6 +408,8 @@ bool media_active(void) { return s_call_id[0] != '\0'; }
 bool media_connected(void) { return s_connected; }
 void media_set_ice_mode(ice_mode_t mode) { s_ice_mode = mode; }
 void media_set_opus(bool on) { s_opus = on; }
+void media_set_dtls_client(bool on) { s_dtls_client = on; }
+bool media_dtls_client(void) { return s_dtls_client; }
 bool media_opus(void) { return s_opus; }
 ice_mode_t media_ice_mode(void) { return s_ice_mode; }
 

@@ -14,3 +14,9 @@ unsigned sdp_audio_codecs(const char *sdp);
  * the other side needn't code more). Parameters already there are kept.
  */
 char *sdp_with_opus_params(const char *sdp);
+
+/**
+ * In place: an offer's `a=setup:actpass` becomes `a=setup:active`, so this side is the DTLS
+ * client (the answer then says passive). Anything else is left as it is.
+ */
+void sdp_offer_dtls_client(char *sdp);

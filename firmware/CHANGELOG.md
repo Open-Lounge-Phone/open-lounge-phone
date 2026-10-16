@@ -2,18 +2,15 @@
 
 ## 0.9.7 — unreleased
 
-- **Known problem being tracked down:** on a real board, a call the phone places (to a browser or
-  an add-on) connects but carries no audio either way: `esp_peer` never reports the call connected
-  after DTLS, so the phone's audio doesn't start. Calls the phone answers aren't affected in the
-  simulator. 0.9.5 and older placed calls with PCMU alone and worked.
+- **Calls the phone places: the phone is the DTLS client.** On a real board such calls (to a
+  browser or an add-on) connected (ICE, DTLS) but carried no audio. The phone, as DTLS server
+  (it offered `actpass`, the answer said `active`), logged "SRTP connected OK", yet the other side
+  never finished its handshake; `esp_peer` never reported the call connected and stopped
+  answering consent checks. The offer now says `a=setup:active`, so the phone is the DTLS client,
+  as it is when it answers (the case that connects). `rtc dtls auto` puts `actpass` back, for
+  comparing.
 - **`audio codec opus|pcmu`** (console, not saved): `pcmu` makes every call as in 0.9.5 (PCMU
   alone, one codec in the SDP), for comparing on a board; `opus` (the default) is 0.9.6's.
-- **Speed-dial pages** (server 0.8.0 or newer; the phone lists `key-pages`): more than ten
-  people on the keys, in pages of ten. With the handset up and the key map showing, BACK shows
-  the next page with keys and wraps to the first; the footer says `PAGE 2/3 - BACK: NEXT PAGE`,
-  a digit calls that page's key, and hanging up or a call returns to page 1. Redial keeps the
-  page. BACK keeps every other job it had. On an older server the phone shows page 1, as
-  before.
 
 ## 0.9.6 — 2026-10-15: call audio (wideband, the mic level, concealment, sidetone, echo)
 

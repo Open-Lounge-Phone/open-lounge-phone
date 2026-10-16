@@ -23,5 +23,8 @@ void media_set_ice_mode(ice_mode_t mode);
 /** Calls with Opus (default) or, for comparing on a board, PCMU alone as in 0.9.5. Not saved. */
 void media_set_opus(bool on);
 bool media_opus(void);
+/** Calls the phone places offer to be the DTLS client (default), or actpass. Not saved. */
+void media_set_dtls_client(bool on);
+bool media_dtls_client(void);
 ice_mode_t media_ice_mode(void);
 void media_print_status(void);

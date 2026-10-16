@@ -114,3 +114,12 @@ char *sdp_with_opus_params(const char *sdp) {
   strcpy(out + at + (size_t)k, re);
   return out;
 }
+
+void sdp_offer_dtls_client(char *sdp) {
+  static const char from[] = "a=setup:actpass", to[] = "a=setup:active";
+  char *at = sdp ? strstr(sdp, from) : NULL;
+  if (!at) return;
+  // One shorter: write the new value and move the rest of the SDP up a character.
+  memmove(at + sizeof to - 1, at + sizeof from - 1, strlen(at + sizeof from - 1) + 1);
+  memcpy(at, to, sizeof to - 1);
+}

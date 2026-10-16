@@ -38,3 +38,17 @@ TEST(sdp_adds_our_opus_params) {
   CHECK_STR(c, pcmu);  // nothing to do
   free(c);
 }
+
+TEST(sdp_makes_an_offer_the_dtls_client) {
+  char a[] = "v=0\r\na=fingerprint:sha-256 AA\r\na=setup:actpass\r\na=ice-ufrag:x\r\n";
+  sdp_offer_dtls_client(a);
+  CHECK_STR(a, "v=0\r\na=fingerprint:sha-256 AA\r\na=setup:active\r\na=ice-ufrag:x\r\n");
+  char b[] = "v=0\r\na=setup:passive\r\n";  // an answer, or already decided: untouched
+  sdp_offer_dtls_client(b);
+  CHECK_STR(b, "v=0\r\na=setup:passive\r\n");
+  char c[] = "a=setup:actpass";  // at the very end, no line break
+  sdp_offer_dtls_client(c);
+  CHECK_STR(c, "a=setup:active");
+  sdp_offer_dtls_client(NULL);
+}
+
