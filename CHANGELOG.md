@@ -37,6 +37,22 @@ On `main`, not tagged yet.
     add-on shares you hold (`addons`, `addonSharesHeld`; additive, format version 1).
   - Workplace: searching the directory no longer hides people from the admin's extension list
     and ring-group pickers.
+- **Refused calls say why** (`call.state ended` `note`, core `refusals.ts`), on the apps and
+  both phones instead of a bare BUSY: you're already on a call, the add-on isn't connected right
+  now, it takes no calls, it's on as many calls as it takes, add-ons are off on that server, and
+  (to the handle's own account only) no add-on by that name is linked to your account on that
+  server. Anyone who may not call an address gets the same "You can't call that address" whether
+  anything is there or not. Phones show ON ANOTHER CALL, ADD-ON OFFLINE, NO SUCH ADD-ON, …
+  (firmware 0.9.7 too).
+- **Add-ons: where they're linked, and nothing goes silently.** An add-on's page says whose
+  account, which space and which server it's linked to (`GET /addons`: `owner`, `server`); the
+  Python bridge has `addon.linked_to` and logs it. Remove names the shares and how many people
+  lose them before it happens, and afterwards the Add-ons tab keeps a note of what went until
+  dismissed; holders get a note when a share of theirs goes (removed, taken back, no longer
+  offered), here or on their own server (`GET /addons/gone`, `DELETE /addons/gone/:id`; migration
+  0034, additive). A line on the Add-ons tab says how to reach an add-on linked on your other
+  server (connect your two accounts, then give the other one a share); the two-server test runs
+  that path.
 - **Someone's own phones go with them**: leaving a space, being removed from it or deleting the
   account now removes and wipes the person's own phones there. Before, such a phone stayed as
   an ownerless household phone in kids' mode (even in a team), out of every list of own phones.

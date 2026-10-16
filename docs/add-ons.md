@@ -66,10 +66,26 @@ someone shared one with you).
 4. **It calls you**, if it says it may, for a check-in it planned, say. It rings wherever you
    can be rung: your apps, your own phones, a Lounge phone you're signed in at.
 5. **Its page** shows whether it's online now (as the server reports it), its address with
-   **Copy**, **What it does**, its **Shares** (each with Call, Add to contacts, Put on a key and
-   **Give to…**), **Ask it for a new share…** when it offers shares, and **Remove** (it's cut off
-   at once, told to forget its link, and every share of it goes). With one add-on and nothing
-   shared with you, the tab opens straight on its page.
+   **Copy**, where it's linked ("Linked to Jesse (jesse@hub.example), in Jesse's home, on
+   hub.example"), **What it does**, its **Shares** (each with Call, Add to contacts, Put on a key and
+   **Give to…**), **Ask it for a new share…** when it offers shares, and **Remove**: it's cut off
+   at once, told to forget its link, and every share of it goes; the question names the shares
+   and how many people lose them. With one add-on and nothing shared with you, the tab opens
+   straight on its page.
+6. **Nothing goes silently.** When an add-on is removed (by you, or because you left the space or
+   the space went), the Add-ons tab keeps a note of it until you press OK: which shares went and
+   who no longer has them. Someone holding a share gets a note too when it goes (its add-on was
+   removed, its owner took it back, or the add-on stopped offering it), on their own server.
+7. **Accounts on two servers.** An add-on shows on the app of the server it's linked to. To
+   reach it from your account on another server, connect your two accounts (Connections), then
+   on the add-on's server give that account a share of it.
+
+**When a call doesn't go through**, the app and the phones say why: the add-on isn't connected
+right now (`ADD-ON OFFLINE`), it takes no calls, it's on as many calls as it takes, add-ons are
+off on that server, you're already on a call, or, for your own address, that no add-on of that
+name is linked to your account on that server (`NO SUCH ADD-ON`: it may be linked on your other
+server). Anyone who may not call an address hears only "You can't call that address", whether
+anything is there or not.
 
 A call with an add-on is one to one: no Add caller, no Transfer. The app shows a **Keypad**
 during the call when it takes keys; it hears the keys ("press 1 to…"). Calls to and from an
@@ -348,6 +364,10 @@ on the server-pair stream.
 - `POST /api/addons/:id/share-requests {label, with: [ref]}` and
   `GET /api/addons/:id/share-requests/:requestId` → `{id, label, state, shareId?, reason?,
   people}`, `state` one of `waiting`, `created`, `refused`, `offline`, `timeout`.
+- `GET /api/addons/gone`: notes of what went (`what` `removed`: your add-on, with `shares`
+  `[{label, holders}]`; `share`: a share you held, with `owner` and `label`), newest first, at
+  most 20; `DELETE /api/addons/gone/:id` dismisses one. Each add-on in `GET /api/addons` also
+  says `owner` (`name`, `address`) and `server`.
 - `GET /api/addons/shared`: shares of other people's add-ons on this server given to you
   (`owner`, `addon`, `share`, `address`, `muted`, `about`); shares from other servers come with
   that connection in `GET /api/connections` (`addonShares`, with `muted`).
