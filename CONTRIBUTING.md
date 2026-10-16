@@ -31,6 +31,10 @@ These apply to everyone, human or AI.
 - **Biome** for lint and format: `npm run lint`, fix with `npx biome check --write .`
   (2 spaces, 100 columns).
 - **Vitest**, with tests next to the code as `*.test.ts`.
+- **Docs change with the code.** The website (openloungephone.app) is built from this repository's
+  `main`: the reference from `docs/`, `firmware/` and `hardware/`, and the user guides from
+  `docs/site/` (Markdown with Starlight frontmatter: getting started, the how-tos). A change to a
+  screen, a key or a setting updates its guide in the same commit.
 - **Protocol:** `packages/protocol/src/messages.ts` (zod) is the source of truth. Messages are
   flat JSON `{ t: "type", id?, ... }` of at most 16 KiB. After a change run
   `npm run docs:protocol` and commit `docs/protocol.md`; CI fails if it is out of date. Additive
