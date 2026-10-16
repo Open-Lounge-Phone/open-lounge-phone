@@ -104,6 +104,7 @@ export async function start(config: Config) {
     ...(config.operators.length ? { operators: config.operators } : {}),
     ...(config.hub ? { hub: config.hub } : {}),
     trustProxy: config.trustProxy,
+    turn: config.ice.turnUrls.length > 0 && !!config.ice.turnSecret,
     refuseRecordedCalls: config.refuseRecordedCalls,
     addons: config.addons,
     ...(config.federation

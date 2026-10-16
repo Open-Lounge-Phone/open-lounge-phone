@@ -1306,6 +1306,30 @@ export class Store {
     return r ?? {};
   }
 
+  /**
+   * Accounts an operator set apart: suspended, or exempt from the fair-use allowance (the admin
+   * view lists them so they can be undone without remembering a handle). At most `limit` each.
+   */
+  async flaggedAccounts(
+    limit = 200,
+  ): Promise<{ suspended: Account[]; exempt: Account[]; more: boolean }> {
+    const [suspended, exempt] = await Promise.all([
+      this.sql.all<AccountRow>(
+        "SELECT * FROM accounts WHERE suspended_at IS NOT NULL ORDER BY suspended_at DESC LIMIT ?",
+        limit + 1,
+      ),
+      this.sql.all<AccountRow>(
+        "SELECT * FROM accounts WHERE fair_use_exempt = 1 ORDER BY handle LIMIT ?",
+        limit + 1,
+      ),
+    ]);
+    return {
+      suspended: suspended.slice(0, limit).map(toAccount),
+      exempt: exempt.slice(0, limit).map(toAccount),
+      more: suspended.length > limit || exempt.length > limit,
+    };
+  }
+
   async setSharePresence(accountId: string, share: boolean): Promise<void> {
     await this.sql.run(
       "UPDATE accounts SET share_presence = ? WHERE id = ?",

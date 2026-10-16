@@ -20,6 +20,7 @@ import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
 import { operatorAudit, ownKeys, rotateOwnKey } from "./ownKey.ts";
 import { knownOffers } from "./peers.ts";
+import { serverSettings } from "./serverSettings.ts";
 import { closeAccountApps } from "./sessions.ts";
 
 /** Public: what this server asks of its users and how it's funded (hubs only). */
@@ -67,11 +68,28 @@ export function hubRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): v
 
   api.get("/admin/overview", async (c) => {
     if (!(await operator(c))) return refused();
+    const flagged = await store.flaggedAccounts();
+    const brief = (a: import("@openloungephone/db").Account) => ({
+      id: a.id,
+      handle: a.handle,
+      name: a.name,
+      suspendedAt: a.suspendedAt,
+    });
     return c.json({
       counts: await store.hubCounts(),
       blockedServers: await store.connections.blockedServers(),
       keyAlerts: await store.connections.keyAlerts(),
+      // Who is suspended or exempt, so either can be undone without remembering a handle.
+      suspended: flagged.suspended.map(brief),
+      exempt: flagged.exempt.map(brief),
+      ...(flagged.more ? { more: true } : {}),
     });
+  });
+
+  /** How this server is set up (no secrets: only whether they're set). Operators only. */
+  api.get("/admin/server", async (c) => {
+    if (!(await operator(c))) return refused();
+    return c.json(await serverSettings(env));
   });
 
   api.get("/admin/accounts", async (c) => {

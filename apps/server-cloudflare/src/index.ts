@@ -241,6 +241,7 @@ function baseEnv(
     openSignup: env.OPEN_SIGNUP === "1",
     refuseRecordedCalls: env.REFUSE_RECORDED_CALLS === "1",
     addons: env.ADDONS === "on" || env.ADDONS === "1",
+    turn: !!(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN),
     ...(env.DEV_LOOPBACK === "1"
       ? { fetch: (req: Request) => fetch(new Request(loopback(env, req.url), req)) }
       : {}),

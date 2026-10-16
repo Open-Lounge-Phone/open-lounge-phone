@@ -172,6 +172,11 @@ export interface ServerEnv {
    * 1:1 calls never use it.
    */
   relay?: import("./sfu.ts").RelayConfig;
+  /**
+   * A TURN relay is set up for calls (`TURN_URLS` + `TURN_SECRET`, or Cloudflare's
+   * `TURN_KEY_ID` + `TURN_KEY_API_TOKEN`). Only shown to operators; `iceServers` does the work.
+   */
+  turn?: boolean;
   /** Calls with other households and servers; without it such calls are unreachable. */
   calls?: CallLinks;
   /**

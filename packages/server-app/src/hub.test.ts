@@ -298,6 +298,9 @@ describe("abuse controls", () => {
     const overview = await s.http("/admin/overview", { token: boss.token });
     expect(overview.json.blockedServers).toMatchObject([{ host: "spam.example", reason: "spam" }]);
     expect(overview.json.counts).toMatchObject({ accounts: 2, suspended: 1, exempt: 1 });
+    // Who is suspended or exempt is listed, so either can be undone without the handle.
+    expect(overview.json.suspended).toMatchObject([{ id: eve.account.id, handle: "eve" }]);
+    expect(overview.json.exempt).toMatchObject([{ id: eve.account.id, handle: "eve" }]);
     expectStatus(
       await s.http("/admin/servers/spam.example", { method: "DELETE", token: boss.token }),
       204,
