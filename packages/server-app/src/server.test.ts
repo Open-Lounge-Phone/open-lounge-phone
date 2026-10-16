@@ -274,7 +274,7 @@ describe("pairing and device auth", () => {
       t: "config",
       buttons: [{ index: 0, label: "Mom" }],
       quiet: false,
-      greeting: { kind: "default", canRecord: true },
+      greeting: { kind: "default", canRecord: false },
       // The strip's trust line: whose phone, and how it's used.
       owner: { mode: "kids", space: "Home" },
       // The space's UTC offset (the test household's time zone is UTC).
