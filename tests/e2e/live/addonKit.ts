@@ -25,7 +25,11 @@ export class AddonLab {
   private readonly dirs: string[] = [];
 
   /** Builds the web apps (unless OLP_ADDON_NO_BUILD=1), starts the server and Chromium. */
-  async start(env: Record<string, string> = {}): Promise<void> {
+  async start(
+    env: Record<string, string> = {},
+    /** Runs on the empty data folder before the server starts (e.g. to seed an operator). */
+    prepare?: (dataDir: string) => void | Promise<void>,
+  ): Promise<void> {
     if (process.env.OLP_ADDON_NO_BUILD !== "1") {
       for (const w of ["@openloungephone/companion", "@openloungephone/device-web"]) {
         const b = spawnSync("npm", ["run", "build", "-w", w], { cwd: ROOT, encoding: "utf8" });
@@ -34,6 +38,7 @@ export class AddonLab {
     }
     const port = await freePort();
     this.dataDir = mkdtempSync(join(tmpdir(), "olp-addon-lab-"));
+    await prepare?.(this.dataDir);
     const origin = `http://localhost:${port}`;
     const log = new ProcLog("selfhost");
     this.logs.push(log);
