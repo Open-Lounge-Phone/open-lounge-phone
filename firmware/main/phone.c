@@ -43,6 +43,30 @@ static void to_offhook(phone_state_t *s, const char *last_end) {
   CPY(s->last_end, last_end);
 }
 
+// Mirrors packages/core/src/refusals.ts (notes and their status lines; a test keeps them equal).
+static const char *const WHY_NOTES[][2] = {
+    {"You're already on a call", "ON ANOTHER CALL"},
+    {"That add-on isn't connected right now", "ADD-ON OFFLINE"},
+    {"That add-on doesn't take calls", "TAKES NO CALLS"},
+    {"That add-on is on as many calls as it takes", "ADD-ON BUSY"},
+    {"You have no add-on by that name on that server", "NO SUCH ADD-ON"},
+    {"Add-ons are off on that server", "ADD-ONS ARE OFF"},
+    {"You can't call that address", "CAN'T CALL THAT"},
+};
+
+int phone_why(const char *note) {
+  if (!note) return 0;
+  for (size_t i = 0; i < sizeof WHY_NOTES / sizeof WHY_NOTES[0]; i++) {
+    if (!strcmp(note, WHY_NOTES[i][0])) return (int)i + 1;
+  }
+  return 0;
+}
+
+const char *phone_why_text(int why) {
+  int n = (int)(sizeof WHY_NOTES / sizeof WHY_NOTES[0]);
+  return why >= 1 && why <= n ? WHY_NOTES[why - 1][1] : NULL;
+}
+
 void phone_init(phone_state_t *s) {
   memset(s, 0, sizeof(*s));
   s->kind = PH_IDLE;
@@ -372,6 +396,7 @@ bool phone_server(phone_state_t *s, const cJSON *m, phone_emit_fn emit) {
         to_offhook(s, reason ? reason : "hangup");
         CPY(s->held, held);
         s->sign_in = note && !strcmp(note, PHONE_SIGN_IN_NOTE);
+        s->why = phone_why(note);
       } else if (!strcmp(state, "active") || !strcmp(state, "connecting")) {
         phone_init(s);
         s->kind = PH_INCALL;

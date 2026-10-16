@@ -153,7 +153,7 @@ export const CallAddress = z
     ),
   })
   .describe(
-    "Server feature `addons`. Call by address. An add-on calls its owner, or (with `share`) someone who holds that share (people only); an app calls an add-on it may talk to: its own (`handle+name@host`), or a share of one that its owner gave them (`handle+name+share@host`). Phones use speed-dial keys instead. Every refusal (unknown, not allowed, add-ons off) answers `call.state ended` `unavailable` (or `denied` with a `note` for fair use).",
+    "Server feature `addons`. Call by address. An add-on calls its owner, or (with `share`) someone who holds that share (people only); an app calls an add-on it may talk to: its own (`handle+name@host`), or a share of one that its owner gave them (`handle+name+share@host`). Phones use speed-dial keys instead. A refusal answers `call.state ended` with a `note` in plain words (core `refusals.ts`): someone who may not call it gets the same `unavailable` + `You can't call that address` whether it exists or not; its owner and holders hear why (`unreachable` + not connected, `busy` + on as many calls as it takes, no add-on by that name linked to your own handle, add-ons off), and fair use answers `denied` with its note.",
   );
 
 export const AddonSharesMsg = z

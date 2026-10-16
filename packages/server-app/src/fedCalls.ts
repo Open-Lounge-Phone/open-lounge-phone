@@ -2,6 +2,7 @@
 // server (host '') or across servers. The caller's hub opens a room whose far end is a proxy
 // peer; the callee's server authorizes on its own terms and opens the matching room. Signaling
 // flows between the two rooms: directly between hubs here, over the server-pair stream otherwise.
+import { ADDON_NOT_LINKED_NOTE, ADDONS_OFF_NOTE, CANT_CALL_NOTE } from "@openloungephone/core";
 import { isRemoteContactId, LOCAL_HOST } from "@openloungephone/db";
 import {
   type CallBody,
@@ -161,6 +162,7 @@ export class FedCalls implements CallLinks {
       const plain = !body.viaPhone && body.guestOf === undefined && body.ringLabel === undefined;
       const ok =
         this.env.addons && plain && (body.addon !== undefined) !== (body.to.kind === "addon");
+      if (!this.env.addons) return { state: "ended", reason: "unavailable", note: ADDONS_OFF_NOTE };
       if (!ok || (body.addon !== undefined && body.to.kind !== "person")) {
         return { state: "ended", reason: "unavailable" };
       }
@@ -169,10 +171,14 @@ export class FedCalls implements CallLinks {
       return { state: "ended", reason: "unavailable" };
     if (body.to.kind === "addon") {
       // Its owner at its own address; at a share's, only someone holding that share. Everything
-      // else looks the same.
-      const unavailable = { state: "ended", reason: "unavailable" } as const;
+      // else looks the same (core/refusals.ts), except to the handle's own account here.
+      const unavailable = { state: "ended", reason: "unavailable", note: CANT_CALL_NOTE } as const;
       const addon = await store.addons.byAddress(body.to.handle, body.to.name);
-      if (!addon) return unavailable;
+      if (!addon) {
+        const own =
+          host === LOCAL_HOST && (await store.accountByHandle(body.to.handle))?.id === from.id;
+        return own ? { ...unavailable, note: ADDON_NOT_LINKED_NOTE } : unavailable;
+      }
       const who = { host, accountId: from.id, handle: from.handle };
       const access = await addonAccess(this.env, addon, who, body.to.share);
       if (!access) return unavailable;

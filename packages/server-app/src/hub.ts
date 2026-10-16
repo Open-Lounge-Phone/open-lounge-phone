@@ -1,4 +1,9 @@
 import {
+  ADDON_FULL_NOTE,
+  ADDON_NO_CALLS_NOTE,
+  ADDON_NOT_LINKED_NOTE,
+  ADDON_OFFLINE_NOTE,
+  ADDONS_OFF_NOTE,
   afterHoursAction,
   afterMissedCallback,
   authorizeInbound,
@@ -6,6 +11,8 @@ import {
   CALLBACK_ANSWER_GRACE_MS,
   CALLBACK_KEEP_MS,
   CALLBACK_RING_MS,
+  CALLER_BUSY_NOTE,
+  CANT_CALL_NOTE,
   CLOSED_NOTE,
   CONNECTION_LOST_NOTE,
   type Contact,
@@ -968,7 +975,9 @@ export class HouseholdHub {
           return this.lineDial(peer, msg.address);
         case "call.address": {
           const addon = parseAddonAddress(msg.address);
-          return addon ? this.addonDial(peer, addon) : this.refuse(peer, "unavailable");
+          return addon
+            ? this.addonDial(peer, addon)
+            : this.refuse(peer, "unavailable", CANT_CALL_NOTE);
         }
         case "call.key":
           return this.callKey(peer, msg);
@@ -1452,7 +1461,7 @@ export class HouseholdHub {
     if (decision.decision === "voicemail") return this.refuse(user, "voicemail", undefined, vm);
     const peer = this.devices.get(deviceId);
     if (!peer) return this.refuse(user, "unreachable", undefined, vm);
-    if (!this.canDial(user)) return this.refuse(user, "busy");
+    if (!this.canDial(user)) return this.refuse(user, "busy", CALLER_BUSY_NOTE);
     // In a call: call waiting (if it may ring softly there), else busy. Handset up: busy.
     const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
     if ((this.busy(peer.key) && !waiting) || (peer.hook === "up" && !waiting)) {
@@ -1508,7 +1517,7 @@ export class HouseholdHub {
       target: { kind: "user" as const, userId, name: callee.name },
       from,
     };
-    if (!this.canDial(caller)) return this.refuse(caller, "busy");
+    if (!this.canDial(caller)) return this.refuse(caller, "busy", CALLER_BUSY_NOTE);
     const targets = this.reachable(userId);
     const plans = await this.branchesFor(userId);
     if (!targets.length && !plans.length) return this.refuse(caller, "unreachable", undefined, vm);
@@ -3503,17 +3512,19 @@ export class HouseholdHub {
   /**
    * Someone here calls an add-on by its address: from their app, or from their own phone (a key),
    * or a Lounge phone they're signed in at. Only its owner or a connection its owner allowed;
-   * never a kids' phone. Every other refusal looks the same (`unavailable`).
+   * never a kids' phone. Someone who may not call it learns only `CANT_CALL_NOTE`, whether it
+   * exists or not; its owner and holders learn why it didn't ring (core/refusals.ts).
    */
   private async addonDial(peer: Peer, addr: AddonAddress): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_ADDONS);
-    if (!this.env.addons || peer.kind === "addon") return this.refuse(peer, "unavailable");
+    if (peer.kind === "addon") return this.refuse(peer, "unavailable");
+    if (!this.env.addons) return this.refuse(peer, "unavailable", ADDONS_OFF_NOTE);
     const as = await this.callingAs(peer);
     const user = as && (await store.getUser(as.id));
     const account = user && (await store.getAccount(user.accountId));
     if (!as || !account) return this.refuse(peer, "denied");
-    if (!this.canDial(peer)) return this.refuse(peer, "busy");
+    if (!this.canDial(peer)) return this.refuse(peer, "busy", CALLER_BUSY_NOTE);
     const host = addr.host === ownHost(this.env) ? LOCAL_HOST : addr.host;
     const share = addr.share;
     const body = {
@@ -3542,7 +3553,11 @@ export class HouseholdHub {
       });
     }
     const addon = await store.addons.byAddress(addr.handle, addr.name);
-    if (!addon) return this.refuse(peer, "unavailable");
+    if (!addon) {
+      // Only the handle's own account learns that nothing is linked under it here.
+      const own = addr.handle.toLowerCase() === account.handle;
+      return this.refuse(peer, "unavailable", own ? ADDON_NOT_LINKED_NOTE : CANT_CALL_NOTE);
+    }
     if (addon.householdId !== this.householdId) {
       // Linked in another household here: its hub decides, as for a call from elsewhere.
       return this.dialRemote(peer, {
@@ -3558,13 +3573,15 @@ export class HouseholdHub {
     }
     const who = { host: LOCAL_HOST, accountId: account.id, handle: account.handle };
     const access = await addonAccess(this.env, addon, who, share);
-    if (!access) return this.refuse(peer, "unavailable");
+    if (!access) return this.refuse(peer, "unavailable", CANT_CALL_NOTE);
     const target = this.addonPeers.get(addon.id);
-    if (target && !this.rulesFor(target).answers) return this.refuse(peer, "unavailable");
+    if (target && !this.rulesFor(target).answers) {
+      return this.refuse(peer, "unavailable", ADDON_NO_CALLS_NOTE);
+    }
     const limited = await addonCallerLimited(this.env, addon, who);
     if (limited) return this.refuse(peer, "denied", limited);
-    if (!target) return this.refuse(peer, "unreachable");
-    if (this.addonFull(target)) return this.refuse(peer, "busy");
+    if (!target) return this.refuse(peer, "unreachable", ADDON_OFFLINE_NOTE);
+    if (this.addonFull(target)) return this.refuse(peer, "busy", ADDON_FULL_NOTE);
     const note = await fairUseProblem(this.env, addon.accountId, "call");
     if (note) return this.refuse(peer, "denied", note);
     const room = this.openRoom(peer, target.key);
@@ -3598,10 +3615,12 @@ export class HouseholdHub {
   ): Promise<RingResult> {
     const peer = this.addonPeers.get(target.addonId);
     if (!peer || !(await this.addonStillLinked(peer))) {
-      return { state: "ended", reason: "unreachable" };
+      return { state: "ended", reason: "unreachable", note: ADDON_OFFLINE_NOTE };
     }
-    if (!this.rulesFor(peer).answers) return { state: "ended", reason: "unavailable" };
-    if (this.addonFull(peer)) return { state: "ended", reason: "busy" };
+    if (!this.rulesFor(peer).answers) {
+      return { state: "ended", reason: "unavailable", note: ADDON_NO_CALLS_NOTE };
+    }
+    if (this.addonFull(peer)) return { state: "ended", reason: "busy", note: ADDON_FULL_NOTE };
     const note = await fairUseProblem(this.env, target.accountId, "call");
     if (note) return { state: "ended", reason: "denied", note };
     const room = this.openRoom(remote, peer.key, callId);
@@ -3640,7 +3659,7 @@ export class HouseholdHub {
     const opts = share ? { addonShare: { id: share.id, label: share.label } } : {};
     /** One call at a time, and its hourly and per-person limits (refusals say why). */
     const limited = async (callee: { host: string; accountId: string }) => {
-      if (!this.canDial(peer)) return this.refuse(peer, "busy").then(() => true);
+      if (!this.canDial(peer)) return this.refuse(peer, "busy", CALLER_BUSY_NOTE).then(() => true);
       const note = await addonCallsOutLimited(this.env, addon, callee);
       return note ? this.refuse(peer, "denied", note).then(() => true) : false;
     };
@@ -3954,7 +3973,7 @@ export class HouseholdHub {
           }
         : undefined;
     if (!calls) return this.refuse(caller, "unreachable");
-    if (!this.canDial(caller)) return this.refuse(caller, "busy");
+    if (!this.canDial(caller)) return this.refuse(caller, "busy", CALLER_BUSY_NOTE);
     // An add-on's own server says when it's busy (it may take several calls at once).
     if (!target.addon && this.busy(target.key)) return this.refuse(caller, "busy", undefined, vm);
     const allowance = target.free
@@ -4579,7 +4598,7 @@ export class HouseholdHub {
     as: { id: string; label: string },
     target: { deviceId: string } | { groupId: string },
   ): Promise<void> {
-    if (!this.canDial(caller)) return this.refuse(caller, "busy");
+    if (!this.canDial(caller)) return this.refuse(caller, "busy", CALLER_BUSY_NOTE);
     const allowance = await this.allowance(caller, as);
     if (allowance.note) return this.refuse(caller, "denied", allowance.note);
     const opened =
@@ -5692,7 +5711,7 @@ export class HouseholdHub {
       { counted: since === undefined },
     );
     if (!admitted) return this.refuse(peer, "unavailable");
-    if (!this.canDial(peer)) return this.refuse(peer, "busy");
+    if (!this.canDial(peer)) return this.refuse(peer, "busy", CALLER_BUSY_NOTE);
     const allowance = await this.allowance(peer, as);
     if (allowance.note) return this.refuse(peer, "denied", allowance.note);
     const opened = await this.openToGroup(peer, line.groupId, as.label, {

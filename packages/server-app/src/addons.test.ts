@@ -1,3 +1,10 @@
+import {
+  ADDON_NOT_LINKED_NOTE,
+  ADDON_OFFLINE_NOTE,
+  ADDONS_OFF_NOTE,
+  CALLER_BUSY_NOTE,
+  CANT_CALL_NOTE,
+} from "@openloungephone/core";
 import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,11 +12,13 @@ import {
   addonHello,
   BOOK_CLUB,
   connect,
+  connectAddon,
   declare,
   give,
   type Linked,
   linkAddon,
   type Person,
+  settle,
   talk,
 } from "./addonHarness.ts";
 import { ADDON_CODE, ADDONS_OFF, PHONE_CODE } from "./addons.ts";
@@ -140,10 +149,17 @@ describe("add-ons on one server", () => {
     // Linking with the old `allow` list still works, and allows nobody.
     const seat = await linkAddon(a, jesse, "seat", [ids.aSide]);
     const anaApp = await a.connectApp(ana.token);
+    // Not hers to call: the same answer whether it exists or not (no enumeration).
     anaApp.write({ t: "call.address", address: "jesse+seat@a.test" });
-    expect(await anaApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
+    expect(await anaApp.nextState("ended")).toMatchObject({
+      reason: "unavailable",
+      note: CANT_CALL_NOTE,
+    });
     anaApp.write({ t: "call.address", address: "jesse+nobody@a.test" });
-    expect(await anaApp.nextState("ended")).toMatchObject({ reason: "unavailable" });
+    expect(await anaApp.nextState("ended")).toMatchObject({
+      reason: "unavailable",
+      note: CANT_CALL_NOTE,
+    });
     seat.conn.write({ t: "call.address", address: "ana@a.test" });
     expect(await seat.conn.nextState("ended")).toMatchObject({ reason: "unavailable" });
     expect(seat.conn.all("call.ringing")).toEqual([]);
@@ -164,6 +180,40 @@ describe("add-ons on one server", () => {
       body: { to: "jesse+seat@a.test" },
     });
     expect(knock.status).toBe(400);
+  });
+
+  it("says why a call to it didn't go through, to its owner (never just busy)", async () => {
+    const seat = await linkAddon(a, jesse);
+    const app = await a.connectApp(jesse.token);
+    const ended = async (address: string) => {
+      app.write({ t: "call.address", address });
+      return app.nextState("ended");
+    };
+    // An add-on name that isn't linked to your account here (e.g. it was linked elsewhere).
+    expect(await ended("jesse+other@a.test")).toMatchObject({
+      reason: "unavailable",
+      note: ADDON_NOT_LINKED_NOTE,
+    });
+    // Linked but not connected.
+    seat.conn.close(1000, "bye");
+    await settle(a);
+    expect(await ended("jesse+seat@a.test")).toMatchObject({
+      reason: "unreachable",
+      note: ADDON_OFFLINE_NOTE,
+    });
+    // Add-ons turned off on the server.
+    a.env.addons = false;
+    expect(await ended("jesse+seat@a.test")).toMatchObject({ note: ADDONS_OFF_NOTE });
+    a.env.addons = true;
+    // You're the one on a call already: said so, not "busy" as if it were.
+    const live = await connectAddon(a, seat.id, seat.key);
+    app.write({ t: "call.address", address: "jesse+seat@a.test" });
+    const ring = await live.next("call.ringing");
+    await talk(app, live, (await app.nextState("ringing")).callId, ring.callId);
+    expect(await ended("jesse+seat@a.test")).toMatchObject({
+      reason: "busy",
+      note: CALLER_BUSY_NOTE,
+    });
   });
 
   it("keys pressed in a call reach only an add-on", async () => {
@@ -336,6 +386,28 @@ describe("add-ons across servers", () => {
     });
     expect(toPhone).toEqual({ state: "ended", reason: "unavailable" });
     expect(seat.conn.all("call.ringing")).toEqual([]);
+  });
+
+  it("from another server: the same answer for no add-on and no access; holders hear why", async () => {
+    const seat = await linkAddon(a, jesse);
+    await declare(a, seat, [BOOK_CLUB]);
+    const bobApp = await b.connectApp(bob.token);
+    const ended = async (address: string) => {
+      bobApp.write({ t: "call.address", address });
+      return bobApp.nextState("ended");
+    };
+    const nobody = await ended("jesse+nobody+bookclub@a.test");
+    const notHis = await ended("jesse+seat+bookclub@a.test");
+    expect(nobody).toMatchObject({ reason: "unavailable", note: CANT_CALL_NOTE });
+    expect(notHis).toMatchObject({ reason: nobody.reason, note: nobody.note });
+    // Holding the share: told it isn't connected, rather than "busy".
+    expectStatus(await give(a, jesse, seat.id, "bookclub", `conn:${ids.aSide}`), 201);
+    seat.conn.close(1000, "bye");
+    await settle(a);
+    expect(await ended("jesse+seat+bookclub@a.test")).toMatchObject({
+      reason: "unreachable",
+      note: ADDON_OFFLINE_NOTE,
+    });
   });
 
   it("isn't offered to a server that doesn't take add-on calls", async () => {

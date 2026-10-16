@@ -1,4 +1,4 @@
-import { type DeviceState, pageLabel, shownPages } from "@openloungephone/core";
+import { type DeviceState, pageLabel, refusalStatus, shownPages } from "@openloungephone/core";
 import type { EndReason } from "@openloungephone/protocol";
 import type { Connection, DeviceConfig } from "./leds.ts";
 
@@ -189,6 +189,9 @@ export function statusLines(input: StatusInput): StatusLines {
       if (s.callback) return ["PLACE KEPT", "WE'LL CALL BACK"];
       // A free Lounge phone tried a public line: only someone signed in can call one.
       if (s.signIn) return ["SIGN IN TO CALL", "PRESS A KEY"];
+      // Why it didn't go through, when the server said (e.g. ADD-ON OFFLINE, ON ANOTHER CALL).
+      const why = refusalStatus(s.why);
+      if (why) return why;
       const text = s.lastEnd ? END_TEXT[s.lastEnd] : undefined;
       if (text) return [text, "PRESS A KEY"];
       // More than one page of keys: which page is on screen, and how to turn it.

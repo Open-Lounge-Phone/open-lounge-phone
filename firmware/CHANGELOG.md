@@ -2,6 +2,11 @@
 
 ## 0.9.7 — unreleased
 
+- **Why a call didn't go through.** When the server says why (server 0.9.0 sends a plain-words
+  note), the display shows it instead of a bare BUSY: ON ANOTHER CALL, ADD-ON OFFLINE, ADD-ON
+  BUSY, TAKES NO CALLS, NO SUCH ADD-ON, ADD-ONS ARE OFF, CAN'T CALL THAT (the same words as the
+  browser phone; a test keeps the two tables equal). Host-tested only.
+
 - **Calls the phone places: the phone is the DTLS client.** On a real board such calls (to a
   browser or an add-on) connected (ICE, DTLS) but carried no audio. The phone, as DTLS server
   (it offered `actpass`, the answer said `active`), logged "SRTP connected OK", yet the other side

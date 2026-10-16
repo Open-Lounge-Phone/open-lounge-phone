@@ -8,6 +8,7 @@ import type {
 import { CONNECTION_LOST_NOTE } from "./callControl.ts";
 import { keyIndex, nextPage } from "./keyPages.ts";
 import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
+import { refusalStatus } from "./refusals.ts";
 
 /**
  * Handset behaviour shared by every Open Lounge Phone device. The web emulator runs this directly and
@@ -24,6 +25,8 @@ export type DeviceState =
    * `signIn`: a Lounge phone with nobody signed in tried a public line (`SIGN IN TO CALL`).
    * `lost`: the last call's audio connection dropped and couldn't be restored (`CONNECTION LOST`).
    * `page`: the page of speed-dial keys on screen (BACK turns it; absent = page 1).
+   * `why`: the server's note for the last refusal, when the phone has words for it
+   * (core/refusals.ts, e.g. `ADD-ON OFFLINE` rather than a bare BUSY).
    */
   | {
       kind: "offhook";
@@ -33,6 +36,7 @@ export type DeviceState =
       signIn?: true;
       lost?: true;
       page?: number;
+      why?: string;
     }
   /**
    * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
@@ -371,7 +375,14 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
       }
       if (msg.state === "ended") {
         const signIn = msg.note === SIGN_IN_FOR_LINES_NOTE ? { signIn: true as const } : {};
-        return stay({ kind: "offhook", lastEnd: msg.reason ?? "hangup", ...held, ...signIn });
+        const why = refusalStatus(msg.note) ? { why: msg.note as string } : {};
+        return stay({
+          kind: "offhook",
+          lastEnd: msg.reason ?? "hangup",
+          ...held,
+          ...signIn,
+          ...why,
+        });
       }
       if (msg.state === "active")
         return stay({ kind: "incall", callId: msg.callId, connected: true, ...held });

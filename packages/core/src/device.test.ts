@@ -13,6 +13,7 @@ import {
   soundFor,
 } from "./device.ts";
 import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
+import { ADDON_OFFLINE_NOTE } from "./refusals.ts";
 
 const hook = (state: "up" | "down"): DeviceInput => ({ type: "hook", state });
 const button = (index: number): DeviceInput => ({ type: "button", index });
@@ -438,6 +439,32 @@ describe("public lines (waiting in a queue)", () => {
       { type: "server", msg: { t: "call.state", callId: "c1", state: "ended", reason: "denied" } },
     ]).state;
     expect(other).toEqual({ kind: "offhook", lastEnd: "denied" });
+  });
+
+  it("keeps the server's reason for a refusal it has words for", () => {
+    const ended = (note?: string) =>
+      run([
+        hook("up"),
+        button(0),
+        {
+          type: "server",
+          msg: {
+            t: "call.state",
+            callId: "c1",
+            state: "ended",
+            reason: "unreachable",
+            ...(note ? { note } : {}),
+          },
+        },
+      ]).state;
+    expect(ended(ADDON_OFFLINE_NOTE)).toEqual({
+      kind: "offhook",
+      lastEnd: "unreachable",
+      why: ADDON_OFFLINE_NOTE,
+    });
+    // A note it has no words for (or none): just the reason.
+    expect(ended("Something else")).toEqual({ kind: "offhook", lastEnd: "unreachable" });
+    expect(ended()).toEqual({ kind: "offhook", lastEnd: "unreachable" });
   });
 
   it("key 2 asks for a call back: the place is kept, and the line rings back later", () => {

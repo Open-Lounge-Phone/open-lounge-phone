@@ -146,6 +146,9 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       if (s->callback) return set2(out, "PLACE KEPT", "WE'LL CALL BACK");
       // A free Lounge phone tried a public line: only someone signed in can call one.
       if (s->sign_in) return set2(out, "SIGN IN TO CALL", "PRESS A KEY");
+      // Why it didn't go through, when the server said (e.g. ADD-ON OFFLINE, ON ANOTHER CALL).
+      const char *why = phone_why_text(s->why);
+      if (why) return set2(out, why, "PRESS A KEY");
       const char *t = end_text(s->last_end);
       if (t) return set2(out, t, "PRESS A KEY");
       // More than one page of keys: which page is on screen, and how to turn it.

@@ -1,3 +1,4 @@
+import { ADDON_OFFLINE_NOTE, CALLER_BUSY_NOTE, CANT_CALL_NOTE } from "@openloungephone/core";
 import { describe, expect, it } from "vitest";
 import type { DeviceConfig } from "./leds.ts";
 import {
@@ -437,6 +438,19 @@ describe("public lines on the strip", () => {
     ]);
     expect(lines({ deviceState: { kind: "offhook", lastEnd: "denied" } })).toEqual([
       "NOT ALLOWED",
+      "PRESS A KEY",
+    ]);
+  });
+
+  it("says why a call didn't go through when the server said", () => {
+    const offhook = (why: string, lastEnd: "busy" | "unreachable" | "unavailable") =>
+      lines({ deviceState: { kind: "offhook", lastEnd, why } });
+    expect(offhook(CALLER_BUSY_NOTE, "busy")).toEqual(["ON ANOTHER CALL", "PRESS A KEY"]);
+    expect(offhook(ADDON_OFFLINE_NOTE, "unreachable")).toEqual(["ADD-ON OFFLINE", "PRESS A KEY"]);
+    expect(offhook(CANT_CALL_NOTE, "unavailable")).toEqual(["CAN'T CALL THAT", "PRESS A KEY"]);
+    // Without one: the reason as before.
+    expect(lines({ deviceState: { kind: "offhook", lastEnd: "busy" } })).toEqual([
+      "BUSY",
       "PRESS A KEY",
     ]);
   });

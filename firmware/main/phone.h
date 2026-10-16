@@ -51,6 +51,9 @@ typedef struct {
   bool callback;
   // offhook: a Lounge phone with nobody signed in tried a public line (SIGN IN TO CALL).
   bool sign_in;
+  // offhook: why the last call didn't go through, when the server's note is one the phone has
+  // words for (core refusals.ts; phone_why_text): 0 = none.
+  int why;
   // incoming: the caller is an add-on (call.ringing from.kind "addon"): shown "SEAT - ADD-ON".
   bool addon;
   // offhook: the last call's audio connection dropped and couldn't be restored (CONNECTION LOST).
@@ -63,6 +66,13 @@ typedef struct {
   char waiting_from[25];
   bool waiting_addon;
 } phone_state_t;
+
+/**
+ * The phone's words for a refusal note (core `refusalStatus`, first line; the second is PRESS A
+ * KEY): phone_why(note) gives its number (0 = no words for it), phone_why_text(n) the line.
+ */
+int phone_why(const char *note);
+const char *phone_why_text(int why);
 
 /** What MENU offers in a call or a room (core `CallAction`). */
 typedef enum { ACT_HOLD, ACT_RESUME, ACT_MERGE, ACT_TRANSFER, ACT_MUTE, ACT_UNMUTE } phone_action_t;

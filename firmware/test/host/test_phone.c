@@ -271,6 +271,25 @@ TEST(phone_free_lounge_phone_told_to_sign_in_for_a_line) {
   CHECK(s.kind == PH_OFFHOOK && !s.sign_in);
 }
 
+TEST(phone_keeps_why_a_call_did_not_go_through) {
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_button(&s, 0, emit);
+  server(&s,
+         "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":"
+         "\"unreachable\",\"note\":\"That add-on isn't connected right now\"}");
+  CHECK(s.kind == PH_OFFHOOK && s.why != 0);
+  CHECK_STR(phone_why_text(s.why), "ADD-ON OFFLINE");
+  // A note without words on the phone (or none): just the reason.
+  phone_button(&s, 0, emit);
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c2\",\"state\":\"ended\",\"reason\":"
+             "\"busy\",\"note\":\"Something else\"}");
+  CHECK(s.kind == PH_OFFHOOK && s.why == 0);
+  CHECK(phone_why_text(0) == NULL);
+  CHECK(phone_why("You're already on a call") != 0);
+}
+
 TEST(phone_lost_connection_ends_the_call_saying_why) {
   phone_state_t s;
   in_call(&s);

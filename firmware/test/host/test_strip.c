@@ -189,6 +189,23 @@ TEST(strip_free_lounge_phone_says_sign_in) {
   CHECK_STR(out[0], "NOT ALLOWED");
 }
 
+TEST(strip_says_why_a_call_did_not_go_through) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_OFFHOOK;
+  snprintf(ph.last_end, sizeof ph.last_end, "busy");
+  ph.why = phone_why("You're already on a call");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .call_started_ms = -1,
+                      .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "ON ANOTHER CALL");
+  CHECK_STR(out[1], "PRESS A KEY");
+  ph.why = 0;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "BUSY");
+}
+
 TEST(strip_says_muted_in_a_call) {
   phone_state_t ph;
   phone_init(&ph);
