@@ -17,6 +17,9 @@ permissions, and forgets them when they're done.
 2. A guardian pairs it like any phone ([Pair a phone](/how-to/pair-a-phone/)) and picks
    **Lounge phone** as how it will be used.
 
+Lounge phones are listed on **Home** under *Lounge phones*, with who's at each. Guardians get
+**Manage** on each: rename it, or **Remove and wipe** it.
+
 The idle phone shows a **QR code** on its display. Each code works once and only for a couple
 of minutes; the phone fetches a new one by itself.
 

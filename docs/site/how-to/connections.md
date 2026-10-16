@@ -46,7 +46,8 @@ Once you're connected:
 - **See each other's availability**, if you both choose to share it (below).
 - **Call their household's phones, when they let you.** When someone puts you on one of their
   household's phones (their kid's phone, say), it shows up under their name in your app and you
-  can call it.
+  can call it. The other way round, each connection in your list says which of your phones can
+  call them ("Can call your Kid phone"); change that on the phone's page.
 - **Join each other's rooms** when you're invited (see [Rooms & 3-way calls](/how-to/rooms-and-3-way-calls/)).
 - **See your history together:** each connection has a timeline of your calls and the voicemail
   you've left each other. **Keep our history** chooses how long it's kept: 30 days, a year or

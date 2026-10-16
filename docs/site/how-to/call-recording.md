@@ -27,6 +27,9 @@ everyone in the room sees the mark.
 
 ## Where recordings go
 
+- In the **Voicemail** tab under **Call recordings**: the recordings of calls and rooms you were
+  in, and for guardians and admins all of the space's, each with Play and its transcript. Whoever
+  made a recording, and the space's guardians or admins, can **Delete** it there.
 - In the **buddy timeline** of the people on the call ("Recorded" with a Play button), and for
   admins in the space's **call log** (Directory → Admin → Call log).
 - **Transcribed** only if the space transcribes voicemail.

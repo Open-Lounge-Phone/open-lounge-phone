@@ -14,6 +14,33 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Everything that exists shows in the app** (an audit of what the server keeps against what the
+  app lets people see, act on and remove):
+  - **Operator → This server**: every setting that isn't a secret, in plain words with what it
+    means: version, sign-up and its bot check, add-ons, the fair-use allowance, TURN and the
+    rooms' relay, transcripts, recording, public address, federation (key fingerprint, features
+    offered), funding and Sponsor, operators, proxy trust and changed limits. Secrets show only
+    as set up or not. `GET /api/admin/server` (operators only); how to change each:
+    [server settings](docs/site/how-to/server-settings.md). The Operator view also lists
+    **suspended** and **fair-use exempt** accounts with their undo (`/admin/overview`:
+    `suspended`, `exempt`, additive).
+  - **Lounge phones** get **Manage** for guardians on Home (rename, remove and wipe); Home puts
+    every phone in exactly one list (mine, the household's, other people's own, Lounge).
+  - **Call recordings** are listed in the Voicemail tab (yours; guardians and admins: the
+    space's) with play, transcript and **Delete** for whoever may (`GET /recordings`:
+    `canDelete`, additive). Before, a home's recorded calls between its own people showed
+    nowhere, and no recording could be deleted from the app.
+  - **Connections** say which of your phones each one can call (`yourPhones`, additive).
+  - **Show older** on the lists that came one page at a time: the operator audit trail, a
+    space's Changes, the workplace call log.
+  - **Your data** (account export) lists your add-ons with their shares and holders, and the
+    add-on shares you hold (`addons`, `addonSharesHeld`; additive, format version 1).
+  - Workplace: searching the directory no longer hides people from the admin's extension list
+    and ring-group pickers.
+- **Someone's own phones go with them**: leaving a space, being removed from it or deleting the
+  account now removes and wipes the person's own phones there. Before, such a phone stayed as
+  an ownerless household phone in kids' mode (even in a team), out of every list of own phones.
+
 ## 0.8.0 (2026-10-16, `server-v0.8.0`)
 
 - **Speed-dial pages**: more than ten people on a phone's keys, in pages of ten (up to 10 pages,

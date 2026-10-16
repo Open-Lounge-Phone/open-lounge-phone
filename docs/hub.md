@@ -141,9 +141,11 @@ and `SFU_APP_ID`/`SFU_APP_SECRET` (see [cloudflare.md](cloudflare.md)).
   recovery codes (plus 5 recovery tries an hour per handle from one network and 100 a day per handle); IP addresses are hashed before
   they're counted; a per-account limit on changes; the fair-use allowance; knock limits;
   per-server budgets and signature checks for federation.
-- **Operator view** (companion → Operator, for the `--operator` accounts): counts, find an
-  account, suspend or exempt it (a suspension closes its open apps at once), block a server, and
-  see refused server-key changes. Operators can't recover anyone's account: people use their
+- **Operator view** (companion → Operator, for the `--operator` accounts): **This server** (every
+  setting that isn't a secret, in plain words; what each means and how to change it:
+  [server settings](site/how-to/server-settings.md)), counts, find an account, suspend or exempt
+  it (a suspension closes its open apps at once) and the lists of suspended and exempt accounts
+  with their undo, block a server, and see refused server-key changes. Operators can't recover anyone's account: people use their
   recovery code (or, in a space that's their only one, a sign-in link).
 - What the hub stores and for how long: [privacy.md](privacy.md). How people take their data
   with them: [export.md](export.md).

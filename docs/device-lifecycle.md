@@ -66,7 +66,9 @@ the phone.
      if it's connected (`wipe`), otherwise the next time it connects — the server remembers the
      removed id and key (`removed_devices`, a year) and sends `wipe` only after the phone signs
      the challenge with that key, so nobody else can trigger it. Deleting an account or space
-     wipes its phones the same way. The browser phone deletes its key from IndexedDB, its id and
+     wipes its phones the same way, and so does someone leaving a space (or being removed from
+     it): their own phones there go with them, wiped. A phone never changes whose it is, so it
+     can't stay behind as the space's phone. The browser phone deletes its key from IndexedDB, its id and
      its first-run choice, and starts over.
    - **Factory reset** (MENU+BACK held **10 s** at power-on; released after 3 s it opens the
      Wi-Fi setup network instead; the display says which): wipes Wi-Fi, owner and keys, and generates a new
