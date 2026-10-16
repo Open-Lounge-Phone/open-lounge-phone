@@ -200,7 +200,7 @@ static void start_peer(const char *ice_json, bool offerer) {
       .tcp_support = tcp_relay,
   };
   esp_peer_cfg_t cfg = {
-      .server_lists = cfgs,
+      .server_lists = n ? cfgs : NULL,  // esp_peer refuses an empty list that isn't NULL
       .server_num = (uint8_t)n,
       .role = offerer ? ESP_PEER_ROLE_CONTROLLING : ESP_PEER_ROLE_CONTROLLED,
       .ice_trans_policy = (s_ice_mode == ICE_TCP || s_ice_mode == ICE_TLS) ? ESP_PEER_ICE_TRANS_POLICY_RELAY
