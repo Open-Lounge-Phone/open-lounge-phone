@@ -1726,6 +1726,7 @@ void app_main(void) {
     }
 #endif
     prov_event(PROV_EV_TICK, false);
+    audio_persist();
     sync_media();
     render();
   }

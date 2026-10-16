@@ -106,3 +106,6 @@ audio_stats_t audio_stats(void);
 /** Which frequency to watch for in the received audio (default 440 Hz: the e2e's test tone). */
 void audio_watch(float hz);
 void audio_print_status(void);
+
+/** Saves settings the audio task changed (it can't write flash itself). Main task, often. */
+void audio_persist(void);

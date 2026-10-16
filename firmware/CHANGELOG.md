@@ -2,14 +2,14 @@
 
 ## 0.9.7 — unreleased
 
-- **Calls stalled after "SRTP connected OK" (found on a board).** The chip's hardware AES reads its
-  data by DMA; when internal RAM ran short in a call (0.9.6's audio work), TLS and DTLS buffers
-  fell back to PSRAM and that DMA failed: the phone's larger messages (its call offer, the DTLS
-  certificate flight) stalled while small ones went, so calls it placed connected ICE but never
-  carried audio, and the offer reached the other side only at hang-up. AES now runs in software,
-  TLS/DTLS buffers live in PSRAM on purpose, allocations over 4 KB go to PSRAM and 48 KB of internal
-  RAM stays reserved for Wi-Fi and DMA. The simulator reproduced the stall ("[AES] Error reading
-  from GDMA buffer") and connects with the fix.
+- **Calls stalled after "SRTP connected OK" (found on a board).** Internal RAM was down to 9 KB at
+  the start of a call (Wi-Fi and lwIP buffers, TLS/DTLS, the 36 KB audio stack), so the phone's
+  larger packets (its call offer, the DTLS certificate flight) failed while small ones went: calls
+  it placed connected ICE but never carried audio, and the offer reached the other side only at
+  hang-up. Now Wi-Fi/lwIP buffers, TLS/DTLS and allocations over 4 KB live in PSRAM, the audio
+  task's stack too (its two settings are saved from the main task), and AES runs in software (the
+  hardware AES's DMA failed on PSRAM buffers: the simulator reproduced the stall). In the
+  simulator a call now starts with about 150 KB of internal RAM free.
 - **`mem`** (console): free internal, DMA and PSRAM memory; each RTC state line logs internal free.
 - The games extra (Snake, Memory) is gone.
 - **Why a call didn't go through.** When the server says why (server 0.9.0 sends a plain-words

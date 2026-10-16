@@ -413,6 +413,8 @@ static void echo_test_keep(const int16_t *mic, const int16_t *ref) {
 }
 
 /** The test's numbers, from what was kept: the loss, the delay, and what follows from them. */
+static volatile bool s_persist_pending;
+
 static void echo_test_finish(void) {
   // The sweep reached the earpiece a little after it was made (the earpiece's queue): line the
   // kept audio up with the test's timeline first.
@@ -432,14 +434,26 @@ static void echo_test_finish(void) {
     s_sidetone_slow = true;
     ESP_LOGW(TAG, "sidetone off: %.1f ms mic to ear (over 5 ms)", r.delay_ms);
   }
-  if (r.erl_db < ECHO_POOR_DB && !s_echo_cancel) audio_set_echo_cancel(true);
+  if (r.erl_db < ECHO_POOR_DB && !s_echo_cancel) {
+    s_echo_cancel = true;  // from the next call
+    ESP_LOGI(TAG, "ECHO CANCEL on (the echo test found poor loss)");
+  }
+  // Saved by audio_persist() on the main task: this task's stack is in PSRAM, which must not
+  // be in use while flash is written.
+  s_persist_pending = true;
+  s_et_state = 3;
+}
+
+void audio_persist(void) {
+  if (!s_persist_pending) return;
+  s_persist_pending = false;
   nvs_handle_t h;
   if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
     nvs_set_u8(h, "st_slow", s_sidetone_slow);
+    nvs_set_u8(h, "echo", s_echo_cancel);
     nvs_commit(h);
     nvs_close(h);
   }
-  s_et_state = 3;
 }
 
 static void task(void *arg) {
@@ -642,7 +656,12 @@ void audio_start(bool force_test_device) {
   fifo_init(&s_ref_fifo, s_ref_buf, FIFO_CAP);
   fifo_init(&s_spk_fifo, s_spk_buf, FIFO_CAP);
   // Opus encodes on this task's stack (libopus's scratch arrays): AUDIO stack= shows what's left.
-  xTaskCreatePinnedToCore(task, "audio", 36864, NULL, 7, &s_dsp_task, 1);
+  // 36 KB (libopus needs most of it): in PSRAM, so internal RAM stays for Wi-Fi, lwIP and TLS.
+  // This task never writes flash (audio_persist does, on the main task).
+  if (xTaskCreatePinnedToCoreWithCaps(task, "audio", 36864, NULL, 7, &s_dsp_task, 1,
+                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+    xTaskCreatePinnedToCore(task, "audio", 36864, NULL, 7, &s_dsp_task, 1);
+  }
   xTaskCreatePinnedToCore(pump, "audio_io", 3072, NULL, 12, NULL, 1);
   ESP_LOGI(TAG, "sidetone %s (%.0f dB; %d-sample blocks, about %.1f ms mic to ear%s); echo "
            "canceller %s", sidetone_name(s_sidetone), dsp_sidetone_db(s_sidetone),

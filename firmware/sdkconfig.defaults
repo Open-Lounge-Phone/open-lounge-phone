@@ -26,14 +26,14 @@ CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
 CONFIG_MBEDTLS_SSL_DTLS_SRTP=y
 CONFIG_LWIP_MAX_SOCKETS=16
 
-# Internal RAM is what Wi-Fi needs to send a packet. In a call (TLS to the server, DTLS, Opus,
-# echo removal, a 36 KB audio task) it ran short on a board: large packets from the phone were
-# dropped while small ones went (the offer and DTLS flights never arrived). TLS/DTLS and larger
-# allocations live in PSRAM instead, and a reserve stays internal for Wi-Fi and DMA.
+# Memory for calls. On a board, internal RAM fell to 9 KB at the start of a call (Wi-Fi and lwIP
+# buffers, TLS/DTLS, a 36 KB audio stack), so the phone's larger packets (its offer, the DTLS
+# flights) failed while small ones went. Wi-Fi/lwIP buffers, TLS/DTLS and allocations over 4 KB
+# live in PSRAM; the audio task's stack too (audio.c).
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
-# AES in software: the hardware AES reads its data by DMA, and with TLS/DTLS buffers in PSRAM that
-# DMA failed (the simulator logs "[AES] Error reading from GDMA buffer" and the call stalls right
-# after "SRTP connected OK", as the board did). One call's AES is light work for the CPU.
-CONFIG_MBEDTLS_HARDWARE_AES=n
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
-CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=49152
+# AES in software: the hardware AES reads its data by DMA, which failed with TLS/DTLS buffers in
+# PSRAM (the simulator logs "[AES] Error reading from GDMA buffer" and stalls right after "SRTP
+# connected OK", as the board did). One call's AES is light work for the CPU.
+CONFIG_MBEDTLS_HARDWARE_AES=n
