@@ -20,6 +20,19 @@ TEST(strip_ready_clock) {
   CHECK_STR(out[0], "QUIET TIL 07:00");
 }
 
+TEST(strip_owner_left) {
+  phone_config_t cfg = {.present = true};
+  char line[STATUS_MAX + 1];
+  snprintf(cfg.owner_mode, sizeof cfg.owner_mode, "left");
+  snprintf(cfg.owner_space, sizeof cfg.owner_space, "Acme");
+  snprintf(cfg.owner_person, sizeof cfg.owner_person, "Dana");
+  strip_owner_line(line, &cfg);
+  CHECK_STR(line, "DANA LEFT");
+  cfg.owner_person[0] = 0;
+  strip_owner_line(line, &cfg);
+  CHECK_STR(line, "OWNER LEFT");
+}
+
 TEST(strip_leave_a_message) {
   phone_state_t ph;
   phone_init(&ph);

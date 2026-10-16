@@ -30,7 +30,7 @@ typedef struct {
   // The daily check-in (config.checkin): by this time, done today, the guardians were told.
   char checkin_by[6];                // "" = no check-in
   bool checkin_done, checkin_alerted;
-  char owner_mode[10];        // "kids" | "personal" | "lounge" | ""
+  char owner_mode[10];        // "kids" | "personal" | "lounge" | "left" | ""
   char owner_space[65];
   char owner_person[25];
 } phone_config_t;

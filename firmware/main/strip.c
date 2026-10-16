@@ -65,6 +65,8 @@ void strip_owner_line(char *dst, const phone_config_t *c) {
   char buf[96];
   if (!strcmp(c->owner_mode, "personal") && c->owner_person[0])
     snprintf(buf, sizeof buf, "%s'S PHONE", c->owner_person);
+  else if (!strcmp(c->owner_mode, "left"))  // the phone of someone who left the space
+    snprintf(buf, sizeof buf, "%s LEFT", c->owner_person[0] ? c->owner_person : "OWNER");
   else
     snprintf(buf, sizeof buf, "%s: %s", !strcmp(c->owner_mode, "lounge") ? "LOUNGE" : "KIDS",
              c->owner_space);
@@ -207,8 +209,10 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     if (c->missed_count == 1) {
       // A missed call (no message): it's on MENU 5. A message: where to listen.
       const char *next = c->missed_call[0]                                     ? "MENU 5: MISSED"
-                         : !c->owner_mode[0] || !strcmp(c->owner_mode, "kids") ? "ASK A GROWN-UP"
-                                                                               : "PLAY IN APP";
+                         : !c->owner_mode[0] || !strcmp(c->owner_mode, "kids") ||
+                                 !strcmp(c->owner_mode, "left")
+                             ? "ASK A GROWN-UP"
+                             : "PLAY IN APP";
       return strlen(single) <= STATUS_WIDTH ? set2(out, single, next)
                                             : set2(out, "MISSED CALL", newest);
     }

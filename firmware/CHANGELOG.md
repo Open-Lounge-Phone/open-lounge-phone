@@ -21,6 +21,9 @@
   note), the display shows it instead of a bare BUSY: ON ANOTHER CALL, ADD-ON OFFLINE, ADD-ON
   BUSY, TAKES NO CALLS, NO SUCH ADD-ON, ADD-ONS ARE OFF, CAN'T CALL THAT (the same words as the
   browser phone; a test keeps the two tables equal). Host-tested only.
+- **The phone of someone who left** (server 0.9.0: `config.owner.mode` `left`): the trust line
+  says `DANA LEFT` (or `OWNER LEFT`), a message waiting says ASK A GROWN-UP, and MENU is the kids'
+  one (the Network item asks twice) until it's set up again. Host-tested only.
 
 - **Calls the phone places: the phone is the DTLS client.** On a real board such calls (to a
   browser or an add-on) connected (ICE, DTLS) but carried no audio. The phone, as DTLS server

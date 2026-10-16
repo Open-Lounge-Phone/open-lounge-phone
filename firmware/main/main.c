@@ -350,7 +350,9 @@ static void render(void) {
   s_menu.n_rooms = s_menu.intercom ? lan_rooms(s_menu.rooms, 8, now) : 0;
   snprintf(s_menu.chime, sizeof s_menu.chime, "%s", s_lounge.on ? "" : s_chime);
   s_menu.can_play = !strcmp(s_cfg.owner_mode, "personal");
-  s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids");
+  // The phone of someone who left gets the kids' (strictest) menu until it's set up again.
+  s_menu.kids = !s_cfg.owner_mode[0] || !strcmp(s_cfg.owner_mode, "kids") ||
+                !strcmp(s_cfg.owner_mode, "left");
   s_menu.lounge = s_lounge.on;
   s_menu.lounge_session = s_lounge.session;
   s_menu.open_to_chat = s_lounge.open_to_chat;
