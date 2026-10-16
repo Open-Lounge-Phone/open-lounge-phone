@@ -217,6 +217,7 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `audio watch <hz>` | which frequency the received-audio meter watches (default 440 Hz) |
 | `audio gain <pga 0-30> [scale-up 0-42]` | the ES8311 mic gain in dB, live and not saved (tuning on a board: watch `miclevel`, or MENU 7's `MIC` row with the handset up; then set `CONFIG_OLP_MIC_PGA_DB` / `CONFIG_OLP_MIC_SCALE_DB`, see hardware/BRINGUP.md) |
 | `audio agc on\|off` | the mic's automatic gain control (on by default) |
+| `audio codec opus\|pcmu` | calls with Opus (default) or PCMU alone as in 0.9.5, for comparing on a board; not saved |
 | `audio sidetone off\|low\|normal` | your own voice in the earpiece in a call (saved; also MENU → 1 → 6) |
 | `audio echo on\|off\|test` | the echo canceller from the next call (saved; also MENU → 1 → 7), or the echo test (as MENU 7 → 2) |
 | `audio source <hz>` | the test device's mic tone (0 = silent; simulators and e2e) |

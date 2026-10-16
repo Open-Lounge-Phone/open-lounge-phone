@@ -1,5 +1,14 @@
 # Firmware changelog
 
+## 0.9.7 — unreleased
+
+- **Known problem being tracked down:** on a real board, a call the phone places (to a browser or
+  an add-on) connects but carries no audio either way: `esp_peer` never reports the call connected
+  after DTLS, so the phone's audio doesn't start. Calls the phone answers aren't affected in the
+  simulator. 0.9.5 and older placed calls with PCMU alone and worked.
+- **`audio codec opus|pcmu`** (console, not saved): `pcmu` makes every call as in 0.9.5 (PCMU
+  alone, one codec in the SDP), for comparing on a board; `opus` (the default) is 0.9.6's.
+
 ## 0.9.6 — 2026-10-15: call audio (wideband, the mic level, concealment, sidetone, echo)
 
 All on both boards; nothing changes on the server. See [docs/audio.md](../docs/audio.md), whose

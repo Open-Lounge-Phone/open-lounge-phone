@@ -20,5 +20,8 @@ const char *media_call_id(void);
 bool media_active(void);
 bool media_connected(void);
 void media_set_ice_mode(ice_mode_t mode);
+/** Calls with Opus (default) or, for comparing on a board, PCMU alone as in 0.9.5. Not saved. */
+void media_set_opus(bool on);
+bool media_opus(void);
 ice_mode_t media_ice_mode(void);
 void media_print_status(void);

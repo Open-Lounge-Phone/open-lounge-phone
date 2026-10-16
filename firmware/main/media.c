@@ -46,6 +46,9 @@ static ice_mode_t s_ice_mode = ICE_ALL;
 static voice_codec_t s_send_codec;
 static char *s_ice_json;  // this call's ICE servers, to open again with PCMU
 static bool s_offerer;
+// `audio codec pcmu` (console, not saved): every call as in 0.9.5, PCMU alone, for comparing on a
+// board. Opus (the default) offers and answers with both codecs, sending Opus.
+static bool s_opus = true;
 #if CONFIG_OLP_ICE_PREFER_TLS
 #define PREFER_TLS true
 #else
@@ -252,7 +255,7 @@ static void start_peer(const char *ice_json, bool offerer, voice_codec_t codec) 
                                                          .sample_rate = 8000, .channel = 1},
 #if CONFIG_OLP_CALL_OPUS
       // Both in the SDP: Opus and PCMU (an offer lists both, an answer what both sides have).
-      .codec_caps = ESP_PEER_CAPS_AUD_OPUS | ESP_PEER_CAPS_AUD_G711U,
+      .codec_caps = s_opus ? (ESP_PEER_CAPS_AUD_OPUS | ESP_PEER_CAPS_AUD_G711U) : 0,
 #endif
       .audio_dir = ESP_PEER_MEDIA_DIR_SEND_RECV,
       .video_dir = ESP_PEER_MEDIA_DIR_NONE,
@@ -290,7 +293,7 @@ static void start_peer(const char *ice_json, bool offerer, voice_codec_t codec) 
 static void handle(cmd_t *c) {
   switch (c->type) {
     case CMD_START:
-      start_peer(c->text, c->offerer, VOICE_OPUS);
+      start_peer(c->text, c->offerer, s_opus ? VOICE_OPUS : VOICE_PCMU);
       break;
     case CMD_SDP:
       if (!s_peer) break;
@@ -398,6 +401,8 @@ const char *media_call_id(void) { return s_call_id; }
 bool media_active(void) { return s_call_id[0] != '\0'; }
 bool media_connected(void) { return s_connected; }
 void media_set_ice_mode(ice_mode_t mode) { s_ice_mode = mode; }
+void media_set_opus(bool on) { s_opus = on; }
+bool media_opus(void) { return s_opus; }
 ice_mode_t media_ice_mode(void) { return s_ice_mode; }
 
 void media_print_status(void) {
