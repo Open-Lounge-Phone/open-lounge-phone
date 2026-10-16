@@ -134,6 +134,15 @@ class Addon:
         with contextlib.suppress(FileNotFoundError):
             self._state_path.unlink()
 
+    @property
+    def linked_to(self) -> str | None:
+        """Where it's linked, once connected, for its own UI: "jo+seat@hub.example (Jo)": its
+        address (`handle+name@host`, whose host is the server) and its owner's name."""
+        if self.identity is None:
+            return None
+        who = self.identity.owner.name or self.identity.owner.address or ""
+        return f"{self.identity.address} ({who})" if who else self.identity.address
+
     # --- status ----------------------------------------------------------------------------
 
     @property
@@ -363,6 +372,8 @@ class Addon:
             self.server_features = p.server_features(msg)
             first = not self._ready.is_set()
             self._ready.set()
+            if first and self.linked_to:
+                log.info("linked to %s on %s", self.linked_to, self.server_url)
             if first:
                 # A new connection: say again what it does and what it offers for sharing.
                 await self._send_about()

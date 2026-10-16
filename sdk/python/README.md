@@ -136,6 +136,10 @@ and only its owner reaches it.
 `addon.identity`
 : Once connected: `.name`, `.address` (`handle+name@host`) and `.owner` (`.name`, `.address`).
 
+`addon.linked_to`
+: Once connected, where it's linked, for its own UI: `"jesse+seat@hub.example (Jesse)"` (the
+  address's host is the server it's linked on). It's also logged when it connects.
+
 `addon.online` / `@addon.on_status`
 : `online` is True while it's connected and signed in. `handler(online)` runs with True when it
   signs in and False when the connection drops (it then reconnects by itself).

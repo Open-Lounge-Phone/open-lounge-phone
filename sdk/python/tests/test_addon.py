@@ -158,6 +158,7 @@ class AddonTest(unittest.IsolatedAsyncioTestCase):
         assert addon.identity is not None
         self.assertEqual(addon.identity.address, "jo+seat@x.example")
         self.assertEqual(addon.identity.owner.address, "jo@x.example")
+        self.assertEqual(addon.linked_to, "jo+seat@x.example (Jo)")
 
         await self.fake.send(
             {"t": "call.ringing", "callId": "c1", "from": {"label": "Bob", "address": "bob@b.example"}}
