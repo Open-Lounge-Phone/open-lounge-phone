@@ -1,7 +1,15 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { AdminFederation, Api, OperatorAuditEntry } from "./api.ts";
+import type {
+  AdminFederation,
+  Api,
+  FlaggedAccount,
+  OperatorAuditEntry,
+  ServerSettings,
+} from "./api.ts";
 import { serverName, serverProblem } from "./fields.ts";
 import { describeAudit } from "./operatorAudit.ts";
+import { appendOlder, mayHaveMore, olderCursor, PAGE_SIZE } from "./paging.ts";
+import { SERVER_SETTINGS_HELP_URL, serverRows } from "./serverText.ts";
 
 type Overview = Awaited<ReturnType<Api["adminOverview"]>>;
 type Found = Awaited<ReturnType<Api["adminFindAccount"]>>;
@@ -10,9 +18,9 @@ const when = (ms: number) => new Date(ms).toLocaleString();
 const day = (ms: number) => new Date(ms).toLocaleDateString();
 
 /**
- * The operator's admin view: counts, find an account, suspend/exempt, this server's federation
- * key (rotate), other servers' pinned keys (re-trust a refused change, block), blocked servers,
- * and the audit trail of all of it.
+ * The operator's admin view: how this server is set up, counts, find an account, suspend/exempt
+ * (and who is), this server's federation key (rotate), other servers' pinned keys (re-trust a
+ * refused change, block), blocked servers, and the audit trail of all of it.
  */
 export function Admin({
   api,
@@ -27,6 +35,8 @@ export function Admin({
   const [overview, setOverview] = useState<Overview>();
   const [fed, setFed] = useState<AdminFederation>();
   const [auditLog, setAuditLog] = useState<OperatorAuditEntry[]>([]);
+  const [olderAudit, setOlderAudit] = useState(false);
+  const [settings, setSettings] = useState<ServerSettings>();
   const [notice, setNotice] = useState<string>();
   const blockInput = useRef<HTMLInputElement>(null);
   const [handle, setHandle] = useState("");
@@ -39,14 +49,18 @@ export function Admin({
 
   const load = useCallback(async () => {
     try {
-      const [o, f, a] = await Promise.all([
+      const [o, f, a, server] = await Promise.all([
         api.adminOverview(),
         api.adminFederation(),
         api.adminAudit(),
+        // An older server has no settings view: the card just doesn't show.
+        api.adminServer().catch(() => undefined),
       ]);
       setOverview(o);
       setFed(f);
       setAuditLog(a);
+      setOlderAudit(mayHaveMore(a, PAGE_SIZE.operatorAudit));
+      setSettings(server);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -127,6 +141,19 @@ export function Admin({
     blockInput.current?.focus();
   };
 
+  const showOlderAudit = () => {
+    const before = olderCursor(auditLog, (e) => e.at);
+    if (before === undefined) return;
+    api.adminAudit(before).then(
+      (older) => {
+        const next = appendOlder(auditLog, older, PAGE_SIZE.operatorAudit);
+        setAuditLog(next.list);
+        setOlderAudit(next.more);
+      },
+      (e: Error) => setError(e.message),
+    );
+  };
+
   const copySession = () => {
     if (!sessionToken) return;
     void navigator.clipboard
@@ -151,6 +178,7 @@ export function Admin({
           {notice}
         </p>
       )}
+      {settings && <ThisServer settings={settings} />}
       {overview && (
         <div className="card">
           <dl className="counts">
@@ -213,6 +241,16 @@ export function Admin({
           </div>
         )}
       </form>
+
+      {overview && (
+        <Flagged
+          suspended={overview.suspended ?? []}
+          exempt={overview.exempt ?? []}
+          more={!!overview.more}
+          onUnsuspend={(a) => void run(() => api.adminSuspend(a.id, false))}
+          onUnexempt={(a) => void run(() => api.adminExempt(a.id, false))}
+        />
+      )}
 
       <form
         className="card stack"
@@ -376,7 +414,104 @@ export function Admin({
             </li>
           ))}
         </ul>
+        {olderAudit && (
+          <button type="button" className="link" onClick={showOlderAudit}>
+            Show older
+          </button>
+        )}
       </div>
     </section>
+  );
+}
+
+/** How this server is set up, in plain words (operators only; never a secret). */
+function ThisServer({ settings }: { settings: ServerSettings }) {
+  return (
+    <section className="card stack this-server" aria-labelledby="this-server-title">
+      <h3 id="this-server-title">This server</h3>
+      <dl className="settings-list">
+        {serverRows(settings).map((r) => (
+          <div key={r.label} className="setting-row">
+            <dt className="setting-name">{r.label}</dt>
+            <dd className="setting-value">
+              <strong>{r.value}</strong>
+              <span className="hint setting-meaning">{r.meaning}</span>
+            </dd>
+          </div>
+        ))}
+        {settings.federation.fingerprint && (
+          <div className="setting-row">
+            <dt className="setting-name">Federation key</dt>
+            <dd className="setting-value">
+              <code className="key-fp">{settings.federation.fingerprint}</code>
+            </dd>
+          </div>
+        )}
+      </dl>
+      <p className="hint">
+        These come from how the server was started.{" "}
+        <a href={SERVER_SETTINGS_HELP_URL} target="_blank" rel="noreferrer">
+          How to change them
+        </a>
+      </p>
+    </section>
+  );
+}
+
+/** Accounts suspended or exempt from fair use, each with its undo. */
+function Flagged({
+  suspended,
+  exempt,
+  more,
+  onUnsuspend,
+  onUnexempt,
+}: {
+  suspended: FlaggedAccount[];
+  exempt: FlaggedAccount[];
+  more: boolean;
+  onUnsuspend(a: FlaggedAccount): void;
+  onUnexempt(a: FlaggedAccount): void;
+}) {
+  if (!suspended.length && !exempt.length) return null;
+  const who = (a: FlaggedAccount) => (
+    <span>
+      <strong>{a.name}</strong> <span className="muted">@{a.handle}</span>
+    </span>
+  );
+  return (
+    <div className="card stack">
+      {suspended.length > 0 && (
+        <>
+          <h3>Suspended</h3>
+          <ul className="stack">
+            {suspended.map((a) => (
+              <li key={a.id} className="row">
+                {who(a)}
+                {a.suspendedAt && <span className="muted small">since {day(a.suspendedAt)}</span>}
+                <button type="button" onClick={() => onUnsuspend(a)}>
+                  Unsuspend
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {exempt.length > 0 && (
+        <>
+          <h3>Exempt from fair use</h3>
+          <ul className="stack">
+            {exempt.map((a) => (
+              <li key={a.id} className="row">
+                {who(a)}
+                <button type="button" onClick={() => onUnexempt(a)}>
+                  Hold to fair use again
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {more && <p className="hint">There are more; find them by handle above.</p>}
+    </div>
   );
 }

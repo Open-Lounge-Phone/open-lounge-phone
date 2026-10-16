@@ -741,6 +741,41 @@ export interface AdminFederation {
   }[];
 }
 
+/** An account an operator suspended or exempted (the admin view lists them). */
+export interface FlaggedAccount {
+  id: string;
+  handle: string;
+  name: string;
+  suspendedAt: number | null;
+}
+
+/** How this server is set up (`GET /admin/server`, operators only; never a secret). */
+export interface ServerSettings {
+  version: { server: string; protocol: { min: number; max: number }; federation: number[] };
+  signup: { open: boolean; turnstile: boolean };
+  addons: boolean;
+  /** null = no allowance (unlimited). */
+  fairUse: {
+    callMinutesPerMonth?: number;
+    voicemailsPerMonth?: number;
+    voicemailMbPerMonth?: number;
+    knocksPerMonth?: number;
+    phonesPerSpace?: number;
+    spacesPerAccount?: number;
+    roomMinutesPerMonth?: number;
+  } | null;
+  calls: { turn: boolean; rooms: "sfu" | "livekit" | "mesh" };
+  transcription: boolean;
+  recording: { spacesMayRecord: boolean; refuseOtherServersRecordedCalls: boolean };
+  publicUrl: string | null;
+  federation: { on: boolean; fingerprint: string | null; features: string[] };
+  funding: { balanceUsd: number } | null;
+  sponsorUrl: string | null;
+  operators: { handle: string | null; name: string | null }[];
+  trustProxy: boolean;
+  limits: Record<string, number>;
+}
+
 export interface OperatorAuditEntry {
   id: string;
   at: number;
@@ -932,7 +967,13 @@ export function createApi(opts: ApiOptions) {
         counts: Record<string, number>;
         blockedServers: { host: string; reason: string | null; createdAt: number }[];
         keyAlerts: { host: string; rejectedAt: number }[];
+        /** Accounts suspended, and exempt from fair use (newer servers). */
+        suspended?: FlaggedAccount[];
+        exempt?: FlaggedAccount[];
+        /** More than the lists hold (find the rest by handle). */
+        more?: boolean;
       }>("GET", "/admin/overview"),
+    adminServer: () => request<ServerSettings>("GET", "/admin/server"),
     adminFindAccount: (handle: string) =>
       request<{
         id: string;
@@ -964,7 +1005,8 @@ export function createApi(opts: ApiOptions) {
     /** Replaces a server's pin with the key it now presents; `from`/`to` as shown. */
     adminRetrust: (host: string, from: string, to: string) =>
       request<void>("POST", `/admin/federation/peers/${enc(host)}/retrust`, { from, to }),
-    adminAudit: () => request<OperatorAuditEntry[]>("GET", "/admin/audit"),
+    adminAudit: (before?: number) =>
+      request<OperatorAuditEntry[]>("GET", `/admin/audit${before ? `?before=${before}` : ""}`),
 
     // Connections (knock, then talk)
     connections: () => request<ConnectionsInfo>("GET", "/connections"),
@@ -1151,7 +1193,8 @@ export function createApi(opts: ApiOptions) {
     spaceCalls: (before?: number) =>
       request<SpaceCall[]>("GET", `/space/calls${before ? `?before=${before}` : ""}`),
     spaceCallsCsv: async () => (await send("GET", "/space/calls.csv")).blob(),
-    audit: () => request<AuditEntry[]>("GET", "/space/audit"),
+    audit: (before?: number) =>
+      request<AuditEntry[]>("GET", `/space/audit${before ? `?before=${before}` : ""}`),
 
     // Call recording (off unless the space turns it on; always announced)
     recordingSetting: () => request<RecordingInfo>("GET", "/space/recording"),

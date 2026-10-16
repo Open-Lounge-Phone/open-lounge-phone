@@ -1,14 +1,17 @@
 // A space's Settings page: its name and time zone, its privacy settings, and (for the people who
 // run it) the list of changes made in it. Everyone in the space sees the values; guardians of a
 // home, or the owner and admins of a team or organization, change them.
+
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { Api, AuditEntry, Household } from "./api.ts";
 import { auditText } from "./auditText.ts";
 import { requiredProblem } from "./fields.ts";
+import { PAGE_SIZE } from "./paging.ts";
 import { SpacePrivacy } from "./SpacePrivacy.tsx";
 import { kidSafe, spaceNoun } from "./spaces.ts";
 import { TimeZonePicker } from "./TimeZonePicker.tsx";
 import { zoneLabel, zoneProblem } from "./timeZones.ts";
+import { usePaged } from "./usePaged.ts";
 
 export function SpaceSettings({
   api,
@@ -155,12 +158,26 @@ function NameAndZone({
 
 /** What was changed here, by whom and when (the audit trail), newest first. */
 function Changes({ api, home }: { api: Api; home: boolean }) {
-  const [entries, setEntries] = useState<AuditEntry[]>();
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
+  const paged = usePaged<AuditEntry>(
+    PAGE_SIZE.spaceAudit,
+    (e) => e.at,
+    (before) => api.audit(before),
+    setError,
+  );
+  const { reset } = paged;
   const load = useCallback(() => {
-    api.audit().then(setEntries, (e: Error) => setError(e.message));
-  }, [api]);
+    api.audit().then(
+      (first) => {
+        reset(first);
+        setLoaded(true);
+      },
+      (e: Error) => setError(e.message),
+    );
+  }, [api, reset]);
   useEffect(load, [load]);
+  const entries = loaded ? paged.list : undefined;
   return (
     <div className="card stack">
       <h3>Changes</h3>
@@ -184,6 +201,11 @@ function Changes({ api, home }: { api: Api; home: boolean }) {
             </li>
           ))}
         </ul>
+      )}
+      {paged.more && (
+        <button type="button" className="link" onClick={paged.older}>
+          Show older
+        </button>
       )}
     </div>
   );

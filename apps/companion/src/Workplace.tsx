@@ -23,7 +23,9 @@ import {
   wholeNumber,
 } from "./fields.ts";
 import { PublicLineEditor } from "./PublicLine.tsx";
+import { PAGE_SIZE } from "./paging.ts";
 import { formatDuration } from "./text.ts";
+import { usePaged } from "./usePaged.ts";
 import { Player } from "./Voicemail.tsx";
 import { afterHoursText, hoursText, STRATEGY_TEXT } from "./workplaceText.ts";
 
@@ -377,8 +379,20 @@ function Admin({
     hours: HoursRule[] | null;
     afterHours: AfterHours | null;
   }>();
-  const [calls, setCalls] = useState<SpaceCall[]>([]);
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const calls = usePaged<SpaceCall>(
+    PAGE_SIZE.spaceCalls,
+    (c) => c.startedAt,
+    (before) => api.spaceCalls(before),
+    onError,
+  );
+  const audit = usePaged<AuditEntry>(
+    PAGE_SIZE.spaceAudit,
+    (e) => e.at,
+    (before) => api.audit(before),
+    onError,
+  );
+  const { reset: resetCalls } = calls;
+  const { reset: resetAudit } = audit;
   const [tab, setTab] = useState<"numbers" | "groups" | "hours" | "log" | "audit">("numbers");
 
   const reload = useCallback(async () => {
@@ -391,12 +405,12 @@ function Admin({
       ]);
       setGroups(g);
       setSpace(h);
-      setCalls(c);
-      setAudit(a);
+      resetCalls(c);
+      resetAudit(a);
     } catch (e) {
       onError((e as Error).message);
     }
-  }, [api, onError]);
+  }, [api, onError, resetCalls, resetAudit]);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -487,7 +501,7 @@ function Admin({
             <span className="muted small">Kept as long as the space's history setting.</span>
           </div>
           <ul className="stack">
-            {calls.map((c) => (
+            {calls.list.map((c) => (
               <li key={c.id} className="row small">
                 <span className="grow">
                   {new Date(c.startedAt).toLocaleString()} · {c.who}{" "}
@@ -509,19 +523,31 @@ function Admin({
                 )}
               </li>
             ))}
-            {calls.length === 0 && <li className="muted">No calls yet.</li>}
+            {calls.list.length === 0 && <li className="muted">No calls yet.</li>}
           </ul>
+          {calls.more && (
+            <button type="button" className="link" onClick={calls.older}>
+              Show older
+            </button>
+          )}
         </div>
       )}
       {tab === "audit" && (
         <ul className="stack">
-          {audit.map((e) => (
+          {audit.list.map((e) => (
             <li key={e.id} className="small">
               <span className="muted">{new Date(e.at).toLocaleString()}</span> · {e.actorName}{" "}
               {auditText(e.action, e.detail)}
             </li>
           ))}
-          {audit.length === 0 && <li className="muted">No changes yet.</li>}
+          {audit.list.length === 0 && <li className="muted">No changes yet.</li>}
+          {audit.more && (
+            <li>
+              <button type="button" className="link" onClick={audit.older}>
+                Show older
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </section>
