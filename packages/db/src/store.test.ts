@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { newPairingCode, sha256 } from "./crypto.ts";
 import { MIGRATIONS_DIR, migrate, openSqlite } from "./node.ts";
-import { handleFromName, handleProblem, PAIRING_TTL_MS, SESSION_TTL_MS, Store } from "./store.ts";
+import {
+  deviceMode,
+  handleFromName,
+  handleProblem,
+  PAIRING_TTL_MS,
+  SESSION_TTL_MS,
+  Store,
+} from "./store.ts";
 
 const T0 = 1_780_000_000_000;
 const KEY = "k".repeat(43);
@@ -1762,6 +1769,35 @@ describe("0033 speed-dial pages", () => {
     // Still cascades with the phone and the person.
     await s.removeContact(device.id, guardian.id);
     expect((await s.listButtons(device.id)).has(99)).toBe(false);
+    old.db.close();
+  });
+});
+
+describe("0035_left_phones", () => {
+  it("marks phones orphaned before: someone's own (by the audit trail) and any in a team", async () => {
+    const old = openBefore("0035");
+    old.db.exec(`
+      INSERT INTO households (id, name, time_zone, created_at, type) VALUES
+        ('hh_home', 'Home', 'UTC', 1, 'home'), ('hh_team', 'Acme', 'UTC', 1, 'team');
+      INSERT INTO devices (id, household_id, name, public_key, key_alg, created_at, kind) VALUES
+        ('dev_kid', 'hh_home', 'Kid', 'k1', 'ed25519', 1, 'kids'),
+        ('dev_dad', 'hh_home', 'Dad''s phone', 'k2', 'ed25519', 1, 'kids'),
+        ('dev_desk', 'hh_team', 'Desk', 'k3', 'ed25519', 1, 'kids'),
+        ('dev_lounge', 'hh_team', 'Lobby', 'k4', 'ed25519', 1, 'lounge');
+      INSERT INTO audit_log (id, household_id, at, actor_account, actor_name, action, detail) VALUES
+        ('a1', 'hh_home', 1, NULL, 'Dad', 'phone.add', '{"deviceId":"dev_dad","name":"Dad''s phone","mode":"personal"}'),
+        ('a2', 'hh_home', 1, NULL, 'Mom', 'phone.add', '{"deviceId":"dev_kid","name":"Kid","mode":"kids"}');
+    `);
+    expect(migrate(old.db)).toContain("0035_left_phones.sql");
+    const s = new Store(old.sql);
+    const mode = async (id: string) => {
+      const d = await s.getDevice(id);
+      return d && [deviceMode(d), d.leftBy];
+    };
+    expect(await mode("dev_kid")).toEqual(["kids", null]);
+    expect(await mode("dev_dad")).toEqual(["left", "Dad"]);
+    expect(await mode("dev_desk")).toEqual(["left", ""]);
+    expect(await mode("dev_lounge")).toEqual(["lounge", null]);
     old.db.close();
   });
 });

@@ -216,8 +216,14 @@ export type PhoneKind = "kids" | "lounge";
 export type PhoneMode = "kids" | "personal" | "lounge";
 export const PHONE_MODES: readonly PhoneMode[] = ["kids", "personal", "lounge"];
 
-export const deviceMode = (d: Pick<Device, "kind" | "ownerUserId">): PhoneMode =>
-  d.kind === "lounge" ? "lounge" : d.ownerUserId ? "personal" : "kids";
+/**
+ * How a phone is used: its `PhoneMode`, or `left`: the phone of someone who left the space (or
+ * was removed, or deleted their account). Nobody owns it and it isn't a kids' phone: nobody can
+ * call it, and it calls out only under the strictest rules (docs/device-lifecycle.md).
+ */
+export type DeviceMode = PhoneMode | "left";
+export const deviceMode = (d: Pick<Device, "kind" | "ownerUserId" | "leftBy">): DeviceMode =>
+  d.kind === "lounge" ? "lounge" : d.ownerUserId ? "personal" : d.leftBy !== null ? "left" : "kids";
 
 /** How long a Lounge session lasts in a space. */
 export type LoungeSessionPolicy = "idle" | "end_of_day" | "until_logout";
@@ -326,6 +332,12 @@ export interface Device {
   /** Firmware (or browser-phone app) version and model from its last hello. */
   fw: string | null;
   model: string | null;
+  /**
+   * Set when this was someone's own phone and they left the space (or were removed, or deleted
+   * their account): their name then ('' if it isn't known). `ownerUserId` is null then.
+   */
+  leftBy: string | null;
+  leftAt: number | null;
 }
 
 /** A space's privacy settings (docs/security-model.md). */
@@ -502,6 +514,8 @@ type DeviceRow = {
   last_seen: number | null;
   fw?: string | null;
   model?: string | null;
+  left_by?: string | null;
+  left_at?: number | null;
 };
 type UserRow = {
   id: string;
@@ -554,6 +568,8 @@ const toDevice = (r: DeviceRow): Device => ({
   lastSeen: r.last_seen,
   fw: r.fw ?? null,
   model: r.model ?? null,
+  leftBy: r.left_by ?? null,
+  leftAt: r.left_at ?? null,
 });
 const toUser = (r: UserRow): User => ({
   id: r.id,
@@ -1534,7 +1550,28 @@ export class Store {
   async deleteUser(id: string, now: number): Promise<void> {
     const user = await this.getUser(id);
     if (!user) return;
+    // Their own phones here stay, as the phones of someone who left: marked with their name,
+    // owned by nobody, callable by nobody, and stripped of what was theirs (connections, lines
+    // and add-ons, rooms, extensions, check-ins). What's left of the allow-list is the space's
+    // own people, whom it may still call under the strictest rules (`deviceMode` 'left').
+    const theirs = "SELECT id FROM devices WHERE owner_user_id = ? AND kind != 'lounge'";
     await this.sql.batch([
+      { query: `DELETE FROM remote_contacts WHERE device_id IN (${theirs})`, params: [id] },
+      { query: `DELETE FROM line_contacts WHERE device_id IN (${theirs})`, params: [id] },
+      { query: `DELETE FROM room_contacts WHERE device_id IN (${theirs})`, params: [id] },
+      {
+        query: `DELETE FROM extensions WHERE kind = 'device' AND target_id IN (${theirs})`,
+        params: [id],
+      },
+      {
+        query: `UPDATE contacts SET can_call_device = 0 WHERE device_id IN (${theirs})`,
+        params: [id],
+      },
+      {
+        query: `UPDATE devices SET left_by = ?, left_at = ?, checkin_by = NULL, chime_text = NULL,
+          intercom = 0 WHERE owner_user_id = ? AND kind != 'lounge'`,
+        params: [user.name, now, id],
+      },
       { query: "DELETE FROM extensions WHERE kind = 'user' AND target_id = ?", params: [id] },
       { query: "DELETE FROM users WHERE id = ?", params: [id] },
       // A deleted account's handle stays reserved for 90 days.
@@ -1756,6 +1793,8 @@ export class Store {
       lastSeen: null,
       fw: null,
       model: null,
+      leftBy: null,
+      leftAt: null,
     };
     // A key re-paired to a new household replaces its old device record.
     await this.sql.batch([

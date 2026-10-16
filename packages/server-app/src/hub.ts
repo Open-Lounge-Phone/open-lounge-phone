@@ -24,7 +24,10 @@ import {
   isOpen,
   isQuietAt,
   keyIndex,
+  LEFT_PHONE_CANT_NOTE,
+  LEFT_PHONE_NOTE,
   LINE_ENDED_NOTE,
+  leftPhoneName,
   localClock,
   localDay,
   loungeDayEnd,
@@ -105,6 +108,7 @@ import {
   KEYS_PER_PAGE,
   MAX_KEY_PAGES,
   MAX_MESSAGE_BYTES,
+  type OwnerMode,
   type RoomEndReason,
   type ServerToApp,
   type ServerToDevice,
@@ -708,11 +712,15 @@ export class HouseholdHub {
         kind: "device",
         id: device.id,
         key: deviceKey(device.id),
-        label: device.name,
+        label:
+          deviceMode(device) === "left"
+            ? leftPhoneName(device.name, device.leftBy ?? "")
+            : device.name,
         conn,
         guardian: false,
         hook: "down",
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
+        ...(deviceMode(device) === "left" ? { left: device.leftBy ?? "" } : {}),
         ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
         ...(device.model && RECORDING_MODELS.has(device.model) ? { canRecord: true } : {}),
         ...(features?.length ? { features: [...features] } : {}),
@@ -1065,9 +1073,14 @@ export class HouseholdHub {
       }
       if (device) {
         const before = peer.owner;
-        peer.label = device.name;
+        peer.label =
+          deviceMode(device) === "left"
+            ? leftPhoneName(device.name, device.leftBy ?? "")
+            : device.name;
         if (device.ownerUserId) peer.owner = device.ownerUserId;
         else delete peer.owner;
+        if (deviceMode(device) === "left") peer.left = device.leftBy ?? "";
+        else delete peer.left;
         this.remember(peer);
         if (before !== peer.owner) {
           for (const u of [before, peer.owner]) if (u) await this.announceMember(u);
@@ -1307,8 +1320,8 @@ export class HouseholdHub {
     }
     if (peer.kind !== "device") return undefined;
     // A child's voice is never recorded (COPPA): a kids' phone's unanswered call gets no
-    // voicemail offer.
-    if (this.isKidsPhone(peer)) return undefined;
+    // voicemail offer; nor does the phone of someone who left (nobody answers for it).
+    if (this.strictPhone(peer)) return undefined;
     let person: string | undefined;
     if (peer.lounge) {
       const session = peer.lounge.session;
@@ -1439,6 +1452,8 @@ export class HouseholdHub {
       user.conn.send({ t: "error", code: "not_found", message: "no such device" });
       return;
     }
+    // Nobody answers for the phone of someone who left: it never rings.
+    if (deviceMode(device) === "left") return this.refuse(user, "denied", LEFT_PHONE_NOTE);
     const [contact, schedule] = await Promise.all([
       store.getContact(deviceId, as.id),
       device.ownerUserId
@@ -2543,10 +2558,16 @@ export class HouseholdHub {
     const { store } = this.env;
     const space = await store.getHousehold(this.householdId);
     if (!space) return undefined;
-    const mode = peer.lounge ? "lounge" : peer.owner ? "personal" : "kids";
-    const person = peer.owner ? (await store.getUser(peer.owner))?.name : undefined;
+    const mode: OwnerMode = peer.lounge
+      ? "lounge"
+      : peer.owner
+        ? "personal"
+        : peer.left !== undefined
+          ? "left"
+          : "kids";
+    const person = peer.owner ? (await store.getUser(peer.owner))?.name : peer.left?.trim();
     return {
-      mode: mode as "kids" | "personal" | "lounge",
+      mode,
       space: space.name.slice(0, 64),
       ...(person ? { person: person.slice(0, 24) } : {}),
     };
@@ -3527,6 +3548,7 @@ export class HouseholdHub {
   private async addonDial(peer: Peer, addr: AddonAddress): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_ADDONS);
+    if (this.strictPhone(peer)) return this.refuse(peer, "denied", LEFT_PHONE_CANT_NOTE);
     if (peer.kind === "addon") return this.refuse(peer, "unavailable");
     if (!this.env.addons) return this.refuse(peer, "unavailable", ADDONS_OFF_NOTE);
     const as = await this.callingAs(peer);
@@ -4669,7 +4691,8 @@ export class HouseholdHub {
   ): Promise<Room | Refusal> {
     const { store } = this.env;
     const target = await store.getDevice(deviceId);
-    if (!target || target.householdId !== this.householdId || deviceMode(target) === "kids") {
+    const mode = target && deviceMode(target);
+    if (!target || target.householdId !== this.householdId || mode === "kids" || mode === "left") {
       return { reason: "denied" };
     }
     const peer = this.devices.get(deviceId);
@@ -5327,7 +5350,7 @@ export class HouseholdHub {
     const now = this.env.now();
     if (room.farLine) {
       const far = room.calleePeer;
-      if (far?.kind !== "remote" || this.isKidsPhone(peer)) return;
+      if (far?.kind !== "remote" || this.strictPhone(peer)) return;
       if (!(await peerSupports(this.env, far.host, "line-callback"))) return;
       const as = await this.callingAs(peer);
       const user = as && (await store.getUser(as.id));
@@ -5669,6 +5692,7 @@ export class HouseholdHub {
   ): Promise<void> {
     const { store } = this.env;
     if (this.isKidsPhone(peer)) return this.refuse(peer, "denied", KIDS_NO_LINES);
+    if (this.strictPhone(peer)) return this.refuse(peer, "denied", LEFT_PHONE_CANT_NOTE);
     if (
       peer.kind === "device" &&
       (peer as DevicePeer).lounge &&
@@ -5879,7 +5903,15 @@ export class HouseholdHub {
     if (p.kind === "remote") return p.kidsPhone === true;
     if (p.kind !== "device") return false;
     const d = p as DevicePeer;
-    return !d.owner && !d.lounge;
+    return !d.owner && !d.lounge && d.left === undefined;
+  }
+
+  /**
+   * A phone under kids' rules for what it may do: a kids' phone, or the phone of someone who
+   * left (nobody answers for it, so it gets the strictest rules without being a kids' phone).
+   */
+  private strictPhone(p: Peer): boolean {
+    return this.isKidsPhone(p) || (p.kind === "device" && p.left !== undefined);
   }
 
   /**
@@ -5896,7 +5928,8 @@ export class HouseholdHub {
     const decision = recordingDecision({
       enabled,
       spaceKidsPhones: kidsPhones,
-      kidsPhoneOnCall: parties.some((p) => this.isKidsPhone(p)),
+      // Nor with a phone of someone who left: nobody there agreed to it.
+      kidsPhoneOnCall: parties.some((p) => this.strictPhone(p)),
     });
     if (!decision.record) return undefined;
     return (await store.getHousehold(this.householdId))?.name.slice(0, 64);
@@ -6292,7 +6325,8 @@ export class HouseholdHub {
     }
     if ("deviceId" in t) {
       const d = await store.getDevice(t.deviceId);
-      return d?.householdId === this.householdId && deviceMode(d) !== "kids"
+      return d?.householdId === this.householdId &&
+        (deviceMode(d) === "personal" || deviceMode(d) === "lounge")
         ? { deviceId: d.id }
         : undefined;
     }

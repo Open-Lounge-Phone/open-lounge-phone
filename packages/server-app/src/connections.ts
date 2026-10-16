@@ -8,6 +8,7 @@ import {
   type Connection,
   connectionLive,
   DECLINE_COOLDOWN_MS,
+  deviceMode,
   KNOCK_TTL_MS,
   LOCAL_HOST,
   VOICEMAIL_TICKET_TTL_MS,
@@ -1014,7 +1015,7 @@ export async function greetingForPeer(
     return found ? greetingOf(env, { accountId: found.account.id }) : undefined;
   }
   const device = await env.store.getDevice(to.deviceId);
-  if (!device || device.ownerUserId || device.kind === "lounge") return undefined;
+  if (!device || deviceMode(device) !== "kids") return undefined;
   const entry = (await env.store.listRemoteContacts(device.id)).find(
     (r) => r.connection.peerHost === from.host && r.connection.peerAccount === from.id,
   );

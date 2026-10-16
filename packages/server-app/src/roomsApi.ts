@@ -7,14 +7,14 @@
 //   a personal phone), and only rooms of the phone's own space: a kids' phone can only join rooms
 //   a guardian allowed.
 import { opensText, roomOpenAt } from "@openloungephone/core";
-import { handleProblem, type Room, type User } from "@openloungephone/db";
+import { deviceMode, handleProblem, type Room, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { auditFrom, auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
-import { body, type Vars } from "./httpUtil.ts";
+import { body, LEFT_PHONE_SETUP, type Vars } from "./httpUtil.ts";
 import { Rules } from "./workplace.ts";
 
 /** Most rooms a space may have. */
@@ -176,6 +176,7 @@ export function roomRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (!device || !room || room.householdId !== user.householdId) {
       return c.json({ error: "not found" }, 404);
     }
+    if (deviceMode(device) === "left") return c.json({ error: LEFT_PHONE_SETUP }, 409);
     const b = await body(c.req.raw, PhoneRoom);
     if (b instanceof Response) return b;
     const id = await store.rooms.addToPhone(device.id, room.id, b.label);

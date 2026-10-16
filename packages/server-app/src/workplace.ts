@@ -156,6 +156,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     if (kind === "device") {
       const d = await store.getDevice(id);
       if (!d || d.householdId !== hh) return "not a phone of this space";
+      if (deviceMode(d) === "left") return "nobody can call the phone of someone who left";
       return deviceMode(d) === "kids" ? "kids' phones have no extension" : undefined;
     }
     if (kind === "room") {
@@ -232,7 +233,7 @@ export function workplaceRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
     return c.json({
       members: members.filter((m) => directoryMatch(q, m)),
       phones: devices
-        .filter((d) => deviceMode(d) !== "kids")
+        .filter((d) => deviceMode(d) === "personal" || deviceMode(d) === "lounge")
         .map((d) => ({
           id: d.id,
           name: d.name,

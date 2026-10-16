@@ -1,13 +1,13 @@
 // Home features on a phone (docs/phone-ux.md "Daily check-in", "Chime", "House intercom"): set
 // per phone by its guardians (or by the owner, on their own phone), all off by default.
 import { hhmm, localClock, localDay, noticeLines } from "@openloungephone/core";
-import type { User } from "@openloungephone/db";
+import { deviceMode, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { auditPhone } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
-import { body, type Vars } from "./httpUtil.ts";
+import { body, LEFT_PHONE_SETUP, type Vars } from "./httpUtil.ts";
 
 const HomeBody = z
   .object({
@@ -45,6 +45,7 @@ export function homeRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     if (device.kind === "lounge") {
       return c.json({ error: "Lounge phones don't have home features" }, 409);
     }
+    if (deviceMode(device) === "left") return c.json({ error: LEFT_PHONE_SETUP }, 409);
     const b = await body(c.req.raw, HomeBody);
     if (b instanceof Response) return b;
     if (b.checkinBy && hhmm(b.checkinBy) === undefined) {

@@ -214,17 +214,34 @@ export async function removeAndWipe(env: ServerEnv, live: Coordinator, device: D
 }
 
 /**
- * Someone leaves a space (or is removed): their own phones there go with them, wiped. A phone
- * never changes whose it is, so it can't stay behind as the space's phone; and in a team or
- * organization an ownerless phone would be a kids' phone, which only homes have.
+ * Someone leaves a space, is removed from it, or their account goes: their membership goes. Their
+ * own phones there stay as phones of someone who left (`Store.deleteUser` marks them and strips
+ * what was theirs): those phones get fresh config, connections that could call them learn they
+ * can't, and a Lounge phone they were using forgets them.
  */
-export async function wipeOwnPhones(
+export async function removeMember(
   env: ServerEnv,
   live: Coordinator,
   user: { id: string; householdId: string },
 ) {
-  for (const d of await env.store.listDevices(user.householdId)) {
-    if (d.ownerUserId === user.id) await removeAndWipe(env, live, d);
+  const { store } = env;
+  const own = (await store.listDevices(user.householdId)).filter(
+    (d) => d.ownerUserId === user.id && d.kind !== "lounge",
+  );
+  const shared = new Set<string>();
+  for (const d of own) {
+    for (const r of await store.listRemoteContacts(d.id)) shared.add(r.connectionId);
+  }
+  await store.deleteUser(user.id, env.now());
+  for (const d of await store.listDevices(user.householdId)) {
+    if (d.kind === "lounge" || own.some((o) => o.id === d.id)) {
+      await live.refreshDevice(user.householdId, d.id);
+    }
+  }
+  const service = new Connections(env, live);
+  for (const id of shared) {
+    // The connection may have gone with the account.
+    if (await store.connections.get(id)) await service.sharePhones(id);
   }
 }
 
@@ -273,12 +290,7 @@ export async function deleteAccountEverywhere(
       continue;
     }
     await dropVoicemailBlobs(env, { userId: user.id });
-    await wipeOwnPhones(env, live, user);
-    await store.deleteUser(user.id, now);
-    // A Lounge phone they were using forgets them now.
-    for (const d of await store.listDevices(household.id)) {
-      if (d.kind === "lounge") await live.refreshDevice(household.id, d.id);
-    }
+    await removeMember(env, live, user);
   }
   await dropVoicemailBlobs(env, { accountId: account.id });
   await store.deleteAccount(account.id, now);

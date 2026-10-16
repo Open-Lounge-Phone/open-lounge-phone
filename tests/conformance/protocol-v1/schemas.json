@@ -1406,7 +1406,7 @@
             "properties": {
               "mode": {
                 "type": "string",
-                "enum": ["kids", "personal", "lounge"]
+                "enum": ["kids", "personal", "lounge", "left"]
               },
               "space": {
                 "type": "string",

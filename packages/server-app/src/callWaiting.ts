@@ -1,7 +1,7 @@
 // Call waiting settings (docs/phone-ux.md "Call waiting"): on unless turned off. A person's own
 // (their apps and own phones follow it), and a household phone's (a kid's), set by its guardians.
 
-import type { User } from "@openloungephone/db";
+import { deviceMode, type User } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { ServerEnv } from "./env.ts";
@@ -27,8 +27,7 @@ export function callWaitingRoutes(api: Hono<Vars>, env: ServerEnv): void {
   const householdPhone = async (user: User, id: string) => {
     const device = await store.getDevice(id);
     if (!device || device.householdId !== user.householdId) return undefined;
-    if (device.ownerUserId || device.kind === "lounge") return undefined;
-    return device;
+    return deviceMode(device) === "kids" ? device : undefined;
   };
 
   api.get("/devices/:id/call-waiting", async (c) => {

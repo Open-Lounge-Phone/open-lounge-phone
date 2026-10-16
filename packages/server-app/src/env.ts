@@ -248,6 +248,11 @@ export interface PeerInfo {
   hook?: "up" | "down";
   /** A device that is a person's own phone: their user id. */
   owner?: string;
+  /**
+   * The phone of someone who left the space: their name ('' if not known). Nobody can call it;
+   * it calls out under the strictest rules (kids' rules, without being a kids' phone).
+   */
+  left?: string;
   /** Present for Lounge phones. */
   lounge?: LoungeInfo;
   status?: Extract<DeviceToServer, { t: "status" }>;

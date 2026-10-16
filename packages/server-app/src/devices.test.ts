@@ -149,7 +149,7 @@ describe("remove = wipe", () => {
   });
 });
 
-describe("someone's own phones go with them", () => {
+describe("the phones of someone who left stay, labelled, under the strictest rules", () => {
   /** Ann: her own home, and a member of Acme's team with her own desk phone there. */
   async function annAtAcme() {
     const ann = await s.person("ann", "Ann");
@@ -164,28 +164,146 @@ describe("someone's own phones go with them", () => {
     const { deviceId } = await phone.conn.next("pair.done");
     const conn = await signIn(deviceId, phone.key.pair);
     await conn.next("config");
-    return { ann, acme, there, token, deviceId, conn };
+    return { ann, acme, there, token, deviceId, conn, key: phone.key };
   }
 
-  it("wiped when they leave, never left behind as the space's phone", async () => {
+  const listed = async (token: string, id: string) =>
+    ((await s.http("/devices", { token })).json as { id: string }[]).find((d) => d.id === id);
+
+  it("stays when they leave: Ann's phone (Ann left), not a kids' phone, never wiped", async () => {
     const { acme, token, deviceId, conn } = await annAtAcme();
     expectStatus(
       await s.http("/space/leave", { method: "POST", token, household: acme.household.id }),
       200,
     );
-    expect(await conn.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
-    expect(await s.store.getDevice(deviceId)).toBeUndefined();
-    expect((await s.http("/devices", { token: acme.token })).json).toEqual([]);
+    // The phone learns whose it was; it isn't wiped.
+    expect((await conn.next("config")).owner).toEqual({
+      mode: "left",
+      space: "Acme's home",
+      person: "Ann",
+    });
+    expect(conn.all("wipe")).toEqual([]);
+    expect(await s.store.getDevice(deviceId)).toMatchObject({ ownerUserId: null, leftBy: "Ann" });
+    expect(await listed(acme.token, deviceId)).toMatchObject({
+      mode: "left",
+      leftBy: "Ann",
+      leftAt: s.timers.now,
+      ownerUserId: null,
+    });
+    // It isn't offered anywhere it could be called from: no extension, not in the directory.
+    const dir = await s.http("/directory", { token: acme.token });
+    expect((dir.json.phones as { id: string }[]).map((p) => p.id)).not.toContain(deviceId);
+    const ext = await s.http("/extensions/201", {
+      method: "PUT",
+      token: acme.token,
+      body: { kind: "device", targetId: deviceId },
+    });
+    expectStatus(ext, 400);
+    expect(ext.json.error).toMatch(/someone who left/);
   });
 
-  it("wiped when they're removed", async () => {
-    const { acme, there, deviceId, conn } = await annAtAcme();
+  it("stays when they're removed; guardians rename it, remove it, but don't reconfigure it", async () => {
+    const { acme, there, deviceId, conn, key } = await annAtAcme();
     expectStatus(await s.http(`/users/${there.id}`, { method: "DELETE", token: acme.token }), 200);
+    expect((await conn.next("config")).owner).toMatchObject({ mode: "left", person: "Ann" });
+    expect(await listed(acme.token, deviceId)).toMatchObject({ mode: "left", leftBy: "Ann" });
+    // Rename: yes. Changing who it calls: set it up again first.
+    expectStatus(
+      await s.http(`/devices/${deviceId}`, {
+        method: "PATCH",
+        token: acme.token,
+        body: { name: "Front desk" },
+      }),
+      204,
+    );
+    const put = await s.http(`/devices/${deviceId}/contacts/${acme.user.id}`, {
+      method: "PUT",
+      token: acme.token,
+      body: { label: "Acme", canCallDevice: true, deviceCanCall: true, bypassQuietHours: false },
+    });
+    expectStatus(put, 409);
+    expect(put.json.error).toMatch(/owner left/);
+    // Remove and wipe (to set it up again): it wipes itself.
+    expectStatus(
+      await s.http(`/devices/${deviceId}`, { method: "DELETE", token: acme.token }),
+      204,
+    );
     expect(await conn.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
     expect(await s.store.getDevice(deviceId)).toBeUndefined();
+    void key;
   });
 
-  it("wiped when their account goes with the space it was their only one", async () => {
+  it("nobody can call it; it calls only the space's people on its list, no voicemail offer", async () => {
+    const { mom, dad } = await home();
+    const phone = await unpaired("personal");
+    expectStatus(await pair(dad.token, phone.code), 201);
+    const { deviceId } = await phone.conn.next("pair.done");
+    // Dad's phone has Mom and Sam on its keys (a grown-up's phone gets the household).
+    expectStatus(
+      await s.http(`/users/${dad.user.id}`, { method: "DELETE", token: mom.token }),
+      200,
+    );
+    expect(await listed(mom.token, deviceId)).toMatchObject({ mode: "left", leftBy: "Dad" });
+    const conn = await signIn(deviceId, phone.key.pair);
+    expect((await conn.next("config")).owner).toMatchObject({ mode: "left", person: "Dad" });
+    // Mom calls it: refused, in plain words.
+    const app = await s.connectApp(mom.token);
+    app.write({ t: "call.dial", deviceId });
+    expect(await app.nextState("ended")).toMatchObject({
+      reason: "denied",
+      note: "Nobody can call that phone: its owner left",
+    });
+    // Not even with the allow-list flag set behind the store's back.
+    const entry = await s.store.getContact(deviceId, mom.user.id);
+    expect(entry).toMatchObject({ canCallDevice: false, deviceCanCall: true });
+    // It calls Mom (on its keys); unanswered, there's no voicemail offer.
+    app.write({ t: "app.hello", proto: 1, token: mom.token });
+    conn.write({ t: "button", index: 0 });
+    const ring = await app.next("call.ringing");
+    expect(ring.from.label).toBe("Phone (Dad left)");
+    app.write({ t: "call.hangup", callId: ring.callId });
+    expect((await conn.nextState("ended")).voicemail).toBeUndefined();
+    // Quiet hours hold for it as for a kids' phone (Mom's key doesn't bypass them).
+    await s.store.upsertContact(deviceId, {
+      id: mom.user.id,
+      label: "Mom",
+      canCallDevice: false,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    });
+    expectStatus(
+      await s.http("/quiet-hours", {
+        method: "PUT",
+        token: mom.token,
+        body: {
+          timezone: "UTC",
+          rules: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "23:59" }],
+        },
+      }),
+      204,
+    );
+    conn.write({ t: "button", index: 0 });
+    expect(await conn.nextState("ended")).toMatchObject({ reason: "denied" });
+  });
+
+  it("it isn't a kids' phone: a home with it may still record calls", async () => {
+    const { mom, dad } = await home();
+    const phone = await unpaired("personal");
+    expectStatus(await pair(dad.token, phone.code), 201);
+    await phone.conn.next("pair.done");
+    expectStatus(
+      await s.http(`/users/${dad.user.id}`, { method: "DELETE", token: mom.token }),
+      200,
+    );
+    const rec = await s.http("/space/recording", {
+      method: "PUT",
+      token: mom.token,
+      body: { enabled: true },
+    });
+    expectStatus(rec, 204);
+  });
+
+  it("stays when their account goes with the space it was their only one", async () => {
     const { mom, dad } = await home();
     const phone = await unpaired("personal");
     expectStatus(await pair(dad.token, phone.code), 201);
@@ -194,10 +312,10 @@ describe("someone's own phones go with them", () => {
       await s.http(`/users/${dad.user.id}`, { method: "DELETE", token: mom.token }),
       200,
     );
-    expect(await s.store.getDevice(deviceId)).toBeUndefined();
-    // …and it learns to wipe itself when it comes back.
+    expect(await s.store.getDevice(deviceId)).toMatchObject({ leftBy: "Dad", ownerUserId: null });
     const back = await signIn(deviceId, phone.key.pair);
-    expect(await back.next("wipe")).toEqual({ t: "wipe", reason: "removed" });
+    expect((await back.next("config")).owner).toMatchObject({ mode: "left", person: "Dad" });
+    expect(back.all("wipe")).toEqual([]);
   });
 });
 

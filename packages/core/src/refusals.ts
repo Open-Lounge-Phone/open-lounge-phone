@@ -18,6 +18,10 @@ export const ADDON_FULL_NOTE = "That add-on is on as many calls as it takes";
 export const ADDON_NOT_LINKED_NOTE = "You have no add-on by that name on that server";
 /** The server the add-on would be on has add-ons turned off. */
 export const ADDONS_OFF_NOTE = "Add-ons are off on that server";
+/** The phone of someone who left the space: nobody answers for it, so it takes no calls. */
+export const LEFT_PHONE_NOTE = "Nobody can call that phone: its owner left";
+/** The phone of someone who left calls only the space's people on its list. */
+export const LEFT_PHONE_CANT_NOTE = "This phone's owner left: it calls only the people on its list";
 /** Nothing you may call at that address (whether or not anything is there). */
 export const CANT_CALL_NOTE = "You can't call that address";
 
@@ -37,3 +41,10 @@ export const refusalStatus = (note: string | undefined): [string, string] | unde
 
 /** Every refusal note a phone has a status line for (firmware mirrors this table). */
 export const REFUSAL_NOTES: readonly string[] = Object.keys(STATUS);
+
+/**
+ * What the phone of someone who left is called wherever it shows (its ringing label, the app's
+ * phone lists): "Dana's phone (Dana left)", or "(its owner left)" when who isn't known.
+ */
+export const leftPhoneName = (name: string, leftBy: string): string =>
+  `${name} (${leftBy.trim() ? `${leftBy.trim()} left` : "its owner left"})`;

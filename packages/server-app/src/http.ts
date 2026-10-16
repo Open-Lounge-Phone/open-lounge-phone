@@ -40,7 +40,7 @@ import { capReached } from "./fairUse.ts";
 import { FederationError, fedFetch, ownHost, SOFTWARE } from "./federation.ts";
 import type { Coordinator } from "./gateway.ts";
 import { homeRoutes } from "./home.ts";
-import { body, guardianOnly, type Vars } from "./httpUtil.ts";
+import { body, guardianOnly, LEFT_PHONE_SETUP, type Vars } from "./httpUtil.ts";
 import { hubRoutes, publicHubRoutes } from "./hubAdmin.ts";
 import { leavingRoutes, removeAndWipe } from "./leaving.ts";
 import { limitsOf } from "./limits.ts";
@@ -373,6 +373,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           ownerUserId: d.ownerUserId,
           kind: d.kind,
           mode: deviceMode(d),
+          // The phone of someone who left: who (their name then; '' if not known) and when.
+          ...(deviceMode(d) === "left" ? { leftBy: d.leftBy ?? "", leftAt: d.leftAt } : {}),
           // For the phone's page: what it runs, and the four words its MENU → About shows.
           fw: d.fw,
           model: d.model,
@@ -514,6 +516,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const user = c.get("user");
     const device = await manageable(user, c.req.param("id"));
     if (!device || device.kind === "lounge") return c.json({ error: "not found" }, 404);
+    if (deviceMode(device) === "left") return c.json({ error: LEFT_PHONE_SETUP }, 409);
     const connection = await store.connections.get(c.req.param("connectionId"));
     if (!connection || connection.accountId !== c.get("account").id) {
       return c.json({ error: "not found" }, 404);
@@ -544,6 +547,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     if (!device || !target || target.householdId !== user.householdId) {
       return c.json({ error: "not found" }, 404);
     }
+    if (deviceMode(device) === "left") return c.json({ error: LEFT_PHONE_SETUP }, 409);
     const b = await body(c.req.raw, ContactBody);
     if (b instanceof Response) return b;
     await store.upsertContact(device.id, { id: target.id, ...b });
@@ -611,6 +615,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const device = await manageable(user, c.req.param("id"));
     const index = Number(c.req.param("index"));
     if (!device) return c.json({ error: "not found" }, 404);
+    if (deviceMode(device) === "left") return c.json({ error: LEFT_PHONE_SETUP }, 409);
     const pages = limitsOf(env).keyPages;
     if (!validKeyIndex(index, pages)) {
       return c.json({ error: `index must be 0-${Math.min(pages, MAX_KEY_PAGES) * 10 - 1}` }, 400);

@@ -73,3 +73,7 @@ export function relyingParty(env: ServerEnv, requestUrl: string): { rpID: string
   const url = new URL(env.publicUrl ?? requestUrl);
   return { rpID: url.hostname, origin: url.origin };
 }
+
+/** Changing what the phone of someone who left does waits until it's set up again. */
+export const LEFT_PHONE_SETUP =
+  "This phone's owner left. Set it up again (or remove it) before changing what it does.";

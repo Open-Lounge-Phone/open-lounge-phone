@@ -9,7 +9,7 @@ import { auditFrom } from "./audit.ts";
 import type { ServerEnv } from "./env.ts";
 import type { Coordinator } from "./gateway.ts";
 import { body, type Vars } from "./httpUtil.ts";
-import { deleteSpace, wipeOwnPhones } from "./leaving.ts";
+import { deleteSpace, removeMember } from "./leaving.ts";
 import { dropVoicemailBlobs } from "./voicemail.ts";
 import { roleOf } from "./workplace.ts";
 
@@ -58,11 +58,7 @@ export function memberRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator)
     } else {
       await dropVoicemailBlobs(env, { userId: me.id });
       await unlinkAddonsOf(env, live, { accountId: account.id, userId: me.id });
-      await wipeOwnPhones(env, live, me);
-      await store.deleteUser(me.id, env.now());
-      for (const d of await store.listDevices(me.householdId)) {
-        if (d.kind === "lounge") await live.refreshDevice(me.householdId, d.id);
-      }
+      await removeMember(env, live, me);
     }
     return c.json({ deletedSpace: check.deletesSpace });
   });

@@ -633,6 +633,13 @@ export const PhoneMode = z
   );
 export type PhoneMode = z.infer<typeof PhoneMode>;
 
+export const OwnerMode = z
+  .enum(["kids", "personal", "lounge", "left"])
+  .describe(
+    "How a phone is used now (`config.owner`): its `PhoneMode`, or `left` = the phone of someone who left the space (`person` names them when known). Nobody can call a `left` phone, and it calls only the space's people on its list, under kids' rules; it shows who it belonged to until its guardians or admins set it up again or remove it.",
+  );
+export type OwnerMode = z.infer<typeof OwnerMode>;
+
 export const PairKind = z
   .enum(["kids", "personal", "lounge", "addon"])
   .describe(
@@ -968,9 +975,14 @@ export const Config = z
       .describe("The phone's voicemail greeting (absent on Lounge phones)."),
     owner: z
       .object({
-        mode: PhoneMode,
+        mode: OwnerMode,
         space: z.string().min(1).max(64).describe("The space it belongs to."),
-        person: z.string().min(1).max(24).optional().describe("`personal`: whose phone it is."),
+        person: z
+          .string()
+          .min(1)
+          .max(24)
+          .optional()
+          .describe("`personal`: whose phone it is; `left`: who it belonged to (if known)."),
       })
       .optional()
       .describe(

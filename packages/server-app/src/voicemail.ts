@@ -6,6 +6,7 @@ import {
 } from "@openloungephone/core";
 import {
   type Account,
+  deviceMode,
   type GreetingKind,
   newId,
   type User,
@@ -471,8 +472,9 @@ export function voicemailRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinat
   const kidsPhone = async (user: User, id: string) => {
     const device = await store.getDevice(id);
     if (!device || device.householdId !== user.householdId) return undefined;
-    // A person's own phone uses its owner's settings; Lounge phones never take voicemail.
-    if (device.ownerUserId || device.kind === "lounge") return undefined;
+    // A person's own phone uses its owner's settings; Lounge phones never take voicemail, nor
+    // does the phone of someone who left (nobody can call it).
+    if (deviceMode(device) !== "kids") return undefined;
     return user.role === "guardian" ? device : undefined;
   };
 
