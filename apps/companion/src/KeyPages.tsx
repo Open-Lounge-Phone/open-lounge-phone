@@ -114,7 +114,10 @@ function MoveKey({
   const [page, setPage] = useState(1);
   const [slot, setSlot] = useState(0);
   if (!assigned.length) return null;
-  const source = from ?? assigned[0]?.index ?? 0;
+  // Whoever was chosen, while they're still on a key (after a move: the first one listed).
+  const source = assigned.some((a) => a.index === from)
+    ? (from as number)
+    : (assigned[0]?.index ?? 0);
   const to = keyIndexOf(page, slot);
   const there = buttons[String(to)];
   return (
@@ -129,7 +132,11 @@ function MoveKey({
       <div className="row wrap">
         <label>
           <span className="muted small">Who</span>
-          <select value={source} onChange={(e) => setFrom(Number(e.target.value))}>
+          <select
+            aria-label="Who to move"
+            value={source}
+            onChange={(e) => setFrom(Number(e.target.value))}
+          >
             {assigned.map((a) => (
               <option key={a.index} value={a.index}>
                 {label(a.id)} ({keyName(a.index, true).toLowerCase()})
@@ -139,7 +146,11 @@ function MoveKey({
         </label>
         <label>
           <span className="muted small">To page</span>
-          <select value={page} onChange={(e) => setPage(Number(e.target.value))}>
+          <select
+            aria-label="Move to page"
+            value={page}
+            onChange={(e) => setPage(Number(e.target.value))}
+          >
             {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -149,7 +160,11 @@ function MoveKey({
         </label>
         <label>
           <span className="muted small">Key</span>
-          <select value={slot} onChange={(e) => setSlot(Number(e.target.value))}>
+          <select
+            aria-label="Move to key"
+            value={slot}
+            onChange={(e) => setSlot(Number(e.target.value))}
+          >
             {DIGITS.map((d) => {
               const id = buttons[String(keyIndexOf(page, slotOf(d)))];
               return (
