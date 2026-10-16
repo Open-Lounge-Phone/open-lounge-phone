@@ -510,6 +510,8 @@ export function connectionRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordina
             ...connectionView(r, host, now),
             // Their household phones you may call.
             phones: r.state === "active" ? await store.connections.phones(r.id) : [],
+            // Your phones they may call (you put them on those phones' allow-lists).
+            yourPhones: r.state === "active" ? await store.sharedPhones(r.id) : [],
             // Shares of their add-ons they gave you (another server; it decides every call).
             ...(env.addons && r.state === "active" && r.peerHost !== LOCAL_HOST
               ? {

@@ -265,6 +265,8 @@ export interface ConnectionView {
   presence?: { online: boolean; available: boolean; at: number } | null;
   /** Household phones on their side that you may call. */
   phones?: { deviceId: string; label: string }[];
+  /** Your phones they may call (set on each phone's page). */
+  yourPhones?: { id: string; label: string }[];
   /** Shares of their add-ons they gave you (another server). */
   addonShares?: {
     addon: string;

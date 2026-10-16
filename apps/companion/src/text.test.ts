@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatLastSeen,
   formatWhen,
+  listNames,
   missedSummary,
   powerWarning,
   transcriptText,
@@ -80,5 +81,14 @@ describe("a missed call in a line", () => {
     expect(missedSummary({ kind: "callback", count: 1, at }, now + 86_400_000)).toBe(
       `Called you back · Yesterday ${time}`,
     );
+  });
+});
+
+describe("listNames", () => {
+  it("joins names the way people say them", () => {
+    expect(listNames([])).toBe("");
+    expect(listNames(["Kid phone"])).toBe("Kid phone");
+    expect(listNames(["Kid phone", "Desk"])).toBe("Kid phone and Desk");
+    expect(listNames(["A", "B", "C"])).toBe("A, B and C");
   });
 });

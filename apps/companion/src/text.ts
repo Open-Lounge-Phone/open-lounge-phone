@@ -98,3 +98,9 @@ export function formatWhen(ts: number, now: number, locale?: string): string {
   if (days === 1) return `Yesterday ${time}`;
   return `${d.toLocaleDateString(locale, { month: "short", day: "numeric" })} ${time}`;
 }
+
+/** "Kid phone", "Kid phone and Desk", "A, B and C". */
+export function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

@@ -5,6 +5,7 @@ import type { Api, ConnectionsInfo, ConnectionView, Retention } from "./api.ts";
 import { daysLeft, groupConnections, hostBadge } from "./connectionGroups.ts";
 import { addressProblem, serverName, serverProblem } from "./fields.ts";
 import { BuddyTimeline } from "./Timeline.tsx";
+import { listNames } from "./text.ts";
 import { retentionOptions } from "./timelineText.ts";
 
 interface Props {
@@ -318,6 +319,12 @@ export function Connections({
                     </li>
                   ))}
                 </ul>
+              )}
+              {(c.yourPhones ?? []).length > 0 && (
+                <p className="small muted your-phones">
+                  Can call your {listNames((c.yourPhones ?? []).map((p) => p.label))}. Change that
+                  on the phone's page.
+                </p>
               )}
               {(c.addonShares ?? []).length > 0 && (
                 <ul className="shared-phones">
