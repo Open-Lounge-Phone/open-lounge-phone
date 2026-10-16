@@ -1,8 +1,9 @@
 // Which list on Home each phone of the space goes in. Every phone lands in exactly one, so none
-// can vanish: mine (all of them), the household's, other people's own phones, Lounge phones.
+// can vanish: mine (all of them), the household's, other people's own phones, phones of people
+// who left, Lounge phones.
 import type { DeviceSummary } from "./api.ts";
 
-type Phone = Pick<DeviceSummary, "id" | "ownerUserId" | "kind">;
+type Phone = Pick<DeviceSummary, "id" | "ownerUserId" | "kind" | "mode">;
 
 export interface PhoneLists<T extends Phone> {
   /** Every phone of mine (a desk phone, a virtual one…). */
@@ -11,14 +12,17 @@ export interface PhoneLists<T extends Phone> {
   household: T[];
   /** Other people's own phones (guardians manage them). */
   theirs: T[];
+  /** Phones of people who left the space (guardians set them up again or remove them). */
+  left: T[];
   /** Shared Lounge phones. */
   lounge: T[];
 }
 
 export function phoneLists<T extends Phone>(devices: readonly T[], meId?: string): PhoneLists<T> {
-  const out: PhoneLists<T> = { mine: [], household: [], theirs: [], lounge: [] };
+  const out: PhoneLists<T> = { mine: [], household: [], theirs: [], left: [], lounge: [] };
   for (const d of devices) {
     if (d.kind === "lounge") out.lounge.push(d);
+    else if (d.mode === "left") out.left.push(d);
     else if (!d.ownerUserId) out.household.push(d);
     else if (meId && d.ownerUserId === meId) out.mine.push(d);
     else out.theirs.push(d);

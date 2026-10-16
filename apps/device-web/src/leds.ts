@@ -42,7 +42,7 @@ export interface DeviceConfig {
   /** The phone's voicemail greeting, and whether MENU → Voicemail may change it. */
   greeting?: { kind: "default" | "name" | "custom"; canRecord: boolean };
   /** Whose phone this is and how it's used (the strip's trust line). */
-  owner?: { mode: "kids" | "personal" | "lounge"; space: string; person?: string };
+  owner?: { mode: "kids" | "personal" | "lounge" | "left"; space: string; person?: string };
   /** A team/org space with extensions: MENU → 6 dials one. */
   extensions?: boolean;
   /** Daily check-in (the ready screen asks for I'm OK until `done`). */

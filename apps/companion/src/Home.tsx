@@ -1,3 +1,4 @@
+import { leftPhoneName } from "@openloungephone/core";
 import { useEffect, useState } from "react";
 import type { Api, CallBackHint, DeviceSummary, User } from "./api.ts";
 import type { DeviceLive, MemberLive } from "./connection.ts";
@@ -65,7 +66,7 @@ export function Home({
   // Every phone of mine (a person can have several: a desk phone, a virtual one…), household
   // phones (e.g. kids'), and other people's own phones (guardians manage those too). Lounge
   // phones have their own card.
-  const { mine, household, theirs } = phoneLists(devices, meId);
+  const { mine, household, theirs, left } = phoneLists(devices, meId);
   const ownerName = (id: string) => people.find((u) => u.id === id)?.name ?? "Someone";
   return (
     <section className="stack">
@@ -170,6 +171,45 @@ export function Home({
                         {online
                           ? "online"
                           : `offline · last seen ${formatLastSeen(l?.lastSeen ?? d.lastSeen, now)}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="device-actions">
+                    <button type="button" onClick={() => onManage(d)}>
+                      Manage
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+      {guardian && left.length > 0 && (
+        <>
+          <h3>Phones of people who left</h3>
+          <p className="muted small">
+            Nobody can call these, and they call only the people on their list. Set one up again for
+            someone, or remove it.
+          </p>
+          <ul className="devices">
+            {left.map((d) => {
+              const l = live[d.id];
+              const online = l?.online ?? d.online;
+              return (
+                <li key={d.id} className="card device">
+                  <div className="device-main">
+                    <span
+                      className={`dot ${online ? "on" : "off"}`}
+                      role="img"
+                      aria-label={online ? "online" : "offline"}
+                    />
+                    <div>
+                      <div className="device-name">{leftPhoneName(d.name, d.leftBy ?? "")}</div>
+                      <div className="muted small">
+                        {online
+                          ? "Online"
+                          : `Offline · last seen ${formatLastSeen(l?.lastSeen ?? d.lastSeen, now)}`}
                       </div>
                     </div>
                   </div>

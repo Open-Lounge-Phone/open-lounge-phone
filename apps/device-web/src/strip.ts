@@ -252,7 +252,7 @@ export function statusLines(input: StatusInput): StatusLines {
       const next =
         missedItems[0]?.kind === "call"
           ? "MENU 5: MISSED"
-          : !config?.owner || config.owner.mode === "kids"
+          : !config?.owner || config.owner.mode === "kids" || config.owner.mode === "left"
             ? "ASK A GROWN-UP"
             : "PLAY IN APP";
       const lines: StatusLines =
@@ -274,10 +274,12 @@ export function statusLines(input: StatusInput): StatusLines {
 
 /**
  * The trust line: whose phone this is and how it's used ("KIDS: SMITH HOME", "JESSE'S PHONE",
- * "LOUNGE: OFFICE"), so anyone can see it at a glance.
+ * "LOUNGE: OFFICE", "DANA LEFT"), so anyone can see it at a glance.
  */
 export function ownerLine(owner: NonNullable<DeviceConfig["owner"]>): string {
   if (owner.mode === "personal" && owner.person) return clip(`${owner.person}'S PHONE`);
+  // The phone of someone who left: who it was ("DANA LEFT"), until it's set up again.
+  if (owner.mode === "left") return clip(owner.person ? `${owner.person} LEFT` : "OWNER LEFT");
   return clip(`${owner.mode === "lounge" ? "LOUNGE" : "KIDS"}: ${owner.space}`);
 }
 

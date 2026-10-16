@@ -1,3 +1,4 @@
+import { leftPhoneName } from "@openloungephone/core";
 import { useCallback, useEffect, useState } from "react";
 import { addonAddressProblem, isAddonAddress } from "./addonText.ts";
 import type {
@@ -118,6 +119,40 @@ export function ManageDevice({
   const others = users.filter((u) => !byId.has(u.id));
   const listed = new Set([...remote.values()].map((r) => r.connectionId));
   const addable = connections.filter((c) => !listed.has(c.id));
+
+  // The phone of someone who left: rename, set it up again or remove it; nothing else changes
+  // until it's set up again (the server refuses that too).
+  if (device?.mode === "left") {
+    const mayCall = peopleListed.filter((c) => c.deviceCanCall);
+    return (
+      <section className="stack">
+        <button type="button" className="link back" onClick={onBack}>
+          ← Back
+        </button>
+        <h2>{leftPhoneName(device.name, device.leftBy ?? "")}</h2>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <PhoneSettings
+          api={api}
+          device={fresh ? { ...device, ...fresh } : device}
+          meId={meId}
+          onChanged={onChanged}
+          onRemoved={onRemoved}
+          onError={setError}
+        />
+        <h3>Who it can call</h3>
+        <p className="muted small">
+          {mayCall.length
+            ? `${mayCall.map((c) => c.label).join(", ")}, with its keys (quiet hours apply).`
+            : "Nobody."}{" "}
+          Nobody can call it.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="stack">
@@ -455,8 +490,12 @@ function PhoneSettings({
   const [busy, setBusy] = useState(false);
   useEffect(() => setName(device.name), [device.name]);
   const someoneElses = !!device.ownerUserId && device.ownerUserId !== meId;
+  const left = device.mode === "left";
   const mode =
-    device.mode ?? (device.kind === "lounge" ? "lounge" : device.ownerUserId ? "personal" : "kids");
+    device.mode === "left"
+      ? "kids"
+      : (device.mode ??
+        (device.kind === "lounge" ? "lounge" : device.ownerUserId ? "personal" : "kids"));
 
   const act = async (fn: () => Promise<unknown>, after: () => void) => {
     onError(undefined);
@@ -513,14 +552,34 @@ function PhoneSettings({
           </>
         )}
       </dl>
-      <p className="small">
-        <strong>{MODE_TEXT[mode].title}</strong>
-        {someoneElses ? " — another person's own phone." : ` — ${MODE_TEXT[mode].hint}`}
-      </p>
+      {left ? (
+        <p className="small">
+          <strong>Phone of someone who left</strong> —{" "}
+          {device.leftBy ? `${device.leftBy} left` : "Its owner left"}
+          {device.leftAt ? ` on ${new Date(device.leftAt).toLocaleDateString()}` : ""}. Nobody can
+          call it, and it calls only the people below, like a kids' phone (quiet hours apply, no
+          add-ons or lines, no voicemail from it).
+        </p>
+      ) : (
+        <p className="small">
+          <strong>{MODE_TEXT[mode].title}</strong>
+          {someoneElses ? " — another person's own phone." : ` — ${MODE_TEXT[mode].hint}`}
+        </p>
+      )}
       <span className="hint">
-        To use it another way or give it to someone else, remove it (it wipes itself) and pair it
-        again.
+        {left
+          ? "To set it up again for someone, press Set it up again: it wipes itself and shows a new code; then pair it with that code (Pair a phone)."
+          : "To use it another way or give it to someone else, remove it (it wipes itself) and pair it again."}
       </span>
+      {left && !confirming && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void act(() => api.removeDevice(device.id), onRemoved)}
+        >
+          {busy ? "Wiping…" : "Set it up again"}
+        </button>
+      )}
       {confirming ? (
         <div className="confirm stack" role="alertdialog" aria-label="Remove this phone?">
           <p className="small">

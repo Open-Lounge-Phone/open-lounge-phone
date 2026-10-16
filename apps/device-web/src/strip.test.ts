@@ -293,6 +293,8 @@ describe("trust line", () => {
       ["READY", "KIDS: SMITH HOME"],
     );
     expect(ownerLine({ mode: "personal", space: "Home", person: "Jesse" })).toBe("JESSE'S PHONE");
+    expect(ownerLine({ mode: "left", space: "Acme", person: "Dana" })).toBe("DANA LEFT");
+    expect(ownerLine({ mode: "left", space: "Acme" })).toBe("OWNER LEFT");
     expect(ownerLine({ mode: "lounge", space: "The Office Space" })).toBe("LOUNGE: THE OFFI");
     expect(ownerLine({ mode: "lounge", space: "The Office Space" }).length).toBeLessThanOrEqual(
       STATUS_WIDTH,

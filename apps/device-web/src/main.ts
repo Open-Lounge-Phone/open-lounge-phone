@@ -406,8 +406,10 @@ async function handle(msg: ServerToDevice): Promise<void> {
         setTimeout(render, 4100);
       }
       // The mode is decided when the phone is claimed; it may differ from the first-run choice.
-      if (msg.owner && msg.owner.mode !== variant) {
-        variant = msg.owner.mode;
+      // The phone of someone who left works like a kids' phone here (the strictest rules).
+      const mode = msg.owner?.mode === "left" ? "kids" : msg.owner?.mode;
+      if (mode && mode !== variant) {
+        variant = mode;
         chosenKind = variant;
         saveKind(storage, profile, variant);
         $<HTMLElement>('[data-power="variant"]').textContent = VARIANT_NAME[variant];

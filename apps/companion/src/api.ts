@@ -145,8 +145,14 @@ export interface DeviceSummary {
   ownerUserId?: string | null;
   /** `lounge` = a shared phone people take over by scanning its code. */
   kind?: "kids" | "lounge";
-  /** How it's used: a kids' phone, someone's own phone, or a shared Lounge phone. */
-  mode?: "kids" | "personal" | "lounge";
+  /**
+   * How it's used: a kids' phone, someone's own phone, a shared Lounge phone, or `left`: the
+   * phone of someone who left (nobody can call it; guardians set it up again or remove it).
+   */
+  mode?: "kids" | "personal" | "lounge" | "left";
+  /** `left`: who it belonged to ('' when not known) and when they left. */
+  leftBy?: string;
+  leftAt?: number | null;
   /** Firmware (or browser-phone app) version and model it last reported. */
   fw?: string | null;
   model?: string | null;
