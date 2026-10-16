@@ -1,5 +1,35 @@
 # Firmware changelog
 
+## 0.9.6 — 2026-10-15: call audio (wideband, the mic level, concealment, sidetone, echo)
+
+All on both boards; nothing changes on the server. See [docs/audio.md](../docs/audio.md), whose
+last section lists what only a real board can check (none of this has run on one yet).
+
+- **Opus wideband calls**: 16 kHz mono, about 24 kbit/s, with in-band error correction; PCMU
+  (8 kHz) stays the fallback. Answering an offer without Opus, the phone sends PCMU. A call the
+  phone places sends Opus: a phone on 0.9.5 or older that it calls would answer PCMU only and
+  couldn't decode it (update both). The log's `CODEC send=… recv=…` says what a call uses.
+  The audio path runs at 16 kHz; voicemail and greetings stay 8 kHz WAV (resampled with proper
+  filters), and so does the house intercom.
+- **The right mic level**: the mic's analog gain goes up (PGA 30 dB + 6 dB) and an automatic
+  gain control brings speech to about -24 dBFS, following only speech. The phone check
+  (MENU 7, handset up) shows `SPEAK NOW: -26 DB OK` (or `WEAK`, `TOO LOUD`).
+- **Smoother over a poor connection**: an adaptive jitter buffer (40-120 ms, starting at 60);
+  lost packets come from the next one's error correction or are concealed (G.711: the last
+  pitch period repeated, fading out over 60 ms). The `AUDIO` line counts them (`conceal=`,
+  `fec=`, `late=`).
+- **Sidetone**: you hear yourself faintly in a call (about 4 ms mic to ear: the codec is read
+  and written in 1 ms blocks), never while muted. MENU 1 → 6: off / low / normal (the default).
+- **Echo**: every call measures how much of the earpiece comes back in the mic (`erl=`); the
+  phone check's echo test (MENU 7 → 2) plays a sweep and shows it with the delay (`38 DB OK,
+  4 MS`). An echo canceller (SpeexDSP's, 64 ms) is there, off by default until the reference
+  handsets are measured: MENU 1 → 7 turns it on for a phone, and so does an echo test that finds
+  a poor result. A delay over 5 ms turns the sidetone off.
+- **Fix**: a server that gives no ICE servers (a LAN-only self-hosted one without STUN or TURN)
+  can now place and take calls with the phone (`esp_peer` refused an empty list).
+- Console: `audio agc on|off`, `audio sidetone off|low|normal`, `audio echo on|off|test`,
+  `audio source <hz>` (the test device's tone); `audio` shows the codecs' and echo's numbers.
+
 ## 0.9.5 — 2026-10-15: wired network for hw v0.901, a board choice
 
 Nothing changes on the boards that exist (rev A, hw v0.1): a default build is the rev A build,

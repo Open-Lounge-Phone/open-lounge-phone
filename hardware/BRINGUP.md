@@ -27,7 +27,7 @@ headset.
 
 ## 2. Codec on I2C
 
-1. The boot log must show `ES8311 (id 8311) ready: 8 kHz, mic PGA 18 dB` and
+1. The boot log must show `ES8311 (id 8311) ready: 16 kHz, mic PGA 30 dB, scale-up 6 dB` and
    `audio device: es8311`. If it says `ES8311 not found` or `audio device: test`: check SDA IO18 /
    SCL IO17, the 4.7 kΩ pull-ups, CE to GND (address 0x18) and the codec's 3V3.
 2. `audio` prints `AUDIO device=es8311 …`.
@@ -52,14 +52,17 @@ The earpiece plays only with the handset lifted; `audio tone` overrides that for
 
 1. `audio loop 300`: the mic plays back in the earpiece 300 ms later (an echo test; the delay
    keeps it from howling). The mic is on only while the loopback runs.
-2. Speak normally into the handset: `audio` shows `miclevel=` about -30 to -20 dBFS; silence
-   below -55 dBFS. The phone check shows the same without a console: MENU 7 with the handset up
-   switches the mic on and its `MIC` row reads the live level every second (`-27 DBFS PEAK -9`).
-   If speech is below -35 dBFS (a first board read speech peaks around -38 dBFS at PGA 18 dB,
-   about 25 dB too quiet), try more gain live with `audio gain <pga 0-30 dB> [scale-up 0-42 dB]`
-   (for example `audio gain 30`, then `audio gain 30 12`) while watching the level, and once a
-   setting sounds right put it in `CONFIG_OLP_MIC_PGA_DB` (3 dB steps; `audio gain` isn't saved);
-   if it clips (near 0 dBFS) lower it.
+2. Speak normally into the handset: `audio` shows `miclevel=` (at the ADC, before the AGC)
+   about -30 to -20 dBFS and `speech=` (after the AGC) near -24; silence below -55 dBFS. The
+   phone check shows it without a console: MENU 7 with the handset up switches the mic on and
+   its `MIC` row reads `SPEAK NOW: -24 DB OK` every second. **This sets the analog gain
+   default** (PGA 30 dB + 6 dB scale-up, a first board read speech peaks around -38 dBFS at PGA
+   18 dB): with each handset, a normal voice must read `OK` (not `WEAK`) and shouting must not
+   read `TOO LOUD` (`micpeak=` in `audio` stays below -1 dBFS). If not, try other gains live with
+   `audio gain <pga 0-30 dB> [scale-up 0-42 dB]` (for example `audio gain 30 0`, `audio gain 30
+   12`) and put the one that works for all handsets in `CONFIG_OLP_MIC_PGA_DB` /
+   `CONFIG_OLP_MIC_SCALE_DB` (`audio gain` isn't saved). `audio agc off` compares without the
+   AGC.
 3. You hear yourself 0.3 s later, clearly, with no hum or buzz. A 50/60 Hz hum points at the mic
    bias filter (1 kΩ / 10 µF) or a ground loop through the USB supply.
 4. Tap the handset's button (if it has one): note whether the log shows a level spike (the board
@@ -76,15 +79,24 @@ The earpiece plays only with the handset lifted; `audio tone` overrides that for
    small (a few per minute at most).
 4. Talk both ways. The companion hears the handset clearly; the handset hears the companion at a
    comfortable level at the default volume (6/10).
-5. **Echo with the handset:** talk from the companion with the phone's handset lying on a table
-   and then held normally. The companion should not hear itself back. The browser's echo
-   canceller only handles echo it can model; receiver-to-mic acoustic or electrical coupling in the
-   handset shows up here. If there is echo, note the level (`miclevel` while only the companion
-   talks) and report it: the fix is AEC on the phone with the earpiece stream as the reference
-   (not in this firmware yet), or a lower earpiece volume.
-6. `rtc` shows the selected ICE servers; `ice tcp` then a new call forces TURN over TCP/TLS (for
+5. **Codec and timing:** the `AUDIO` line says `codec=opus/opus` with the companion, `dry=0`
+   (the earpiece never ran dry with the 1 ms DMA blocks), `conceal=` small, and the CPU per
+   20 ms frame: `enc=` (Opus encode), `dec=` and `aec=` (average/worst µs; together well under
+   20000). Note them. A listening test against firmware 0.9.5 (PCMU): s, f and th should be
+   clearer.
+6. **Sidetone:** in a call you hear yourself faintly, right away (no echo-like delay); MENU 1 6
+   cycles off / low / normal. Note which sounds right. Mute (MENU 3): the sidetone stops.
+7. **Echo with the handset:** with the handset held normally, MENU 7 then 2 (the echo test):
+   note the `ECHO` row (`38 DB OK, 4 MS`) for each reference handset, and at volumes 6 and 10.
+   The `MS` is the sidetone's delay too: it must be under 5. Then talk from the companion with
+   the handset on a table and held normally: the companion should not hear itself back; note
+   `erl=` / `erlbest=` in the `AUDIO` line. Repeat with MENU 1 7 `ECHO CANCEL ON` (next call):
+   `erle=` shows what it removed; the companion's echo should be gone and the phone user's voice
+   unchanged when both talk at once. These numbers decide whether the canceller is on by
+   default (`CONFIG_OLP_ECHO_CANCEL`).
+8. `rtc` shows the selected ICE servers; `ice tcp` then a new call forces TURN over TCP/TLS (for
    networks that block UDP): the call must still connect.
-7. Hang up with the hook: `call media off (mic off)` in the log; the companion shows the call
+9. Hang up with the hook: `call media off (mic off)` in the log; the companion shows the call
    ended.
 
 ## 6. Wi-Fi setup network
@@ -196,7 +208,9 @@ tests from a computer port alone: with the PHY and Wi-Fi on together the board d
 ## 9. What to record
 
 Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the chosen cap,
-`miclevel` for speech and for silence, the PGA gain used, call setup time (`RTC CONNECTED … ms`),
-underruns per minute, whether echo was heard, and how each phone OS handled the setup page. On
+`miclevel` for speech and for silence, the PGA gain and scale-up used, the phone check's `MIC`
+word per handset, call setup time (`RTC CONNECTED … ms`), underruns per minute, `dry=`, the
+`enc=` / `dec=` / `aec=` times, the echo test per handset (loss and delay), `erl=` in calls,
+whether echo was heard with the canceller off and on, the sidetone level chosen, and how each phone OS handled the setup page. On
 hw v0.901: the `eth` line, the 5 V current with the PHY off and on, how long a plugged cable took
 to be used, the switch's PoE class and power, and any audio underruns during an e-paper refresh.

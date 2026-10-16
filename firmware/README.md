@@ -8,7 +8,7 @@ part of the menu (`menu.ts` → `menu.c`). With a server it can't talk to (proto
 `compat.c`) it shows `UPDATE NEEDED` or `SERVER TOO OLD` and retries hourly; unknown fields and
 messages from a newer server are ignored.
 
-**Status: sets up its Wi-Fi, pairs, signs in, and makes and takes calls with two-way audio (WebRTC, G.711).** Call
+**Status: sets up its Wi-Fi, pairs, signs in, and makes and takes calls with two-way audio (WebRTC, Opus wideband or G.711).** Call
 audio is verified end to end in the QEMU simulator with a test tone; the codec path (ES8311) needs a
 real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 
@@ -20,9 +20,9 @@ real board ([`hardware/BRINGUP.md`](../hardware/BRINGUP.md)).
 | WebSocket over TLS (the ESP-IDF certificate bundle), reconnects, keep-alive `{"t":"ping"}`, `status` every minute; **updates** (see below; off in source builds): signed manifest + image, two slots, rollback, overnight while idle, MENU → 9 | Hardware Secure Boot V2 / flash encryption eFuses (documented, not burned) |
 | `hello` → `pair.begin` (`alg: "p256"`, mbedTLS ECDSA) → `pair.code` on the strip + beeps → `pair.done` → reconnect → `auth.challenge`/`auth.proof` → `config` | Flash encryption and hardware secure boot (eFuses; planned for production phones) |
 | `deviceStep`: hook, keys → `button`, incoming ring (BACK silences it here), answer by lifting, hang up by the hook, rooms, busy decline; **call waiting** (`WAITING: MOM` / `1 TAKE 2 IGNORE`; taking it ends the call you're in: one call has audio at a time); MENU in a call: 1 hold / resume, 2 blind transfer, 3 **mute** (the codec's mic off, silence sent; `MUTED`, the LED's slow double blink), 9 volume; **missed calls** (MENU 5: call back, next, clear) and **redial** (MENU 8, kept in NVS); `RECONNECTING` when the call's connection drops, `CONNECTION LOST` (`call.hangup` `lost`) if it isn't back in 15 s; **leaving a message** after no answer (beep, record 8 kHz WAV, hang up to send); **listening to voicemail** (MENU 2 → 1 on a person's own phone); **extensions** (MENU 6, and transfer to one from the call screen); **Lounge phones** (takeover code on the e-paper, `PRESS KEY 7` proof, MENU 5 chat / 8 log out, who's here, house-line keys) | Adding a second caller, merge and attended transfer (one call has audio at a time), playing recorded greetings |
-| **Call audio** (see below): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), G.711 µ-law at 8 kHz, the ES8311 over I2S, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
+| **Call audio** (see below and [docs/audio.md](../docs/audio.md)): WebRTC with Espressif's `esp_peer` (ICE with the server's STUN and TURN over UDP, DTLS-SRTP), Opus 16 kHz wideband with G.711 µ-law as the fallback, the ES8311 over I2S at 16 kHz, the mic's AGC, an adaptive jitter buffer with loss concealment, sidetone, the echo measured in every call and an echo canceller, a capped earpiece volume, call-progress tones in the earpiece | First-run mode choice (always `kind: "kids"`) |
 | `wipe`: erases the whole NVS partition (the device key, id and settings; Wi-Fi put back), reboots, pairs again; factory reset: MENU+BACK held 10 s at power-on; **encrypted storage** in release builds (see below) | Rooms (group calls) have no media on the phone yet |
-| The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume (earpiece, ringer loudness and style), 2 Voicemail (count, play, clear), 3 Network: Wi-Fi and server (→ 1 change: the setup network; kids' phones ask twice, Lounge phones don't offer it), 4 the house intercom or the chime (else Network), 5 Missed calls / 8 Redial (on a Lounge phone in use: 5 chat / 8 log out), 6 Extension, 7 Phone check (the mic's live level with the handset up; → 1 self-test), 9 Update now, 0 About (firmware version + the four fingerprint words); the clock on the ready screen; the daily check-in (`CHECK IN BY 10:00` / `PRESS 1: I'M OK`); the status LED double-flashes in a recorded call | Spoken prompts |
+| The phone's screens, keys, LED, beeps and menu follow [docs/phone-ux.md](../docs/phone-ux.md): MENU → 1 Volume (earpiece, ringer loudness and style, 6 sidetone, 7 echo canceller), 2 Voicemail (count, play, clear), 3 Network: Wi-Fi and server (→ 1 change: the setup network; kids' phones ask twice, Lounge phones don't offer it), 4 the house intercom or the chime (else Network), 5 Missed calls / 8 Redial (on a Lounge phone in use: 5 chat / 8 log out), 6 Extension, 7 Phone check (the mic's live speech level with the handset up; → 1 self-test, 2 echo test), 9 Update now, 0 About (firmware version + the four fingerprint words); the clock on the ready screen; the daily check-in (`CHECK IN BY 10:00` / `PRESS 1: I'M OK`); the status LED double-flashes in a recorded call | Spoken prompts |
 | **House intercom** (`intercom.c`, `lan.c`, `lan_crypto.c`; see below): phones of one space on the same network call room to room with no server, off unless turned on in the app; control lines HMAC-signed with the space's key, audio AES-128-CTR | Tried in QEMU only: two boards on real Wi-Fi, the codec's audio over it |
 | **Wired network** on hw v0.901 (`eth.c`, `netsel.c`; see below): the W5500 on the display's SPI bus, DHCP, the cable used when it works and Wi-Fi off, Wi-Fi as the fallback with the cable's PHY powered down and checked every 30 s; setup without Wi-Fi on a cable; `eth` on the console | Run in QEMU with its Ethernet as the cable (`tools/qemu_cable.py`); the W5500 itself needs a v0.901 board ([BRINGUP.md](../hardware/BRINGUP.md) §8) |
 
@@ -68,7 +68,9 @@ doesn't show up, hold BOOT, press RESET, release BOOT. `idf.py menuconfig` → *
 picks the board (above), can bake in a default server and Wi-Fi (both empty by default),
 *Updates* turns updates on with your key, and *Call audio* sets the earpiece cap, mic gain and ICE
 options. CI builds both boards, the Wokwi and QEMU targets with the `espressif/idf:v5.5.5` image and runs the host
-unit tests (`make -C firmware/test/host`: G.711, tones, meters, ICE server choice).
+unit tests (`make -C firmware/test/host`: G.711, tones, meters, ICE server choice, the audio
+modules: AGC, jitter buffer, concealment, resamplers, Opus, sidetone, echo; they need libopus:
+`brew install opus` or `apt-get install libopus-dev pkg-config`).
 
 ## Your keys, your server
 
@@ -209,11 +211,15 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `drop [wifi]` | drop the WebSocket (or Wi-Fi) to test reconnects |
 | `eth` | the wired network (hw v0.901): controller, PHY on/off, link, speed and duplex, address, MAC, the network in use; on rev A: `no wired network on this board` |
 | `wipe` | forget the device key, id and settings (keeps Wi-Fi), reboot |
-| `audio` | audio device, call counters (`tx`/`rx` frames, underruns) and levels (`miclevel`, `rxlevel`, the watched tone) |
+| `audio` | audio device, call counters (`tx`/`rx` frames, underruns, `conceal`ed and `late` frames, the jitter buffer's target `jb`) and levels (`miclevel`, `micpeak`, the AGC's gain and the speech it hears, `rxlevel`, the watched tone), the echo (`erl`, `erle`) and the sidetone |
 | `audio tone <dialtone\|ringback\|busy\|hold\|test\|none>` | play a tone in the earpiece, even on the hook (bring-up) |
 | `audio loop <ms>\|off` | mic → earpiece after a delay: an echo test for bring-up (the mic is on only while it runs) |
 | `audio watch <hz>` | which frequency the received-audio meter watches (default 440 Hz) |
-| `audio gain <pga 0-30> [scale-up 0-42]` | the ES8311 mic gain in dB, live and not saved (tuning on a board: watch `miclevel`, or MENU 7's `MIC` row with the handset up; then set `CONFIG_OLP_MIC_PGA_DB`, see hardware/BRINGUP.md) |
+| `audio gain <pga 0-30> [scale-up 0-42]` | the ES8311 mic gain in dB, live and not saved (tuning on a board: watch `miclevel`, or MENU 7's `MIC` row with the handset up; then set `CONFIG_OLP_MIC_PGA_DB` / `CONFIG_OLP_MIC_SCALE_DB`, see hardware/BRINGUP.md) |
+| `audio agc on\|off` | the mic's automatic gain control (on by default) |
+| `audio sidetone off\|low\|normal` | your own voice in the earpiece in a call (saved; also MENU → 1 → 6) |
+| `audio echo on\|off\|test` | the echo canceller from the next call (saved; also MENU → 1 → 7), or the echo test (as MENU 7 → 2) |
+| `audio source <hz>` | the test device's mic tone (0 = silent; simulators and e2e) |
 | `volume [0-10]` | earpiece volume (10 = the cap, 3 dB steps; also MENU → 1) |
 | `rtc [log on\|off]` | the call's media state: ICE servers in use, connected, setup time |
 | `ice <all\|udp\|tcp\|tls>` | which ICE servers the next call uses (`tcp`/`tls` = TURN over TCP/TLS only: experimental, see Call audio) |
@@ -221,8 +227,8 @@ At the `olp>` prompt (USB serial, 115200 in the simulator):
 | `reboot` | restart |
 
 The log shows every protocol message (`-> …`, `<- …`), `STATE <kind>`, `STRIP [line|line]`,
-`SIG led=…`/`SIG ring=…`, `TONE …`, `RTC state …`/`RTC CONNECTED …`, `AUDIO tx=… rx=…` every 5 s in
-a call, and the pairing code as **`PAIRING CODE: 123456`**.
+`SIG led=…`/`SIG ring=…`, `TONE …`, `RTC state …`/`RTC CONNECTED …`, `CODEC send=… recv=…`,
+`AUDIO tx=… rx=…` every 5 s in a call (with the codecs, CPU per frame and the echo), `ECHOTEST …`, and the pairing code as **`PAIRING CODE: 123456`**.
 
 ## Updates (OTA)
 
@@ -390,36 +396,65 @@ on its own task; `main/audio.c` moves 20 ms frames between it and the audio devi
   and `ice tcp` / `ice tls` try it again with a newer `esp_peer` (e2e steps 8 and 9, opt-in). TURN
   credentials are never logged (`rtc.config` is logged without them, and `esp_peer`'s agent, which
   prints them at INFO, stays at WARN unless `rtc log on`).
-- **Codec: G.711 µ-law (PCMU) at 8 kHz**, not Opus. Every browser supports PCMU; it costs no CPU and
-  no extra library (`main/dsp.c`, host-tested), behaves the same in the simulator and on the board,
-  and the handset is a telephone earpiece and electret, narrowband anyway. The price is bandwidth:
-  64 kbit/s each way (≈ 80 with headers) and no DTX, so a relayed call costs ~70 MB per hour on TURN.
-  Opus (via `esp_audio_codec`) is feasible on the S3 with PSRAM and is the upgrade path behind the
-  same audio interface; it was not chosen first because Opus encoding is the one heavy CPU load
-  that the simulator can't show honestly.
-- **Audio device** (`main/audio_dev.h`): the **ES8311** on I2S0 (8 kHz, 16-bit mono, MCLK
-  2.048 MHz from the S3; registers set over I2C, `main/audio_es8311.c`), or a **test device**
-  (`main/audio_test.c`: the "mic" is a 1 kHz tone at -15 dBFS, the "earpiece" measures level and a
-  watched frequency). The simulators always use the test device; a board without a codec falls back
-  to it. `audio` prints the counters and levels of the current call.
+- **Codecs** (`main/voice.c`, host-tested with the system's libopus): **Opus** at 16 kHz mono,
+  about 24 kbit/s, 20 ms frames, complexity 5, in-band FEC (libopus from Espressif's
+  `espressif/esp_audio_codec`), and **G.711 µ-law (PCMU)** at 8 kHz as the fallback. The phone
+  offers and accepts both; an offer without Opus opens the peer again sending PCMU before it
+  answers. Its own SDP asks the other side for FEC and at most 16 kHz (`main/sdp.c`). `esp_peer`
+  sends the codec it was opened with: a call the phone places sends Opus, so a peer that
+  answers PCMU only (as a phone on 0.9.5 or older would) can't decode it. The log's `CODEC send=… recv=…`
+  says what a call uses; `CONFIG_OLP_CALL_OPUS=n` builds a PCMU-only phone.
+- **The audio path runs at 16 kHz.** G.711 calls, the house intercom, voicemail and greetings
+  stay 8 kHz (WAV everywhere) through 2:1 half-band resamplers (`main/resample.c`: flat to
+  3.4 kHz, at least 70 dB down from 4.6 kHz).
+- **Two audio tasks.** A pump (`audio_io`) reads and writes the codec in 1 ms DMA blocks
+  (`CONFIG_OLP_AUDIO_BLOCK`) and mixes in the sidetone; the audio task does the 20 ms work (the
+  codecs, AGC, echo canceller, tones, voicemail) through lock-free FIFOs (`main/fifo.c`), keeping
+  about 15 ms queued for the earpiece. Opus encodes on the audio task's stack (36 KB); its
+  states and the echo canceller's are in PSRAM. The `AUDIO` line every 5 s gives the encode,
+  decode and echo canceller time per frame (average/worst, µs), the stack left and the internal
+  heap.
+- **Audio device** (`main/audio_dev.h`): the **ES8311** on I2S0 (16 kHz, 16-bit mono, MCLK
+  4.096 MHz from the S3; registers set over I2C, `main/audio_es8311.c`), or a **test device**
+  (`main/audio_test.c`: the "mic" is a tone at -15 dBFS, 1 kHz unless `audio source`, the
+  "earpiece" measures level and a watched frequency). The simulators always use the test device;
+  a board without a codec falls back to it. `audio` prints the counters and levels of the
+  current call.
 - **Earpiece:** plays only with the handset lifted (the DAC is muted on the hook); call-progress
   tones (`soundFor` in `packages/core`: dial 350+440 Hz, ringback 440+480 Hz 2 s/4 s, busy 480+620
   Hz 0.5 s/0.5 s, hold beep) are mixed in locally. **Volume** 0-10 (MENU → 1, `volume`), 3 dB steps
   below a **cap of -6 dBFS** (`CONFIG_OLP_EARPIECE_MAX_DB`; hardware owner question 8: full scale
-  may reach ~98 dB SPL until the receiver is measured).
+  may reach ~98 dB SPL until the receiver is measured). **Sidetone** (MENU → 1 → 6): your voice
+  at -20 dB (normal, the default) or -26 dB (low), only in a connected call and never while
+  muted; about 4 ms mic to ear by design (a block in, two queued out, the codec's filters).
 - **Mic:** captured only while a call's media is connected and not muted (MENU 3), while leaving a
-  message, while the phone check (MENU 7) is open with the handset up (to show its level; nothing
-  is sent or kept), or during the `audio loop` bring-up test; otherwise the ADC is muted and I2S
-  RX is off.
-- A small jitter buffer (starts at 60 ms, capped at 300 ms) sits behind `esp_peer`'s own (NACK,
-  reordering).
+  message, while the phone check (MENU 7) is open with the handset up (to show its level, or for
+  the echo test; nothing is sent or kept), or during the `audio loop` bring-up test; otherwise the
+  ADC is muted and I2S RX is off. The PGA is at 30 dB plus 6 dB of ADC scale-up by default, then
+  an **AGC** (`main/agc.c`: speech to -24 dBFS, gain -6 to +18 dB, only on frames above a gate
+  over the noise floor, a -3 dBFS peak limiter).
+- **Receiving** (`main/jbuf.c`, `main/plc.c`): an adaptive jitter buffer (starts at 60 ms, then
+  40-120 ms from the measured jitter) behind `esp_peer`'s own; lost frames come from Opus FEC or
+  Opus's concealment, or for PCMU a G.711 Appendix I-style concealment (pitch repetition, fading
+  to silence over 60 ms).
+- **Echo** (`main/echo.c`, SpeexDSP in `components/speexdsp`): the echo return loss is measured in
+  every call (`AUDIO erl=`); the phone check's echo test (MENU 7 → 2) measures it and the delay
+  with a sweep. The canceller (SpeexDSP's, 64 ms tail, with its residual echo suppressor) is off by
+  default (`CONFIG_OLP_ECHO_CANCEL`), on per phone with MENU → 1 → 7, and turned on by an echo
+  test that finds a poor loss (under 30 dB).
 
 **Verified in simulation** (QEMU, `tests/e2e/live/firmware.test.ts` against a live server, see
 TESTLOG.md): ICE through Cloudflare TURN over UDP (relay to relay) and directly, DTLS-SRTP, RTP both ways with
 test tones (the companion finds the phone's 1 kHz with WebAudio; the phone measures the companion's
-440 Hz), both call directions, hang-up turns the mic off. **Needs the real board:** the ES8311
-register setup and I2S timing, levels, the volume cap in dB SPL, echo from the handset, and call
-quality over real Wi-Fi: [`hardware/BRINGUP.md`](../hardware/BRINGUP.md).
+440 Hz), both call directions, hang-up turns the mic off. Entirely local
+(`tests/e2e/live/codec.test.ts`: QEMU, a self-hosted server on this machine, the companion in
+Chromium): a call from the companion negotiates Opus and carries 5 and 6 kHz tones both ways, and
+PCMU (telephone band only) when Opus is taken out of its offer; a call the phone places offers both
+(its media can't connect behind QEMU's NAT without TURN); the echo test runs. **Needs the real
+board:** the ES8311 register setup and I2S timing at 16 kHz with 1 ms blocks, levels and the mic
+gain default, the volume cap in dB SPL, the sidetone's delay and level, Opus's sound and CPU time,
+echo from each handset, and call quality over real Wi-Fi:
+[`hardware/BRINGUP.md`](../hardware/BRINGUP.md).
 
 ## Pairing a phone
 
