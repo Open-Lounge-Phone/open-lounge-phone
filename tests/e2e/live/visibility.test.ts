@@ -14,8 +14,10 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { migrate, openSqlite } from "@openloungephone/db/node";
+import { toBase64Url } from "@openloungephone/protocol";
 import { afterAll, beforeAll, expect, it, onTestFailed } from "vitest";
 import { reportLogs } from "../procs.ts";
+import { socket } from "../scenario.ts";
 import { api, operatorSeed, type Person, signUp } from "../twoServers.ts";
 import { AddonLab } from "./addonKit.ts";
 import { Companion, Phone, until } from "./browser.ts";
@@ -107,6 +109,38 @@ it.skipIf(!ON)(
     await page.getByRole("button", { name: "Remove and wipe" }).waitFor();
     expect(page.url()).not.toContain("error");
     void lobby;
+
+    // An add-on: its page says where it's linked; removing it says what went, and the note
+    // stays until dismissed.
+    const ws = lab.server.base.replace(/^http/, "ws");
+    const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, false, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const publicKey = toBase64Url(
+      new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey)),
+    );
+    const pairing = await socket(`${ws}/ws/device`);
+    pairing.send({ t: "hello", proto: 1, model: "addon", fw: "e2e", buttons: 1, display: "none" });
+    pairing.send({ t: "pair.begin", kind: "addon", publicKey });
+    const { code } = await pairing.next("pair.code");
+    const linked = await api(mom, "/addons/link", { body: { code, name: "seat" } });
+    expect(linked.status, JSON.stringify(linked.json)).toBe(201);
+    pairing.ws.close();
+    await app.tab("Add-ons");
+    const host = new URL(lab.server.origin).host;
+    await page.getByText(`Linked to Mom (mom@${host}), in Mom's home, on ${host}.`).waitFor();
+    await shot(page, "1b-addon-linked-to");
+    page.on("dialog", (d: { message(): string; accept(): Promise<void> }) => {
+      expect(d.message()).toContain("its address stops working");
+      void d.accept();
+    });
+    await page.getByRole("button", { name: "Remove" }).click();
+    await page.getByText("seat was removed and its address stopped working.").waitFor();
+    await shot(page, "1c-addon-removed-note");
+    await page.locator(".gone-notes").getByRole("button", { name: "OK" }).click();
+    await page.locator(".gone-notes").waitFor({ state: "detached" });
+    await app.tab("Home");
 
     // The operator: This server, in plain words.
     const boss: Person = { server: lab.server, token: op.token, householdId: "", address: "" };

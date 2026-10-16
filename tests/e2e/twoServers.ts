@@ -1,6 +1,6 @@
 // Interop scenario between two independent servers (federation): sign-up on each, a knock across
 // servers, accept, and block. Runs against any two servers with open sign-up.
-import { deviceFingerprint } from "@openloungephone/core";
+import { CANT_CALL_NOTE, deviceFingerprint } from "@openloungephone/core";
 import { fromBase64Url, toBase64Url } from "@openloungephone/protocol";
 import { expect } from "vitest";
 import { fakeRegistration } from "./passkey.ts";
@@ -813,7 +813,11 @@ export async function addonsAcross(jesse: Person, bob: Person) {
 
   const bApp = await appSocket(bob);
   bApp.send({ t: "call.address", address: linked.json.address });
-  expect(await untilState(bApp, "ended")).toMatchObject({ reason: "unavailable" });
+  // Not his to call: the plain answer every stranger gets, whether it exists or not.
+  const refused = await untilState(bApp, "ended");
+  expect(refused).toMatchObject({ reason: "unavailable", note: CANT_CALL_NOTE });
+  bApp.send({ t: "call.address", address: `jesse+nothing@${host}` });
+  expect(await untilState(bApp, "ended")).toMatchObject({ note: refused.note });
 
   addon.send({ t: "addon.shares", shares: [{ id: "bookclub", label: "Book club" }] });
   const shareAddress = `jesse+seat+bookclub@${host}`;
@@ -883,6 +887,10 @@ export async function addonsAcross(jesse: Person, bob: Person) {
     await new Promise((r) => setTimeout(r, 100));
   }
   expect(await bobsShares()).toEqual([]);
+  // His server kept a note that it went, for his Add-ons tab.
+  expect((await api(bob, "/addons/gone")).json).toMatchObject([
+    { what: "share", addon: "seat", label: "Book club" },
+  ]);
 
   expect((await api(jesse, `/addons/${deviceId}`, { method: "DELETE" })).status).toBe(204);
   expect(await addon.next("wipe")).toMatchObject({ reason: "removed" });

@@ -6,12 +6,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrate, openSqlite } from "@openloungephone/db/node";
-import { afterAll, beforeAll, it, onTestFailed } from "vitest";
+import { afterAll, beforeAll, expect, it, onTestFailed } from "vitest";
 import { freePort, ProcLog, reportLogs, retryOnce, saveLogs } from "./procs.ts";
 import {
   addonsAcross,
+  api,
   block,
   callAcross,
+  connections,
   connectLocally,
   knockAndAccept,
   mergeAcross,
@@ -119,6 +121,17 @@ it("two servers: sign up on each, knock, accept, call, add-ons, voicemail, timel
   await callAcross(jesse, bob);
   // Jesse's add-on on A: Bob holds one of its shares, calls it from B, and it calls him.
   await addonsAcross(jesse, bob);
+  // The same person with an account on each server: her add-on on A shows only on A; she
+  // reaches it from B by connecting her two accounts and giving the B one a share.
+  const jesseOnB = await signUp(b, "jesse", "Jesse");
+  expect((await api(jesse, "/connections", { body: { to: jesseOnB.address } })).status).toBe(202);
+  const [knock] = await connections(jesseOnB);
+  expect((await api(jesseOnB, `/connections/${knock?.id}/accept`, { method: "POST" })).status).toBe(
+    200,
+  );
+  await addonsAcross(jesse, jesseOnB);
+  const toSelf = (await connections(jesse)).find((c) => c.address === jesseOnB.address);
+  expect((await api(jesse, `/connections/${toSelf?.id}`, { method: "DELETE" })).status).toBe(204);
   await noAnswerAcross(jesse, bob);
   await timelineAcross(jesse, bob);
   await rotateMidCall(jesse, bob, {
