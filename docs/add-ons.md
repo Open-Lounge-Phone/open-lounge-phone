@@ -68,14 +68,14 @@ someone shared one with you).
 5. **Its page** shows whether it's online now (as the server reports it), its address with
    **Copy**, where it's linked ("Linked to Jesse (jesse@hub.example), in Jesse's home, on
    hub.example"), **What it does**, its **Shares** (each with Call, Add to contacts, Put on a key and
-   **Give to…**), **Ask it for a new share…** when it offers shares, and **Remove**: it's cut off
+   **Give to…**), **Ask it for a new share…** when it offers shares, **Test connection** ([below](#test-connection)), and **Remove**: it's cut off
    at once, told to forget its link, and every share of it goes; the question names the shares
    and how many people lose them. With one add-on and nothing shared with you, the tab opens
    straight on its page.
 6. **Nothing goes silently.** When an add-on is removed (by you, or because you left the space or
    the space went), the Add-ons tab keeps a note of it until you press OK: which shares went and
-   who no longer has them. Someone holding a share gets a note too when it goes (its add-on was
-   removed, its owner took it back, or the add-on stopped offering it), on their own server.
+   who no longer has them. Someone holding a share sees it under **Shared with you** when it stops
+   working or goes, with why ([Holding a share](#sharing)), on their own server.
 7. **Accounts on two servers.** An add-on shows on the app of the server it's linked to. To
    reach it from your account on another server, connect your two accounts (Connections), then
    on the add-on's server give that account a share of it.
@@ -123,10 +123,24 @@ call and can hear what you say, and:
 - **Stop its calls**: the add-on can't call you any more (you can still call it). Your own
   server enforces this, so it holds whatever the add-on's server does. **Let it call me** undoes
   it.
+- **Test connection**: checks it end to end without a call ([below](#test-connection)).
 - **Give it back**: you lose the share and your calls within it end; its owner sees you gone.
-  Across servers this uses `POST /fed/v1/addon-shares/leave` (feature `addon-leave`); with a
-  server that doesn't have it, your server still forgets the share and refuses the add-on's calls
-  to you within it.
+  Across servers this uses `POST /fed/v1/addon-shares/leave` (feature `addon-leave`); your server
+  forgets the share at once either way and refuses the add-on's calls to you within it.
+
+**When a share stops working, it stays on the list**, marked with why, until you give it back:
+
+| Shown | Why |
+|---|---|
+| Stopped: add-ons are off on this server / on that server | the operator turned add-ons off (here, or on the add-on's server) |
+| Stopped: Jesse's account is suspended | its owner's account is suspended on its server |
+| Stopped: you're no longer connected with Jesse | you disconnected or blocked each other, or (here) you left the spaces you shared |
+| Gone: Jesse removed the add-on / took it back | its owner removed it, or took the share back |
+| Gone: the add-on doesn't offer it any more | the add-on stopped offering that share |
+| Gone: Jesse's server doesn't list it any more | another server's list of your shares no longer has it |
+
+A stopped share can't be called, put on a key or tested; **Give it back** removes it (for one that
+went, it just takes it off your list).
 
 ![A share given to you, with Stop its calls and Give it back](images/addons-shared-with-you.png)
 
@@ -208,6 +222,7 @@ asyncio.run(addon.run())   # prints the link code the first time, then takes cal
   holding that share (`call.state` is `ringing`, or `ended` with `call.reason`).
 - `addon.set_shares([{"id": …, "label": …}])`, `call.share`, `@addon.on_share_request`: see
   [Sharing](#sharing).
+- `@addon.on_test`: an optional check before it answers a [Test connection](#test-connection).
 - `Call`: `.caller` (`.address`, `.name`), `.share`, `.callee`, `.state`, `.reason`,
   `await answer()`, `await hangup()`, `frames()`, `await send(pcm)`, `clear()`, `on_key`,
   `on_hangup`, `await wait_active()`, `await wait_ended()`.
@@ -241,6 +256,24 @@ After connecting (before `addon.shares`), an add-on says what it does:
 It replaces what it said before. An add-on that never sends it keeps these rules: it can be
 called, may call, may offer shares, gets keys, one call at a time; its page says it hasn't said
 what it does. Servers list the device feature `addon-about`; the bridge sends it only to them.
+
+### Test connection
+
+**Test connection** on an add-on's page (its owner), or on a share under **Shared with you** (a
+holder, here or on another server), checks an add-on end to end without placing a call. The
+server sends it a small message, and the add-on answers at once:
+
+```json
+← {"t":"addon.test","testId":"at_…"}
+→ {"t":"addon.test.ok","testId":"at_…","version":"seat/1.4","uptimeS":10800,"calls":0}
+```
+
+The app says how it went: "Answered in 42 ms · seat/1.4 · up 3 hours", "Not connected.", or
+"Connected but didn't answer in 5 s." (A holder who can't reach it now gets "You can't reach it
+now.", whatever the reason.) `version`, `uptimeS` (seconds since it started) and `calls` (calls
+it's on) are optional and plain text; a late answer, or one for another add-on's test, is ignored.
+The bridge answers by itself; `@addon.on_test` can run a check of its own first and, by raising,
+not answer. Each person may test one add-on 30 times an hour.
 
 ### The protocol, for other languages
 
@@ -299,7 +332,7 @@ Other rules:
 
 - `{"t":"ping"}` → `{"t":"pong"}` keeps the socket open (every 25 s or so).
 - Once signed in, an add-on may send only `ping`, `addon.about`, `addon.shares`,
-  `addon.share.created`, `addon.share.refused`, `call.address`, `call.answer`, `call.hangup`,
+  `addon.share.created`, `addon.share.refused`, `addon.test.ok`, `call.address`, `call.answer`, `call.hangup`,
   `rtc.sdp` and `rtc.ice` (without `peer`). Anything else is answered with
   `{"t":"error","code":"bad_message","message":"not for add-ons: …"}` and does nothing.
 - Words people will read (share labels, `summary`, a refusal's `reason`, its `fw`) are plain
@@ -328,6 +361,7 @@ Every limit is in `packages/server-app/src/limits.ts` (operators can change them
 | Calls one add-on places to one person per day | 6 | `denied` + note; audited once |
 | Calls one person places to one add-on per hour | 30 | `denied` + note |
 | Share lists (`addon.shares`) per hour | 60 | `error` `rate_limited`, list unchanged |
+| Test connection, per person and add-on per hour | 30 | `429` "Too many tests of this add-on. Try again later." |
 | Connections (signed in) per hour | 120 | `error` `rate_limited`, closed (4429) |
 | Messages per minute on one connection | 600 | `error` `rate_limited`, closed (4429), its calls end |
 
@@ -343,6 +377,8 @@ Calls to and from add-ons on other servers use the federation feature `addons`
 `addon-shares`: the target's `share`, `CallBody.addonShare` (for a call from an add-on within a
 share) and `POST /fed/v1/addon-shares` (the shares a person there holds, for their server to
 list). `addon-leave` adds `POST /fed/v1/addon-shares/leave` (a holder there gives one back).
+`POST /fed/v1/addons/test` is a holder there's Test connection: the add-on's server checks the
+grant (anyone else gets `unavailable`), asks the add-on and answers how it went.
 
 The add-on's server decides every call into it by its own grants. The holder's server decides
 calls from it: it rings a person only within a share that the add-on's server told it they hold,
@@ -364,15 +400,20 @@ on the server-pair stream.
 - `POST /api/addons/:id/share-requests {label, with: [ref]}` and
   `GET /api/addons/:id/share-requests/:requestId` → `{id, label, state, shareId?, reason?,
   people}`, `state` one of `waiting`, `created`, `refused`, `offline`, `timeout`.
-- `GET /api/addons/gone`: notes of what went (`what` `removed`: your add-on, with `shares`
-  `[{label, holders}]`; `share`: a share you held, with `owner` and `label`), newest first, at
-  most 20; `DELETE /api/addons/gone/:id` dismisses one. Each add-on in `GET /api/addons` also
-  says `owner` (`name`, `address`) and `server`.
-- `GET /api/addons/shared`: shares of other people's add-ons on this server given to you
-  (`owner`, `addon`, `share`, `address`, `muted`, `about`); shares from other servers come with
-  that connection in `GET /api/connections` (`addonShares`, with `muted`).
+- `GET /api/addons/gone`: notes of your add-ons that were removed (`what` `removed`, with
+  `shares` `[{label, holders}]`), newest first, at most 20; `DELETE /api/addons/gone/:id`
+  dismisses one. Each add-on in `GET /api/addons` also says `owner` (`name`, `address`) and
+  `server`.
+- `GET /api/addons/shared`: every share of someone else's add-on you hold, here or on a
+  connection's server: `key`, `here`, `owner`, `addon`, `share`, `address`, `muted`, `about` (add-ons
+  here), and `stopped` when it doesn't work (`addons_off_here`, `addons_off_there`, `suspended`,
+  `not_connected`) or went (`removed`, `taken_back`, `not_offered`, `not_connected`, `gone`; then
+  with `goneId`, its note, which `DELETE /api/addons/gone/:id` removes). Working shares from other
+  servers also come with that connection in `GET /api/connections` (`addonShares`).
+- `POST /api/addons/:id/test` (its owner) and `POST /api/addons/test {address}` (a share you hold):
+  Test connection, `{state: ok|offline|timeout|unavailable, ms?, version?, uptimeS?, calls?}`.
 - `PUT /api/addons/muted {address, muted}`: stop (or allow again) an add-on's calls to you.
-  `POST /api/addons/leave {address}`: give a share back.
+  `POST /api/addons/leave {address}`: give a share back (working or stopped).
 - `GET /api/addons/contacts`, `PUT /api/addons/contacts {address, label?}`,
   `DELETE /api/addons/contacts {address}`: add-ons (and shares) you may call, in your contacts on
   Home (`ok`: you can call it now).

@@ -12,7 +12,10 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 ## 0.9.0 (unreleased)
 
-On `main`, not tagged yet.
+On `main`, not tagged yet. **Update everything together** (server, apps, phones' firmware, add-on
+bridge): this release changes shapes without keeping older ones working (a phone's `config.owner`
+mode `left`, `addon.test`, the `GET /addons/shared` list, `/fed/v1/addons/test`). A holder testing
+an add-on on a server still on 0.8.0 is told "You can't reach it now."
 
 - **A kids' phone never records the child** (COPPA): a call it makes that isn't answered gets no
   voicemail offer, and the child can't record the phone's greeting (guardians record it in the
@@ -57,6 +60,20 @@ On `main`, not tagged yet.
   0034, additive). A line on the Add-ons tab says how to reach an add-on linked on your other
   server (connect your two accounts, then give the other one a share); the two-server test runs
   that path.
+- **Add-on shares that stopped working are shown, not hidden**: under Add-ons → Shared with you,
+  with a plain reason (add-ons off on this server or that one, its owner suspended, you're no
+  longer connected) and **Give it back**. A share that went stays there too, saying why (removed,
+  taken back, no longer offered, no longer connected, or gone from another server's list), until
+  given back; a connection that goes takes its shares with a note, never silently. `GET
+  /addons/shared` lists shares from every server with `stopped`/`goneId`; `GET /addons/gone`
+  keeps your own removed add-ons only.
+- **Test connection** for add-ons: its owner (and someone holding a share, here or on another
+  server) presses it on its page; the server sends `addon.test`, the add-on answers
+  `addon.test.ok` (version, uptime, calls it's on), and the app says "Answered in 42 ms", "Not
+  connected." or "Connected but didn't answer in 5 s." No call is placed. `POST
+  /addons/:id/test`, `POST /addons/test {address}`, `POST /fed/v1/addons/test`; 30 tests per
+  person and add-on an hour (`addonTestsPerHour`). The Python bridge (0.4.0) answers by itself,
+  with an optional `@addon.on_test` check.
 - **The phones of someone who left stay, labelled**: when someone leaves a space, is removed
   from it or deletes their account, their own phones there stay as "Dana's phone (Dana left)"
   (`DANA LEFT` on the phone; `config.owner.mode` `left` with `person`; `GET /devices` `mode`

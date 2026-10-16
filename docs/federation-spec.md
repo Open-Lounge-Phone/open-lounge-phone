@@ -384,6 +384,7 @@ Federation version 1, base path `/fed/v1`. JSON bodies are at most 16384 bytes; 
 | `POST /fed/v1/phones` | yes | The household phones `to` may call through their connection with `from`. |
 | `POST /fed/v1/addon-shares` | yes | Feature `addon-shares`: the shares of `from`'s add-ons that `to` holds (for listing and keys). |
 | `POST /fed/v1/addon-shares/leave` | yes | Feature `addon-leave`: `from` gives back a share of `to`'s add-on (their grant goes; their calls within it end). |
+| `POST /fed/v1/addons/test` | yes | Feature `addon-shares`: `from` tests their share of `to`'s add-on end to end (Test connection), without a call. |
 | `POST /fed/v1/presence` | yes | `from`'s availability, for their connections on the receiving server (opt-in). |
 | `POST /fed/v1/lounge/claim` | yes | The sender vouches that its account `from` scanned the receiver's Lounge phone. |
 | `POST /fed/v1/lounge/progress` | yes | The receiver's account's takeover of the sender's Lounge phone moved on. |
@@ -674,6 +675,33 @@ Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
 
 - Only the grant held by `from` (the signing server's account) for that share goes.
 - Sent only to servers that list `addon-leave`; the holder's server forgets the share either way.
+
+### `POST /fed/v1/addons/test`
+
+Feature `addon-shares`: `from` tests their share of `to`'s add-on end to end (Test connection), without a call.
+
+Signed (RFC 9421 profile, §4). Unsigned or badly signed requests get `401`.
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `from` | `Party` | yes | One of the sending server's accounts. |
+| `to` | string (`^[a-z0-9._-]{2,30}$`) | yes | The add-on's owner on the receiving server. |
+| `addon` | string (`^[a-z0-9._-]{2,30}$`) | yes | The add-on's name. |
+| `share` | string (`^[a-z0-9-]{1,30}$`) | yes |  |
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | { state: `"ok"` \| `"offline"` \| `"timeout"` \| `"unavailable"`, ms?: integer (≥0), version?: string (len ≤64), uptimeS?: integer (≥0), calls?: integer (≥0) } | How it went. |
+| 429 | — | Too many tests from that person for that add-on (`Retry-After`). |
+
+**Receiver rules**
+
+- `unavailable` unless `from` holds that share and could call it now; nothing else is told apart.
+- The receiver sends the add-on `addon.test` and waits up to 5 seconds for `addon.test.ok`.
 
 ### `POST /fed/v1/presence`
 

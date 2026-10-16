@@ -321,7 +321,7 @@ that names another add-on's id can't answer its challenge.
 ### The threats and the answers
 
 1. **It sends messages it shouldn't.** Once signed in, an add-on may send only `ping`,
-   `addon.about`, `addon.shares`, `addon.share.created`, `addon.share.refused`,
+   `addon.about`, `addon.shares`, `addon.share.created`, `addon.share.refused`, `addon.test.ok` (the answer to a Test connection),
    `call.address`, `call.answer`, `call.hangup`, `rtc.sdp` and `rtc.ice` (without `peer`). That
    list is an explicit allow-list (`ADDON_MESSAGES`): every other message of the device protocol
    (hooks, keys, notices and chimes, rooms, extensions, hold, merge, transfer, greetings,

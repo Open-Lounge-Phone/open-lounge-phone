@@ -41,6 +41,9 @@ on its page). Each page shows:
   does gets the plainest rules, and its page says so;
 - its **shares**, each with **Call**, **Add to contacts**, **Put on a key** and **Give to…**;
 - **Ask it for a new share…**, when it offers shares;
+- **Test connection**: checks it end to end without calling it. The server sends the add-on a
+  small message and it answers by itself; the app says "Answered in 42 ms" (with its version and
+  how long it has been up, if it says), "Not connected", or "Connected but didn't answer in 5 s";
 - **Remove**: it's cut off at once, told to forget the link, and every share of it goes. To use it
   again, link it again.
 
@@ -82,7 +85,13 @@ does, that it learns your name and address when you call and hears what you say,
 - **Call**, **Add to contacts**, **Put on a key** (on your own phones);
 - **Stop its calls**: it can't call you any more (you can still call it). Your own server enforces
   this. **Let it call me** undoes it;
+- **Test connection**, as on your own add-on's page (also for an add-on on another server);
 - **Give it back**: you lose the share, and its owner sees you gone.
+
+A share that **stops working** stays on the list, marked with why: add-ons are off (on your server
+or the add-on's), its owner's account is suspended, or you're no longer connected with its owner.
+One that **went** stays too, saying why: its owner removed the add-on or took the share back, or
+the add-on stopped offering it. Press **Give it back** to take it off your list.
 
 ## Calls, limits and labels
 

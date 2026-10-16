@@ -118,6 +118,18 @@ Server feature `addon-shares`, from an add-on: it won't make that share.
 | `requestId` | string (len ≤64) | yes |  |
 | `reason` | string (len ≤200) | yes | Shown to its owner as it is. |
 
+### `addon.test.ok`
+
+From an add-on: the answer to `addon.test`, sent at once (the bridge does it by itself). The server measures the time from its `addon.test` to this.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `testId` | string (len ≤64) | yes | The `addon.test` this answers. |
+| `version` | string (len ≤64) |  | Its software and version (plain text), e.g. `seat/1.4`. |
+| `uptimeS` | integer (≥0) |  | Seconds since it started (its process, not this connection). |
+| `calls` | integer (≥0, ≤100) |  | Calls it's on right now. |
+
 ### `addon.about`
 
 Server feature `addons`, from an add-on: what it does, in its own words, for its page in the app. Send it after connecting, before `addon.shares`; it replaces the earlier one. The server enforces `answers`, `calls`, `shares`, `keys` and `lines`; `summary`, `hears` and `transcribes` are shown as the add-on's own statement. An add-on that never sends it is shown as not having said what it does, and keeps the rules of server 0.7.0 (it can be called, may call, may offer shares, gets keys, one call at a time).
@@ -684,6 +696,15 @@ Server feature `addon-shares`, to an add-on: its owner asks for a new shared sco
 | `label` | string (len ≤40) | yes | What its owner called it. |
 | `by` | string (len ≤300) | yes | Its owner's address (`handle@host`). |
 | `with` | string (len ≤300)[] | yes | The people to give it to, by address (`handle@host`). |
+
+### `addon.test`
+
+To an add-on: its owner (or someone holding one of its shares) pressed Test connection. Answer `addon.test.ok` with the same `testId` at once; no call is placed. Unanswered within 5 seconds, the test says it didn't answer.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `testId` | string (len ≤64) | yes |  |
 
 ### `rtc.config`
 
