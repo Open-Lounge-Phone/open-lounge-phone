@@ -78,6 +78,16 @@ describe("speed-dial pages: storage and the API", () => {
     expect((await s.http(`/devices/${kid.id}/contacts`, { token: mom.token })).json.keyPages).toBe(
       2,
     );
+    // …for public lines and add-ons put on a key in one step too.
+    const own = await s.pairDevice(mom.token, "Desk", { forMe: true });
+    const line = (key: number) =>
+      s.http(`/devices/${own.deviceId}/lines`, {
+        method: "PUT",
+        token: mom.token,
+        body: { address: "help@b.example", label: "Help", key },
+      });
+    expectStatus(await line(25), 400);
+    expectStatus(await line(15), 200);
   });
 });
 
@@ -140,8 +150,11 @@ describe("speed-dial pages on the phone", () => {
   });
 
   it("an empty key, a page without keys, or a slot past 9 is refused", async () => {
-    const { s, kid } = await paged();
+    const { s, kid, mom, ben } = await paged();
     const phone = await s.connectDevice(kid.id, kid.key, PAGED);
+    // Someone on page 3, key 3 (stored 22): a press saying page 2, slot 12 must not reach them.
+    const benApp = await s.connectApp(ben.token);
+    expectStatus(await putKey(s, mom.token, kid.id, 22, ben.id), 204);
     phone.write({ t: "hook", state: "up" });
     for (const press of [
       { index: 4, page: 2 },
@@ -151,6 +164,7 @@ describe("speed-dial pages on the phone", () => {
       phone.write({ t: "button", ...press });
       expect(await phone.nextState("ended")).toMatchObject({ reason: "denied" });
     }
+    expect(benApp.all("call.ringing")).toHaveLength(0);
   });
 
   it("allow-lists and quiet hours decide a later page's keys as page 1's", async () => {
