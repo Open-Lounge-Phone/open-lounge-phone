@@ -374,6 +374,15 @@ export interface HeldShare {
   goneId?: string;
 }
 
+/** How Test connection went (see `addonTestText`). */
+export interface AddonTestResult {
+  state: "ok" | "offline" | "timeout" | "unavailable";
+  ms?: number;
+  version?: string;
+  uptimeS?: number;
+  calls?: number;
+}
+
 /** An add-on (or a share of one) in your contacts. */
 export interface AddonContact {
   address: string;
@@ -1071,6 +1080,9 @@ export function createApi(opts: ApiOptions) {
     muteAddon: (address: string, muted: boolean) =>
       request<void>("PUT", "/addons/muted", { address, muted }),
     leaveShare: (address: string) => request<void>("POST", "/addons/leave", { address }),
+    /** Test connection: your add-on, or (by its address) a share you hold. */
+    testAddon: (id: string) => request<AddonTestResult>("POST", `/addons/${enc(id)}/test`),
+    testShare: (address: string) => request<AddonTestResult>("POST", "/addons/test", { address }),
     knock: (to: string, note?: string) =>
       request<{ status: "sent" | "connected"; connection: ConnectionView }>(
         "POST",

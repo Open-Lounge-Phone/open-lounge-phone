@@ -174,6 +174,31 @@ export interface GoneNote {
   shares: { label: string; holders: string[] }[];
 }
 
+/** How Test connection went, in plain words: "Answered in 42 ms · seat/1.4 · up 3 hours". */
+export function addonTestText(r: {
+  state: "ok" | "offline" | "timeout" | "unavailable";
+  ms?: number;
+  version?: string;
+  uptimeS?: number;
+  calls?: number;
+}): string {
+  if (r.state === "offline") return "Not connected.";
+  if (r.state === "timeout") return "Connected but didn't answer in 5 s.";
+  if (r.state === "unavailable") return "You can't reach it now.";
+  const parts = [`Answered in ${r.ms ?? 0} ms`];
+  if (r.version) parts.push(r.version);
+  if (r.uptimeS !== undefined) parts.push(`up ${upFor(r.uptimeS)}`);
+  if (r.calls) parts.push(`on ${r.calls} call${r.calls === 1 ? "" : "s"}`);
+  return `${parts.join(" · ")}.`;
+}
+
+const upFor = (s: number): string => {
+  if (s < 120) return `${s} s`;
+  if (s < 2 * 3600) return `${Math.floor(s / 60)} minutes`;
+  if (s < 2 * 86400) return `${Math.floor(s / 3600)} hours`;
+  return `${Math.floor(s / 86400)} days`;
+};
+
 /**
  * Why a share you hold doesn't work (or went), as the server says it: add-ons off here or on the
  * add-on's server, its owner suspended, not connected any more, or why it went.

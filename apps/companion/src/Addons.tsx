@@ -10,6 +10,7 @@ import {
   addonNameProblem,
   addonPreview,
   addonStatus,
+  addonTestText,
   type GoneNote,
   goneText,
   heldShareLabel,
@@ -23,6 +24,7 @@ import type {
   AddonContact,
   AddonPerson,
   AddonShareView,
+  AddonTestResult,
   AddonView,
   Api,
   DeviceSummary,
@@ -441,6 +443,7 @@ function AddonPage({
           </button>
         </div>
         <p className="muted small">{linkedText(addon)} Only you can call it at this address.</p>
+        {s.enabled && <TestConnection run={() => s.api.testAddon(addon.id)} />}
         <ReachActions
           {...s}
           address={addon.address}
@@ -682,6 +685,37 @@ function ShareRow({
   );
 }
 
+/** Test connection: asks the add-on (no call) and says how it went. */
+function TestConnection({ run }: { run(): Promise<AddonTestResult> }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+  return (
+    <div className="row wrap">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setResult(undefined);
+          run()
+            .then(
+              (r) => setResult(addonTestText(r)),
+              (e: Error) => setResult(e.message),
+            )
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? "Testing…" : "Test connection"}
+      </button>
+      {result && (
+        <span className="small" role="status">
+          {result}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** Shares of other people's add-ons given to you, with what you control. */
 function HeldList({ held, ...s }: Shared & { held: Held[] }) {
   if (!held.length) return null;
@@ -756,6 +790,7 @@ function HeldRow({ h, ...s }: Shared & { h: Held }) {
         </ul>
       )}
       <p className="hint">{learnsText(h.addon)}</p>
+      {s.enabled && <TestConnection run={() => s.api.testShare(h.address)} />}
       <ReachActions
         {...s}
         address={h.address}

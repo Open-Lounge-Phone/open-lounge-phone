@@ -6,6 +6,7 @@ import {
   addonNameProblem,
   addonPreview,
   addonStatus,
+  addonTestText,
   firstFreeSlot,
   goneText,
   heldShareLabel,
@@ -182,6 +183,18 @@ describe("goneText", () => {
     expect(goneText({ id: "g2", what: "removed", addon: "seat", at: 0, shares: [] })).toBe(
       "seat was removed and its address stopped working.",
     );
+  });
+});
+
+describe("addonTestText", () => {
+  it("says how Test connection went in plain words", () => {
+    expect(addonTestText({ state: "ok", ms: 42 })).toBe("Answered in 42 ms.");
+    expect(
+      addonTestText({ state: "ok", ms: 42, version: "seat/1.4", uptimeS: 3 * 3600, calls: 1 }),
+    ).toBe("Answered in 42 ms · seat/1.4 · up 3 hours · on 1 call.");
+    expect(addonTestText({ state: "offline" })).toBe("Not connected.");
+    expect(addonTestText({ state: "timeout" })).toBe("Connected but didn't answer in 5 s.");
+    expect(addonTestText({ state: "unavailable" })).toBe("You can't reach it now.");
   });
 });
 
