@@ -34,6 +34,7 @@ export const DEVICE_FEATURES = [
   "checkin",
   "chime",
   "intercom",
+  "key-pages",
 ] as const;
 export type DeviceFeature = (typeof DEVICE_FEATURES)[number];
 
@@ -62,7 +63,7 @@ export const ServerInfo = z
       })
       .describe("The protocol versions the server accepts."),
     features: Names(32).describe(
-      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on), `addon-shares` (shares of add-ons: `addon.shares`, `addon.share.*`, `call.ringing.share`, `call.ringing.from.share`, `call.address.share`; with `addons`), `missed-calls` (missed calls in `config.missed` with `kind`, `call.back`, `missed.changed`), `call-waiting` (`call.ringing.waiting`), `checkin` (`config.checkin`, `checkin.ok` counted by the server), `chime` (`config.chime`, `notice.chime`), `intercom` (`config.intercom`). Unknown names are ignored.",
+      "Optional capabilities: `call-control` (hold, merge, transfer), `rooms`, `greetings` (`greeting.*`), `extensions` (`call.extension`), `lounge`, `recording` (recording notices), `public-lines` (`call.line`, `call.state.queue`, `call.voicemail`), `addons` (add-ons: `call.address`, `call.key`, `call.ringing.from.kind`; listed only when the server's operator turned add-ons on), `addon-shares` (shares of add-ons: `addon.shares`, `addon.share.*`, `call.ringing.share`, `call.ringing.from.share`, `call.address.share`; with `addons`), `missed-calls` (missed calls in `config.missed` with `kind`, `call.back`, `missed.changed`), `call-waiting` (`call.ringing.waiting`), `checkin` (`config.checkin`, `checkin.ok` counted by the server), `chime` (`config.chime`, `notice.chime`), `intercom` (`config.intercom`), `key-pages` (`config.pages`, `button.page`). Unknown names are ignored.",
     ),
   })
   .describe("What the server speaks, so a client can adapt to an older or newer server.");
@@ -73,6 +74,15 @@ export type ServerInfo = z.infer<typeof ServerInfo>;
  * keeping the receive buffer small enough for a microcontroller.
  */
 export const MAX_MESSAGE_BYTES = 16 * 1024;
+
+/**
+ * Speed-dial keys come in pages of ten, one per digit key (slot 0-8 = digits 1-9, slot 9 =
+ * digit 0). Page 1 is `config.buttons`; pages 2 and up are `config.pages` (phones listing
+ * `key-pages`). Stored as one index, `(page - 1) * KEYS_PER_PAGE + slot`.
+ */
+export const KEYS_PER_PAGE = 10;
+/** The most pages a phone can have (so 100 keys): the wire and storage ceiling. */
+export const MAX_KEY_PAGES = 10;
 
 /** Opaque identifier: short, URL-safe, printable on an e-ink panel if needed. */
 export const Id = z

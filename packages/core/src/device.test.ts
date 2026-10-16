@@ -729,3 +729,99 @@ describe("call waiting", () => {
     ]);
   });
 });
+
+describe("speed-dial pages (BACK turns the page)", () => {
+  const pages = [1, 2, 4];
+  const back: DeviceInput = { type: "page", pages };
+
+  it("BACK shows the next page with keys and wraps from the last to the first", () => {
+    let r = run([hook("up"), back]);
+    expect(r.state).toEqual({ kind: "offhook", page: 2 });
+    r = run([back], r.state);
+    expect(r.state).toEqual({ kind: "offhook", page: 4 });
+    r = run([back], r.state);
+    expect(r.state).toEqual({ kind: "offhook" });
+    expect(r.sent).toEqual([]); // paging never leaves the phone
+  });
+
+  it("a digit dials that key on the page shown", () => {
+    const r = run([hook("up"), back, back, button(9)]);
+    expect(r.sent).toEqual([
+      { t: "hook", state: "up" },
+      { t: "button", index: 9, page: 4 },
+    ]);
+    expect(r.state).toMatchObject({ kind: "dialing", button: 39 });
+    // Page 1 sends no page, exactly as before.
+    expect(run([hook("up"), button(2)]).sent[1]).toEqual({ t: "button", index: 2 });
+  });
+
+  it("hanging up returns to page 1", () => {
+    const r = run([hook("up"), back, hook("down"), hook("up")]);
+    expect(r.state).toEqual({ kind: "offhook" });
+  });
+
+  it("a call returns to page 1 when it ends", () => {
+    const r = run([
+      hook("up"),
+      back,
+      button(0),
+      callState("c1", "active"),
+      callState("c1", "ended"),
+    ]);
+    expect(r.state).toEqual({ kind: "offhook", lastEnd: "hangup" });
+    // A call that didn't go through too.
+    const busy = run([hook("up"), back, button(0), callState("c2", "ended", "denied")]);
+    expect(busy.state).toEqual({ kind: "offhook", lastEnd: "denied" });
+  });
+
+  it("turning the page moves on from the last call's result", () => {
+    const r = run([back], { kind: "offhook", lastEnd: "busy", lost: true });
+    expect(r.state).toEqual({ kind: "offhook", page: 2 });
+  });
+
+  it("a phone with one page: BACK does nothing, as before", () => {
+    const start: DeviceState = { kind: "offhook", lastEnd: "busy" };
+    expect(run([{ type: "page", pages: [1] }], start).state).toBe(start);
+    expect(run([{ type: "page", pages: [] }], start).state).toBe(start);
+  });
+
+  it("BACK keeps its other meanings: silencing a ring, nothing in a call or with a call held", () => {
+    // Paging is only for the speed-dial screen.
+    const ring: DeviceState = { kind: "incoming", callId: "c1", from: "Mom" };
+    expect(run([back], ring).state).toBe(ring);
+    expect(run([{ type: "silence" }], ring).state).toEqual({ ...ring, silenced: true });
+    const call: DeviceState = { kind: "incall", callId: "c1", connected: true };
+    expect(run([back], call)).toEqual({ state: call, sent: [] });
+    const held: DeviceState = { kind: "offhook", held: "c1" };
+    expect(run([back], held).state).toBe(held);
+    expect(run([back]).state).toEqual({ kind: "idle" });
+    const dialing: DeviceState = { kind: "dialing", button: 0, callId: "c1" };
+    expect(run([back], dialing).state).toBe(dialing);
+  });
+
+  it("keys elsewhere stay on page 1 (a blind transfer, a line's queue keys)", () => {
+    const call: DeviceState = {
+      kind: "incall",
+      callId: "c1",
+      connected: true,
+      transferPending: true,
+    };
+    expect(run([button(3)], call).sent).toEqual([
+      { t: "call.transfer", callId: "c1", to: { button: 3 } },
+    ]);
+  });
+
+  it("Redial calls the same page's key, whatever page is shown", () => {
+    const s: DeviceState = { kind: "offhook", page: 2 };
+    const last = dialOf(s, button(4));
+    expect(last).toEqual({ kind: "button", index: 4, page: 2 });
+    expect(run([redialInput(last as never)], { kind: "offhook" }).sent).toEqual([
+      { t: "button", index: 4, page: 2 },
+    ]);
+    // A page-1 key redials page 1 even with another page on screen.
+    const first = dialOf({ kind: "offhook" }, button(4));
+    expect(run([redialInput(first as never)], { kind: "offhook", page: 4 }).sent).toEqual([
+      { t: "button", index: 4 },
+    ]);
+  });
+});

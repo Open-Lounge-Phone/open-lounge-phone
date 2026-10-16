@@ -6,6 +6,7 @@ import type {
   VoicemailOffer,
 } from "@openloungephone/protocol";
 import { CONNECTION_LOST_NOTE } from "./callControl.ts";
+import { keyIndex, nextPage } from "./keyPages.ts";
 import { SIGN_IN_FOR_LINES_NOTE } from "./lines.ts";
 
 /**
@@ -22,6 +23,7 @@ export type DeviceState =
    * `callback`: you just asked a public line to call you back (your place is kept).
    * `signIn`: a Lounge phone with nobody signed in tried a public line (`SIGN IN TO CALL`).
    * `lost`: the last call's audio connection dropped and couldn't be restored (`CONNECTION LOST`).
+   * `page`: the page of speed-dial keys on screen (BACK turns it; absent = page 1).
    */
   | {
       kind: "offhook";
@@ -30,6 +32,7 @@ export type DeviceState =
       callback?: true;
       signIn?: true;
       lost?: true;
+      page?: number;
     }
   /**
    * Not yet answered. `queue`: calling a public line and waiting in its queue (the place in
@@ -37,6 +40,7 @@ export type DeviceState =
    */
   | {
       kind: "dialing";
+      /** The key dialled, as stored (`(page - 1) * 10 + slot`); -1 = not a key. */
       button: number;
       callId?: string;
       held?: string;
@@ -89,7 +93,13 @@ export type CallAction = "hold" | "resume" | "merge" | "transfer" | "mute" | "un
 
 export type DeviceInput =
   | { type: "hook"; state: "up" | "down" }
-  | { type: "button"; index: number }
+  /** A digit key (its slot, 0-9). `page`: dial that page's key (Redial), else the page shown. */
+  | { type: "button"; index: number; page?: number }
+  /**
+   * BACK on the speed-dial screen (handset up, nothing dialled): show the next page of keys.
+   * `pages`: the pages the phone shows (`shownPages(config)`); with one page it does nothing.
+   */
+  | { type: "page"; pages: readonly number[] }
   | { type: "action"; action: CallAction }
   /** MENU → Dial extension (team/org spaces): the handset is up and the digits are in. */
   | { type: "extension"; number: string }
@@ -210,11 +220,24 @@ export function deviceStep(s: DeviceState, input: DeviceInput): DeviceStep {
     return stay({ kind: "idle" }, ...hangups, hook);
   }
 
+  if (input.type === "page") {
+    // Only the speed-dial screen pages (with a call on hold the screen says so instead).
+    if (s.kind !== "offhook" || s.held || input.pages.length < 2) return stay(s);
+    const page = nextPage(input.pages, s.page ?? 1);
+    // Turning the page moves on from the last call's result (and its busy tone).
+    return stay(page > 1 ? { kind: "offhook", page } : { kind: "offhook" });
+  }
+
   if (input.type === "button") {
     if (s.kind === "offhook") {
+      const page = input.page ?? s.page ?? 1;
       return stay(
-        { kind: "dialing", button: input.index, ...(s.held ? { held: s.held } : {}) },
-        { t: "button", index: input.index },
+        {
+          kind: "dialing",
+          button: keyIndex(page, input.index),
+          ...(s.held ? { held: s.held } : {}),
+        },
+        { t: "button", index: input.index, ...(page > 1 ? { page } : {}) },
       );
     }
     // Waiting in a public line's queue: key 1 leaves a voicemail instead (when offered).
@@ -432,14 +455,18 @@ function action(s: DeviceState, a: CallAction): DeviceStep {
 
 /** What a phone last called, for MENU → Redial (kept by the phone across restarts). */
 export type LastDial =
-  | { kind: "button"; index: number }
+  /** `page`: a key on a later page (absent = page 1). */
+  | { kind: "button"; index: number; page?: number }
   | { kind: "extension"; number: string }
   | { kind: "back"; id: string };
 
 /** The call this input starts from `s` (handset up, nothing dialled), if it starts one. */
 export function dialOf(s: DeviceState, input: DeviceInput): LastDial | undefined {
   if (s.kind !== "offhook") return undefined;
-  if (input.type === "button") return { kind: "button", index: input.index };
+  if (input.type === "button") {
+    const page = input.page ?? s.page ?? 1;
+    return { kind: "button", index: input.index, ...(page > 1 ? { page } : {}) };
+  }
   if (input.type === "extension") return { kind: "extension", number: input.number };
   if (input.type === "callBack") return { kind: "back", id: input.id };
   return undefined;
@@ -449,7 +476,7 @@ export function dialOf(s: DeviceState, input: DeviceInput): LastDial | undefined
 export function redialInput(last: LastDial): DeviceInput {
   switch (last.kind) {
     case "button":
-      return { type: "button", index: last.index };
+      return { type: "button", index: last.index, page: last.page ?? 1 };
     case "extension":
       return { type: "extension", number: last.number };
     case "back":

@@ -7,6 +7,8 @@ import {
   ErrorCode,
   IceServer,
   Id,
+  KEYS_PER_PAGE,
+  MAX_KEY_PAGES,
   Names,
   ServerInfo,
 } from "./common.ts";
@@ -604,7 +606,7 @@ export const DeviceHello = z
       .optional()
       .catch(undefined)
       .describe(
-        "What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: \"call\"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy). Unknown names are ignored.",
+        "What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: \"call\"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`), `key-pages` (speed-dial keys beyond the first ten, in `config.pages`; BACK turns the page). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy; only the first page of keys). Unknown names are ignored.",
       ),
   })
   .describe("First message on every connection.");
@@ -671,7 +673,20 @@ export const Hook = z
   .describe("Handset lifted (`up`) or returned to the cradle (`down`).");
 
 export const Button = z
-  .object({ t: z.literal("button"), ...Ref, index: z.number().int().min(0).max(15) })
+  .object({
+    t: z.literal("button"),
+    ...Ref,
+    index: z.number().int().min(0).max(15),
+    page: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_KEY_PAGES)
+      .optional()
+      .describe(
+        "The page of keys on screen (`config.pages`, phones listing `key-pages`): `index` is then the digit's slot on that page (0-9). Absent = page 1.",
+      ),
+  })
   .describe("Speed-dial button pressed (0-based).");
 
 export const PowerStatus = z
@@ -867,7 +882,27 @@ export const Config = z
   .object({
     t: z.literal("config"),
     ...Ref,
-    buttons: z.array(ButtonConfig).max(16).describe("Only mapped buttons are listed."),
+    buttons: z
+      .array(ButtonConfig)
+      .max(16)
+      .describe("Only mapped buttons are listed. The first page of keys (slots 0-9)."),
+    pages: z
+      .array(
+        z.object({
+          page: z.number().int().min(2).max(MAX_KEY_PAGES),
+          buttons: z
+            .array(ButtonConfig)
+            .min(1)
+            .max(KEYS_PER_PAGE)
+            .describe("Its mapped keys; `index` is the digit's slot on the page (0-9)."),
+        }),
+      )
+      .max(MAX_KEY_PAGES - 1)
+      .optional()
+      .catch(undefined)
+      .describe(
+        "Speed-dial pages after the first, in order (only to phones listing `key-pages`; only pages with keys). With the handset up, BACK shows the next page; a key then sends `button` with its `page`.",
+      ),
     quiet: z.boolean().describe("Quiet hours currently in effect."),
     quietUntil: z
       .string()

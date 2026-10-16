@@ -30,7 +30,7 @@ byte-for-byte as shown so hibernating servers can answer it without waking.
   (`MIN_PROTOCOL_VERSION`..`PROTOCOL_VERSION`): when `PROTOCOL_VERSION` is bumped, the previous
   version stays accepted for at least 12 months. `config.server` and `app.ready.server` tell the
   client the range, the software version and the optional features it offers
-  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `addon-shares`, `addon-about`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`), so a client can leave out what a server
+  (`call-control`, `rooms`, `greetings`, `extensions`, `lounge`, `recording`, `voicemail-play`, `public-lines`, `line-callback`, `notices`, `addons`, `addon-shares`, `addon-about`, `missed-calls`, `call-waiting`, `checkin`, `chime`, `intercom`, `key-pages`), so a client can leave out what a server
   doesn't offer; clients ignore names they don't know.
 - **Outside the range.** A client older than the server accepts gets, for a phone, a `config`
   with `update` (show `message`, e.g. `UPDATE NEEDED`, and don't treat the phone as signed in),
@@ -59,7 +59,7 @@ First message on every connection.
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
 | `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
-| `features` | string (len ≤32)[] |  | What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: "call"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy). Unknown names are ignored. |
+| `features` | string (len ≤32)[] |  | What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: "call"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`), `key-pages` (speed-dial keys beyond the first ten, in `config.pages`; BACK turns the page). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy; only the first page of keys). Unknown names are ignored. |
 
 ### `call.extension`
 
@@ -171,6 +171,7 @@ Speed-dial button pressed (0-based).
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
 | `index` | integer (≥0, ≤15) | yes |  |
+| `page` | integer (≥1, ≤10) |  | The page of keys on screen (`config.pages`, phones listing `key-pages`): `index` is then the digit's slot on that page (0-9). Absent = page 1. |
 
 ### `status`
 
@@ -510,7 +511,8 @@ Sent after authentication and whenever guardians change settings.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `id` | string (len ≤64) |  |  |
-| `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24), addon?: `true` }[] | yes | Only mapped buttons are listed. |
+| `buttons` | { index: integer (≥0, ≤15), label: string (len ≤24), addon?: `true` }[] | yes | Only mapped buttons are listed. The first page of keys (slots 0-9). |
+| `pages` | { page: integer (≥2, ≤10), buttons: { index: integer (≥0, ≤15), label: string (len ≤24), addon?: `true` }[] }[] |  | Speed-dial pages after the first, in order (only to phones listing `key-pages`; only pages with keys). With the handset up, BACK shows the next page; a key then sends `button` with its `page`. |
 | `quiet` | boolean | yes | Quiet hours currently in effect. |
 | `quietUntil` | string (`^([01]\d|2[0-3]):[0-5]\d$`) |  | Local time (HH:MM) when current quiet hours end, if they end. |
 | `utcOffsetMin` | integer (≥-720, ≤840) |  | The space's current UTC offset in minutes (its quiet-hours time zone), so a phone with a clock knows local time: hardware phones install updates overnight. |
