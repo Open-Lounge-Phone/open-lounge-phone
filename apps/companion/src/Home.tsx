@@ -6,6 +6,7 @@ import { MissedCalls } from "./MissedCalls.tsx";
 import { Notices } from "./Notices.tsx";
 import { UseOldDeviceHint } from "./Pair.tsx";
 import { offlineHint, shareLink, VIRTUAL_MODEL, virtualPhoneUrl } from "./phoneLed.ts";
+import { phoneLists } from "./phoneLists.ts";
 import { formatBattery, formatLastSeen, powerWarning } from "./text.ts";
 
 interface Props {
@@ -61,13 +62,10 @@ export function Home({
   onCallBack,
 }: Props) {
   const now = useNow(30_000);
-  // Every phone of mine (a person can have several: a desk phone, a virtual one…).
-  const mine = devices.filter((d) => !!meId && d.ownerUserId === meId && d.kind !== "lounge");
-  // Household phones (e.g. kids'), and other people's own phones (guardians manage those too).
-  const household = devices.filter((d) => !d.ownerUserId && d.kind !== "lounge");
-  const theirs = devices.filter(
-    (d) => !!d.ownerUserId && d.ownerUserId !== meId && d.kind !== "lounge",
-  );
+  // Every phone of mine (a person can have several: a desk phone, a virtual one…), household
+  // phones (e.g. kids'), and other people's own phones (guardians manage those too). Lounge
+  // phones have their own card.
+  const { mine, household, theirs } = phoneLists(devices, meId);
   const ownerName = (id: string) => people.find((u) => u.id === id)?.name ?? "Someone";
   return (
     <section className="stack">

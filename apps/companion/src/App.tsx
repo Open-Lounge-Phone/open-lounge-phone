@@ -691,6 +691,7 @@ function SignedIn({
             guardian={guardian}
             conn={conn}
             onCallPerson={(u) => void conn?.callUser(u.id, u.name)}
+            onManage={(d) => setRoute({ name: "device", id: d.id })}
           />
         )}
         {me && !loungeLink && !welcome && route.name === "home" && (

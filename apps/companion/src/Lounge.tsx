@@ -22,6 +22,7 @@ import {
   targetValue,
 } from "./houseLine.ts";
 import { guestLoungeUrl, type LoungeLink, loungeReasonText } from "./loungeLink.ts";
+import { phoneLists } from "./phoneLists.ts";
 import { presenceOf } from "./presence.ts";
 
 /** The page a Lounge phone's QR code opens: "Use this phone", then press the flashing key. */
@@ -167,6 +168,7 @@ export function LoungePhones({
   guardian,
   conn,
   onCallPerson,
+  onManage,
 }: {
   api: Api;
   devices: DeviceSummary[];
@@ -177,8 +179,10 @@ export function LoungePhones({
   guardian: boolean;
   conn: Connection | undefined;
   onCallPerson(u: User): void;
+  /** Guardians: rename it, or remove and wipe it. */
+  onManage?(d: DeviceSummary): void;
 }) {
-  const phones = devices.filter((d) => d.kind === "lounge");
+  const phones = phoneLists(devices, meId).lounge;
   const [info, setInfo] = useState<LoungeInfo>();
   const load = useCallback(() => {
     api.lounge().then(setInfo, () => {});
@@ -222,6 +226,11 @@ export function LoungePhones({
                 </div>
               </div>
               <div className="device-actions">
+                {guardian && onManage && (
+                  <button type="button" onClick={() => onManage(d)}>
+                    Manage
+                  </button>
+                )}
                 {who && (mine || guardian) && (
                   <button type="button" onClick={() => conn?.leaveLounge(d.id)}>
                     {mine ? "Leave" : "End session"}
