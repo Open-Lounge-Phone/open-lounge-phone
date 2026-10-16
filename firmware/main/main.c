@@ -496,10 +496,12 @@ static void render(void) {
     if (s_cfg.owner_mode[0]) strip_owner_line(title, &s_cfg);
     if (n_status == 2) snprintf(footer, sizeof footer, "%s - %s", full[0], full[1]);
     else snprintf(footer, sizeof footer, "PRESS A KEY TO CALL");
+    // The page of keys on screen (BACK turns it): its ten labels.
+    int page = s_phone.page > 1 ? s_phone.page : 1;
     const char *labels[10];
-    for (int i = 0; i < 10; i++) labels[i] = s_cfg.labels[i];
+    for (int i = 0; i < 10; i++) labels[i] = s_cfg.labels[(page - 1) * KEYS_PER_PAGE + i];
 #if CONFIG_OLP_LABS
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; page == 1 && i < 10; i++)
       if (labs_label(i)) labels[i] = labs_label(i);
 #endif
     // Long names scroll: then each step is a new picture.
@@ -887,6 +889,7 @@ static void on_open(void) {
   cJSON *features = cJSON_AddArrayToObject(hello, "features");
   cJSON_AddItemToArray(features, cJSON_CreateString("missed-calls"));
   cJSON_AddItemToArray(features, cJSON_CreateString("call-waiting"));
+  cJSON_AddItemToArray(features, cJSON_CreateString("key-pages"));
   proto_send(hello);
   s_last_ping = now_ms();
   if (!id[0]) begin_pairing();
@@ -941,8 +944,20 @@ static void on_config(const cJSON *m) {
   const cJSON *b;
   cJSON_ArrayForEach(b, cJSON_GetObjectItemCaseSensitive(m, "buttons")) {
     const cJSON *idx = cJSON_GetObjectItemCaseSensitive(b, "index");
-    if (cJSON_IsNumber(idx) && idx->valueint >= 0 && idx->valueint < MAX_BUTTONS)
+    if (cJSON_IsNumber(idx) && idx->valueint >= 0 && idx->valueint < KEYS_PER_PAGE)
       copy(s_cfg.labels[idx->valueint], sizeof s_cfg.labels[0], jstr(b, "label"));
+  }
+  // Speed-dial pages after the first (`key-pages`): stored as (page - 1) * 10 + slot.
+  const cJSON *pg;
+  cJSON_ArrayForEach(pg, cJSON_GetObjectItemCaseSensitive(m, "pages")) {
+    const cJSON *page = cJSON_GetObjectItemCaseSensitive(pg, "page");
+    if (!cJSON_IsNumber(page) || page->valueint < 2 || page->valueint > MAX_KEY_PAGES) continue;
+    cJSON_ArrayForEach(b, cJSON_GetObjectItemCaseSensitive(pg, "buttons")) {
+      const cJSON *idx = cJSON_GetObjectItemCaseSensitive(b, "index");
+      if (!cJSON_IsNumber(idx) || idx->valueint < 0 || idx->valueint >= KEYS_PER_PAGE) continue;
+      int at = (page->valueint - 1) * KEYS_PER_PAGE + idx->valueint;
+      copy(s_cfg.labels[at], sizeof s_cfg.labels[0], jstr(b, "label"));
+    }
   }
   s_cfg.quiet = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "quiet"));
   copy(s_cfg.quiet_until, sizeof s_cfg.quiet_until, jstr(m, "quietUntil"));
@@ -1244,6 +1259,14 @@ static void on_key(int index) {
 #if CONFIG_OLP_LABS
   if (labs_key(index, s_hook_up, now)) return;   // intercom, home, stories, macro, check-in…
 #endif
+  // The speed-dial screen with more than one page of keys: BACK shows the next (wrapping).
+  if (index == KEY_BACK_INDEX && s_phone.kind == PH_OFFHOOK && s_hook_up && s_authed) {
+    int pages[MAX_KEY_PAGES];
+    int n = strip_key_pages(&s_cfg, pages);
+    phone_page(&s_phone, pages, n);
+    if (n > 1) ESP_LOGI(TAG, "KEYS page %d of %d", s_phone.page > 1 ? s_phone.page : 1, n);
+    return;
+  }
   if (index >= 10) return;  // MENU/BACK outside the menu
   if (s_lounge.on && s_lounge.challenge >= 0 && s_authed) {
     // The takeover proof: the key the screen names (any key is sent; the server checks it).
@@ -1267,9 +1290,10 @@ static void on_key(int index) {
   }
   phone_kind_t before = s_phone.kind;
   phone_button(&s_phone, index, emit);
-  if (before == PH_OFFHOOK && s_phone.kind == PH_DIALING) {
-    copy(s_active_label, sizeof s_active_label, s_cfg.labels[index]);
-    save_last_dial(&(last_dial_t){.kind = DIAL_KEY, .index = index});
+  if (before == PH_OFFHOOK && s_phone.kind == PH_DIALING && s_phone.button >= 0) {
+    // The key on the page shown: its stored index is (page - 1) * 10 + slot.
+    copy(s_active_label, sizeof s_active_label, s_cfg.labels[s_phone.button]);
+    save_last_dial(&(last_dial_t){.kind = DIAL_KEY, .index = s_phone.button});
   }
 }
 
@@ -1544,8 +1568,9 @@ void app_main(void) {
           ESP_LOGI(TAG, "%s %s", ev.type == EV_CALL_BACK ? "CALL BACK" : "REDIAL",
                    d.kind == DIAL_KEY ? "key" : d.kind == DIAL_EXT ? d.text : "missed call");
           if (d.kind == DIAL_KEY) {
+            // The same key on the same page, whatever page is on screen.
             copy(s_active_label, sizeof s_active_label, s_cfg.labels[d.index]);
-            phone_button(&s_phone, d.index, emit);
+            phone_key(&s_phone, d.index % KEYS_PER_PAGE, d.index / KEYS_PER_PAGE + 1, emit);
           } else if (d.kind == DIAL_EXT) {
             snprintf(s_active_label, sizeof s_active_label, "EXT %.20s", d.text);
             phone_extension(&s_phone, d.text, emit);

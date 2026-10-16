@@ -133,17 +133,42 @@ void phone_lost(phone_state_t *s, phone_emit_fn emit) {
   s->lost = true;
 }
 
+void phone_page(phone_state_t *s, const int *pages, int n) {
+  // Only the speed-dial screen pages (with a call on hold the screen says so instead).
+  if (s->kind != PH_OFFHOOK || s->held[0] || n < 2) return;
+  int cur = s->page > 1 ? s->page : 1, next = pages[0];
+  for (int i = 0; i < n; i++) {
+    if (pages[i] > cur) {
+      next = pages[i];
+      break;
+    }
+  }
+  // Turning the page moves on from the last call's result (and its busy tone).
+  to_offhook(s, "");
+  s->page = next > 1 ? next : 0;
+}
+
+void phone_key(phone_state_t *s, int slot, int page, phone_emit_fn emit) {
+  if (s->kind != PH_OFFHOOK) {
+    phone_button(s, slot, emit);
+    return;
+  }
+  if (page < 1) page = s->page > 1 ? s->page : 1;
+  char held[65];
+  CPY(held, s->held);
+  cJSON *m = msg("button");
+  cJSON_AddNumberToObject(m, "index", slot);
+  if (page > 1) cJSON_AddNumberToObject(m, "page", page);
+  emit(m);
+  phone_init(s);
+  s->kind = PH_DIALING;
+  s->button = (page - 1) * 10 + slot;
+  CPY(s->held, held);
+}
+
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit) {
   if (s->kind == PH_OFFHOOK) {
-    char held[65];
-    CPY(held, s->held);
-    cJSON *m = msg("button");
-    cJSON_AddNumberToObject(m, "index", index);
-    emit(m);
-    phone_init(s);
-    s->kind = PH_DIALING;
-    s->button = index;
-    CPY(s->held, held);
+    phone_key(s, index, 0, emit);
     return;
   }
   // Waiting in a public line's queue: key 1 leaves a voicemail instead (when the line offers it).

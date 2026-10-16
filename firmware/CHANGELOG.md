@@ -8,6 +8,12 @@
   simulator. 0.9.5 and older placed calls with PCMU alone and worked.
 - **`audio codec opus|pcmu`** (console, not saved): `pcmu` makes every call as in 0.9.5 (PCMU
   alone, one codec in the SDP), for comparing on a board; `opus` (the default) is 0.9.6's.
+- **Speed-dial pages** (server 0.8.0 or newer; the phone lists `key-pages`): more than ten
+  people on the keys, in pages of ten. With the handset up and the key map showing, BACK shows
+  the next page with keys and wraps to the first; the footer says `PAGE 2/3 - BACK: NEXT PAGE`,
+  a digit calls that page's key, and hanging up or a call returns to page 1. Redial keeps the
+  page. BACK keeps every other job it had. On an older server the phone shows page 1, as
+  before.
 
 ## 0.9.6 — 2026-10-15: call audio (wideband, the mic level, concealment, sidetone, echo)
 

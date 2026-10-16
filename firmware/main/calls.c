@@ -21,7 +21,7 @@ bool last_dial_decode(const char *s, last_dial_t *d) {
   if (s[0] == 'k') {
     char *end;
     long i = strtol(v, &end, 10);
-    if (*end || i < 0 || i > 15) return false;
+    if (*end || i < 0 || i > 99) return false;  // ten pages of ten keys
     d->kind = DIAL_KEY;
     d->index = (int)i;
     return true;

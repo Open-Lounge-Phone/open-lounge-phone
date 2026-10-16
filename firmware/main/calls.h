@@ -9,7 +9,7 @@
 typedef enum { DIAL_NONE, DIAL_KEY, DIAL_EXT, DIAL_BACK } dial_kind_t;
 typedef struct {
   dial_kind_t kind;
-  int index;       // DIAL_KEY: the key (protocol order)
+  int index;       // DIAL_KEY: the key as stored, (page - 1) * 10 + slot (0-99)
   char text[65];   // DIAL_EXT: the extension's digits; DIAL_BACK: the missed call's id
 } last_dial_t;
 

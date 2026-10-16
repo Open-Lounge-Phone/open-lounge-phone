@@ -147,7 +147,15 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       // A free Lounge phone tried a public line: only someone signed in can call one.
       if (s->sign_in) return set2(out, "SIGN IN TO CALL", "PRESS A KEY");
       const char *t = end_text(s->last_end);
-      return t ? set2(out, t, "PRESS A KEY") : set1(out, "PRESS A KEY");
+      if (t) return set2(out, t, "PRESS A KEY");
+      // More than one page of keys: which page is on screen, and how to turn it.
+      int pages[MAX_KEY_PAGES];
+      int n = in->config ? strip_key_pages(in->config, pages) : 1;
+      if (n > 1) {
+        snprintf(buf, sizeof buf, "PAGE %d/%d", s->page > 1 ? s->page : 1, pages[n - 1]);
+        return set2(out, buf, "BACK: NEXT PAGE");
+      }
+      return set1(out, "PRESS A KEY");
     }
     case PH_VOICEMAIL:
       if (in->vm_stage == VM_RECORDING) {
@@ -215,4 +223,18 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
     return set2(out, first, owner);
   }
   return set1(out, first);
+}
+
+int strip_key_pages(const phone_config_t *c, int out[MAX_KEY_PAGES]) {
+  int n = 0;
+  out[n++] = 1;
+  for (int page = 2; page <= MAX_KEY_PAGES; page++) {
+    for (int slot = 0; slot < KEYS_PER_PAGE; slot++) {
+      if (c->labels[(page - 1) * KEYS_PER_PAGE + slot][0]) {
+        out[n++] = page;
+        break;
+      }
+    }
+  }
+  return n;
 }

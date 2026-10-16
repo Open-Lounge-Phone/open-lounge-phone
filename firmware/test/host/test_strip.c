@@ -320,3 +320,43 @@ TEST(strip_daily_check_in) {
   CHECK(strip_lines(&in, out) == 1);
   CHECK_STR(out[0], "READY");
 }
+
+TEST(strip_shows_key_pages) {
+  phone_state_t ph;
+  phone_init(&ph);
+  ph.kind = PH_OFFHOOK;
+  static phone_config_t cfg;
+  memset(&cfg, 0, sizeof cfg);
+  cfg.present = true;
+  snprintf(cfg.labels[0], sizeof cfg.labels[0], "Mom");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  int pages[MAX_KEY_PAGES];
+  // One page: as before.
+  CHECK(strip_key_pages(&cfg, pages) == 1 && pages[0] == 1);
+  CHECK(strip_lines(&in, out) == 1);
+  CHECK_STR(out[0], "PRESS A KEY");
+  // Keys on pages 2 and 4 (page 3 empty: not shown).
+  snprintf(cfg.labels[13], sizeof cfg.labels[0], "Ben");
+  snprintf(cfg.labels[39], sizeof cfg.labels[0], "Cy");
+  CHECK(strip_key_pages(&cfg, pages) == 3 && pages[1] == 2 && pages[2] == 4);
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "PAGE 1/4");
+  CHECK_STR(out[1], "BACK: NEXT PAGE");
+  ph.page = 4;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "PAGE 4/4");
+  // A call that didn't go through says so first.
+  snprintf(ph.last_end, sizeof ph.last_end, "busy");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "BUSY");
+  CHECK_STR(out[1], "PRESS A KEY");
+  // Page 10 still fits the 16-character line.
+  snprintf(cfg.labels[90], sizeof cfg.labels[0], "Zed");
+  ph.last_end[0] = '\0';
+  ph.page = 10;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "PAGE 10/10");
+  CHECK(strlen(out[1]) <= STATUS_WIDTH);
+}

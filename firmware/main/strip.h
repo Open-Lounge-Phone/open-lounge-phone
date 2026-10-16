@@ -8,14 +8,16 @@
 
 #define STATUS_WIDTH 16  // what fits a line; longer text (names) scrolls on screen (marquee.c)
 #define STATUS_MAX 40    // the longest line kept
-#define MAX_BUTTONS 16
+#define KEYS_PER_PAGE 10  // speed-dial keys a page: one per digit key
+#define MAX_KEY_PAGES 10  // pages a phone can have (protocol MAX_KEY_PAGES)
+#define MAX_BUTTONS (KEYS_PER_PAGE * MAX_KEY_PAGES)  // keys as stored: (page - 1) * 10 + slot
 #define MAX_MISSED 8
 
 typedef enum { CONN_CONNECTING, CONN_ONLINE, CONN_OFFLINE } conn_t;
 
 typedef struct {
   bool present;               // a config arrived
-  char labels[MAX_BUTTONS][25];  // "" = unmapped
+  char labels[MAX_BUTTONS][25];  // by stored index ((page - 1) * 10 + slot); "" = unmapped
   bool quiet;
   char quiet_until[6];        // "HH:MM" or ""
   int missed_count;
@@ -52,6 +54,11 @@ typedef struct {
 
 /** Returns the number of lines (1 or 2) written to out. */
 int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]);
+/**
+ * The speed-dial pages the phone shows, in order (core `shownPages`): page 1 always, then each
+ * later page with keys. Returns how many (1..MAX_KEY_PAGES).
+ */
+int strip_key_pages(const phone_config_t *c, int out[MAX_KEY_PAGES]);
 /**
  * An add-on's name, always marked as one: "SEAT - ADD-ON" (the font has no middle dot), the name
  * shortened when it must be ("THINKIN - ADD-ON"). `dst` holds at least STATUS_MAX + 1 bytes.

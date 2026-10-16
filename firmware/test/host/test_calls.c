@@ -36,7 +36,8 @@ TEST(calls_last_dial_round_trips) {
   CHECK_STR(back.text, "204");
   CHECK(last_dial_decode("b:mc_xyz", &back) && back.kind == DIAL_BACK);
   CHECK_STR(back.text, "mc_xyz");
-  CHECK(!last_dial_decode("k:99", &back) && back.kind == DIAL_NONE);
+  CHECK(last_dial_decode("k:99", &back) && back.index == 99);  // page 10, key 0
+  CHECK(!last_dial_decode("k:100", &back) && back.kind == DIAL_NONE);
   CHECK(!last_dial_decode("e:2a", &back));
   CHECK(!last_dial_decode("x:1", &back));
   CHECK(!last_dial_decode("", &back));

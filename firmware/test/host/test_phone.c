@@ -377,3 +377,86 @@ TEST(phone_call_waiting_take_ignore_hang_up) {
   server(&s, "{\"t\":\"call.ringing\",\"callId\":\"c7\",\"from\":{\"label\":\"Ana\"}}");
   CHECK(s_n == 1 && !s.waiting_id[0]);
 }
+
+// Speed-dial pages (core device.test.ts "speed-dial pages"): BACK turns the page on the
+// speed-dial screen, a digit dials the page shown, and hanging up or a call returns to page 1.
+TEST(phone_key_pages) {
+  static const int pages[] = {1, 2, 4};
+  phone_state_t s;
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_page(&s, pages, 3);
+  CHECK(s.kind == PH_OFFHOOK && s.page == 2);
+  phone_page(&s, pages, 3);
+  CHECK(s.page == 4);
+  phone_page(&s, pages, 3);
+  CHECK(s.page == 0);  // wrapped to page 1
+  phone_page(&s, pages, 3);
+  phone_page(&s, pages, 3);
+  s_n = 0;
+  phone_button(&s, 9, emit);  // key 0 on page 4
+  CHECK(s.kind == PH_DIALING && s.button == 39);
+  CHECK_STR(s_sent[0], "{\"t\":\"button\",\"index\":9,\"page\":4}");
+  // The call ends: back on page 1, whose keys send no page (as before).
+  server(&s, "{\"t\":\"call.state\",\"callId\":\"c1\",\"state\":\"ended\",\"reason\":\"busy\"}");
+  CHECK(s.kind == PH_OFFHOOK && s.page == 0);
+  CHECK_STR(s.last_end, "busy");
+  s_n = 0;
+  phone_button(&s, 2, emit);
+  CHECK_STR(s_sent[0], "{\"t\":\"button\",\"index\":2}");
+  CHECK(s.button == 2);
+  // Hanging up returns to page 1 too.
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_page(&s, pages, 3);
+  phone_hook(&s, false, emit);
+  phone_hook(&s, true, emit);
+  CHECK(s.page == 0);
+  // Turning the page moves on from the last call's result.
+  snprintf(s.last_end, sizeof s.last_end, "busy");
+  s.lost = true;
+  phone_page(&s, pages, 3);
+  CHECK(s.page == 2 && !s.last_end[0] && !s.lost);
+}
+
+TEST(phone_key_pages_back_elsewhere) {
+  static const int pages[] = {1, 2};
+  static const int one[] = {1};
+  phone_state_t s;
+  // One page: BACK does nothing, as before.
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  snprintf(s.last_end, sizeof s.last_end, "busy");
+  phone_page(&s, one, 1);
+  CHECK(s.kind == PH_OFFHOOK && s.page == 0);
+  CHECK_STR(s.last_end, "busy");
+  // Not the speed-dial screen: ringing, in a call, a call on hold, handset down.
+  phone_init(&s);
+  phone_page(&s, pages, 2);
+  CHECK(s.kind == PH_IDLE && s.page == 0);
+  in_call(&s);
+  phone_page(&s, pages, 2);
+  CHECK(s.kind == PH_INCALL && s.page == 0);
+  phone_action(&s, ACT_HOLD, emit);
+  phone_page(&s, pages, 2);
+  CHECK(s.kind == PH_OFFHOOK && s.page == 0 && s.held[0]);
+  // A blind transfer picks from page 1.
+  in_call(&s);
+  phone_action(&s, ACT_TRANSFER, emit);
+  s_n = 0;
+  phone_button(&s, 3, emit);
+  CHECK_STR(s_sent[0], "{\"t\":\"call.transfer\",\"callId\":\"c1\",\"to\":{\"button\":3}}");
+  // Redial: the same page's key, whatever page is shown.
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  phone_page(&s, pages, 2);
+  s_n = 0;
+  phone_key(&s, 4, 1, emit);
+  CHECK_STR(s_sent[0], "{\"t\":\"button\",\"index\":4}");
+  phone_init(&s);
+  phone_hook(&s, true, emit);
+  s_n = 0;
+  phone_key(&s, 4, 3, emit);
+  CHECK_STR(s_sent[0], "{\"t\":\"button\",\"index\":4,\"page\":3}");
+  CHECK(s.button == 24);
+}

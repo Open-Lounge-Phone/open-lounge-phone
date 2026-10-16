@@ -25,7 +25,8 @@ typedef enum {
 typedef struct {
   phone_kind_t kind;
   char last_end[16];   // offhook: why the last call ended ("" = none)
-  int button;          // dialing: the key (-1 = extension/transfer)
+  int button;          // dialing: the key as stored, (page - 1) * 10 + slot (-1 = not a key)
+  int page;            // offhook: the page of speed-dial keys on screen (0 or 1 = page 1)
   char call_id[65];    // dialing (may be ""), incoming, incall
   char from[25];       // incoming: caller label; voicemail: the offer's name
   bool connected;      // incall
@@ -72,6 +73,12 @@ typedef void (*phone_emit_fn)(cJSON *msg);
 void phone_init(phone_state_t *s);
 void phone_hook(phone_state_t *s, bool up, phone_emit_fn emit);
 void phone_button(phone_state_t *s, int index, phone_emit_fn emit);
+/** A digit key (its slot, 0-9) on `page` (core input `button` with `page`: Redial); 0 = the
+ * page on screen. Handset up and nothing dialled; elsewhere it is phone_button. */
+void phone_key(phone_state_t *s, int slot, int page, phone_emit_fn emit);
+/** BACK on the speed-dial screen (core input `page`): the next of `pages` (the pages shown,
+ * strip_key_pages), wrapping to the first. Nothing with one page or off that screen. */
+void phone_page(phone_state_t *s, const int *pages, int n);
 /** In a call, MENU → 6: hand the call to an extension (blind transfer). */
 void phone_transfer_extension(phone_state_t *s, const char *number, phone_emit_fn emit);
 /** MENU → 6: dial an extension (team and organization spaces). Handset up, nothing dialled. */
