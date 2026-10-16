@@ -4,7 +4,13 @@ import { ownedSpacesBlockingDelete } from "@openloungephone/core";
 import type { Account, Device } from "@openloungephone/db";
 import type { Hono } from "hono";
 import { z } from "zod";
-import { unlinkAddon, unlinkAddonsOf } from "./addons.ts";
+import {
+  addonAddress,
+  holderAddress,
+  shareAddress,
+  unlinkAddon,
+  unlinkAddonsOf,
+} from "./addons.ts";
 import { Connections } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { ownHost } from "./federation.ts";
@@ -114,6 +120,32 @@ export function leavingRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator
         durationMs: r.durationMs,
         transcript: r.transcript,
         audio: `/api/recordings/${r.id}/audio`,
+      })),
+      // Add-ons linked to the account (its keys stay with the add-on), with their shares and
+      // who holds each; and shares of other people's add-ons on this server you hold.
+      addons: await Promise.all(
+        (await store.addons.list(account.id)).map(async (a) => {
+          const grants = await store.addons.grants(a.id);
+          return {
+            name: a.name,
+            address: addonAddress(env, account.handle, a.name),
+            space: (await store.getHousehold(a.householdId))?.name ?? "",
+            createdAt: new Date(a.createdAt).toISOString(),
+            shares: (await store.addons.shares(a.id)).map((sh) => ({
+              label: sh.label,
+              address: shareAddress(env, account.handle, a.name, sh.id),
+              holders: grants
+                .filter((g) => g.shareId === sh.id)
+                .map((g) => ({ name: g.name, address: holderAddress(env, g) })),
+            })),
+          };
+        }),
+      ),
+      addonSharesHeld: (await store.addons.heldBy(account.id)).map((h) => ({
+        owner: `${h.ownerHandle}@${host}`,
+        addon: h.addonName,
+        share: h.label,
+        address: shareAddress(env, h.ownerHandle, h.addonName, h.shareId),
       })),
     };
     return c.json(document, 200, {

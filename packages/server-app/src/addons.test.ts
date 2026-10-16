@@ -632,6 +632,34 @@ describe("sharing add-ons on one server", () => {
       },
       { id: "garden", label: "Garden", address: "jesse+seat+garden@a.test", holders: [] },
     ]);
+    // Each one's data download lists them too: Jesse's add-on with its holders, Ana's share.
+    const exported = async (token: string) =>
+      (await a.http("/account/export", { token })).json as Record<string, unknown>;
+    expect((await exported(jesse.token)).addons).toEqual([
+      {
+        name: "seat",
+        address: "jesse+seat@a.test",
+        space: "Jesse's home",
+        createdAt: expect.any(String),
+        shares: [
+          {
+            label: "Book club",
+            address: "jesse+seat+bookclub@a.test",
+            holders: [{ name: "Ana", address: "ana@a.test" }],
+          },
+          { label: "Garden", address: "jesse+seat+garden@a.test", holders: [] },
+        ],
+      },
+    ]);
+    expect((await exported(ana.token)).addonSharesHeld).toEqual([
+      {
+        owner: "jesse@a.test",
+        addon: "seat",
+        share: "Book club",
+        address: "jesse+seat+bookclub@a.test",
+      },
+    ]);
+    expect((await exported(cyToken)).addons).toEqual([]);
     expect((await a.http("/addons/shared", { token: ana.token })).json.held).toEqual([
       {
         grantId: grant.json.grantId,

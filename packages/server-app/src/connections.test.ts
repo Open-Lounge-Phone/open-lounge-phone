@@ -248,9 +248,15 @@ describe("local knocks", () => {
       { index: 1, label: "Jesse" },
     ]);
     // Bob's Connections says which of his phones Jesse can call; Jesse's own row has none.
-    const bobsRow = (await list(s, bob)).connections.find((c: { id: string }) => c.id === req?.id);
-    expect(bobsRow?.yourPhones).toEqual([{ id: deviceId, label: "Kid phone" }]);
-    expect(jessesRow?.yourPhones).toEqual([]);
+    const rows = async (who: Person) =>
+      (await s.http("/connections", { token: who.token })).json.connections as {
+        id: string;
+        yourPhones: unknown;
+      }[];
+    expect((await rows(bob)).find((c) => c.id === req?.id)?.yourPhones).toEqual([
+      { id: deviceId, label: "Kid phone" },
+    ]);
+    expect((await rows(jesse))[0]?.yourPhones).toEqual([]);
     // Jesse disconnects: the entry and its key are gone.
     await s.http(`/connections/${jessesRow?.id}`, { method: "DELETE", token: jesse.token });
     expect(await s.store.listRemoteContacts(deviceId)).toEqual([]);

@@ -96,6 +96,29 @@ and, later, for **moving an account** to another server while keeping its connec
       "transcript": "…",
       "audio": "/api/recordings/rec_…/audio"
     }
+  ],
+  "addons": [
+    {
+      "name": "seat",
+      "address": "jesse+seat@hub.openloungephone.app",
+      "space": "Jesse's home",
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "shares": [
+        {
+          "label": "Book club",
+          "address": "jesse+seat+bookclub@hub.openloungephone.app",
+          "holders": [{ "name": "Ana", "address": "ana@hub.openloungephone.app" }]
+        }
+      ]
+    }
+  ],
+  "addonSharesHeld": [
+    {
+      "owner": "jo@hub.openloungephone.app",
+      "addon": "echo",
+      "share": "Garden",
+      "address": "jo+echo+garden@hub.openloungephone.app"
+    }
   ]
 }
 ```
@@ -114,6 +137,10 @@ and, later, for **moving an account** to another server while keeping its connec
   everyone on it) carries `recordingId` and `recording`, the path of its audio.
 - `recordings` lists the recordings of calls and rooms you were in or recorded (up to 1,000),
   with their transcripts where the space transcribes; the audio is at `audio` (signed-in `GET`).
+- `addons` lists the add-ons linked to your account (docs/add-ons.md): name, address, the space
+  it was linked in, and each share with who holds it. `addonSharesHeld` lists the shares of other
+  people's add-ons on this server that you hold (shares from another server come with that
+  connection, on that server).
 - `missedCalls` lists calls that rang you (any of your phones and apps, in any space) that nobody
   answered and that left no message: who (`peer`, `peerLabel`, named as in `calls`) and when
   (`at`), with `seenAt` once you cleared them. Kept as long as the space's history setting keeps
