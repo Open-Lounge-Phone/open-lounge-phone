@@ -1652,7 +1652,7 @@ describe("0032 add-on about and mutes", () => {
     await s.addons.setShares(seat.id, [{ id: "bookclub", label: "Book club" }]);
     const local = { host: "", accountId: bob.id, handle: "bob", name: "Bob", connectionId: null };
     const g = await s.addons.grant(seat.id, "bookclub", local, T0);
-    expect(migrate(old.db)).toEqual(["0032_addon_about.sql"]);
+    expect(migrate(old.db)).toContain("0032_addon_about.sql");
     // As it was, and it hasn't said anything yet.
     expect(await s.addons.get(seat.id)).toMatchObject({ name: "seat", about: null });
     expect(await s.addons.getGrant(g?.id ?? "")).toMatchObject({ shareId: "bookclub" });
@@ -1689,6 +1689,79 @@ describe("0032 add-on about and mutes", () => {
     expect(await s.addons.contacts(bob.id)).toEqual([{ address: "mom+seat@x", label: "Seat" }]);
     await s.addons.removeContact(bob.id, "MOM+SEAT@x");
     expect(await s.addons.contacts(bob.id)).toEqual([]);
+    old.db.close();
+  });
+});
+
+describe("0033 speed-dial pages", () => {
+  it("keeps every phone's keys and allows keys 0-99", async () => {
+    const old = openBefore("0033");
+    const s = new Store(old.sql);
+    const { household: hh, guardian } = await s.createHousehold(
+      { name: "Home", timeZone: "UTC", guardianName: "Mom" },
+      T0,
+    );
+    const { code } = await s.createPairing(KEY, T0);
+    const device = await s.claimPairing({ code, householdId: hh.id, name: "Kid" }, T0);
+    if (!device) throw new Error("no phone");
+    const bob = await s.createAccount({ name: "Bob", handle: "bob" }, T0);
+    old.db.exec(`
+      INSERT INTO connections (id, account_id, peer_host, peer_handle, peer_account, peer_name,
+        state, direction, created_at, updated_at) VALUES ('con_1', '${guardian.accountId}', '',
+        'bob', '${bob?.id}', 'Bob', 'active', 'none', 1, 1);
+    `);
+    await s.upsertContact(device.id, {
+      id: guardian.id,
+      label: "Mom",
+      canCallDevice: true,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    });
+    const rc = await s.upsertRemoteContact(device.id, "con_1", {
+      label: "Bob",
+      canCallDevice: true,
+      deviceCanCall: true,
+      bypassQuietHours: false,
+    });
+    const room = await s.rooms.create(
+      {
+        householdId: hh.id,
+        kind: "party",
+        name: "Den",
+        handle: null,
+        ownerAccount: guardian.accountId,
+        access: "space",
+      },
+      T0,
+    );
+    if (!room) throw new Error("no room");
+    const rk = await s.rooms.addToPhone(device.id, room.id, "Den");
+    const ln = await s.lines.addToPhone(device.id, "help@x.example", "Help");
+    await s.setButton(device.id, 0, guardian.id);
+    await s.setButton(device.id, 12, rc); // keys 10-15 were allowed (no app set them)
+    await s.setButton(device.id, 5, rk);
+    await s.setButton(device.id, 9, ln);
+    // Before: nothing past 15.
+    await expect(s.setButton(device.id, 16, guardian.id)).rejects.toThrow();
+    expect(migrate(old.db)).toEqual(["0033_key_pages.sql"]);
+    expect([...(await s.listButtons(device.id))]).toEqual([
+      [0, guardian.id],
+      [5, rk],
+      [9, ln],
+      [12, rc],
+    ]);
+    // After: ten pages of ten, of every kind.
+    await s.setButton(device.id, 99, guardian.id);
+    await s.setButton(device.id, 98, rc);
+    await s.setButton(device.id, 57, rk);
+    await s.setButton(device.id, 40, ln);
+    await expect(s.setButton(device.id, 100, guardian.id)).rejects.toThrow();
+    await expect(s.setButton(device.id, 100, rc)).rejects.toThrow();
+    expect((await s.listButtons(device.id)).get(99)).toBe(guardian.id);
+    expect((await s.listButtons(device.id)).size).toBe(8);
+    // Still cascades with the phone and the person.
+    await s.removeContact(device.id, guardian.id);
+    expect((await s.listButtons(device.id)).has(99)).toBe(false);
     old.db.close();
   });
 });
