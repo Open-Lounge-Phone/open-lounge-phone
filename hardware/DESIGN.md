@@ -434,7 +434,8 @@ Wi-Fi the PHY is in power-down (PHYCFGR) and woken every 30 s for a 6 s look (wh
 together: the list under the power table). Setup needs no Wi-Fi on a cable. Bring-up: BRINGUP.md
 §8.
 
-**Not changed:** the other cases (plush, flat case, faceplate) have no RJ45 opening or hood yet;
+**Not changed:** the plush case and the faceplate have no RJ45 opening or hood yet (the flat
+case's front plate has a notch for the RJ45 and PS1);
 the 2.9" display option is unaffected (J4/PS1 are right of its standoffs).
 
 ## 13. Sources

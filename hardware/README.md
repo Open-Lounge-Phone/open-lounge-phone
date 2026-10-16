@@ -28,8 +28,8 @@ the bottom, DRC clean, image in `build/review/placement.png` (`make placement`);
   - [enclosure/PROTO_BOX.md](enclosure/PROTO_BOX.md): the core shell (tray, lid, bezel, a hinged
     handset cradle) for the placed board and what designs built around it must keep.
   - [enclosure/PLUSH.md](enclosure/PLUSH.md): the cushion desk case.
-  - [enclosure/FLATCASE.md](enclosure/FLATCASE.md): the laser-cut sandwich (one sheet of 3 mm
-    acrylic or plywood, M3 standoffs).
+  - [enclosure/FLATCASE.md](enclosure/FLATCASE.md): the laser-cut desk phone (one sheet of 3 mm
+    acrylic or plywood, M3 standoffs, the core shell's hinged cradle).
 
 ## Building the outputs
 
