@@ -1,4 +1,5 @@
 /** Typed client for the Open Lounge Phone REST API (`/api/*`). */
+import type { ActivityRow } from "./activityText.ts";
 import type { GoneNote, HeldStopped } from "./addonText.ts";
 import type { SpaceType } from "./spaces.ts";
 
@@ -1080,6 +1081,12 @@ export function createApi(opts: ApiOptions) {
     muteAddon: (address: string, muted: boolean) =>
       request<void>("PUT", "/addons/muted", { address, muted }),
     leaveShare: (address: string) => request<void>("POST", "/addons/leave", { address }),
+    /** A kids' phone's call activity (guardians), a page at a time. */
+    phoneCalls: (deviceId: string, before?: string) =>
+      request<{ calls: ActivityRow[]; more: boolean }>(
+        "GET",
+        `/devices/${enc(deviceId)}/calls${before ? `?before=${enc(before)}` : ""}`,
+      ),
     /** Test connection: your add-on, or (by its address) a share you hold. */
     testAddon: (id: string) => request<AddonTestResult>("POST", `/addons/${enc(id)}/test`),
     testShare: (address: string) => request<AddonTestResult>("POST", "/addons/test", { address }),

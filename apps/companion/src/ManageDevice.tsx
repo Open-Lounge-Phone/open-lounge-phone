@@ -1,5 +1,6 @@
 import { leftPhoneName } from "@openloungephone/core";
 import { useCallback, useEffect, useState } from "react";
+import { type ActivityRow, activityText } from "./activityText.ts";
 import { addonAddressProblem, isAddonAddress } from "./addonText.ts";
 import type {
   Api,
@@ -18,7 +19,7 @@ import { HomeFeaturesCard } from "./HomeFeatures.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
 import { KeyPages } from "./KeyPages.tsx";
 import { MODE_TEXT } from "./pairMode.ts";
-import { formatLastSeen } from "./text.ts";
+import { formatLastSeen, formatWhen } from "./text.ts";
 
 interface Props {
   api: Api;
@@ -175,6 +176,8 @@ export function ManageDevice({
           onError={setError}
         />
       )}
+
+      {device && guardian && device.mode === "kids" && <CallActivity api={api} device={device} />}
 
       {device && guardian && !device.ownerUserId && device.kind !== "lounge" && (
         <>
@@ -606,5 +609,82 @@ function PhoneSettings({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * A kids' phone's call activity, for its guardians: every call in and out, newest first, with
+ * who, when, how long, and why one didn't go through. "Show older" pages back.
+ */
+function CallActivity({ api, device }: { api: Api; device: DeviceSummary }) {
+  const [rows, setRows] = useState<ActivityRow[]>();
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const load = useCallback(
+    async (before?: string) => {
+      setBusy(true);
+      try {
+        const page = await api.phoneCalls(device.id, before);
+        setRows((old) => (before ? [...(old ?? []), ...page.calls] : page.calls));
+        setMore(page.more);
+        setError(undefined);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [api, device.id],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const now = Date.now();
+  return (
+    <section className="stack call-activity" aria-label="Call activity">
+      <h3>Call activity</h3>
+      <p className="muted small">
+        Every call to and from {device.name}: who, when, how long, and why one didn't go through.
+        Nothing that was said. Kept as long as this household keeps its call history.
+      </p>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {rows && rows.length === 0 && <p className="muted small">No calls yet.</p>}
+      {rows && rows.length > 0 && (
+        <ul className="stack activity-list">
+          {rows.map((r) => {
+            const t = activityText(r);
+            return (
+              <li key={r.id} className="row wrap activity">
+                <span className="grow">
+                  <strong>{t.title}</strong>
+                  <span className="muted small"> · {formatWhen(r.at, now)}</span>
+                  <br />
+                  <span
+                    className={`small ${r.refused || (!r.answered && r.direction === "in") ? "warning" : "muted"}`}
+                  >
+                    {t.detail}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {more && rows && rows.length > 0 && (
+        <button
+          type="button"
+          className="link"
+          disabled={busy}
+          onClick={() => void load(rows[rows.length - 1]?.cursor)}
+        >
+          {busy ? "Loading…" : "Show older"}
+        </button>
+      )}
+    </section>
   );
 }
