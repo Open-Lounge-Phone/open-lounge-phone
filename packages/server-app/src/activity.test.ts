@@ -80,6 +80,7 @@ describe("a kids' phone's call activity", () => {
     await phone.next("call.ringing");
     s.timers.advance(60_000);
     await momApp.nextState("ended");
+    await phone.nextState("ended");
     s.timers.advance(1000);
     // 3. Dad isn't on the phone's list.
     const dadApp = await s.connectApp(dadToken);
@@ -115,6 +116,7 @@ describe("a kids' phone's call activity", () => {
     s.timers.advance(1000);
     // 6. The phone is offline when Mom calls.
     await offline(phone, momApp);
+    s.timers.advance(1000);
     momApp.write({ t: "call.dial", deviceId });
     expect(await momApp.nextState("ended")).toMatchObject({ reason: "unreachable" });
 
