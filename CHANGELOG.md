@@ -60,6 +60,13 @@ an add-on on a server still on 0.8.0 is told "You can't reach it now."
   0034, additive). A line on the Add-ons tab says how to reach an add-on linked on your other
   server (connect your two accounts, then give the other one a share); the two-server test runs
   that path.
+- **A kids' phone's call activity** for its guardians, on the phone's Manage page: every call in
+  and out (answered, not answered, missed, refused with why in plain words: not on its list,
+  quiet hours, busy, offline, or the words the caller got), with time, who and duration, newest
+  first, with **Show older** (`GET /devices/:id/calls?before=`, guardians, kids' phones only).
+  Refused calls to and from a kids' phone now get a call-log row (`call_log.refused`, `note`;
+  migration 0036), including someone on another server not on its list. Kept within the space's
+  history retention; no content.
 - **Add-on shares that stopped working are shown, not hidden**: under Add-ons → Shared with you,
   with a plain reason (add-ons off on this server or that one, its owner suspended, you're no
   longer connected) and **Give it back**. A share that went stays there too, saying why (removed,

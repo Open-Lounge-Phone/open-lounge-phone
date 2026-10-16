@@ -83,6 +83,14 @@ the greeting says, recorded in the app (see [Voicemail & greetings](/how-to/voic
 The phone never records your child: no voicemail from it when a call isn't answered, no greeting
 recorded on it, and no call recording.
 
+## See who called
+
+The phone's **Manage** page has **Call activity**, for guardians only: every call to and from the
+phone, newest first, with when, who and how long. Calls that didn't go through say why, in plain
+words: "Dad tried to call · Not on the phone's list", "Tried to call Grandma · Quiet hours",
+"Missed call from Mom · left a voicemail". **Show older** goes further back, as far as your
+household keeps its call history (**Settings → Privacy**). Nothing that was said is in it.
+
 ## A daily check-in for someone you look after
 
 For a grandparent or anyone living alone, the [labs firmware](/extend/labs/) adds a daily

@@ -55,6 +55,12 @@ kept like any voicemail, for the guardians.
 
 - The people in a space see its members; guardians also see its phones, voicemail and Lounge
   history.
+- **A kids' phone's call activity** is shown to its guardians only, on the phone's Manage page:
+  every call to and from it (answered, not answered, missed, and the ones that never rang, with
+  why: not on its list, quiet hours, busy, offline), with time, who and how long, newest first
+  (`GET /api/devices/:id/calls`, a page at a time). It's the space's call log for that phone,
+  kept as long as the space keeps its call history; it holds no audio or words, only whether a
+  missed caller left a voicemail.
 - Your connections see your name and address, and your availability only if you turn on "Share
   my availability".
 - Other servers learn only what's needed for a knock, a call or a voicemail between their people
