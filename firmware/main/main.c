@@ -36,7 +36,6 @@
 #include "storage.h"
 #include "screens.h"
 #include "selftest.h"
-#include "snake.h"
 #include "strip.h"
 #include "vmleave.h"
 #include "vmplay.h"
@@ -454,9 +453,9 @@ static void render(void) {
   for (int i = 0; i < n; i++) marquee(lines[i], sizeof lines[i], full[i], line_capacity(w, h, n), step);
   if (s_boot_until && now >= s_boot_until) {
     s_boot_until = 0;
-    if (!snake_active()) display_pixels(NULL);
+    display_pixels(NULL);
   }
-  if (qr && !snake_active() && !s_boot_until && !s_setup_qr) {
+  if (qr && !s_boot_until && !s_setup_qr) {
     uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
     if (fb) {
       screen_setup(fb, w, h, prov_ssid(), prov_password());
@@ -466,10 +465,10 @@ static void render(void) {
     }
   } else if (!qr && s_setup_qr) {
     s_setup_qr = false;
-    if (!snake_active()) display_pixels(NULL);
+    display_pixels(NULL);
   }
   bool about = s_menu.screen == MENU_ABOUT;
-  if (about && !s_about_px && !snake_active() && !s_boot_until) {
+  if (about && !s_about_px && !s_boot_until) {
     uint8_t *fb = calloc(1, (size_t)(w * h + 7) / 8);
     if (fb) {
       char url[PROV_SERVER_MAX], host[PROV_SERVER_MAX];
@@ -484,14 +483,14 @@ static void render(void) {
     }
   } else if (!about && s_about_px) {
     s_about_px = false;
-    if (!snake_active() && !s_setup_qr) display_pixels(NULL);
+    if (!s_setup_qr) display_pixels(NULL);
   }
   // Handset up, nothing dialled: whose phone this is and who is on each key (docs/phone-ux.md).
   bool keys = n_status > 0 && s_phone.kind == PH_OFFHOOK && !s_phone.held[0] && s_authed &&
               lounge_keys_live(&s_lounge) && s_lounge.challenge < 0 &&
               s_conn == CONN_ONLINE && !s_code[0] && s_menu.screen == MENU_CLOSED &&
               !selftest_active() && !lan_busy();  // the house intercom's screen instead
-  if (keys && !snake_active() && !s_boot_until) {
+  if (keys && !s_boot_until) {
     char title[STATUS_MAX + 1] = "SPEED DIAL", footer[96], sig[sizeof s_keys_sig];
     if (s_cfg.owner_mode[0]) strip_owner_line(title, &s_cfg);
     if (n_status == 2) snprintf(footer, sizeof footer, "%s - %s", full[0], full[1]);
@@ -522,14 +521,14 @@ static void render(void) {
     }
   } else if (s_keys_px) {
     s_keys_px = false;
-    if (!snake_active() && !s_setup_qr && !s_about_px) display_pixels(NULL);
+    if (!s_setup_qr && !s_about_px) display_pixels(NULL);
   }
 
   // A free Lounge phone: its takeover code, redrawn when the code (or the hint) changes.
   bool lqr = s_authed && s_conn == CONN_ONLINE && !s_code[0] &&
              lounge_show_qr(&s_lounge, s_phone.kind == PH_IDLE && !s_hook_up,
                             s_menu.screen != MENU_CLOSED, now);
-  if (lqr && !snake_active() && !s_boot_until && !s_setup_qr) {
+  if (lqr && !s_boot_until && !s_setup_qr) {
     char sig[sizeof s_lounge_qr_shown];
     snprintf(sig, sizeof sig, "%.24s|%.38s", s_lounge.nonce, n_status > 1 ? full[1] : "");
     if (!s_lounge_qr_px || strcmp(sig, s_lounge_qr_shown)) {
@@ -549,20 +548,20 @@ static void render(void) {
     }
   } else if (s_lounge_qr_px) {
     s_lounge_qr_px = false;
-    if (!snake_active() && !s_setup_qr && !s_about_px && !s_keys_px) display_pixels(NULL);
+    if (!s_setup_qr && !s_about_px && !s_keys_px) display_pixels(NULL);
   }
 
   // MENU → 7: the phone check page, redrawn every 10 s while open (signal, uptime, memory).
   bool check = s_menu.screen == MENU_CHECK;
   // Every 10 s; every second while it shows the mic's live level (the handset is up).
   int64_t every = s_hook_up ? 1000 : 10000;
-  if (check && !snake_active() && !s_boot_until && (!s_check_px || now - s_check_drawn >= every)) {
+  if (check && !s_boot_until && (!s_check_px || now - s_check_drawn >= every)) {
     draw_check(w, h, now);
     s_check_px = true;
     s_check_drawn = now;
   } else if (!check && s_check_px) {
     s_check_px = false;
-    if (!snake_active() && !s_setup_qr && !s_about_px && !selftest_active()) display_pixels(NULL);
+    if (!s_setup_qr && !s_about_px && !selftest_active()) display_pixels(NULL);
   }
   if (selftest_active()) {
     if (selftest_dirty() || !s_selftest_px) {
@@ -578,7 +577,7 @@ static void render(void) {
     s_selftest_px = false;
     display_pixels(NULL);
   }
-  if (snake_active() || s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px ||
+  if (s_boot_until || s_setup_qr || s_about_px || s_check_px || s_selftest_px ||
       s_keys_px || s_lounge_qr_px) {
     s_shown_n = -1;  // a pixel screen owns the display; redraw the status after it
   } else if (n != s_shown_n || memcmp(lines, s_shown, sizeof s_shown)) {
@@ -1215,11 +1214,6 @@ static void on_key(int index) {
     selftest_key(index, now);
     return;
   }
-  if (snake_key(index, now)) return;
-  if (index == KEY_MENU_INDEX && snake_menu_press(now)) {
-    menu_close(&s_menu);
-    return;
-  }
   menu_screen_t was = s_menu.screen;
   // MENU opens the menu in every state; in a call or a room it opens the call screen.
   s_menu.n_actions = phone_actions(&s_phone, s_menu.actions);
@@ -1322,7 +1316,6 @@ static void on_hook(bool up) {
   if (!up) vm_leave_finish(now_ms());  // hanging up sends a message being recorded
   if (!up) vmplay_stop();              // …and stops one playing
   selftest_hook(up, now_ms());
-  snake_stop();  // lifting or hanging up the handset ends a game
   if (s_menu.screen != MENU_CLOSED) menu_close(&s_menu);
   // The intercom answered: the phone's own call logic leaves the lift alone. Hanging up always
   // reaches it too, so a phone lifted to call a room isn't left off the hook.
@@ -1724,8 +1717,6 @@ void app_main(void) {
       }
     }
     tick();
-    if (s_phone.kind == PH_INCOMING) snake_stop();  // a call wins
-    snake_tick(now_ms());
 #if BOARD_HAS_ETHERNET
     network_changed(net_select(NS_TICK, network_busy()));  // looks for a cable, timeouts
     if (!s_prov_booted && net_settled()) {

@@ -1,3 +1,4 @@
+#include "esp_heap_caps.h"
 #include "media.h"
 
 #include <stdio.h>
@@ -93,7 +94,9 @@ static volatile bool s_closing;  // close_peer: its own disconnect isn't news fo
 static int on_state(esp_peer_state_t state, void *ctx) {
   if (s_closing) return 0;
   s_last_state = state;
-  ESP_LOGI(TAG, "RTC state %s (%d ms)", state_name(state), (int)(now_ms() - s_started_ms));
+  ESP_LOGI(TAG, "RTC state %s (%d ms; internal free %u, largest %u)", state_name(state),
+           (int)(now_ms() - s_started_ms), (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   if (state == ESP_PEER_STATE_CONNECTED) {
     s_connected = true;
     s_connected_ms = now_ms();

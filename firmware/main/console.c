@@ -10,6 +10,7 @@
 #include "app.h"
 #include "audio.h"
 #include "audio_dev.h"
+#include "esp_heap_caps.h"
 #include "media.h"
 #include "display.h"
 #include "esp_console.h"
@@ -67,6 +68,18 @@ static int cmd_server(int argc, char **argv) {
   }
   printf("server saved: %s\n", next[0] ? next : "none");
   app_post(EV_RECONNECT, 0, NULL);
+  return 0;
+}
+
+static int cmd_mem(int argc, char **argv) {
+  // Internal RAM is what Wi-Fi, TLS/DTLS and lwIP need; a large packet needs a block this size.
+  printf("internal free %u, largest block %u, lowest ever %u; DMA free %u, largest %u; PSRAM free %u\n",
+         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+         (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA),
+         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
   return 0;
 }
 
@@ -298,6 +311,7 @@ void console_start(void) {
       {.command = "wifi", .help = "wifi <ssid> [password] | wifi forget: save (or forget) Wi-Fi", .func = cmd_wifi},
       {.command = "server", .help = "server [<address> | hub | none]: show or set the server", .func = cmd_server},
       {.command = "status", .help = "phone, connection and Wi-Fi state", .func = cmd_status},
+      {.command = "mem", .help = "free internal, DMA and PSRAM memory", .func = cmd_mem},
       {.command = "key", .help = "key <0-9|menu|back>: press a key", .func = cmd_key},
       {.command = "hook", .help = "hook <up|down>: lift or hang up the handset", .func = cmd_hook},
       {.command = "lounge", .help = "Lounge phone: who is using it, and the takeover link", .func = cmd_lounge},

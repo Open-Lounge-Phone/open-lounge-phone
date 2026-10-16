@@ -27,14 +27,6 @@ config OLP_BOARD_V0901
 
 endchoice
 
-config OLP_SNAKE
-    bool "Games easter egg (MENU ten times in a row)"
-    default n
-    help
-        A personal extra: press MENU ten times in a row (no gap over 1.5 s) for a games menu:
-        1 Snake (3 up, 8 down, 7 left, 9 right), 2 Memory. BACK goes back, MENU plays again.
-        Off in shared builds.
-
 config OLP_UI_V2
     bool "Framed screens (title bar, rules, separators)"
     default n
