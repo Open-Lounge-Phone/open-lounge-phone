@@ -637,6 +637,8 @@ export interface RecordingSummary {
   durationMs: number;
   transcript: string | null;
   transcriptStatus: TranscriptStatus;
+  /** You may delete it: you made it, or you're a guardian/admin of its space. */
+  canDelete?: boolean;
 }
 
 /** One connection's history (GET /connections/:id/timeline). */

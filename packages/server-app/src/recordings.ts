@@ -151,7 +151,18 @@ export function recordingRoutes(api: Hono<Vars>, env: ServerEnv): void {
     const space = user.role === "guardian" ? await store.recordings.list(user.householdId) : [];
     const seen = new Set<string>();
     const all = [...space, ...mine].filter((r) => !seen.has(r.id) && seen.add(r.id));
-    return c.json(all.sort((a, b) => b.startedAt - a.startedAt).map(view));
+    const accountId = c.get("account").id;
+    return c.json(
+      all
+        .sort((a, b) => b.startedAt - a.startedAt)
+        // Who may delete it (as DELETE decides): this space's guardians, or whoever made it.
+        .map((r) => ({
+          ...view(r),
+          canDelete:
+            (user.role === "guardian" && r.householdId === user.householdId) ||
+            r.accountId === accountId,
+        })),
+    );
   });
 
   api.get("/recordings/:id/audio", async (c) => {

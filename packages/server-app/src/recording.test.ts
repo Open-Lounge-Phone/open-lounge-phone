@@ -113,6 +113,19 @@ describe("recording in a space", () => {
     const deeToken = await s.store.createSession(dee.id, s.timers.now);
     expect((await audio(deeToken)).status).toBe(404);
     expect((await s.http("/recordings", { token: deeToken })).json).toEqual([]);
+    // Each list says who may delete it, as DELETE decides: the one who made it and the admins,
+    // not the other party.
+    const benMade = notices(ben).some((m) => m.recording?.ticket);
+    const [maker, other] = benMade ? [t.ben, t.cy] : [t.cy, t.ben];
+    const canDelete = async (token: string) =>
+      (await s.http("/recordings", { token })).json[0]?.canDelete;
+    expect(await canDelete(maker.token)).toBe(true);
+    expect(await canDelete(t.olga.token)).toBe(true);
+    expect(await canDelete(other.token)).toBe(false);
+    expectStatus(
+      await s.http(`/recordings/${res.json.id}`, { method: "DELETE", token: other.token }),
+      404,
+    );
     // Turning it on is in the audit trail.
     const audit = (await s.http("/space/audit", { token: t.olga.token })).json;
     expect(audit.map((e: { action: string }) => e.action)).toContain("recording.update");

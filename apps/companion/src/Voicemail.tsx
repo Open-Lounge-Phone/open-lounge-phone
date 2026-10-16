@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api, DeviceSummary, VoicemailSummary } from "./api.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
+import { Recordings } from "./Recordings.tsx";
 import { formatDuration, formatWhen, transcriptText } from "./text.ts";
 
 const POLL_MS = 5000;
@@ -122,6 +123,7 @@ export function VoicemailInbox({ api, devices, refreshKey, onChanged, onBack }: 
           </li>
         ))}
       </ul>
+      <Recordings api={api} refreshKey={refreshKey} />
     </section>
   );
 }
