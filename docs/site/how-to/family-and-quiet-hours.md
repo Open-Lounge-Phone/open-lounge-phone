@@ -25,7 +25,10 @@ Open a phone's **Manage** page. Under **Allowed people**, add someone and set:
 ## Speed-dial keys
 
 Still on **Manage**, assign people to keys **1–9** and **0**. The names appear on the phone's
-status strip; **Print key labels** also prints them for relegendable keycaps.
+screen when the handset is lifted; **Print key labels** also prints them for relegendable
+keycaps. More than ten people? **Add page** gives ten more keys: on the phone, **BACK** turns
+to them with the handset up (see [More than ten people](/how-to/using-the-phone/#more-than-ten-people)).
+Every key follows the same list and quiet hours, whatever page it's on.
 
 ## People from other households or servers
 
@@ -51,7 +54,8 @@ Windows can run past midnight, and the times are in your household's time zone (
 
 The phone keeps things simple and honest, so a child always knows what happened:
 
-- **Lifting the handset** shows who is on each key. A key with nobody on it shows a dash.
+- **Lifting the handset** shows who is on each key. A key with nobody on it shows a dash. With
+  more than one page of people, the bottom line says `PAGE 1/2 - BACK: NEXT PAGE`.
 - **A missed call** shows the caller's name with `ASK A GROWN-UP`: the message waits for you in
   the app, with a transcript, and the reminder clears once you've heard it.
 - **A call that doesn't go through** says why: `BUSY`, `NO ANSWER`, `NOT ALLOWED`, or

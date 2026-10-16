@@ -21,9 +21,11 @@ Twelve keys in two rows:
 
 - **1 to 9 and 0 are your people.** Each digit key calls whoever is on it. The names live on the
   keycaps (print them from the app: **Manage phone → Print key labels**) and on the screen when
-  you lift the handset.
+  you lift the handset. More than ten people? They go on more pages of ten (see
+  [More than ten people](#more-than-ten-people)).
 - **MENU** opens the menu from anywhere, even in a call (then it opens the call screen).
-- **BACK** steps out of a menu, one level at a time.
+- **BACK** steps out of a menu, one level at a time. With the handset up it turns to the next page
+  of people, when there's more than one.
 - **The hook** is the switch the handset rests on. Lifting the handset is how you start a call
   and how you answer one; putting it down hangs up.
 
@@ -68,6 +70,17 @@ phone carries one call's audio at a time.
 **If the connection drops** (a Wi-Fi blip), the screen says `RECONNECTING` instead of leaving
 you in silence, and the call carries on once it's back. If it can't come back within about
 20 seconds, the call ends on both sides with `CONNECTION LOST`.
+
+## More than ten people
+
+In the app, a phone's keys come in pages of ten: **Manage phone → Keys → Add page** gives ten
+more (up to ten pages). On the phone, lift the handset: the screen shows page 1 and, along the
+bottom, `PAGE 1/3 - BACK: NEXT PAGE`. Press **BACK** to see the next page and its people, then
+press a digit to call whoever is on that key of the page you're looking at. After the last page
+BACK goes back to the first; empty pages are skipped. Hanging up always starts again on page 1.
+
+To move someone to another page, use **Move someone to another key** under the keys in the app
+(whoever is already on that key swaps places with them). The printed key labels show page 1.
 
 ## Call waiting
 

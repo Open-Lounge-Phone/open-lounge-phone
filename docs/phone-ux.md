@@ -58,7 +58,7 @@ Highest priority first: the first row that applies is shown.
 | They put you on hold | `ON HOLD` / name |
 | In a call, another call waiting | `WAITING: MOM` (a long name: `CALL WAITING` / the name, in turn with the keys) / `1 TAKE 2 IGNORE`, with the call-waiting beep in the earpiece (see "Call waiting") |
 | In a room | the room's name / `3 IN ROOM` (`MUTED`, `REC` when they apply); `STILL THERE?` / `PRESS ANY KEY` before an idle room drops you; `CLOSING SOON` / the room's name a minute before a party line's hours end. When a party line with hours opens, a phone with its key shows `PARTY LINE OPEN` / its name with a chime (a notice): lift and press the key to join. The phone shows `IN ROOM` / `MUTED` until rooms get audio on the phone (planned) |
-| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL`, or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED`, `CALL FAILED` or `CONNECTION LOST` (the call's audio connection dropped and couldn't be restored, on either side) `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
+| Handset up, nothing dialled | the **key map**, drawn as a page: whose phone it is in the title bar (`KIDS: SMITHS`, `ANA'S PHONE`, `LOUNGE: STUDIO`; `SPEED DIAL` before the server says), then who is on each digit key of the page shown in two columns like the key rows (1-5 left, 6-0 right; a filled keycap = someone is on it, `-` = nobody), and at the bottom `PRESS A KEY TO CALL` (with more than one page of keys: `PAGE 2/3 - BACK: NEXT PAGE`, see "Speed-dial pages"), or after a call that didn't go through `BUSY`, `NO ANSWER`, `DECLINED`, `UNAVAILABLE`, `NOT ALLOWED`, `CALL FAILED` or `CONNECTION LOST` (the call's audio connection dropped and couldn't be restored, on either side) `- PRESS A KEY` (a Lounge phone with nobody signed in that tried a public line: `SIGN IN TO CALL - PRESS A KEY`) |
 | Not answered, voicemail offered | `LEAVE A MESSAGE` / name, a beep, then `RECORDING 01:59` / `HANG UP TO SEND` (counting down to the limit, 2 minutes) |
 | Just hung up after a message | `SENDING MESSAGE`, then `MESSAGE SENT` or `MESSAGE NOT SENT` (4 s) |
 | Listening to voicemail | `MESSAGE 1 OF 3` / who / `00:04 OF 00:12` / `1 AGAIN 2 NEXT`; then `NO MORE MESSAGES` |
@@ -72,13 +72,13 @@ Highest priority first: the first row that applies is shown.
 
 ## Keys by state
 
-Digits 1-9 and 0 are the speed-dial keys (protocol button 0-8 and 9). MENU and BACK never
-leave the phone.
+Digits 1-9 and 0 are the speed-dial keys (protocol button 0-8 and 9), in pages of ten (see
+"Speed-dial pages"). MENU and BACK never leave the phone.
 
 | State | Digits | MENU | BACK | Hook |
 |---|---|---|---|---|
 | Ready (handset down) | nothing (a click); with a notice showing: clear it; with a daily check-in due: 1 is I'm OK | open the menu | with a notice showing: clear it | lift: dial tone (and a notice's recording) |
-| Handset up | call that key's person (while a notice's recording plays: stop it and clear the notice) | open the menu | nothing (while a notice's recording plays: stop it and clear the notice) | down: back to ready |
+| Handset up | call that key's person on the page shown (while a notice's recording plays: stop it and clear the notice) | open the menu | the next page of keys, from the last back to the first (with one page: nothing); while a notice's recording plays: stop it and clear the notice | down: back to ready (and page 1) |
 | Calling | nothing | open the menu | nothing | down: cancel |
 | Waiting in a public line's queue | 1: leave a voicemail instead; 2: call me back (each when offered) | open the menu | nothing | down: cancel |
 | Ringing | nothing | open the menu | silence the ringer on this phone | lift: answer |
@@ -92,6 +92,27 @@ leave the phone.
 | Power-on with MENU+BACK held | | | | 3 s: setup network, 10 s: factory reset |
 
 The menu closes by itself after 20 s without a key.
+
+### Speed-dial pages
+
+A phone can have more than ten people on its keys: the app keeps them in pages of ten (Manage
+phone → Keys → Add page; up to 10 pages, 100 keys), one key per digit on each page.
+
+- **Handset up, the key map showing: BACK shows the next page** that has someone on it, and from
+  the last page back to the first. Empty pages are skipped; page 1 is always there.
+- The footer says which page is on screen, by the app's page numbers, and how to turn it:
+  `PAGE 2/3 - BACK: NEXT PAGE` (`3` is the last page with keys; the 2-line status says
+  `PAGE 2/3` / `BACK: NEXT PAGE`). After a call that didn't go through the footer says why
+  first (`BUSY - PRESS A KEY`); BACK still turns the page, which clears it.
+- **A digit calls that key on the page shown.** Hanging up, or a call starting, returns to
+  page 1. Redial calls the same page's key again, whatever page is showing.
+- BACK pages only there: everywhere else it keeps its job (the menu's one level up, silencing a
+  ring, stopping voicemail playback or a notice's recording, a house intercom call, deleting an
+  extension's digits). With one page BACK does nothing on the key map, as before.
+- Keys elsewhere use page 1: a blind transfer's "press a key", a free Lounge phone's house-line
+  keys, the key labels printed for the keycaps. A Lounge phone in use pages the signed-in
+  person's own desk-phone keys.
+- Phones that don't list `key-pages` get page 1 only.
 
 ### Menu
 

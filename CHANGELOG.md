@@ -14,6 +14,16 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **Speed-dial pages**: more than ten people on a phone's keys, in pages of ten (up to 10 pages,
+  100 keys; `limits.ts` `keyPages`, a host may allow fewer). The app's key editor shows Page 1,
+  Page 2… with **Add page** and **Move someone to another key**; on the phone, BACK with the
+  handset up turns the page (docs/phone-ux.md "Speed-dial pages"). Keys are stored as
+  `(page - 1) * 10 + slot` (migration 0033 widens the four key tables to 0-99). Protocol
+  (additive): `config.pages` and `button.page`, sent only to phones that list `key-pages`
+  (device feature `key-pages`); older phones get page 1 as before. Every key on every page
+  follows the same allow-list, quiet hours and add-on rules; a Lounge phone pages the
+  signed-in person's desk-phone keys. A config that would pass 16 KiB drops its last pages.
+
 - **Add-ons are treated as untrusted** ([docs/security-model.md](docs/security-model.md#add-ons),
   threat by threat, each with a test that fails without its guard). An add-on may send only an
   explicit allow-list of messages (everything else, including message types added later, is an
