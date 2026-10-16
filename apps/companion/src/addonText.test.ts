@@ -7,9 +7,12 @@ import {
   addonPreview,
   addonStatus,
   firstFreeSlot,
+  goneText,
   heldShareLabel,
   isAddonAddress,
   learnsText,
+  linkedText,
+  removalText,
   shareRequestText,
 } from "./addonText.ts";
 
@@ -123,5 +126,73 @@ describe("what an add-on does, in words", () => {
     const slots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     expect(firstFreeSlot({ "0": "u1", "1": "u2" }, slots)).toBe(2);
     expect(firstFreeSlot(Object.fromEntries(slots.map((s) => [String(s), "x"])), slots)).toBe(0);
+  });
+});
+
+describe("where an add-on is linked, and what removing it takes", () => {
+  it("says whose account, which space and which server", () => {
+    expect(
+      linkedText({
+        space: "Jesse's home",
+        owner: { name: "Jesse", address: "jesse@hub.example" },
+        server: "hub.example",
+      }),
+    ).toBe("Linked to Jesse (jesse@hub.example), in Jesse's home, on hub.example.");
+    expect(linkedText({ space: "Home" })).toBe("Linked to you, in Home.");
+  });
+
+  it("names the shares and the people who lose them", () => {
+    expect(removalText({ name: "seat", shares: [] })).toBe(
+      "seat is cut off at once and its address stops working.",
+    );
+    expect(
+      removalText({
+        name: "seat",
+        shares: [
+          { label: "Book club", holders: [1, 2] },
+          { label: "Garden", holders: [] },
+        ],
+      }),
+    ).toBe(
+      "seat is cut off at once and its address stops working; its 2 shares (Book club, Garden) go, and the 2 people you gave them to lose them.",
+    );
+    expect(removalText({ name: "seat", shares: [{ label: "Book club", holders: [1] }] })).toBe(
+      "seat is cut off at once and its address stops working; its share (Book club) goes, and the person you gave it to loses it.",
+    );
+  });
+});
+
+describe("goneText", () => {
+  it("tells the owner what went with a removed add-on", () => {
+    expect(
+      goneText({
+        id: "g1",
+        what: "removed",
+        addon: "seat",
+        at: 0,
+        shares: [
+          { label: "Book club", holders: ["Ana", "Bob"] },
+          { label: "Garden", holders: ["Ana"] },
+        ],
+      }),
+    ).toBe(
+      "seat was removed and its address stopped working. Its shares Book club, Garden went; Ana, Bob no longer have them.",
+    );
+    expect(goneText({ id: "g2", what: "removed", addon: "seat", at: 0, shares: [] })).toBe(
+      "seat was removed and its address stopped working.",
+    );
+  });
+
+  it("tells a holder their share is gone", () => {
+    expect(
+      goneText({
+        id: "g3",
+        what: "share",
+        addon: "seat",
+        at: 0,
+        owner: "Jesse (jesse@a.test)",
+        label: "Book club",
+      }),
+    ).toBe('Jesse (jesse@a.test)\'s seat: your share "Book club" is gone.');
   });
 });

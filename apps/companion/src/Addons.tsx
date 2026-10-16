@@ -10,8 +10,12 @@ import {
   addonNameProblem,
   addonPreview,
   addonStatus,
+  type GoneNote,
+  goneText,
   heldShareLabel,
   learnsText,
+  linkedText,
+  removalText,
   shareRequestText,
 } from "./addonText.ts";
 import type {
@@ -73,6 +77,8 @@ export function Addons({
   const [info, setInfo] = useState<{ enabled: boolean; addons: AddonView[] }>();
   const [held, setHeld] = useState<Held[]>([]);
   const [contacts, setContacts] = useState<AddonContact[]>([]);
+  /** What went (removed add-ons, shares gone), until dismissed. */
+  const [gone, setGone] = useState<GoneNote[]>([]);
   const [people, setPeople] = useState<AddonPerson[]>([]);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -86,9 +92,11 @@ export function Addons({
       api.addonsShared().catch(() => ({ held: [] as HeldShare[] })),
       api.connections().catch(() => undefined),
       api.addonContacts().catch(() => [] as AddonContact[]),
+      api.addonsGone().catch(() => [] as GoneNote[]),
     ]).then(
-      ([mine, shared, conns, cs]) => {
+      ([mine, shared, conns, cs, g]) => {
         setInfo(mine);
+        setGone(g);
         setHeld([...heldHere(shared.held), ...heldElsewhere(conns?.connections ?? [])]);
         setContacts(cs);
         setError(undefined);
@@ -174,6 +182,22 @@ export function Addons({
         </p>
       )}
       {!info && !error && <p className="muted">Loading…</p>}
+      {gone.length > 0 && (
+        <ul className="stack gone-notes">
+          {gone.map((n) => (
+            <li key={n.id} className="notice row wrap" role="status">
+              <span className="grow">{goneText(n)}</span>
+              <button
+                type="button"
+                className="link"
+                onClick={() => void api.dismissAddonGone(n.id).then(load, load)}
+              >
+                OK
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {current.name === "link" && info?.enabled && (
         <LinkForm
@@ -257,6 +281,11 @@ export function Addons({
           )}
           {info.addons.length > 0 && <HeldList held={held} {...shared} />}
           <CallByAddress onCall={(addr) => void conn?.callAddon(addr, nameOf(addr))} />
+          <p className="hint">
+            An add-on linked to your account on another server shows on that server's app. To reach
+            it from here, connect your two accounts (Connections), then on the other server give
+            this account a share of it.
+          </p>
         </>
       )}
     </section>
@@ -392,13 +421,11 @@ function AddonPage({
   };
   const remove = async () => {
     if (
-      !window.confirm(
-        `Remove ${addon.name}? It's cut off at once, its address stops working, and everyone you gave a share of it loses it. To use it again, link it again.`,
-      )
+      !window.confirm(`Remove ${addon.name}? ${removalText(addon)} To use it again, link it again.`)
     ) {
       return;
     }
-    await act(() => s.api.removeAddon(addon.id), `${addon.name} was removed.`);
+    await act(() => s.api.removeAddon(addon.id));
     onRemoved();
   };
   const callNote = !s.enabled
@@ -419,7 +446,7 @@ function AddonPage({
             Copy
           </button>
         </div>
-        <p className="muted small">Only you can call it at this address.</p>
+        <p className="muted small">{linkedText(addon)} Only you can call it at this address.</p>
         <ReachActions
           {...s}
           address={addon.address}

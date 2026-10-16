@@ -1,4 +1,5 @@
 /** Typed client for the Open Lounge Phone REST API (`/api/*`). */
+import type { GoneNote } from "./addonText.ts";
 import type { SpaceType } from "./spaces.ts";
 
 export type Role = "guardian" | "contact";
@@ -302,6 +303,9 @@ export interface AddonView {
   createdAt: number;
   /** The space it was linked in. */
   space: string;
+  /** The account it's linked to, and the server (newer servers). */
+  owner?: { name: string; address: string };
+  server?: string;
   /** What it offers for sharing (it says), and who holds each. */
   shares: AddonShareView[];
   /** Earlier "who may talk to it" entries were removed (sharing is per share now): say so once. */
@@ -1021,6 +1025,9 @@ export function createApi(opts: ApiOptions) {
       request<AddonView>("POST", "/addons/link", input),
     addonPeople: () => request<AddonPerson[]>("GET", "/addons/people"),
     addonsShared: () => request<{ held: HeldShare[] }>("GET", "/addons/shared"),
+    /** What went: your removed add-ons, shares you held (older servers: none). */
+    addonsGone: () => request<GoneNote[]>("GET", "/addons/gone"),
+    dismissAddonGone: (id: string) => request<void>("DELETE", `/addons/gone/${enc(id)}`),
     giveShare: (addonId: string, shareId: string, to: string) =>
       request<{ grantId: string; name: string; address: string }>(
         "POST",

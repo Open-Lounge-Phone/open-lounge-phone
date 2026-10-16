@@ -131,3 +131,68 @@ export function firstFreeSlot(buttons: Record<string, string>, slots: number[]):
 
 /** A key label for an add-on (phones show up to 24 characters). */
 export const keyLabelFor = (label: string): string => label.trim().slice(0, 24);
+
+/**
+ * Where an add-on is linked: "Linked to Jesse (jesse@hub.example), in Jesse's home, on
+ * hub.example." (an older server doesn't say whose; then only the space).
+ */
+export function linkedText(a: {
+  space: string;
+  owner?: { name: string; address: string } | undefined;
+  server?: string | undefined;
+}): string {
+  const who = a.owner ? `${a.owner.name} (${a.owner.address})` : "you";
+  const where = a.space ? `, in ${a.space}` : "";
+  const on = a.server ? `, on ${a.server}` : "";
+  return `Linked to ${who}${where}${on}.`;
+}
+
+/** What removing an add-on takes with it, said before and after. */
+export function removalText(a: {
+  name: string;
+  shares: { label: string; holders: unknown[] }[];
+}): string {
+  const people = a.shares.reduce((n, s) => n + s.holders.length, 0);
+  const shares = a.shares.length;
+  const parts = [`${a.name} is cut off at once and its address stops working`];
+  if (shares) {
+    parts.push(
+      `its ${shares === 1 ? "share" : `${shares} shares`} (${a.shares.map((s) => s.label).join(", ")}) ${
+        shares === 1 ? "goes" : "go"
+      }${people ? `, and the ${people === 1 ? "person" : `${people} people`} you gave ${shares === 1 ? "it" : "them"} to ${people === 1 ? "loses" : "lose"} ${shares === 1 ? "it" : "them"}` : ""}`,
+    );
+  }
+  return `${parts.join("; ")}.`;
+}
+
+/** A note that something went (`GET /addons/gone`). */
+export type GoneNote =
+  | {
+      id: string;
+      what: "removed";
+      addon: string;
+      at: number;
+      shares: { label: string; holders: string[] }[];
+    }
+  | { id: string; what: "share"; addon: string; at: number; owner: string; label: string };
+
+/** "seat was removed. Its share Book club went; Ana and Bob no longer have it." */
+export function goneText(n: GoneNote): string {
+  if (n.what === "share") {
+    return `${n.owner}'s ${n.addon}: your share ${n.label ? `"${n.label}" ` : ""}is gone.`;
+  }
+  const given = n.shares.filter((s) => s.holders.length);
+  const parts = [`${n.addon} was removed and its address stopped working.`];
+  if (n.shares.length) {
+    parts.push(
+      `${n.shares.length === 1 ? "Its share" : "Its shares"} ${n.shares.map((s) => s.label).join(", ")} went${
+        given.length
+          ? `; ${[...new Set(given.flatMap((s) => s.holders))].join(", ")} no longer ${
+              new Set(given.flatMap((s) => s.holders)).size === 1 ? "has" : "have"
+            } ${n.shares.length === 1 ? "it" : "them"}`
+          : ""
+      }.`,
+    );
+  }
+  return parts.join(" ");
+}

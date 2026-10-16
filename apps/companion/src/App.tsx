@@ -468,8 +468,12 @@ function SignedIn({
     Promise.all([
       baseApi.addons().catch(() => undefined),
       baseApi.addonsShared().catch(() => undefined),
-    ]).then(([mine, held]) =>
-      setAddonsTab(!!mine?.enabled || !!mine?.addons.length || !!held?.held.length),
+      baseApi.addonsGone().catch(() => []),
+    ]).then(([mine, held, gone]) =>
+      // Also while a note of something that went waits to be read.
+      setAddonsTab(
+        !!mine?.enabled || !!mine?.addons.length || !!held?.held.length || gone.length > 0,
+      ),
     );
   }, [baseApi, connSeq]);
 
