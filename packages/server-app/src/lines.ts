@@ -13,6 +13,7 @@ import {
   LINE_WAIT_MIN_SECONDS,
   lineAdmits,
   lineEntry,
+  validKeyIndex,
 } from "@openloungephone/core";
 import {
   deviceMode,
@@ -27,7 +28,7 @@ import {
   parseAddonAddress,
   parseAddress,
 } from "@openloungephone/federation";
-import { Id, type LineInfo } from "@openloungephone/protocol";
+import { Id, KEYS_PER_PAGE, type LineInfo, MAX_KEY_PAGES } from "@openloungephone/protocol";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { ADDONS_OFF } from "./addons.ts";
@@ -99,8 +100,13 @@ const BlockBody = z.object({ entry: Entry });
 const PhoneLine = z.object({
   address: z.string().trim().min(3).max(300),
   label: z.string().trim().min(1).max(24),
-  /** Also put it on this key (0–15), in the same step. */
-  key: z.number().int().min(0).max(15).optional(),
+  /** Also put it on this key (stored index: (page - 1) * 10 + slot, 0–99), in the same step. */
+  key: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_KEY_PAGES * KEYS_PER_PAGE - 1)
+    .optional(),
 });
 
 /** A line's address on this server. */
@@ -485,6 +491,9 @@ export function lineRoutes(api: Hono<Vars>, env: ServerEnv, live: Coordinator): 
     const address = addr
       ? `${addr.handle}@${addr.host}`
       : formatAddonAddress(addon as AddonAddress);
+    if (b.key !== undefined && !validKeyIndex(b.key, limitsOf(env).keyPages)) {
+      return c.json({ error: "this phone has no such key" }, 400);
+    }
     const id = await store.lines.addToPhone(p.device.id, address, b.label);
     if (b.key !== undefined) await store.setButton(p.device.id, b.key, id);
     await live.refreshDevice(user.householdId, p.device.id);

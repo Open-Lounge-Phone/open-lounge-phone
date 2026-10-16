@@ -3,6 +3,7 @@ import {
   isValidTimeZone,
   type QuietHoursRule,
   validateSchedule,
+  validKeyIndex,
   type Weekday,
 } from "@openloungephone/core";
 import {
@@ -19,7 +20,7 @@ import {
   type User,
 } from "@openloungephone/db";
 import { FEDERATION_VERSION } from "@openloungephone/federation";
-import { Id, PROTOCOL_VERSION } from "@openloungephone/protocol";
+import { Id, MAX_KEY_PAGES, PROTOCOL_VERSION } from "@openloungephone/protocol";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -499,6 +500,8 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
       rooms: rooms.map((r) => ({ id: r.id, roomId: r.roomId, label: r.label })),
       // Public lines on its keys (personal phones only): `ln_…` ids in `contacts`.
       lines: lines.map((l) => ({ id: l.id, address: l.address, label: l.label })),
+      // How many pages of ten keys the phone may have (`buttons` index = (page - 1) * 10 + slot).
+      keyPages: Math.min(limitsOf(env).keyPages, MAX_KEY_PAGES),
     });
   });
 
@@ -614,8 +617,9 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
     const device = await manageable(user, c.req.param("id"));
     const index = Number(c.req.param("index"));
     if (!device) return c.json({ error: "not found" }, 404);
-    if (!Number.isInteger(index) || index < 0 || index > 15) {
-      return c.json({ error: "index must be 0-15" }, 400);
+    const pages = limitsOf(env).keyPages;
+    if (!validKeyIndex(index, pages)) {
+      return c.json({ error: `index must be 0-${Math.min(pages, MAX_KEY_PAGES) * 10 - 1}` }, 400);
     }
     const b = await body(c.req.raw, ButtonBody);
     if (b instanceof Response) return b;

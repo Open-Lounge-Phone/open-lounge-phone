@@ -55,6 +55,11 @@ export interface Limits {
   addonConnectsPerHour: number;
   /** Messages one add-on connection may send per minute (more closes it). */
   addonMessagesPerMinute: number;
+  /**
+   * Pages of speed-dial keys a phone may have (ten keys each; BACK turns the page). At most
+   * the protocol's MAX_KEY_PAGES (10); a host may allow fewer.
+   */
+  keyPages: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -79,6 +84,7 @@ export const DEFAULT_LIMITS: Limits = {
   addonShareUpdatesPerHour: 60,
   addonConnectsPerHour: 120,
   addonMessagesPerMinute: 600,
+  keyPages: 10,
 };
 
 export const limitsOf = (env: ServerEnv): Limits => ({ ...DEFAULT_LIMITS, ...env.limits });

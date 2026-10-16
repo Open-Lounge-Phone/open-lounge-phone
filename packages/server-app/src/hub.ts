@@ -16,6 +16,7 @@ import {
   huntSteps,
   isOpen,
   isQuietAt,
+  keyIndex,
   LINE_ENDED_NOTE,
   localClock,
   localDay,
@@ -53,7 +54,9 @@ import {
   roomOpenAt,
   roomStep,
   SIGN_IN_FOR_LINES_NOTE,
+  splitKeyPages,
   utcOffsetMinutes,
+  validKeyIndex,
 } from "@openloungephone/core";
 import {
   type Account,
@@ -91,6 +94,10 @@ import {
   type AppToServer,
   type DeviceToServer,
   type EndReason,
+  encode,
+  KEYS_PER_PAGE,
+  MAX_KEY_PAGES,
+  MAX_MESSAGE_BYTES,
   type RoomEndReason,
   type ServerToApp,
   type ServerToDevice,
@@ -841,8 +848,13 @@ export class HouseholdHub {
           if (device.lounge) await this.touchIdle(device);
           if (msg.state === "down") this.kickLines();
           return;
-        case "button":
-          return this.deviceDial(device, msg.index);
+        case "button": {
+          // A key on a later page (`key-pages`): stored as (page - 1) * 10 + slot.
+          if (msg.page !== undefined && msg.index >= KEYS_PER_PAGE) {
+            return this.refuse(device, "denied");
+          }
+          return this.deviceDial(device, keyIndex(msg.page ?? 1, msg.index));
+        }
         case "call.extension":
           return this.extensionDial(device, msg.number);
         case "call.address":
@@ -2283,14 +2295,19 @@ export class HouseholdHub {
       }
       const dir = await this.sessionDirectory(session);
       const extensions = !session.guest && (await this.hasExtensions());
-      peer.conn.send({
-        t: "config",
-        buttons: [...dir].map(([index, e]) => ({ index, label: e.label })),
-        quiet: false,
-        ...(owner ? { owner } : {}),
-        ...(extensions ? { extensions: true } : {}),
-        server: serverInfo(this.env),
-      });
+      peer.conn.send(
+        fitConfig({
+          t: "config",
+          ...this.keyPagesFor(
+            peer,
+            [...dir].map(([index, e]) => ({ index, label: e.label })),
+          ),
+          quiet: false,
+          ...(owner ? { owner } : {}),
+          ...(extensions ? { extensions: true } : {}),
+          server: serverInfo(this.env),
+        }),
+      );
       return;
     }
     const [buttons, contacts, schedule, missed, greeting, extensions, home] = await Promise.all([
@@ -2331,9 +2348,10 @@ export class HouseholdHub {
       const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
       quietUntil = `${hh}:${String(minutes % 60).padStart(2, "0")}`;
     }
-    peer.conn.send({
+    const keys = this.keyPagesFor(peer, mapped);
+    const config: Extract<ServerToDevice, { t: "config" }> = {
       t: "config",
-      buttons: mapped,
+      ...keys,
       ...(owner ? { owner } : {}),
       quiet,
       ...(quietUntil ? { quietUntil } : {}),
@@ -2351,7 +2369,16 @@ export class HouseholdHub {
       ...(extensions ? { extensions: true } : {}),
       ...home,
       server: serverInfo(this.env),
-    });
+    };
+    peer.conn.send(fitConfig(config));
+  }
+
+  /**
+   * A phone's keys as `config` carries them: page 1 in `buttons`; later pages in `pages`, only
+   * to phones that show them (`hello.features` `key-pages`), as many as this server allows.
+   */
+  private keyPagesFor<T extends { index: number }>(peer: DevicePeer, keys: T[]) {
+    return splitKeyPages(keys, !!peer.features?.includes("key-pages"), limitsOf(this.env).keyPages);
   }
 
   /** A phone's home features in its config: check-in, chime, intercom (each when it's on). */
@@ -3041,7 +3068,8 @@ export class HouseholdHub {
       const lines = new Map((await store.lines.onPhone(own.id)).map((l) => [l.id, l]));
       for (const [index, id] of buttons) {
         const c = byId.get(id);
-        if (!c?.deviceCanCall || id === userId || index >= 10) continue;
+        if (!c?.deviceCanCall || id === userId) continue;
+        if (!validKeyIndex(index, limitsOf(this.env).keyPages)) continue;
         const line = lines.get(id);
         if (line) {
           out.set(index, { kind: "line", id: line.address, label: c.label });
@@ -3074,7 +3102,10 @@ export class HouseholdHub {
         label: (c.peerName || c.peerHandle).slice(0, 24),
       });
     }
-    for (const [i, e] of entries.slice(0, 10).entries()) out.set(i, e);
+    // Ten to a page, as many pages as a phone may have (the phone shows the first page only
+    // unless it lists `key-pages`).
+    const max = Math.min(limitsOf(this.env).keyPages, MAX_KEY_PAGES) * KEYS_PER_PAGE;
+    for (const [i, e] of entries.slice(0, max).entries()) out.set(i, e);
     return out;
   }
 
@@ -6882,6 +6913,23 @@ function checkinChime(): Uint8Array {
     const hz = i < n / 2 ? 660 : 880;
     const env = Math.min(1, (i % (n / 2)) / 200, (n / 2 - (i % (n / 2))) / 400);
     v.setInt16(44 + i * 2, Math.round(9000 * env * Math.sin((2 * Math.PI * hz * i) / rate)), true);
+  }
+  return out;
+}
+
+/**
+ * A phone's config within the 16 KiB message budget: with a hundred long labels it could
+ * outgrow it, so the last pages of keys give way first (the phone still gets everything else).
+ */
+export function fitConfig(
+  config: Extract<ServerToDevice, { t: "config" }>,
+): Extract<ServerToDevice, { t: "config" }> {
+  const size = (m: unknown) => new TextEncoder().encode(encode(m as ServerToDevice)).byteLength;
+  let out = config;
+  while (out.pages?.length && size(out) > MAX_MESSAGE_BYTES) {
+    const pages = out.pages.slice(0, -1);
+    const { pages: _p, ...rest } = out;
+    out = pages.length ? { ...rest, pages } : rest;
   }
   return out;
 }
