@@ -15,7 +15,7 @@ import { addressProblem, requiredProblem } from "./fields.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
 import { HomeFeaturesCard } from "./HomeFeatures.tsx";
 import { KeyLabelSheet } from "./KeyLabelSheet.tsx";
-import { SPEED_DIAL_ROWS, slotOf } from "./keyLabels.ts";
+import { KeyPages } from "./KeyPages.tsx";
 import { MODE_TEXT } from "./pairMode.ts";
 import { formatLastSeen } from "./text.ts";
 
@@ -45,6 +45,8 @@ export function ManageDevice({
   const [users, setUsers] = useState<User[]>([]);
   const [contacts, setContacts] = useState<ContactEntry[]>([]);
   const [buttons, setButtons] = useState<Record<string, string>>({});
+  /** How many pages of ten keys the phone may have (the server says). */
+  const [keyPages, setKeyPages] = useState(1);
   /** Allow-list entries that come from connections, by their `rc_…` id. */
   const [remote, setRemote] = useState<Map<string, RemoteContactInfo>>(new Map());
   const [connections, setConnections] = useState<ConnectionView[]>([]);
@@ -78,6 +80,7 @@ export function ManageDevice({
       setUsers(u);
       setContacts(c.contacts);
       setButtons(c.buttons);
+      setKeyPages(c.keyPages ?? 1);
       setRemote(new Map((c.remote ?? []).map((r) => [r.id, r])));
       setConnections((conns?.connections ?? []).filter((x) => x.state === "active"));
     } catch (e) {
@@ -351,34 +354,17 @@ export function ManageDevice({
         Lift the handset and press a digit to call that person (speed dial). Only people the phone
         is allowed to call light up.
       </p>
-      <div className="card keys">
-        {SPEED_DIAL_ROWS.flat().map((digit) => {
-          const slot = slotOf(digit);
-          const assigned = buttons[String(slot)] ?? "";
-          return (
-            <label key={digit} className="key-row">
-              <span className="keycap" title={`Key ${digit}`}>
-                {digit}
-              </span>
-              <select
-                aria-label={`Key ${digit}`}
-                value={assigned}
-                onChange={(e) =>
-                  void run(() => api.setButton(deviceId, slot, e.target.value || null))
-                }
-              >
-                <option value="">— nobody —</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                    {c.deviceCanCall ? "" : " (can't be called)"}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        })}
-      </div>
+      <KeyPages
+        buttons={buttons}
+        contacts={contacts}
+        maxPages={keyPages}
+        onSet={(index, userId) => run(() => api.setButton(deviceId, index, userId))}
+        onMove={(changes) =>
+          run(async () => {
+            for (const c of changes) await api.setButton(deviceId, c.index, c.userId);
+          })
+        }
+      />
       <KeyLabelSheet buttons={buttons} contacts={contacts} />
     </section>
   );

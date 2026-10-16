@@ -1551,3 +1551,13 @@ dl.phone-facts {
 .addon-contacts .muted.block {
   display: block;
 }
+
+/* Speed-dial pages in the key editor: a titled group of ten keys each. */
+.key-page {
+  margin: 0;
+  min-width: 0;
+}
+.key-page legend {
+  font-weight: 600;
+  padding: 0 0.3rem;
+}

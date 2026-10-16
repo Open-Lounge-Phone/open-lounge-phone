@@ -893,6 +893,8 @@ export function createApi(opts: ApiOptions) {
         remote?: RemoteContactInfo[];
         rooms?: { id: string; roomId: string; label: string }[];
         lines?: { id: string; address: string; label: string }[];
+        /** How many pages of ten keys the phone may have (`buttons` index = page * 10 + slot). */
+        keyPages?: number;
       }>("GET", `/devices/${enc(deviceId)}/contacts`),
     addRoomToPhone: (deviceId: string, roomId: string, label: string) =>
       request<{ id: string }>("PUT", `/devices/${enc(deviceId)}/rooms/${enc(roomId)}`, { label }),

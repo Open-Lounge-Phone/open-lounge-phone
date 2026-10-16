@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { keyLabels, LABEL_MM, labelFontPt } from "./keyLabels.ts";
+import { lastUsedPage } from "./speedDialPages.ts";
 
 interface Props {
   buttons: Record<string, string>;
@@ -23,6 +24,7 @@ export function KeyLabelSheet({ buttons, contacts }: Props) {
           <p className="muted small">
             For phones without a display: print at 100 % scale, cut on the dashed lines and slip
             each label under its clear keycap. Labels are {LABEL_MM} mm square.
+            {lastUsedPage(buttons) > 1 && " They show page 1: the other pages are on the screen."}
           </p>
           <div className="label-sheet" style={{ ["--label-mm" as string]: `${LABEL_MM}mm` }}>
             {labels.map((l) => (
