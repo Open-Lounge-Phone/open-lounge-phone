@@ -75,6 +75,34 @@ class TrackTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(track.wait_room(), 0.05)
         track.stop()
 
+    async def test_stopping_frees_a_waiting_sender(self) -> None:
+        # The far end stopped taking audio (consent expired, connection closed): the call ends
+        # and its track stops; a sender blocked on a full buffer must not hang.
+        track = PcmTrack()
+        track.push(b"\0" * frame_bytes(TRACK_RATE, 1200))
+        waiting = asyncio.ensure_future(track.wait_room())
+        await asyncio.sleep(0.01)
+        self.assertFalse(waiting.done())
+        track.stop()
+        await asyncio.wait_for(waiting, 0.5)
+
+
+class CallSendTest(unittest.IsolatedAsyncioTestCase):
+    async def test_send_returns_when_the_call_ends_while_it_waits(self) -> None:
+        from olp_addon.call import Call
+
+        async def to_server(_msg: object) -> None:
+            pass
+
+        call = Call(to_server, direction="in", rate=TRACK_RATE, call_id="call_x")
+        call._out.push(b"\0" * frame_bytes(TRACK_RATE, 1200))  # nobody is taking the audio
+        sending = asyncio.ensure_future(call.send(b"\0" * frame_bytes(TRACK_RATE, 20)))
+        await asyncio.sleep(0.01)
+        self.assertFalse(sending.done())
+        await call._end("hangup")
+        await asyncio.wait_for(sending, 0.5)
+        self.assertEqual(len(call._out._buf), 0)  # nothing queued after the end
+
 
 if __name__ == "__main__":
     unittest.main()

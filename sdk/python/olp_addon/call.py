@@ -99,6 +99,8 @@ class Call:
         if self.state == "ended":
             return
         await self._out.wait_room()
+        if self.state == "ended":  # it ended while this waited: nothing plays any more
+            return
         self._out.push(self._to_track.pcm(frame))
 
     def clear(self) -> None:

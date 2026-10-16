@@ -49,7 +49,8 @@ On `main`, not tagged yet.
   `ADD-ON CALLING` below it; in a call and while waiting a long name is shortened, never shown
   alone.
 - The Python bridge is 0.3.0: `set_about(...)`, several calls at once, and `examples/radio.py`
-  (one-way, several listeners).
+  (one-way, several listeners). A call that ends while `call.send()` waits for room (the far
+  end stopped taking audio) no longer leaves it, and whatever awaits it, hanging forever.
 - The app's badges use the accent's text colour (too little contrast before).
 
 ## 0.7.0 (2026-10-15, `server-v0.7.0`)

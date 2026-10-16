@@ -102,6 +102,11 @@ class PcmTrack(MediaStreamTrack):
         self._buf.clear()
         self._room.set()
 
+    def stop(self) -> None:
+        # Nothing plays any more: a sender waiting for room must not wait forever.
+        self.clear()
+        super().stop()
+
     async def recv(self) -> av.AudioFrame:
         if self.readyState != "live":
             raise MediaStreamError
