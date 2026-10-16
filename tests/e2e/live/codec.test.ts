@@ -194,7 +194,7 @@ async function startStun(): Promise<string> {
     res.writeUInt16BE(8, 22);
     res.writeUInt16BE(0x0001, 24);
     res.writeUInt16BE(from.port ^ 0x2112, 26);
-    const a = from.address.split(".").map(Number);
+    const a = from.address.split(".").map(Number) as [number, number, number, number];
     const x = ((a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3]) ^ 0x2112a442;
     res.writeUInt32BE(x >>> 0, 28);
     sock.send(res, from.port, from.address);
