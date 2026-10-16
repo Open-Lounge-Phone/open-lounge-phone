@@ -57,9 +57,18 @@ On `main`, not tagged yet.
   0034, additive). A line on the Add-ons tab says how to reach an add-on linked on your other
   server (connect your two accounts, then give the other one a share); the two-server test runs
   that path.
-- **Someone's own phones go with them**: leaving a space, being removed from it or deleting the
-  account now removes and wipes the person's own phones there. Before, such a phone stayed as
-  an ownerless household phone in kids' mode (even in a team), out of every list of own phones.
+- **The phones of someone who left stay, labelled**: when someone leaves a space, is removed
+  from it or deletes their account, their own phones there stay as "Dana's phone (Dana left)"
+  (`DANA LEFT` on the phone; `config.owner.mode` `left` with `person`; `GET /devices` `mode`
+  `left`, `leftBy`, `leftAt`; migration 0035). Such a phone isn't a kids' phone and isn't
+  anyone's: nobody can call it ("Nobody can call that phone: its owner left"), and it calls only
+  the space's people left on its list under kids' rules (quiet hours, no add-ons or lines, no
+  voicemail from it, never recorded); what was its owner's goes (connections, add-ons and lines,
+  rooms, extension, home features). Guardians and admins see them under **Home → Phones of people
+  who left** and, under Manage, rename them, **Set it up again** or **Remove and wipe**. Before,
+  such a phone quietly became an ownerless kids' phone (even in a team). Phones orphaned that way
+  are marked by the migration where the audit trail (or a team or organization) shows they were
+  someone's; firmware 0.9.7 shows `DANA LEFT`.
 - Add-on bridge: an add-on uses STUN and TURN over UDP only. aiortc gathers every relay before
   it answers a call, and TURN over TCP/TLS could hold the answer back 15 s or more, past the
   caller's patience.

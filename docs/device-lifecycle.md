@@ -12,6 +12,7 @@ planned.
 | **Kids** | a home space; guardians manage it | always the child | never idle: allow-list, quiet hours, voicemail |
 | **Personal / desk** | one person | always that person | never idle: it is their own phone (bedside, desk) |
 | **Lounge** | a space (venue, office, common room) | whoever signs in | **dead by default** until someone signs in |
+| *Left* (not chosen) | a space; guardians manage it | nobody | the phone of someone who left: [below](#phones-of-someone-who-left) |
 
 The mode is picked when the phone is claimed (`POST /api/devices/pair` with `mode`; the phone's
 own first-run choice arrives in `pair.begin.kind` and is preselected, `POST
@@ -65,11 +66,11 @@ the phone.
    - **Remove in the app:** the server forgets the device key, and the phone wipes itself: at once
      if it's connected (`wipe`), otherwise the next time it connects — the server remembers the
      removed id and key (`removed_devices`, a year) and sends `wipe` only after the phone signs
-     the challenge with that key, so nobody else can trigger it. Deleting an account or space
-     wipes its phones the same way, and so does someone leaving a space (or being removed from
-     it): their own phones there go with them, wiped. A phone never changes whose it is, so it
-     can't stay behind as the space's phone. The browser phone deletes its key from IndexedDB, its id and
-     its first-run choice, and starts over.
+     the challenge with that key, so nobody else can trigger it. Deleting a space wipes its
+     phones the same way. The browser phone deletes its key from IndexedDB, its id and its
+     first-run choice, and starts over.
+   - **Someone leaves** (leaves the space, is removed from it, or deletes their account): their
+     own phones there stay, as [phones of someone who left](#phones-of-someone-who-left).
    - **Factory reset** (MENU+BACK held **10 s** at power-on; released after 3 s it opens the
      Wi-Fi setup network instead; the display says which): wipes Wi-Fi, owner and keys, and generates a new
      device key.
@@ -79,6 +80,30 @@ the phone.
    - **No claim lock.** A removed phone holds nothing of value (no contacts, no
      history, no keys that still work), so anyone can reset it and claim it again. That keeps
      second-hand and handed-down phones easy.
+
+## Phones of someone who left
+
+When someone leaves a space (or is removed from it, or deletes their account), their own phones
+there stay in the space, owned by nobody and labelled with whose they were: "Dana's phone (Dana
+left)" in the app, `DANA LEFT` on the phone (`config.owner` `{"mode": "left", "person":
+"Dana"}`). Such a phone is **not** a kids' phone, and it isn't anyone's:
+
+- **Nobody can call it.** It never rings for anyone (calls to it end "Nobody can call that phone:
+  its owner left"), it has no extension and isn't in the directory.
+- **It calls out under the strictest rules**, a kids' phone's: only the space's people left on its
+  list (what was the owner's own goes: their connections, add-ons and lines, rooms, extension and
+  home features), quiet hours apply, no add-ons or public lines, no voicemail from it, and a call
+  with it is never recorded. It doesn't count as a kids' phone for the space's recording rule.
+- **Guardians and admins manage it** under Home → Phones of people who left → Manage: rename it,
+  **Set it up again** (it wipes itself and shows a new code to pair it with, in any mode, for
+  anyone), or **Remove and wipe**. Nothing else about it changes until then (the server refuses
+  with "This phone's owner left. Set it up again (or remove it) before changing what it does.").
+
+Phones orphaned by older servers (they turned into ownerless household phones) are marked when
+the server updates (migration 0035): a phone the audit trail says was added as someone's own phone
+shows as theirs ("Dana left"); any other ownerless phone in a team or organization, where kids'
+phones can't exist, shows as "its owner left". In a home without that trail, such a phone can't be
+told from a kids' phone and stays one; its guardians can set it up again.
 
 See [security-model.md](security-model.md) for the protections and trust signals. It covers what
 the minimal board's hardware does and doesn't guarantee (no hardware mute switch or mic lights),

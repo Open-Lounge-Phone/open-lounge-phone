@@ -121,6 +121,12 @@ It never holds what anyone said or wrote: not a notice's text, not voicemail, no
 - **Removed by a guardian or admin?** If it was your only space there, removing you deletes your
   account (your connections are told, and you'd need a new invite to come back); otherwise you
   keep your other spaces. The app says which before they confirm.
+- **Your own phones stay behind** when you leave a space, are removed from it or delete your
+  account. They show to its guardians or admins under **Home → Phones of people who left**, as
+  "Dana's phone (Dana left)", and on the phone as `DANA LEFT`. Nobody can call such a phone; it
+  calls only the space's people still on its list, with a kids' phone's rules. Under **Manage**
+  they rename it, **Set it up again** (it wipes itself and shows a new code to pair it with) or
+  **Remove and wipe** it.
 - **Your data → Download my data** gives you everything the server holds about you: your account, your
   connections, your call history and your voicemail, as files you can read
   ([what's in it](/reference/export/)).
