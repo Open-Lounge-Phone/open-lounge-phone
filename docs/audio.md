@@ -44,7 +44,7 @@ makes s/f/th hard to tell apart.
 
 **Design.**
 - **Opus for calls** (`voice.c`): mono, encoded and decoded at **16 kHz**, about 24 kbit/s,
-  20 ms frames, complexity 5, voice mode, in-band error correction (FEC) on (with a 10 %
+  20 ms frames, complexity 1 (5 took up to 24 ms per 20 ms frame on the board), voice mode, in-band error correction (FEC) on (with a 10 %
   expected loss, so the encoder actually adds it). RTP clock 48 kHz, as WebRTC requires. The
   library is the libopus inside Espressif's `espressif/esp_audio_codec`, used through libopus's
   own API (`opus_api.h`).
@@ -77,12 +77,12 @@ makes s/f/th hard to tell apart.
 - **Host:** the resamplers (down: a sweep 100 Hz to 7.9 kHz, flat to 3.4 kHz and at least 60 dB
   down from 4.6 kHz; up: flat, images at least 60 dB down; frame by frame equals one block);
   the Opus wrapper (`test_voice.c`, against the system's libopus) encoding then decoding tones
-  from 200 Hz to 7 kHz, each within 3 dB, at about 24 kbit/s; PCMU passing 1 kHz and stopping
+  from 200 Hz to 3.5 kHz, each within 3 dB (the phone encodes at complexity 1: complexity 5 kept 7 kHz but took up to 24 ms per 20 ms frame on the board), at about 24 kbit/s; PCMU passing 1 kHz and stopping
   6 kHz; the SDP helpers.
 - **QEMU end-to-end** (`tests/e2e/live/codec.test.ts`, entirely local: the firmware in QEMU,
   a self-hosted server and the companion in Chromium):
   - a call from the companion negotiates Opus both ways, and the phone and the companion each
-    hear the other's 5–6 kHz test tone (only wideband carries it);
+    the phone hears the app's 5 kHz test tone (the phone's own audio is the voice band, complexity 1);
   - with Opus taken out of the companion's offer, both sides use PCMU and those tones are gone;
   - a call the phone places offers Opus and PCMU and the answer picks Opus. Its media doesn't
     connect in QEMU: behind QEMU's NAT, without TURN, `esp_peer` as the controlling side won't

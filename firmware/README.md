@@ -399,7 +399,7 @@ on its own task; `main/audio.c` moves 20 ms frames between it and the audio devi
   credentials are never logged (`rtc.config` is logged without them, and `esp_peer`'s agent, which
   prints them at INFO, stays at WARN unless `rtc log on`).
 - **Codecs** (`main/voice.c`, host-tested with the system's libopus): **Opus** at 16 kHz mono,
-  about 24 kbit/s, 20 ms frames, complexity 5, in-band FEC (libopus from Espressif's
+  about 24 kbit/s, 20 ms frames, complexity 1, in-band FEC (libopus from Espressif's
   `espressif/esp_audio_codec`), and **G.711 µ-law (PCMU)** at 8 kHz as the fallback. The phone
   offers and accepts both; an offer without Opus opens the peer again sending PCMU before it
   answers. Its own SDP asks the other side for FEC and at most 16 kHz (`main/sdp.c`). `esp_peer`

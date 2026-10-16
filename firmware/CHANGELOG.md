@@ -2,6 +2,11 @@
 
 ## 0.9.7 — unreleased
 
+- **Choppy call audio (found on a board): the Opus encoder at complexity 1, not 5.** At 5, SILK's
+  delayed-decision search took 13 ms on average and up to 24 ms per 20 ms frame on the board
+  (`enc=13326/23937us`), the earpiece ran dry thousands of times (`dry=`) and the task watchdog
+  fired on the audio task. Complexity 1 is about 3x cheaper (measured with libopus) for a small
+  quality cost at 16 kHz / 24 kbit/s.
 - **Calls stalled after "SRTP connected OK" (found on a board).** Internal RAM was down to 9 KB at
   the start of a call (Wi-Fi and lwIP buffers, TLS/DTLS, the 36 KB audio stack), so the phone's
   larger packets (its call offer, the DTLS certificate flight) failed while small ones went: calls

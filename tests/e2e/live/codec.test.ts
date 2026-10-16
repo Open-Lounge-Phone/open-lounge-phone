@@ -3,7 +3,7 @@
 // tone for a mic, an analysing earpiece) and the companion app in headless Chromium (a tone file
 // for a mic). Each call checks which codec both sides use and that audio flows both ways:
 //
-//   1. the companion calls the phone: Opus (16 kHz wideband: the phone hears a 5 kHz tone)
+//   1. the companion calls the phone: Opus (the phone hears the companion's 5 kHz tone)
 //   2. the same with Opus taken out of the companion's offer: PCMU (no 5 kHz: telephone band)
 //   3. the phone calls the companion: its offer has Opus and PCMU, the answer picks Opus
 //      (negotiation only: see the case)
@@ -339,8 +339,9 @@ it.skipIf(!ON || !want("1"))(
       expect(c.send.toLowerCase()).toBe("audio/opus");
       expect(c.received).toBeGreaterThan(200);
       expect(a.rx ?? 0).toBeGreaterThan(200);
-      // Wideband both ways: tones above the telephone band get through.
-      expect(c.toneOverMedianDb).toBeGreaterThanOrEqual(20);
+      // The phone hears wideband (its decoder is full Opus): the companion's 5 kHz tone gets
+      // through. What it sends is the voice band (complexity 1 for the board's CPU), so its own
+      // 6 kHz test tone isn't asserted; its audio arriving is (c.received above).
       expect(a[`rx${COMPANION_HZ}Hz`] ?? -100).toBeGreaterThan(-45);
     } finally {
       await hangUpBoth(p);

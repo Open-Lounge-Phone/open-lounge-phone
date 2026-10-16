@@ -16,7 +16,9 @@
 #define VOICE_FRAME 320          // 20 ms at 16 kHz
 #define VOICE_MAX_PACKET 400
 #define VOICE_OPUS_BITRATE 24000
-#define VOICE_OPUS_COMPLEXITY 5
+// 1, not 5: on a board, complexity 5 (SILK's delayed-decision search) took 13 ms on average and
+// up to 24 ms per 20 ms frame (choppy audio, the task watchdog fired); 1 is about 3x cheaper.
+#define VOICE_OPUS_COMPLEXITY 1
 
 typedef enum { VOICE_PCMU, VOICE_OPUS } voice_codec_t;
 
