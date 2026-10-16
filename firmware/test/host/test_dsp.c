@@ -22,14 +22,15 @@ TEST(ulaw_known_values) {
 }
 
 TEST(rms_of_full_scale_sine_is_minus_3) {
-  int16_t buf[8000] = {0};
+  static int16_t buf[DSP_RATE];
+  memset(buf, 0, sizeof buf);
   tone_gen_t g;
   tone_start(&g, TONE_TEST, 32767);
-  tone_mix(&g, buf, 8000);
-  CHECK_NEAR(dsp_rms_dbfs(buf, 8000), -3.0, 0.1);
-  CHECK_NEAR(dsp_goertzel_dbfs(buf, 8000, 1000, DSP_RATE), -3.0, 0.2);
+  tone_mix(&g, buf, DSP_RATE);
+  CHECK_NEAR(dsp_rms_dbfs(buf, DSP_RATE), -3.0, 0.1);
+  CHECK_NEAR(dsp_goertzel_dbfs(buf, DSP_RATE, 1000, DSP_RATE), -3.0, 0.2);
   // Far from 1 kHz there is (almost) nothing.
-  CHECK(dsp_goertzel_dbfs(buf, 8000, 440, DSP_RATE) < -60);
+  CHECK(dsp_goertzel_dbfs(buf, DSP_RATE, 440, DSP_RATE) < -60);
 }
 
 TEST(silence_is_minus_100) {
@@ -39,14 +40,14 @@ TEST(silence_is_minus_100) {
 }
 
 TEST(dial_tone_has_both_frequencies) {
-  static int16_t buf[8000];
+  static int16_t buf[DSP_RATE];
   memset(buf, 0, sizeof buf);
   tone_gen_t g;
   tone_start(&g, TONE_DIAL, 8000);
-  CHECK(tone_mix(&g, buf, 8000));
-  float f350 = dsp_goertzel_dbfs(buf, 8000, 350, DSP_RATE);
-  float f440 = dsp_goertzel_dbfs(buf, 8000, 440, DSP_RATE);
-  float f1000 = dsp_goertzel_dbfs(buf, 8000, 1000, DSP_RATE);
+  CHECK(tone_mix(&g, buf, DSP_RATE));
+  float f350 = dsp_goertzel_dbfs(buf, DSP_RATE, 350, DSP_RATE);
+  float f440 = dsp_goertzel_dbfs(buf, DSP_RATE, 440, DSP_RATE);
+  float f1000 = dsp_goertzel_dbfs(buf, DSP_RATE, 1000, DSP_RATE);
   CHECK_NEAR(f350, f440, 0.5);
   CHECK(f350 > -20 && f350 < -10);  // 8000/32768 peak → -15.3 dBFS RMS
   CHECK(f1000 < f350 - 40);
@@ -54,13 +55,13 @@ TEST(dial_tone_has_both_frequencies) {
 
 TEST(busy_cadence_half_second) {
   // 480+620 Hz, 0.5 s on / 0.5 s off: the first 4000 samples sound, the next 4000 are silent.
-  static int16_t buf[8000];
+  static int16_t buf[DSP_RATE];
   memset(buf, 0, sizeof buf);
   tone_gen_t g;
   tone_start(&g, TONE_BUSY, 8000);
-  tone_mix(&g, buf, 8000);
-  CHECK(dsp_rms_dbfs(buf, 4000) > -20);
-  CHECK(dsp_rms_dbfs(buf + 4000, 4000) == -100);
+  tone_mix(&g, buf, DSP_RATE);
+  CHECK(dsp_rms_dbfs(buf, DSP_RATE / 2) > -20);
+  CHECK(dsp_rms_dbfs(buf + DSP_RATE / 2, DSP_RATE / 2) == -100);
   // It carries on across calls (frame by frame, as the audio task mixes it).
   int16_t frame[160] = {0};
   tone_mix(&g, frame, 160);
@@ -70,11 +71,11 @@ TEST(busy_cadence_half_second) {
 TEST(ringback_two_on_four_off) {
   tone_gen_t g;
   tone_start(&g, TONE_RINGBACK, 8000);
-  int16_t frame[160];
+  int16_t frame[DSP_FRAME];
   int sounding = 0;
   for (int i = 0; i < 300; i++) {  // 6 s in 20 ms frames
     memset(frame, 0, sizeof frame);
-    if (tone_mix(&g, frame, 160)) sounding++;
+    if (tone_mix(&g, frame, DSP_FRAME)) sounding++;
   }
   CHECK(sounding == 100);  // 2 s of 6
 }
@@ -99,21 +100,21 @@ TEST(gain_attenuates_and_saturates) {
 }
 
 TEST(meter_matches_block_functions) {
-  static int16_t buf[8000];
+  static int16_t buf[DSP_RATE];
   memset(buf, 0, sizeof buf);
   tone_gen_t g;
   tone_start(&g, TONE_DIAL, 8000);
-  tone_mix(&g, buf, 8000);
+  tone_mix(&g, buf, DSP_RATE);
   dsp_meter_t m;
-  dsp_meter_init(&m, 440, 8000);
+  dsp_meter_init(&m, 440, DSP_RATE);
   CHECK(m.rms_dbfs == -100);
   bool done = false;
-  for (int i = 0; i < 8000; i += 160) done = dsp_meter_feed(&m, buf + i, 160) || done;
+  for (int i = 0; i < DSP_RATE; i += DSP_FRAME) done = dsp_meter_feed(&m, buf + i, DSP_FRAME) || done;
   CHECK(done);
-  CHECK_NEAR(m.rms_dbfs, dsp_rms_dbfs(buf, 8000), 0.01);
-  CHECK_NEAR(m.tone_dbfs, dsp_goertzel_dbfs(buf, 8000, 440, DSP_RATE), 0.01);
+  CHECK_NEAR(m.rms_dbfs, dsp_rms_dbfs(buf, DSP_RATE), 0.01);
+  CHECK_NEAR(m.tone_dbfs, dsp_goertzel_dbfs(buf, DSP_RATE, 440, DSP_RATE), 0.01);
   // The next window starts clean: silence reads -100.
-  int16_t z[160] = {0};
-  for (int i = 0; i < 50; i++) dsp_meter_feed(&m, z, 160);
+  int16_t z[DSP_FRAME] = {0};
+  for (int i = 0; i < 50; i++) dsp_meter_feed(&m, z, DSP_FRAME);
   CHECK(m.rms_dbfs == -100 && m.tone_dbfs == -100);
 }

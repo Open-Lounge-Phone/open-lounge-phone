@@ -1,4 +1,14 @@
 dependencies:
+  espressif/esp_audio_codec:
+    component_hash: a5b9275af74247e3ce536d16a7080e4d77207a185b63e1bea368eb4d57176c2b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.6.2
   espressif/esp_libsrtp:
     component_hash: 131560184c73ec09f77d8904a2db709307803f0f9f111898921b6966776eac15
     dependencies: []
@@ -39,10 +49,11 @@ dependencies:
       type: idf
     version: 5.5.5
 direct_dependencies:
+- espressif/esp_audio_codec
 - espressif/esp_peer
 - espressif/esp_websocket_client
 - espressif/qrcode
 - idf
-manifest_hash: 9d8f8bedc8ebba46cfe8d64c48b55471b0d0baf5c4a1c5e9f08a956d56132bdf
+manifest_hash: 2cfa3a7f3cf22b428a895222cdc3601acc9a454b765c181a20cb4fc119f99bbb
 target: esp32s3
 version: 2.0.0

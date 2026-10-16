@@ -4,3 +4,6 @@ dependencies:
   espressif/qrcode: "^0.1.0"   # the setup screen's Wi-Fi QR code
   # WebRTC (ICE, DTLS-SRTP, RTP) from esp-webrtc-solution; see README "Call audio".
   espressif/esp_peer: "~1.5.6"
+  # Opus for calls (libopus inside; docs/audio.md item 2). Only its Opus encoder and decoder
+  # are linked.
+  espressif/esp_audio_codec: "~2.6.2"

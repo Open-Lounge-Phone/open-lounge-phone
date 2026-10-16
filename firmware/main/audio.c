@@ -8,8 +8,10 @@
 #include "audio_dev.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "jbuf.h"
-#include "plc.h"
+#include "resample.h"
+#include "voice.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -17,7 +19,8 @@
 
 static const char *TAG = "audio";
 #define NS "olp"
-#define RING 4000             // the loopback test's delay line (500 ms)
+#define RING (DSP_RATE / 2)   // the loopback test's delay line (500 ms; allocated when used)
+#define NB_FRAME (DSP_FRAME / 2)  // 20 ms at 8 kHz (voicemail and greetings)
 #define TONE_AMP 6000         // per sine: -18 dBFS each, like the web phone's quiet tones
 
 static const audio_dev_t *s_dev;
@@ -25,7 +28,7 @@ static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // Shared state (s_lock).
 static jbuf_t s_jb;  // the call's received packets (docs/audio.md item 4)
-static int16_t s_ring[RING];
+static int16_t *s_ring;
 static size_t s_head, s_fill;  // write position = (s_head + s_fill) % RING
 static bool s_playing;
 static bool s_offhook, s_call, s_held, s_muted, s_listen;
@@ -35,6 +38,7 @@ static size_t s_play_len, s_play_pos;
 static size_t s_rec_max, s_rec_len;
 static tone_t s_tone_want;
 static audio_sender_t s_sender;
+static voice_codec_t s_tx_codec, s_rx_codec;  // what the call sends / receives
 static int s_volume = VOLUME_DEFAULT;
 static bool s_volume_dirty = true;
 static int s_loop_ms;
@@ -45,6 +49,10 @@ static audio_stats_t s_stats = {.mic_dbfs = -100, .mic_peak_dbfs = -100, .rx_dbf
 
 // Task-only state.
 static tone_gen_t s_tone;
+static voice_tx_t s_vtx;  // the call's codec, both ways (voice.h)
+static voice_rx_t s_vrx;
+static rs_t s_rec_rs, s_play_rs;  // 16 ↔ 8 kHz for voicemail and greetings
+static uint32_t s_enc_us, s_enc_max_us, s_dec_us, s_dec_max_us, s_codec_frames;
 static agc_t s_agc;  // the mic's automatic gain (item 1 of docs/audio.md)
 static bool s_agc_on = CONFIG_OLP_MIC_AGC;
 static int s_speech_frames;             // speech frames in the current one-second window…
@@ -108,31 +116,40 @@ void audio_rx_packet(const uint8_t *data, size_t n, uint32_t pts_ms) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
-/** The next 20 ms of the call: a packet decoded, or a lost one concealed (PCMU: plc.c). */
-static plc_t s_plc;
+/** The next 20 ms of the call: a packet decoded, or a lost one concealed (voice.c). */
 static bool call_frame(int16_t *out) {
-  uint8_t pkt[JB_MAX_PACKET];
-  size_t len = 0;
+  uint8_t pkt[JB_MAX_PACKET], next[JB_MAX_PACKET];
+  size_t len = 0, next_len = 0;
   taskENTER_CRITICAL(&s_lock);
   jb_out_t o = jb_get(&s_jb);
   if (o.kind == JB_PACKET) {
     len = o.len;
     memcpy(pkt, o.data, len);
+  } else if (o.kind == JB_LOST && o.next) {
+    next_len = o.next_len;
+    memcpy(next, o.next, next_len);
   }
   taskEXIT_CRITICAL(&s_lock);
   if (o.kind == JB_WAIT) {
     memset(out, 0, DSP_FRAME * sizeof *out);
     return false;
   }
-  if (o.kind == JB_LOST) {
-    plc_lost(&s_plc, out, DSP_FRAME);
-    return true;
-  }
-  int16_t pcm[DSP_FRAME] = {0};
-  dsp_ulaw_decode_buf(pkt, pcm, len < DSP_FRAME ? len : DSP_FRAME);
-  plc_good(&s_plc, pcm, out, DSP_FRAME);
+  int64_t t0 = esp_timer_get_time();
+  if (o.kind == JB_LOST) voice_conceal(&s_vrx, next_len ? next : NULL, next_len, out);
+  else voice_decode(&s_vrx, pkt, len, out);
+  uint32_t us = (uint32_t)(esp_timer_get_time() - t0);
+  s_dec_us += us;
+  if (us > s_dec_max_us) s_dec_max_us = us;
   return true;
 }
+
+/** The Opus states in internal RAM when there's room (faster than PSRAM). */
+void *voice_alloc(size_t size) {
+  void *p = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  return p ? p : heap_caps_malloc(size, MALLOC_CAP_8BIT);
+}
+
+void voice_free(void *p) { heap_caps_free(p); }
 
 static void measure(dsp_meter_t *m, const int16_t *pcm, size_t n, bool rx) {
   taskENTER_CRITICAL(&s_lock);
@@ -195,7 +212,14 @@ void audio_agc(bool on) {
 
 bool audio_agc_on(void) { return s_agc_on; }
 
+void audio_rx_codec(voice_codec_t codec) {
+  taskENTER_CRITICAL(&s_lock);
+  s_rx_codec = codec;
+  taskEXIT_CRITICAL(&s_lock);
+}
+
 void audio_record(int16_t *buf, size_t max_samples) {
+  rs_init(&s_rec_rs);
   taskENTER_CRITICAL(&s_lock);
   s_rec_buf = buf;
   s_rec_max = buf ? max_samples : 0;
@@ -257,10 +281,23 @@ void audio_listen(bool on) {
   taskEXIT_CRITICAL(&s_lock);
 }
 
+/** The call's codecs changed (or it started): open them afresh. */
+static void open_codecs(voice_codec_t tx, voice_codec_t rx) {
+  voice_tx_close(&s_vtx);
+  voice_rx_close(&s_vrx);
+  if (!voice_tx_open(&s_vtx, tx)) ESP_LOGW(TAG, "%s encoder failed: sending PCMU", voice_codec_name(tx));
+  if (!voice_rx_open(&s_vrx, rx)) ESP_LOGW(TAG, "%s decoder failed", voice_codec_name(rx));
+  s_enc_us = s_enc_max_us = s_dec_us = s_dec_max_us = s_codec_frames = 0;
+  ESP_LOGI(TAG, "call codec: send %s, receive %s (16 kHz audio)", voice_codec_name(s_vtx.codec),
+           voice_codec_name(s_vrx.codec));
+}
+
 static void task(void *arg) {
   int16_t mic[DSP_FRAME], out[DSP_FRAME];
-  uint8_t ulaw[DSP_FRAME];
+  uint8_t pkt[VOICE_MAX_PACKET];
   uint32_t pts = 0;
+  bool codecs_open = false;
+  voice_codec_t tx_now = VOICE_PCMU, rx_now = VOICE_PCMU;
   tone_t tone_now = TONE_NONE;
   bool mic_now = false, speaker_now = false;
   int64_t last_log = 0;
@@ -273,6 +310,7 @@ static void task(void *arg) {
     tone_t want = s_forced_tone != TONE_NONE ? s_forced_tone : s_tone_want;
     bool forced = s_forced_tone != TONE_NONE;
     audio_sender_t sender = s_sender;
+    voice_codec_t tx_want = s_tx_codec, rx_want = s_rx_codec;
     int loop_ms = s_loop_ms, volume = s_volume;
     s_volume_dirty = false;
     taskEXIT_CRITICAL(&s_lock);
@@ -299,6 +337,16 @@ static void task(void *arg) {
       tone_start(&s_tone, want, TONE_AMP);
       tone_now = want;
     }
+    if (call && (!codecs_open || tx_want != tx_now || rx_want != rx_now)) {
+      open_codecs(tx_want, rx_want);
+      codecs_open = true;
+      tx_now = tx_want;
+      rx_now = rx_want;
+    } else if (!call && codecs_open) {
+      voice_tx_close(&s_vtx);
+      voice_rx_close(&s_vrx);
+      codecs_open = false;
+    }
 
     if (!mic_now && !speaker_now) {
       // Hung up and nothing to play: sleep (the I2S DMA plays silence by itself).
@@ -310,10 +358,12 @@ static void task(void *arg) {
       measure(&s_mic_meter, mic, DSP_FRAME, false);  // the level from the ADC (before the AGC)
       mic_gain(mic, DSP_FRAME);
       if (rec) {
+        int16_t nb[NB_FRAME];  // voicemail is 8 kHz WAV
+        rs_down(&s_rec_rs, mic, DSP_FRAME, nb);
         taskENTER_CRITICAL(&s_lock);
         if (s_rec_buf) {
-          size_t n = s_rec_max - s_rec_len < DSP_FRAME ? s_rec_max - s_rec_len : DSP_FRAME;
-          memcpy(s_rec_buf + s_rec_len, mic, n * sizeof(int16_t));
+          size_t n = s_rec_max - s_rec_len < NB_FRAME ? s_rec_max - s_rec_len : NB_FRAME;
+          memcpy(s_rec_buf + s_rec_len, nb, n * sizeof(int16_t));
           s_rec_len += n;
         }
         taskEXIT_CRITICAL(&s_lock);
@@ -322,8 +372,13 @@ static void task(void *arg) {
     if (call && sender) {
       // On hold or muted: silence keeps the connection alive.
       if (held || muted || !mic_now) memset(mic, 0, sizeof mic);
-      dsp_ulaw_encode_buf(mic, ulaw, DSP_FRAME);
-      sender(ulaw, DSP_FRAME, pts);
+      int64_t t0 = esp_timer_get_time();
+      size_t n = voice_encode(&s_vtx, mic, pkt, sizeof pkt);
+      uint32_t us = (uint32_t)(esp_timer_get_time() - t0);
+      s_enc_us += us;
+      if (us > s_enc_max_us) s_enc_max_us = us;
+      s_codec_frames++;
+      if (n) sender(pkt, n, pts);
       taskENTER_CRITICAL(&s_lock);
       s_stats.tx_frames++;
       taskEXIT_CRITICAL(&s_lock);
@@ -332,22 +387,30 @@ static void task(void *arg) {
 
     memset(out, 0, sizeof out);
     if (loop_ms > 0) {
-      taskENTER_CRITICAL(&s_lock);
-      ring_push(mic, DSP_FRAME);
-      taskEXIT_CRITICAL(&s_lock);
-      ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
+      if (!s_ring) s_ring = heap_caps_calloc(RING, sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!s_ring) s_ring = calloc(RING, sizeof(int16_t));
+      if (s_ring) {
+        taskENTER_CRITICAL(&s_lock);
+        ring_push(mic, DSP_FRAME);
+        taskEXIT_CRITICAL(&s_lock);
+        ring_pop(out, DSP_FRAME, (size_t)loop_ms * DSP_RATE / 1000);
+      }
     } else if (call) {
       if (call_frame(out)) measure(&s_rx_meter, out, DSP_FRAME, true);
       if (held) memset(out, 0, sizeof out);
     }
     if (play) {
       taskENTER_CRITICAL(&s_lock);
+      int16_t nb[NB_FRAME] = {0};  // voicemail is 8 kHz WAV
+      bool first = s_play_pos == 0;
       if (s_play_buf) {
-        size_t n = s_play_len - s_play_pos < DSP_FRAME ? s_play_len - s_play_pos : DSP_FRAME;
-        memcpy(out, s_play_buf + s_play_pos, n * sizeof(int16_t));
+        size_t n = s_play_len - s_play_pos < NB_FRAME ? s_play_len - s_play_pos : NB_FRAME;
+        memcpy(nb, s_play_buf + s_play_pos, n * sizeof(int16_t));
         s_play_pos += n;
       }
       taskEXIT_CRITICAL(&s_lock);
+      if (first) rs_init(&s_play_rs);
+      rs_up(&s_play_rs, nb, NB_FRAME, out);
     }
     tone_mix(&s_tone, out, DSP_FRAME);
     s_dev->write(out, DSP_FRAME);  // blocks ~20 ms
@@ -357,13 +420,21 @@ static void task(void *arg) {
       if (now - last_log >= 5000) {
         last_log = now;
         audio_stats_t st = audio_stats();
-        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu conceal=%lu late=%lu jb=%d "
-                 "jit=%.0f miclevel=%.1f agc=%.1f speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f",
+        uint32_t frames = s_codec_frames ? s_codec_frames : 1;
+        // CPU per 20 ms frame: encode (the mic) and decode (the call), average and worst.
+        ESP_LOGI(TAG, "AUDIO tx=%lu rx=%lu rxbytes=%lu under=%lu conceal=%lu fec=%lu late=%lu "
+                 "jb=%d jit=%.0f miclevel=%.1f agc=%.1f speech=%.1f rxlevel=%.1f rx%.0fHz=%.1f "
+                 "codec=%s/%s enc=%lu/%luus dec=%lu/%luus stack=%u",
                  (unsigned long)st.tx_frames, (unsigned long)st.rx_frames,
                  (unsigned long)st.rx_bytes, (unsigned long)st.underruns,
-                 (unsigned long)st.concealed, (unsigned long)st.late, st.jb_target_ms,
-                 st.jitter_ms, st.mic_dbfs, st.agc_gain_db, st.speech_out_dbfs, st.rx_dbfs,
-                 st.watch_hz, st.rx_tone_dbfs);
+                 (unsigned long)st.concealed, (unsigned long)s_vrx.fec_frames,
+                 (unsigned long)st.late, st.jb_target_ms, st.jitter_ms, st.mic_dbfs,
+                 st.agc_gain_db, st.speech_out_dbfs, st.rx_dbfs, st.watch_hz, st.rx_tone_dbfs,
+                 voice_codec_name(s_vtx.codec), voice_codec_name(s_vrx.codec),
+                 (unsigned long)(s_enc_us / frames), (unsigned long)s_enc_max_us,
+                 (unsigned long)(s_dec_us / frames), (unsigned long)s_dec_max_us,
+                 (unsigned)uxTaskGetStackHighWaterMark(NULL));
+        s_enc_us = s_enc_max_us = s_dec_us = s_dec_max_us = s_codec_frames = 0;
       }
     }
   }
@@ -381,7 +452,8 @@ void audio_start(bool force_test_device) {
   }
   ESP_LOGI(TAG, "audio device: %s; volume %d/%d (%.0f dBFS, cap %d dBFS)", s_dev->name, s_volume,
            VOLUME_MAX, audio_volume_db(s_volume), CONFIG_OLP_EARPIECE_MAX_DB);
-  xTaskCreatePinnedToCore(task, "audio", 4096, NULL, 7, NULL, 1);
+  // Opus encodes on this task's stack (libopus's scratch arrays): AUDIO stack= shows what's left.
+  xTaskCreatePinnedToCore(task, "audio", 40960, NULL, 7, NULL, 1);
 }
 
 void audio_set_offhook(bool up) {
@@ -405,14 +477,15 @@ void audio_force_tone(tone_t tone) {
   ESP_LOGI(TAG, "bring-up tone %s", tone_name(tone));
 }
 
-void audio_call(bool on, audio_sender_t sender) {
+void audio_call(bool on, voice_codec_t codec, audio_sender_t sender) {
   taskENTER_CRITICAL(&s_lock);
   bool changed = s_call != on;
   s_call = on;
   s_sender = on ? sender : NULL;
+  if (on && changed) s_tx_codec = s_rx_codec = codec;
+  if (on) s_tx_codec = codec;
   if (changed && on) {
     jb_init(&s_jb);
-    plc_init(&s_plc, DSP_RATE);
     s_stats.tx_frames = s_stats.rx_frames = s_stats.rx_bytes = 0;
     s_stats.underruns = s_stats.drops = 0;
     s_stats.mic_dbfs = s_stats.rx_dbfs = s_stats.rx_tone_dbfs = -100;

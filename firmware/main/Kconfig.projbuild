@@ -180,6 +180,13 @@ config OLP_MIC_SCALE_DB
     help
         The ES8311 ADC's digital gain after the PGA (register 0x16).
 
+config OLP_CALL_OPUS
+    bool "Opus wideband calls (16 kHz), PCMU as the fallback"
+    default y
+    help
+        The phone offers and accepts Opus (16 kHz mono, about 24 kbit/s, in-band FEC) and PCMU.
+        Off: PCMU (8 kHz G.711) only, as firmware up to 0.9.5.
+
 config OLP_MIC_AGC
     bool "Automatic gain control on the handset mic"
     default y

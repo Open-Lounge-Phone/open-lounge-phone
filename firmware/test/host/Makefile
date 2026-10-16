@@ -9,6 +9,9 @@ LABS := ../../labs/main
 MBEDTLS := $(IDF_PATH)/components/mbedtls/mbedtls
 MBED_FLAGS := -I$(MBEDTLS)/include -I$(MBEDTLS)/library -DMBEDTLS_CONFIG_FILE='"mbedtls_host_config.h"'
 MBED_OBJS := build/mbed_aes.o build/mbed_sha256.o build/mbed_platform_util.o
+# libopus for the voice codec's tests (the phone's comes in esp_audio_codec): the system's
+# (macOS: brew install opus; Debian/Ubuntu: apt-get install libopus-dev pkg-config).
+OPUS_LIBS ?= $(shell pkg-config --libs opus 2>/dev/null || echo -lopus)
 SAN := -fsanitize=address,undefined -fno-omit-frame-pointer
 BASE := -std=gnu11 -O1 -g -I$(MAIN) -I$(LABS) -I$(CJSON) -I. -D_DEFAULT_SOURCE $(MBED_FLAGS) $(SAN)
 CFLAGS := $(BASE) -Wall -Wextra -Werror
@@ -27,7 +30,7 @@ build/mbed_%.o: $(MBEDTLS)/library/%.c mbedtls_host_config.h
 	$(CC) $(BASE) -w -c -o $@ $<
 build/tests: $(SRCS) build/cJSON.o $(MBED_OBJS) $(wildcard *.h) $(wildcard $(MAIN)/*.h)
 	@mkdir -p build
-	$(CC) $(CFLAGS) -o $@ $(SRCS) build/cJSON.o $(MBED_OBJS) $(SAN) -lm
+	$(CC) $(CFLAGS) -o $@ $(SRCS) build/cJSON.o $(MBED_OBJS) $(SAN) $(OPUS_LIBS) -lm
 run: build/tests
 	./build/tests
 clean:

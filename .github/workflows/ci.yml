@@ -51,7 +51,10 @@ jobs:
       - name: Generated sources are up to date
         run: python3 firmware/tools/gen_board.py --check
       - name: Host unit tests (pure modules)
-        run: make -C firmware/test/host
+        run: |
+          # libopus for the voice codec's tests (the phone's own comes in esp_audio_codec).
+          apt-get update -qq && apt-get install -y -qq libopus-dev pkg-config >/dev/null
+          make -C firmware/test/host
       - name: Release scheme (no keys or servers in source builds; official key + fw-stable in releases)
         run: python3 firmware/tools/check_release_scheme.py
       - name: Build (board, rev A)

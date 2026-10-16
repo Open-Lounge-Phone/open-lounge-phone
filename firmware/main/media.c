@@ -15,6 +15,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
+#include "sdp.h"
 
 static const char *TAG = "media";
 // The other side's candidates are pooled for a moment after its SDP (they arrive in a burst) and
@@ -40,6 +41,11 @@ static int s_npending;
 static int s_fed;              // remote candidates given to esp_peer in this call
 static int64_t s_settle_at;    // when the pooled candidates go in (after the remote SDP)
 static ice_mode_t s_ice_mode = ICE_ALL;
+// The codec this phone sends (fixed when the peer opens: esp_peer sends what it was opened with).
+// Opus unless the other side can't (docs/audio.md item 2); PCMU is offered and accepted too.
+static voice_codec_t s_send_codec;
+static char *s_ice_json;  // this call's ICE servers, to open again with PCMU
+static bool s_offerer;
 #if CONFIG_OLP_ICE_PREFER_TLS
 #define PREFER_TLS true
 #else
@@ -64,29 +70,32 @@ static const char *state_name(esp_peer_state_t s) {
 
 // --- esp_peer callbacks (run on the rtc task, inside esp_peer_main_loop) ---------------------
 
-static void send_audio(const uint8_t *ulaw, size_t n, uint32_t pts_ms) {
+static void send_audio(const uint8_t *data, size_t n, uint32_t pts_ms) {
   if (!s_connected) return;
   if (xSemaphoreTake(s_peer_lock, 0) != pdTRUE) return;  // closing: skip this frame
   if (s_peer) {
-    esp_peer_audio_frame_t f = {.pts = pts_ms, .data = (uint8_t *)ulaw, .size = (int)n};
+    esp_peer_audio_frame_t f = {.pts = pts_ms, .data = (uint8_t *)data, .size = (int)n};
     esp_peer_send_audio(s_peer, &f);
   }
   xSemaphoreGive(s_peer_lock);
 }
 
+static volatile bool s_closing;  // close_peer: its own disconnect isn't news for the app
+
 static int on_state(esp_peer_state_t state, void *ctx) {
+  if (s_closing) return 0;
   s_last_state = state;
   ESP_LOGI(TAG, "RTC state %s (%d ms)", state_name(state), (int)(now_ms() - s_started_ms));
   if (state == ESP_PEER_STATE_CONNECTED) {
     s_connected = true;
     s_connected_ms = now_ms();
     ESP_LOGI(TAG, "RTC CONNECTED: ICE + DTLS-SRTP up in %d ms", (int)(s_connected_ms - s_started_ms));
-    audio_call(true, send_audio);
+    audio_call(true, s_send_codec, send_audio);
     app_post(EV_RTC_STATE, 1, NULL);
   } else if (state == ESP_PEER_STATE_DISCONNECTED || state == ESP_PEER_STATE_CONNECT_FAILED) {
     bool was = s_connected;
     s_connected = false;
-    audio_call(false, NULL);
+    audio_call(false, VOICE_PCMU, NULL);
     ESP_LOGW(TAG, "RTC %s", state == ESP_PEER_STATE_CONNECT_FAILED ? "FAILED" : "DISCONNECTED");
     app_post(EV_RTC_STATE, was ? 2 : 3, NULL);
   }
@@ -96,10 +105,14 @@ static int on_state(esp_peer_state_t state, void *ctx) {
 static int on_msg(esp_peer_msg_t *msg, void *ctx) {
   if (msg->type != ESP_PEER_MSG_TYPE_SDP || !msg->data) return 0;
   ESP_LOGI(TAG, "local SDP ready (%d bytes, %d ms)", msg->size, (int)(now_ms() - s_started_ms));
-  char *sdp = malloc((size_t)msg->size + 1);
-  if (!sdp) return 0;
-  memcpy(sdp, msg->data, (size_t)msg->size);
-  sdp[msg->size] = '\0';
+  char *raw = malloc((size_t)msg->size + 1);
+  if (!raw) return 0;
+  memcpy(raw, msg->data, (size_t)msg->size);
+  raw[msg->size] = '\0';
+  // Our Opus receive parameters (FEC from the other side, 16 kHz is enough).
+  char *sdp = sdp_with_opus_params(raw);
+  if (sdp) free(raw);
+  else sdp = raw;
   app_post(EV_RTC_SDP, 0, sdp);  // the app sends it as rtc.sdp (offer or answer)
   return 0;
 }
@@ -114,7 +127,9 @@ static const char *codec_name(esp_peer_audio_codec_t c) {
 static int on_audio_info(esp_peer_audio_stream_info_t *info, void *ctx) {
   ESP_LOGI(TAG, "remote audio: codec %d, %lu Hz, %d ch", info->codec, (unsigned long)info->sample_rate,
            info->channel);
-  ESP_LOGI(TAG, "CODEC send=%s recv=%s", "pcmu", codec_name(info->codec));
+  voice_codec_t rx = info->codec == ESP_PEER_AUDIO_CODEC_OPUS ? VOICE_OPUS : VOICE_PCMU;
+  audio_rx_codec(rx);
+  ESP_LOGI(TAG, "CODEC send=%s recv=%s", voice_codec_name(s_send_codec), codec_name(info->codec));
   return 0;
 }
 
@@ -136,11 +151,13 @@ static int on_data(esp_peer_data_frame_t *frame, void *ctx) { return 0; }
 
 static void close_peer(void) {
   s_connected = false;
-  audio_call(false, NULL);
+  audio_call(false, VOICE_PCMU, NULL);
   xSemaphoreTake(s_peer_lock, portMAX_DELAY);
   if (s_peer) {
+    s_closing = true;
     esp_peer_disconnect(s_peer);
     esp_peer_close(s_peer);
+    s_closing = false;
     s_peer = NULL;
     ESP_LOGI(TAG, "RTC closed");
   }
@@ -171,8 +188,18 @@ static void feed_pool(void) {
   s_npending = 0;
 }
 
-static void start_peer(const char *ice_json, bool offerer) {
+static void start_peer(const char *ice_json, bool offerer, voice_codec_t codec) {
   close_peer();
+  if (ice_json != s_ice_json) {
+    free(s_ice_json);
+    s_ice_json = strdup(ice_json ? ice_json : "[]");
+  }
+  s_offerer = offerer;
+#if CONFIG_OLP_CALL_OPUS
+  s_send_codec = codec;
+#else
+  s_send_codec = VOICE_PCMU;
+#endif
   // The TCP/TLS relay only when it was asked for (Kconfig, or `ice tcp` / `ice tls`).
 #if CONFIG_OLP_ICE_TCP_RELAY
   bool tcp_relay = true;
@@ -218,7 +245,15 @@ static void start_peer(const char *ice_json, bool offerer) {
       .role = offerer ? ESP_PEER_ROLE_CONTROLLING : ESP_PEER_ROLE_CONTROLLED,
       .ice_trans_policy = (s_ice_mode == ICE_TCP || s_ice_mode == ICE_TLS) ? ESP_PEER_ICE_TRANS_POLICY_RELAY
                                                 : ESP_PEER_ICE_TRANS_POLICY_ALL,
-      .audio_info = {.codec = ESP_PEER_AUDIO_CODEC_G711U, .sample_rate = 8000, .channel = 1},
+      .audio_info = s_send_codec == VOICE_OPUS
+                        ? (esp_peer_audio_stream_info_t){.codec = ESP_PEER_AUDIO_CODEC_OPUS,
+                                                         .sample_rate = 16000, .channel = 1}
+                        : (esp_peer_audio_stream_info_t){.codec = ESP_PEER_AUDIO_CODEC_G711U,
+                                                         .sample_rate = 8000, .channel = 1},
+#if CONFIG_OLP_CALL_OPUS
+      // Both in the SDP: Opus and PCMU (an offer lists both, an answer what both sides have).
+      .codec_caps = ESP_PEER_CAPS_AUD_OPUS | ESP_PEER_CAPS_AUD_G711U,
+#endif
       .audio_dir = ESP_PEER_MEDIA_DIR_SEND_RECV,
       .video_dir = ESP_PEER_MEDIA_DIR_NONE,
       .no_auto_reconnect = true,
@@ -236,8 +271,8 @@ static void start_peer(const char *ice_json, bool offerer) {
   s_started_ms = now_ms();
   s_connected_ms = 0;
   s_rx_logged = 0;
-  ESP_LOGI(TAG, "RTC start: %s, ICE %s [%s], G.711 PCMU", offerer ? "offerer" : "answerer",
-           ice_mode_name(s_ice_mode), s_servers_log);
+  ESP_LOGI(TAG, "RTC start: %s, ICE %s [%s], sends %s", offerer ? "offerer" : "answerer",
+           ice_mode_name(s_ice_mode), s_servers_log, voice_codec_name(s_send_codec));
   esp_peer_handle_t peer = NULL;
   int r = esp_peer_open(&cfg, esp_peer_get_default_impl(), &peer);
   if (r != ESP_PEER_ERR_NONE || !peer) {
@@ -255,7 +290,7 @@ static void start_peer(const char *ice_json, bool offerer) {
 static void handle(cmd_t *c) {
   switch (c->type) {
     case CMD_START:
-      start_peer(c->text, c->offerer);
+      start_peer(c->text, c->offerer, VOICE_OPUS);
       break;
     case CMD_SDP:
       if (!s_peer) break;
@@ -266,6 +301,16 @@ static void handle(cmd_t *c) {
         break;
       }
       {
+        unsigned have = sdp_audio_codecs(c->text);
+        ESP_LOGI(TAG, "remote SDP has%s%s", have & SDP_OPUS ? " opus" : "", have & SDP_PCMU ? " pcmu" : "");
+        if (s_send_codec == VOICE_OPUS && !(have & SDP_OPUS) && !s_offerer) {
+          // An offer without Opus: open again sending PCMU, before answering it.
+          ESP_LOGI(TAG, "no Opus in the offer: PCMU");
+          start_peer(s_ice_json, false, VOICE_PCMU);
+          if (!s_peer) break;
+        } else if (s_send_codec == VOICE_OPUS && !(have & SDP_OPUS)) {
+          ESP_LOGW(TAG, "the answer has no Opus");
+        }
         esp_peer_msg_t m = {.type = ESP_PEER_MSG_TYPE_SDP, .data = (uint8_t *)c->text,
                             .size = (int)strlen(c->text)};
         int r = esp_peer_send_msg(s_peer, &m);

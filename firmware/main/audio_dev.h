@@ -1,6 +1,6 @@
 // The audio device behind the call: the ES8311 codec on the board, or a test device (a 1 kHz
 // source and an analysing sink) so the WebRTC path runs without the codec (the simulator,
-// bring-up). 8 kHz, 16-bit mono, 20 ms frames (dsp.h).
+// bring-up). 16 kHz, 16-bit mono, 20 ms frames (dsp.h).
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>

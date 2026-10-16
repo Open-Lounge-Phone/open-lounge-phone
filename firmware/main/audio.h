@@ -6,12 +6,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "dsp.h"
+#include "voice.h"
 
 #define VOLUME_MAX 10
 #define VOLUME_DEFAULT 6
 
-/** Sends one 20 ms mu-law frame to the call (set by rtc.c). */
-typedef void (*audio_sender_t)(const uint8_t *ulaw, size_t n, uint32_t pts_ms);
+/** Sends one 20 ms packet (Opus or mu-law, the call's codec) to the call. */
+typedef void (*audio_sender_t)(const uint8_t *data, size_t n, uint32_t pts_ms);
 
 /** Picks the device (ES8311 if found, else the test device) and starts the task. */
 void audio_start(bool force_test_device);
@@ -20,10 +21,13 @@ const char *audio_device_name(void);
 /** The handset is up: the earpiece plays (tones, the call). Down: muted. */
 void audio_set_offhook(bool up);
 void audio_set_tone(tone_t tone);
-/** Call media on/off: the mic is captured and sent only while on. */
-void audio_call(bool on, audio_sender_t sender);
+/** Call media on/off: the mic is captured and sent only while on, coded as `codec` (and the
+ * call's packets are taken to be that too, until audio_rx_codec says otherwise). */
+void audio_call(bool on, voice_codec_t codec, audio_sender_t sender);
+/** The codec of what the other side sends (it may differ from ours). */
+void audio_rx_codec(voice_codec_t codec);
 /**
- * Leaving a voicemail: the mic records 8 kHz 16-bit samples into `buf` (at most `max_samples`;
+ * Leaving a voicemail: the mic records 8 kHz 16-bit samples (resampled from the 16 kHz path) into `buf` (at most `max_samples`;
  * the mic is on only meanwhile). audio_record_stop ends it and says how many samples it took.
  */
 void audio_record(int16_t *buf, size_t max_samples);

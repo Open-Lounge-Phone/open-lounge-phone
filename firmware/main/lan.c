@@ -219,12 +219,12 @@ static void ic_sync(void) {
     s_rx_last = 0;
     s_audio_peer = s_ic.peer_ip;
     s_audio_on = true;
-    audio_call(true, audio_send);
+    audio_call(true, VOICE_PCMU, audio_send);  // G.711 between phones on the LAN
     ESP_LOGI(TAG, "IC talking with %s", s_ic.peer);
   } else if (!talk && s_audio_on) {
     s_audio_on = false;
     s_audio_peer = 0;
-    audio_call(false, NULL);
+    audio_call(false, VOICE_PCMU, NULL);
   }
   if (s_ic.chimed) {
     s_ic.chimed = false;

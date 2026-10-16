@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DSP_RATE 8000       // the call's sample rate (G.711)
-#define DSP_FRAME 160       // 20 ms at 8 kHz
+#define DSP_RATE 16000      // the audio path's sample rate (Opus wideband; G.711 goes via resample.h)
+#define DSP_FRAME 320       // 20 ms at 16 kHz
 
 // --- G.711 mu-law (PCMU, RTP payload type 0) -----------------------------------------------
 uint8_t dsp_ulaw_encode(int16_t pcm);

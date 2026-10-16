@@ -1,5 +1,5 @@
 // The ES8311 codec (I2C 0x18) on I2S0: the handset's earpiece (OUTP) and electret mic (MIC1).
-// 8 kHz, 16-bit, mono, MCLK = 256 x fs = 2.048 MHz from the S3 (the codec is the I2S slave).
+// 16 kHz, 16-bit, mono, MCLK = 256 x fs = 4.096 MHz from the S3 (the codec is the I2S slave).
 // Register values follow the ES8311 user guide and Espressif's es8311 driver (esp-bsp, Apache-2.0),
 // rewritten on the new i2c_master API (the legacy I2C driver can't share the bus with it).
 #include <string.h>
@@ -131,8 +131,8 @@ static esp_err_t init(void) {
   };
   if ((err = i2s_channel_init_std_mode(s_tx, &std)) != ESP_OK) return err;
   // Receive one slot only. Mono with the default slot mask (both) reads the left AND right slot
-  // of every frame: 16000 samples a second for an 8 kHz call, each mic sample twice. The audio
-  // task reads 8000 a second, so half of every 20 ms block was dropped and the rest played at
+  // of every frame: twice the sample rate, each mic sample twice. The audio
+  // task reads one per sample period, so half of every 20 ms block was dropped and the rest played at
   // half speed (calls and voicemail sounded like mush). The ES8311 puts its ADC on the left.
   i2s_std_config_t rx = std;
   rx.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
@@ -146,9 +146,9 @@ static esp_err_t init(void) {
   vTaskDelay(pdMS_TO_TICKS(20));
   wr(0x00, 0x00);
   wr(0x00, 0x80);
-  // Clocks: all on, MCLK from the MCLK pin; dividers for 2.048 MHz / 8 kHz
-  // (coefficient row {2048000, 8000, pre_div 1, mult 0, adc_div 1, dac_div 1, fs 0,
-  // lrck 0x00ff, bclk_div 4, adc_osr 0x10, dac_osr 0x10}).
+  // Clocks: all on, MCLK from the MCLK pin; dividers for 4.096 MHz / 16 kHz (coefficient row
+  // {4096000, 16000, pre_div 1, mult 0, adc_div 1, dac_div 1, fs 0, lrck 0x00ff, bclk_div 4,
+  // adc_osr 0x10, dac_osr 0x10}: the same values as 2.048 MHz / 8 kHz, as MCLK = 256 x fs).
   wr(0x01, 0x3F);
   wr(0x02, 0x00);
   wr(0x03, 0x10);
@@ -171,7 +171,7 @@ static esp_err_t init(void) {
   s_mic_on = true;
   mic(false);
   speaker(false);
-  ESP_LOGI(TAG, "ES8311 (id %02x%02x) ready: 8 kHz, mic PGA %d dB, scale-up %d dB", id[0], id[1],
+  ESP_LOGI(TAG, "ES8311 (id %02x%02x) ready: 16 kHz, mic PGA %d dB, scale-up %d dB", id[0], id[1],
            s_pga_db, s_scale_db);
   return ESP_OK;
 }
