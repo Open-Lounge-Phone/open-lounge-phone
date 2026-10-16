@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ log = logging.getLogger("olp_addon")
 
 CallHandler = Callable[[Call], Awaitable[Any]]
 ShareRequestHandler = Callable[[p.ShareRequest], Any]
+TestHandler = Callable[[], Any]
 
 #: Seconds between keep-alive pings (the server and proxies close quiet sockets).
 PING_EVERY_S = 25.0
@@ -76,6 +78,9 @@ class Addon:
         self.identity: p.Identity | None = None
         self._handler: CallHandler | None = None
         self._share_handler: ShareRequestHandler | None = None
+        self._test_handler: TestHandler | None = None
+        #: When it started (Test connection reports how long it has been up).
+        self._started = time.monotonic()
         #: What it offers for sharing (None: never said, so nothing is sent).
         self._shares: list[dict[str, str]] | None = None
         #: What it says it does (`addon.about`; None: never said).
@@ -281,6 +286,38 @@ class Addon:
             log.exception("share request handler failed")
             await self._send(p.share_refused(req.request_id, "Something went wrong."))
 
+    def on_test(self, handler: TestHandler) -> TestHandler:
+        """Sets an optional check (usable as a decorator) for Test connection. The bridge always
+        answers a test by itself, with its version, how long it has been up and how many calls
+        it is on; `handler()` (sync or async) runs first and may check what the add-on needs
+        (its model, its storage). Return a dict to change `version`, `uptime_s` or `calls`; raise
+        to not answer, so the test says it didn't answer."""
+        self._test_handler = handler
+        return handler
+
+    async def _test(self, msg: p.Message) -> None:
+        fields: dict[str, Any] = {
+            "version": self.fw,
+            "uptime_s": int(time.monotonic() - self._started),
+            "calls": sum(1 for c in self._calls.values() if not c.ended),
+        }
+        try:
+            if self._test_handler is not None:
+                extra = self._test_handler()
+                if inspect.isawaitable(extra):
+                    extra = await extra
+                if isinstance(extra, dict):
+                    fields.update(
+                        {k: v for k, v in extra.items() if k in ("version", "uptime_s", "calls")}
+                    )
+        except Exception:
+            log.exception("test handler failed: not answering the test")
+            return
+        try:
+            await self._send(p.test_ok(str(msg.get("testId", "")), **fields))
+        except ConnectionError:
+            pass  # the test says it didn't answer
+
     def _spawn(self, work: Awaitable[Any]) -> None:
         task = asyncio.ensure_future(work)
         self._tasks.add(task)
@@ -381,6 +418,8 @@ class Addon:
                 await self._status(True)
         elif t == "addon.share.request":
             self._spawn(self._share_request(msg))
+        elif t == "addon.test":
+            self._spawn(self._test(msg))
         elif t == "wipe":
             self.forget()
             self._stopped = True

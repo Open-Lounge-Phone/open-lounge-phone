@@ -167,6 +167,13 @@ and only its owner reaches it.
   to say no. Without a handler, requests are refused. An unanswered request lapses after a
   minute.
 
+`@addon.on_test` / `addon.on_test(handler)`
+: Test connection (its owner, or someone holding a share, presses it in the app): the bridge
+  answers the server's `addon.test` by itself at once with its `fw` version, how long it has been
+  up and how many calls it's on. The optional `handler()` (sync or async) runs first, to check
+  what the add-on itself needs (its model, its storage): return a dict to change `version`,
+  `uptime_s` or `calls`, or raise to not answer, so the test says it didn't answer in 5 s.
+
 `Call`
 : - `call.caller`: who is calling (`.address`, `.name`), checked by their server.
   - `call.share`: the `Share` (`.id`, `.label`, `.grant_id`) the call came in through, or

@@ -344,6 +344,38 @@ class AddonTest(unittest.IsolatedAsyncioTestCase):
         )
         await addon.stop()
 
+    async def test_answers_a_test_by_itself(self) -> None:
+        addon = await self.linked()
+        await addon.start(timeout=5)
+        await self.fake.send({"t": "addon.test", "testId": "at_1"})
+        ok = await self.fake.next("addon.test.ok")
+        self.assertEqual(ok["testId"], "at_1")
+        self.assertEqual(ok["version"], addon.fw)
+        self.assertEqual(ok["calls"], 0)
+        self.assertGreaterEqual(ok["uptimeS"], 0)
+        await addon.stop()
+
+    async def test_runs_its_check_first_and_stays_quiet_if_it_fails(self) -> None:
+        addon = await self.linked()
+        healthy = True
+
+        @addon.on_test
+        async def check() -> dict:
+            if not healthy:
+                raise RuntimeError("the model is down")
+            return {"version": "seat/1.4", "secret": "never sent"}
+
+        await addon.start(timeout=5)
+        await self.fake.send({"t": "addon.test", "testId": "at_1"})
+        ok = await self.fake.next("addon.test.ok")
+        self.assertEqual(ok["version"], "seat/1.4")
+        self.assertNotIn("secret", ok)
+        healthy = False
+        await self.fake.send({"t": "addon.test", "testId": "at_2"})
+        await asyncio.sleep(0.3)
+        self.assertTrue(self.fake.inbox.empty())  # no answer: the test says it didn't answer
+        await addon.stop()
+
     async def test_refuses_share_requests_without_a_handler(self) -> None:
         addon = await self.linked()
         await addon.start(timeout=5)

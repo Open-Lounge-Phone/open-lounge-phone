@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 PROTOCOL_VERSION = 1
-FW = "olp-addon/0.3.0"
+FW = "olp-addon/0.4.0"
 
 Message = dict[str, Any]
 
@@ -93,6 +93,25 @@ def addon_shares(shares: list[dict[str, str]]) -> Message:
 
 def share_created(request_id: str, share_id: str) -> Message:
     return {"t": "addon.share.created", "requestId": request_id, "id": check_share_id(share_id)}
+
+
+def test_ok(
+    test_id: str,
+    *,
+    version: str | None = None,
+    uptime_s: int | None = None,
+    calls: int | None = None,
+) -> Message:
+    """The answer to `addon.test` (Test connection): how it is, with nothing about any call."""
+    msg: Message = {"t": "addon.test.ok", "testId": test_id}
+    text = (version or "").strip()[:64]
+    if text:
+        msg["version"] = text
+    if uptime_s is not None:
+        msg["uptimeS"] = max(0, int(uptime_s))
+    if calls is not None:
+        msg["calls"] = max(0, min(100, int(calls)))
+    return msg
 
 
 def share_refused(request_id: str, reason: str) -> Message:
