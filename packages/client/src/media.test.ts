@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { withOpusDtx } from "./media.ts";
+import { getMicrophone, MIC_NEEDS_HTTPS, withOpusDtx } from "./media.ts";
 
 const offer = [
   "v=0",
@@ -29,4 +29,10 @@ it("adds an fmtp line when Opus has none", () => {
   expect(withOpusDtx(bare)).toBe(
     "v=0\na=rtpmap:109 opus/48000/2\na=fmtp:109 usedtx=1\na=rtpmap:0 PCMU/8000\n",
   );
+});
+
+it("says the address must be https when the browser offers no microphone (plain http)", async () => {
+  // Node's navigator, like a browser's on http://, has no mediaDevices.
+  expect("mediaDevices" in navigator).toBe(false);
+  await expect(getMicrophone()).rejects.toThrow(MIC_NEEDS_HTTPS);
 });

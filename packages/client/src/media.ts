@@ -195,10 +195,17 @@ export class CallMedia {
 }
 
 /**
+ * Why there's no microphone at all: browsers offer it only on a secure address (https://, or
+ * localhost), so an app opened at http://<a local name or IP> has none.
+ */
+export const MIC_NEEDS_HTTPS = "the browser allows it only on an https:// address";
+
+/**
  * Microphone with the browser's echo cancellation and noise suppression on: the one chosen on
  * this device (`deviceId`, see audioPrefs.ts) if it's still there, else the system default.
  */
 export function getMicrophone(deviceId?: string): Promise<MediaStream> {
+  if (!globalThis.navigator?.mediaDevices) return Promise.reject(new Error(MIC_NEEDS_HTTPS));
   return navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: true,

@@ -4,6 +4,7 @@
  * 8 kHz anyway). Two minutes is 1.9 MB, under the 2 MB upload limit. Call recordings
  * (`CallRecorder`) still use MediaRecorder, see `pickRecordingMime`.
  */
+import { MIC_NEEDS_HTTPS } from "./media.ts";
 
 /** Preference order: Opus in WebM (Chrome, Firefox), Opus in Ogg, then AAC in MP4 (Safari). */
 const CANDIDATES = [
@@ -111,6 +112,7 @@ export class VoicemailRecorder {
       return;
     }
     try {
+      if (!globalThis.navigator?.mediaDevices) throw new Error(MIC_NEEDS_HTTPS);
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
