@@ -298,10 +298,10 @@ def board() -> dict[str, trimesh.Trimesh]:
     USB-C and the jack (on the bottom side; their STEP models aren't in KiCad's library here)."""
     glb = OUT / "board.glb"
     cli = KICAD / "Contents/MacOS/kicad-cli"
-    # board body and parts only: silkscreen, mask and pad layers are coplanar and flicker
-    # STEP models (finer than KiCad's VRML ones), copper pads and tracks (raised, so no flicker)
-    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "--subst-models", "--include-pads",
-                    "--include-tracks", "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
+    # board body and parts only: copper, mask and silkscreen come as a picture (board_texture()),
+    # since thin layers on the board's face flicker and break up once Draco quantizes them
+    subprocess.run([str(cli), "pcb", "export", "glb", "-f", "--subst-models",
+                    "-D", f"KICAD10_3DMODEL_DIR={KICAD}/Contents/SharedSupport/3dmodels",
                     "-o", str(glb), str(HERE.parent / "kicad/main/main.kicad_pcb")],
                    check=True, capture_output=True)
     sc = trimesh.load(glb)
@@ -345,6 +345,46 @@ def board() -> dict[str, trimesh.Trimesh]:
         for k, m in out.items():
             out[k] = H.decimate(m, max(2000, int(FACES["board"] * len(m.faces) / whole)))
     return out
+
+
+def board_texture() -> list[float]:
+    """build/teaser/board-top.webp: the board's top face (copper under the mask, pads, silkscreen)
+    rendered straight down by KiCad with no parts, cropped to the outline and evenly lit. The page
+    lays it on the board's top face. Returns [x0, y0, x1, y1, z] of that face in the shell frame."""
+    from PIL import Image, ImageFilter
+    cli = KICAD / "Contents/MacOS/kicad-cli"
+    src = (HERE.parent / "kicad/main/main.kicad_pcb").read_text()
+    out, i = [], 0                              # the same board without its 3D models
+    while (j := src.find("(model ", i)) >= 0:
+        out.append(src[i:j])
+        depth, k = 0, j
+        while True:
+            depth += {"(": 1, ")": -1}.get(src[k], 0)
+            if depth == 0:
+                break
+            k += 1
+        i = k + 1
+    out.append(src[i:])
+    bare, raw = OUT / "bare.kicad_pcb", OUT / "board-top-raw.png"
+    bare.write_text("".join(out))
+    subprocess.run([str(cli), "pcb", "render", "--side", "top", "--quality", "basic",
+                    "--use-board-stackup-colors", "--background", "transparent", "-w", "3200", "-h", "1900",
+                    "--light-top", "0.55", "--light-camera", "0", "--light-side", "0.45",
+                    "--light-side-elevation", "80", "-o", str(raw), str(bare)], check=True, capture_output=True)
+    a = np.array(Image.open(raw).convert("RGBA"))
+    seen = a[:, :, 3] > 10                      # the outline: rows and columns mostly board
+    r = np.where(seen.sum(1) > seen.sum(1).max() * 0.5)[0]
+    c = np.where(seen.sum(0) > seen.sum(0).max() * 0.5)[0]
+    w = 2048
+    im = Image.fromarray(a[r.min():r.max() + 1, c.min():c.max() + 1]).resize(
+        (w, round(w * P.BOARD_H / P.BOARD_W)), Image.LANCZOS)
+    px = np.array(im).astype(float)
+    glow = np.array(Image.fromarray(px[:, :, :3].mean(2).astype("uint8")).filter(
+        ImageFilter.GaussianBlur(160))).astype(float) + 1      # KiCad's soft centre highlight
+    px[:, :, :3] *= (np.median(glow) / glow)[:, :, None]
+    Image.fromarray(np.clip(px, 0, 255).astype("uint8")).save(OUT / "board-top.webp", quality=88)
+    x0 = y0 = P.GAP + P.WALL
+    return [x0, y0, x0 + P.BOARD_W, y0 + P.BOARD_H, P.Z_BT]
 
 
 def main() -> None:
@@ -428,7 +468,7 @@ def main() -> None:
                                                                       extension_draco=True))
     keys = [{"x": P.bx2x(bx), "y": P.by2y(by), "label": lab} for bx, by, lab in P.keys()]
     meta = {"keys": keys, "rides": rides, "plate": P.Z_LT, "cap_z": P.Z_LT + 6.6,
-            "center": [P.OUT_W / 2, P.OUT_H / 2], "panel": [gx, cy, P.Z_DISP + P.MODULE_PCB_T + 1.01, 79, 31],
+            "center": [P.OUT_W / 2, P.OUT_H / 2], "board_top": board_texture(), "panel": [gx, cy, P.Z_DISP + P.MODULE_PCB_T + 1.01, 79, 31],
             "explode": {"tray": 0, "board": 34, "switch": 62, "spring": 70, "swtop": 82, "stem": 96,
                         "lid": 56, "module": 86, "panel": 86, "keycap": 114, "bezel": 132,
                         "cradle": 160, "handset": 210}}
