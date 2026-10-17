@@ -63,6 +63,11 @@ Configuration is by environment variable:
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_API_URL` | unset | A LiveKit server as the rooms' media relay (see below); without one, rooms are peer to peer and hold 4 people |
 | `SFU_APP_ID`, `SFU_APP_SECRET` | unset | Or a Cloudflare Realtime SFU app as the relay |
 
+**No internet?** The server works on a network of its own: set `STUN_URLS=` (empty), give it a
+local name and an HTTPS front with your own certificate authority, and point hardware phones at
+`ws://<its address>:8787`. See the user guide's *Run it offline* (`docs/site/how-to/run-it-offline.md`);
+`tests/e2e/live/offline.test.ts` (`OLP_OFFLINE_E2E=1`) checks it.
+
 Passkeys are tied to the site's host name. If you reach the server through a reverse proxy or
 several names, set `PUBLIC_URL` to the one address people use.
 
