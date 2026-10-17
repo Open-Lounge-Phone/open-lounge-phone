@@ -2,16 +2,20 @@
 
 Named meshes: tray, lid, bezel, board_* (the KiCad board by material, plus stand-ins for the
 parts whose 3D models KiCad's library lacks), switch, keycap, module, panel, handset and one
-cradle-<style> per cradle (plain styles from build/proto, sculpted ones from build/hands).
-The page instances switch/keycap per key and recolours shells, cradles and the handset.
+cradle-<style> per cradle (plain styles from build/proto, sculpted ones from build/hands); and
+the other cases' parts (teaser_cases.py): flat_* (the flat-cut desk phone), wall_* (the wall
+phone), cushion_* (the cushion) and their captive caps. scene.json's `layouts` says how each case
+poses the shared board, switches, module and handsets, and how it explodes. The page instances
+switch/keycap per key and recolours shells, cradles and the handset.
 
-    .venv/bin/python teaser.py      # after make proto DISPLAY=2.9 and make hands
+    .venv/bin/python teaser.py      # after make proto and make hands
 
 The handset is the receiver of "Red Table Phone" by digitaldaydream (OpenGameArt, CC0): its
 object "Reciever.001", smoothed with Blender's subdivision (level 2), exported to
 build/teaser/handset.stl and scaled here to the Opis 60s Micro's 210 mm. Without that file a
 code-built G-style handset is used. KiCad's library here lacks some part models: the ESP32-S3
-model comes from KiCad's GitLab (build/teaser/dl/), the display module is WeAct's own STEP.
+model comes from KiCad's GitLab (build/teaser/dl/), the display module is WeAct's own STEP of
+the 2.13" module, the standard display (build/weact/).
 """
 from __future__ import annotations
 
@@ -26,9 +30,8 @@ import numpy as np
 import trimesh
 
 import hands as H
-# The teaser still shows WeAct's 2.9" module (their STEP model); the standard is now the 2.13".
-os.environ.setdefault("OLP_DISPLAY", "2.9")
-import proto_box as P  # noqa: E402
+import proto_box as P
+import teaser_cases as C
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "build" / "teaser"
@@ -41,6 +44,16 @@ FACES = {"tray": 120000, "lid": 80000, "bezel": 20000, "cradle": 24000, "board":
 WEB = os.environ.get("OLP_TEASER_WEB") == "1"
 if WEB:
     FACES = {"tray": 60000, "lid": 40000, "bezel": 12000, "cradle": 12000, "board": 110000}
+# the display's panel: glass outline and active area (mm) and its pixels
+GLASS = {"2.13": (59.2, 29.2), "2.9": (79.0, 36.7)}
+ACTIVE = {"2.13": (48.55, 23.71), "2.9": (66.89, 29.05)}
+PIXELS = {"2.13": (250, 122), "2.9": (296, 128)}
+CASE_FACES = {"wall_housing": 45000, "wall_rocker": 16000, "wall_bracket": 8000, "cushion_case": 50000,
+              "cushion_bottom": 10000, "flat_front": 12000, "flat_back": 4000, "wall_cap": 3000,
+              "cushion_cap": 3000, "captive_hook": 3000}
+if not WEB:
+    CASE_FACES = {k: v * 3 for k, v in CASE_FACES.items()}
+NET = P.NETWORK            # the board file is the wired one (RJ45 + PoE on its top, right end)
 STEP_TOL = 0.02          # mm: how closely STEP models (ESP32, display module) are meshed
 CREASE = math.radians(32)  # edges sharper than this stay sharp in the shading
 
@@ -158,9 +171,9 @@ def esp32() -> dict[str, trimesh.Trimesh]:
 
 
 def weact_module() -> dict[str, trimesh.Trimesh]:
-    """WeAct's 2.9" module (their STEP: board, header, parts; no panel) where it plugs into J3:
+    """WeAct's 2.13" module (their STEP: board, header, parts; no panel) where it plugs into J3:
     header end at the module's low x, its back (parts, header) facing down."""
-    sol = step_solids(OUT.parent / "weact" / "WeAct-EpaperModule-2.9_Board_3D.step")
+    sol = step_solids(OUT.parent / "weact" / "WeAct-EpaperModule-2.13_Board_3D.step")
     pcb = max(sol, key=lambda m: m.extents[0] * m.extents[1])
     hdr = [m for m in sol if abs(m.extents[0] - 5.08) < 0.2 and abs(m.extents[1] - 10.16) < 0.2]
     b = pcb.bounds
@@ -323,6 +336,9 @@ def board() -> dict[str, trimesh.Trimesh]:
         if "Buzzer" in gname:                  # long leads in the model: trim them at the floor
             g = g.slice_plane([0, 0, P.Z_FLOOR + 1], [0, 0, 1], cap=False) or g
         key = "board_" + "%02x%02x%02x" % tuple(int(v) for v in rgba[:3])
+        c = g.bounds.mean(0) if len(g.vertices) else np.zeros(3)  # the wired board's RJ45 and PoE module: their own
+        if NET and len(g.vertices) and c[2] > P.Z_BT and c[0] > P.bx2x(P.HOOD[0]) and P.by2y(P.HOOD[2]) < c[1] < P.by2y(P.HOOD[1]):
+            key = key.replace("board_", "board_net_")    # meshes (cases for the Wi-Fi board hide them)
         g.visual = trimesh.visual.ColorVisuals(g)
         groups.setdefault(key, []).append(g)
     out = {k: trimesh.util.concatenate(v) for k, v in groups.items()}
@@ -426,13 +442,14 @@ def main() -> None:
     for k, m in switch().items():
         add(k, m)
     add("keycap", keycap())
-    w, hgt = P.DISP_W, P.DISP_H                # display module (2.9"): green board + panel
+    w, hgt = P.DISP_W, P.DISP_H                # display module (2.13"): its board + panel
     cx, cy = P.bx2x(P.DISP_X0 + w / 2), P.by2y(P.DISP_MID)
     for k, m in weact_module().items():
         add(k, H.decimate(m, 24000 if WEB else 60000))
-    gx = P.bx2x(P.DISP_X0 + P.DSP["view_cx"])
-    add("panel", trimesh.creation.box(bounds=[[gx - 39.5, cy - 15.5, P.Z_DISP + P.MODULE_PCB_T],
-                                              [gx + 39.5, cy + 15.5, P.Z_DISP + P.MODULE_PCB_T + 1.0]]))
+    gx = P.bx2x(P.DISP_X0 + P.DSP["view_cx"])   # the panel's glass, centred on its active area
+    gw, gh = GLASS[P.DISPLAY]
+    add("panel", trimesh.creation.box(bounds=[[gx - gw / 2, cy - gh / 2, P.Z_DISP + P.MODULE_PCB_T],
+                                              [gx + gw / 2, cy + gh / 2, P.Z_DISP + P.MODULE_PCB_T + 1.0]]))
     own = OUT / "handset.stl"                  # a receiver model (CC0 Red Table Phone's, smoothed)
     if own.exists():
         hs = trimesh.load(own, force="mesh")
@@ -457,6 +474,10 @@ def main() -> None:
     hg.apply_scale(s_g)
     hg.apply_translation([g["lx"], g["yc"], g["hb"] - under_g * s_g])
     add("handset-g", hg)
+    parts = C.build_parts(OUT / "cache")       # the other cases (built once, slow)
+    for name, m in parts.items():
+        add(name, H.decimate(m, CASE_FACES.get(name, 6000)))
+    lays = C.layouts(parts, {"handset": hs, "handset-g": hg}, ACTIVE[P.DISPLAY])
     # Draco-compressed (the page loads three's DRACOLoader), at Draco's strongest (lossless)
     # level. No normals stored: hard edges have split vertices, so the page's
     # computeVertexNormals() gives the same crisp-edged, smooth-curved shading.
@@ -467,11 +488,20 @@ def main() -> None:
     (OUT / ("scene-web.glb" if WEB else "scene.glb")).write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=False,
                                                                       extension_draco=True))
     keys = [{"x": P.bx2x(bx), "y": P.by2y(by), "label": lab} for bx, by, lab in P.keys()]
+    explode = {"tray": 0, "board": 34, "switch": 62, "spring": 70, "swtop": 82, "stem": 96,
+               "lid": 56, "module": 86, "keycap": 114, "bezel": 132, "cradle": 160, "handset": 210}
+    # The panel: its active area (the picture the page draws is this size and shape, 250 x 122
+    # pixels on the 2.13"), and per case the part of it that shows through the case's window.
+    aw, ah = ACTIVE[P.DISPLAY]
+    proto = {"label": "printed box", "pose": C.pose(), "caps": "xda", "explode": {k: [0, 0, v] for k, v in explode.items()},
+             "handsets": {"handset": [0, 0, 0], "handset-g": [0, 0, 0]}, "screen": C.screen_window(P.VIEW, (aw, ah)),
+             "occluders": ["handset", "cradle", "bezel", "keycap"]}
+    captive = {"z": P.Z_BT, "top": P.Z_BT + C.F.CAP_TOP, "button": C.F.BUTTON, "dish": [30.0, C.F.DISH],
+               "puffy_flat": C.F.BUTTON - 2 * 3.2}
     meta = {"keys": keys, "rides": rides, "plate": P.Z_LT, "cap_z": P.Z_LT + 6.6,
-            "center": [P.OUT_W / 2, P.OUT_H / 2], "board_top": board_texture(), "panel": [gx, cy, P.Z_DISP + P.MODULE_PCB_T + 1.01, 79, 31],
-            "explode": {"tray": 0, "board": 34, "switch": 62, "spring": 70, "swtop": 82, "stem": 96,
-                        "lid": 56, "module": 86, "panel": 86, "keycap": 114, "bezel": 132,
-                        "cradle": 160, "handset": 210}}
+            "center": [P.OUT_W / 2, P.OUT_H / 2], "board_top": board_texture(),
+            "panel": [gx, cy, P.Z_DISP + P.MODULE_PCB_T + 1.01, aw, ah], "pixels": PIXELS[P.DISPLAY],
+            "explode": explode, "captive": captive, "layouts": {"proto": proto, **lays}}
     (OUT / "scene.json").write_text(json.dumps(meta))
     out = OUT / ("scene-web.glb" if WEB else "scene.glb")
     print(out.name, round(out.stat().st_size / 1e6, 2), "MB;", len(scene.geometry), "meshes")
