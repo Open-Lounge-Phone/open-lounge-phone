@@ -52,6 +52,8 @@ static const char *const WHY_NOTES[][2] = {
     {"You have no add-on by that name on that server", "NO SUCH ADD-ON"},
     {"Add-ons are off on that server", "ADD-ONS ARE OFF"},
     {"You can't call that address", "CAN'T CALL THAT"},
+    {"That phone is waiting for a grown-up's OK", "WAITING FOR OK"},
+    {"Until a grown-up says OK, this phone calls only them", "ASK A GROWN-UP"},
 };
 
 int phone_why(const char *note) {

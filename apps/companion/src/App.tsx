@@ -16,6 +16,7 @@ import { CallOverlay } from "./CallOverlay.tsx";
 import { Connections } from "./Connections.tsx";
 import { Connection, type Snapshot } from "./connection.ts";
 import { groupConnections } from "./connectionGroups.ts";
+import { firmwareNotice } from "./firmwareText.ts";
 import { Home } from "./Home.tsx";
 import { AddHousehold, GetStarted, HouseholdSwitcher } from "./Households.tsx";
 import { Invite, type InviteResult } from "./Invite.tsx";
@@ -458,6 +459,12 @@ function SignedIn({
     void countUnheard();
   }, [countUnheard]);
 
+  // A kids' phone started running new firmware: its page (and the list) show it now.
+  const firmwareSeq = snap.phoneFirmware?.seq ?? 0;
+  useEffect(() => {
+    if (firmwareSeq) void refresh();
+  }, [firmwareSeq, refresh]);
+
   const connSeq = snap.connectionsSeq ?? 0;
   useEffect(() => {
     void connSeq;
@@ -603,6 +610,10 @@ function SignedIn({
         me={meInfo}
         notice={snap.accountNotice}
         onAccount={() => setRoute({ name: "account" })}
+      />
+      <FirmwareBanner
+        notice={snap.phoneFirmware}
+        onSee={(id) => setRoute({ name: "device", id })}
       />
       {(loadError || snap.error) && (
         <div className="banner" role="alert">
@@ -923,6 +934,38 @@ function Tab({
     >
       {children}
     </button>
+  );
+}
+
+/** A kids' phone started running firmware built at home (`phone.firmware`), until dismissed. */
+function FirmwareBanner({
+  notice,
+  onSee,
+}: {
+  notice: Snapshot["phoneFirmware"];
+  onSee(deviceId: string): void;
+}) {
+  const [seen, setSeen] = useState(0);
+  if (!notice || notice.seq <= seen) return null;
+  return (
+    <div className="banner" role="alert">
+      <span>{firmwareNotice(notice, Date.now())}</span>
+      <span className="row">
+        <button
+          type="button"
+          className="link"
+          onClick={() => {
+            setSeen(notice.seq);
+            onSee(notice.deviceId);
+          }}
+        >
+          {notice.held ? "Allow or remove" : "See the phone"}
+        </button>
+        <button type="button" className="link" onClick={() => setSeen(notice.seq)}>
+          Dismiss
+        </button>
+      </span>
+    </div>
   );
 }
 

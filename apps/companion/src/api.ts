@@ -157,6 +157,19 @@ export interface DeviceSummary {
   /** Firmware (or browser-phone app) version and model it last reported. */
   fw?: string | null;
   model?: string | null;
+  /** Hardware phones: the firmware it runs (the browser phone reports none). */
+  build?: {
+    label: string;
+    project: string;
+    version: string;
+    /** The phone installed it itself through its signed update path. */
+    official: boolean;
+    /** Since when it runs it. */
+    since: number;
+  } | null;
+  /** Kids' phones: Ask me first, and whether it waits for a guardian's OK now. */
+  askFirst?: boolean;
+  held?: boolean;
   /** The four words its MENU → About shows (derived from its key). */
   fingerprint?: string[];
   /** How this device lists the signed-in user, if at all. */
@@ -1262,6 +1275,12 @@ export function createApi(opts: ApiOptions) {
         deviceId ? `/devices/${enc(deviceId)}/call-waiting` : "/call-waiting",
         { on },
       ),
+
+    // A kids' phone's firmware: Ask me first, and allowing what it waits on (guardians)
+    setAskFirst: (deviceId: string, on: boolean) =>
+      request<{ on: boolean }>("PUT", `/devices/${enc(deviceId)}/ask-first`, { on }),
+    allowFirmware: (deviceId: string) =>
+      request<{ ok: true }>("POST", `/devices/${enc(deviceId)}/allow`),
 
     // A phone's home features (daily check-in, chime, house intercom)
     homeFeatures: (deviceId: string) =>

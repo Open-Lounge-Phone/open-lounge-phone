@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "board.h"
+#include "build.h"
 #include "cJSON.h"
 #include "agc.h"
 #include "audio.h"
@@ -886,6 +887,8 @@ static void on_open(void) {
   cJSON_AddStringToObject(hello, "fw", FW_VERSION);
   cJSON_AddNumberToObject(hello, "buttons", 10);
   cJSON_AddStringToObject(hello, "display", "eink");
+  // The image it runs, so its guardians hear when that changes (build.c).
+  build_add_to_hello(hello);
   // What this phone shows truthfully beyond the base protocol (docs/protocol.md).
   cJSON *features = cJSON_AddArrayToObject(hello, "features");
   cJSON_AddItemToArray(features, cJSON_CreateString("missed-calls"));
@@ -961,6 +964,8 @@ static void on_config(const cJSON *m) {
     }
   }
   s_cfg.quiet = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "quiet"));
+  // New firmware a guardian hasn't allowed yet (Ask me first): ASK A GROWN-UP.
+  s_cfg.hold = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(m, "hold"));
   copy(s_cfg.quiet_until, sizeof s_cfg.quiet_until, jstr(m, "quietUntil"));
   const cJSON *x;
   cJSON_ArrayForEach(x, cJSON_GetObjectItemCaseSensitive(m, "missed")) {
@@ -1429,6 +1434,7 @@ static void tick(void) {
 
 void app_main(void) {
   ESP_ERROR_CHECK(storage_init());  // NVS (encrypted in release builds)
+  build_init();  // the running image and whether this phone installed it itself
   s_queue = xQueueCreate(32, sizeof(app_event_t));
 #if CONFIG_OLP_QEMU
   ESP_LOGI(TAG, "Open Lounge Phone firmware %s (simulator build: QEMU)", FW_VERSION);

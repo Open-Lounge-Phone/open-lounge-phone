@@ -13,6 +13,7 @@ import type {
 } from "./api.ts";
 import { CallWaitingToggle } from "./CallWaiting.tsx";
 import { hostBadge } from "./connectionGroups.ts";
+import { FirmwareCard } from "./Firmware.tsx";
 import { addressProblem, requiredProblem } from "./fields.ts";
 import { GreetingEditor } from "./GreetingEditor.tsx";
 import { HomeFeaturesCard } from "./HomeFeatures.tsx";
@@ -175,6 +176,22 @@ export function ManageDevice({
           onRemoved={onRemoved}
           onError={setError}
         />
+      )}
+
+      {device?.model && device.model !== "web-emulator" && (
+        <>
+          <h3>Firmware</h3>
+          <FirmwareCard
+            api={api}
+            device={fresh ? { ...device, ...fresh } : device}
+            guardian={guardian}
+            onChanged={() => {
+              void load();
+              onChanged();
+            }}
+            onRemoved={onRemoved}
+          />
+        </>
       )}
 
       {device && guardian && device.mode === "kids" && <CallActivity api={api} device={device} />}

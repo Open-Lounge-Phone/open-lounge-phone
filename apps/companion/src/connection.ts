@@ -117,6 +117,16 @@ export interface Snapshot {
   missedSeq?: number;
   /** Latest `room.opened` (a party line with hours just opened); `seq` changes each time. */
   roomOpened?: { seq: number; roomId: string; name: string; closesAt: number };
+  /** Latest `phone.firmware`: a kids' phone started running firmware built at home. */
+  phoneFirmware?: {
+    seq: number;
+    deviceId: string;
+    name: string;
+    project: string;
+    version: string;
+    held: boolean;
+    at: number;
+  };
   /** Latest `account.notice`: your account was signed in to without a passkey. */
   accountNotice?: { seq: number; kind: "recovered" | "signin_link"; at: number };
 }
@@ -842,6 +852,11 @@ export class Connection {
       case "connections.changed":
         this.set({ connectionsSeq: (this.snap.connectionsSeq ?? 0) + 1 });
         return;
+      case "phone.firmware": {
+        const { t: _t, id: _id, ...n } = msg;
+        this.set({ phoneFirmware: { ...n, seq: (this.snap.phoneFirmware?.seq ?? 0) + 1 } });
+        return;
+      }
       case "account.notice":
         this.set({
           accountNotice: {

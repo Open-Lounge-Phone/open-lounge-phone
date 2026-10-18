@@ -38,6 +38,7 @@ import { Connections, connectionRoutes } from "./connections.ts";
 import type { ServerEnv } from "./env.ts";
 import { capReached } from "./fairUse.ts";
 import { FederationError, fedFetch, ownHost, SOFTWARE } from "./federation.ts";
+import { firmwareRoutes, firmwareView } from "./firmware.ts";
 import type { Coordinator } from "./gateway.ts";
 import { homeRoutes } from "./home.ts";
 import { body, guardianOnly, LEFT_PHONE_SETUP, type Vars } from "./httpUtil.ts";
@@ -378,6 +379,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
           // For the phone's page: what it runs, and the four words its MENU → About shows.
           fw: d.fw,
           model: d.model,
+          ...firmwareView(d),
           fingerprint: await deviceFingerprint(d.publicKey),
           contact: (await store.getContact(d.id, user.id)) ?? null,
         })),
@@ -915,6 +917,7 @@ export function createApi(env: ServerEnv, live: Coordinator): Hono<Vars> {
   missedRoutes(api, env, live);
   callWaitingRoutes(api, env);
   homeRoutes(api, env, live);
+  firmwareRoutes(api, env, live);
   phoneActivityRoutes(api, env);
   roomRoutes(api, env, live);
 

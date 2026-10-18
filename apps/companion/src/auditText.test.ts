@@ -37,6 +37,21 @@ describe("audit trail words", () => {
     );
   });
 
+  it("a phone's firmware: what it started running, and who allowed it", () => {
+    expect(auditText("phone.firmware.update", { phone: "Mia", from: "0.9.7", to: "0.9.8" })).toBe(
+      "updated itself to 0.9.8",
+    );
+    expect(
+      auditText("phone.firmware.change", { phone: "Mia", to: "mia-snake 2", held: true }),
+    ).toBe("started running firmware built at home: mia-snake 2, waiting for a grown-up's OK");
+    expect(auditText("phone.firmware.allow", { phone: "Mia" })).toBe(
+      "allowed the new firmware on Mia",
+    );
+    expect(auditText("phone.ask_first", { phone: "Mia", on: false })).toBe(
+      "turned off Ask me first on Mia",
+    );
+  });
+
   it("add-ons: linking, who may talk to them, removing, a key on a phone", () => {
     expect(auditText("addon.link", { name: "seat", allowed: 0 })).toBe("linked add-on seat");
     expect(auditText("addon.link", { name: "seat", allowed: 2 })).toBe(

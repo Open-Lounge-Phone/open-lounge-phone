@@ -170,6 +170,12 @@ async function ota(phone: WokwiPhone, a: OtaAssets): Promise<string> {
   p.buildDir = a.baseBuild;
   phones.push(phone);
   phone.start();
+  // A flashed image, not one the phone installed itself: not official (hello.build).
+  await phone.waitFor(
+    /BUILD openloungephone 0\.4\.0 sha256=[0-9a-f]{16}\.\.\. official=no \(slot ota_0\)/,
+    90_000,
+    "the flashed base reported as not official",
+  );
   await phone.waitFor(/running 0\.4\.0 from ota_0/, 90_000, "base 0.4.0 in ota_0");
   await phone.consoleReady();
   await phone.waitFor(/PAIRING CODE: \d{6}/, 90_000, "server reached");
@@ -226,6 +232,12 @@ async function ota(phone: WokwiPhone, a: OtaAssets): Promise<string> {
   phone.send("ota now");
   await phone.waitFor(/OTA INSTALLED 0\.4\.1-test/, 240_000, "good image installed");
   await reboot("into 0.4.1-test"); // NEW -> PENDING_VERIFY
+  // The image it installed and verified itself: official (its slot's record matches).
+  await phone.waitFor(
+    /BUILD openloungephone 0\.4\.1-test sha256=[0-9a-f]{16}\.\.\. official=yes \(slot ota_1\)/,
+    120_000,
+    "the installed update reported as official",
+  );
   await phone.waitFor(/running 0\.4\.1-test from ota_1/, 120_000, "restarted into 0.4.1-test");
   await phone.waitFor(/OTA TRIAL 0\.4\.1-test/, 10_000);
   await phone.waitFor(/OTA VALID 0\.4\.1-test/, 120_000, "kept after reaching the server");

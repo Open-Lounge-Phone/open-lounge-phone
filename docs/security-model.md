@@ -85,6 +85,39 @@ What the firmware does today (firmware/README.md has the details) and what is st
   option.
 - *Planned:* **reproducible builds with published fingerprints**, shown on the phone.
 
+## Firmware changes
+
+A hardware phone tells its server which firmware it runs, so a kids' phone's guardians know the
+moment it starts running something new (often a child's own project: a good moment to talk about
+it).
+
+- **What the phone reports** (`hello.build`, firmware 0.9.8): the SHA-256 of the running app image
+  (ESP-IDF's app ELF hash), its project name and version, and `official`. `official` is true only
+  when the phone itself installed the running image through its signed update path: after an update
+  checks out (signed manifest, image hash, format and, in release builds, the image signature), the
+  phone stores that image's hash in NVS for its update slot, and at every boot compares the running
+  image with its slot's record. A build from source, a USB flash or a phone that never updated itself
+  reports `false`. The records survive both wipes (they describe the flash, not anyone). The browser
+  phone reports no build: it runs whatever its server serves.
+- **What the server keeps**: each hardware phone's last build and since when it runs it (shown on the
+  phone's page in the app).
+- **What a change sets off**, at the phone's first signed-in connection with the new build:
+  - an **official update**: an audit-trail entry ("updated itself to 0.9.8"), no alert;
+  - **anything else on a kids' phone**: a live notice to the home's guardians in the app ("Mia's
+    phone is running new firmware: built at home, 'mia-snake 2', today 4:12 PM") and an audit-trail
+    entry; a hardware phone that stops reporting a build counts as a change;
+  - **anything else on other phones** (a person's own, Lounge phones): an audit-trail entry only.
+  The first build a server sees for a phone (at pairing) is recorded without an alert.
+- **Ask me first** (kids' phones, on by default; on the phone's page): after a change that isn't an
+  official update the phone is held until a guardian taps **Allow** (or removes and wipes it). While
+  held, the phone shows `ASK A GROWN-UP`, nobody can call it (callers hear it is waiting and may leave
+  a voicemail), and it calls only its guardians: its keys show only theirs, and extensions, call backs,
+  transfers, chimes and the house intercom are off. Turning Ask me first off also lets a held phone go.
+- **The honest limit**: the build is what the phone says. Firmware someone wrote themselves can
+  report any hash and `official: true`, so this catches honest changes (a child flashing their own
+  project, a USB reflash), not a determined liar. Only hardware Secure Boot, where the chip boots
+  nothing but signed images, can rule that out; a "Locked" option built on it is planned.
+
 ## Accounts and sign-in
 
 Accounts have no password, email or phone number. People sign in with **passkeys** (WebAuthn:
@@ -207,8 +240,9 @@ passkey's public key.
    tamper-evident seal for venues.
 5. **Lounge:** a visible sign-in, a big "Log out", and a "Forgot you ✓" confirmation.
 6. **In the app, per device** (the phone's page): the four words, the software it runs (firmware
-   or browser-phone version, from its `hello`) and when it was last seen, **Remove and wipe**, and
-   for Lounge phones the usage history (Lounge settings).
+   or browser-phone version, from its `hello`), for hardware phones its firmware build (official
+   update or built at home, and since when; see "Firmware changes"), when it was last seen,
+   **Remove and wipe**, and for Lounge phones the usage history (Lounge settings).
 
 ## The four-word device fingerprint
 

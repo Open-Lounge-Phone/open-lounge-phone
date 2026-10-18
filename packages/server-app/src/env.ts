@@ -253,6 +253,11 @@ export interface PeerInfo {
    * it calls out under the strictest rules (kids' rules, without being a kids' phone).
    */
   left?: string;
+  /**
+   * A kids' phone waiting for a guardian to allow its new firmware (Ask me first): nobody can
+   * call it and it calls only its guardians.
+   */
+  held?: true;
   /** Present for Lounge phones. */
   lounge?: LoungeInfo;
   status?: Extract<DeviceToServer, { t: "status" }>;

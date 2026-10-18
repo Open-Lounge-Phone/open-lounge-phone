@@ -104,6 +104,8 @@ def main() -> int:
 
     try:
         wait(r"Open Lounge Phone firmware [\d.]+ \(simulator build: QEMU\)", True)
+        # A flashed build, not one the phone installed itself: reported as not official.
+        wait(r"BUILD openloungephone [\d.]+ sha256=[0-9a-f]{16}\.\.\. official=no \(slot ota_0\)", True)
         wait(r"audio device: test", True)
         wait(r"DTLS certificate ready \(0,", True)
         wait(r"WIFI connected ip=10\.0\.2\.\d+ \(QEMU Ethernet\)", True)

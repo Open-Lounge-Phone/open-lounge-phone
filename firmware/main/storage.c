@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "build_core.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -80,6 +81,22 @@ void storage_wipe(bool keep_wifi) {
       nvs_close(h);
     }
   }
+  // The update path's records of the images it installed (build.c) describe the flash, not
+  // anyone: they stay through both wipes, so an official image still reports as one.
+  struct {
+    char key[16];
+    uint8_t sha[BUILD_SHA_LEN];
+    bool present;
+  } builds[2] = {{"v_ota_0", {0}, false}, {"v_ota_1", {0}, false}};
+  nvs_handle_t bh;
+  if (nvs_open(BUILD_NVS_NS, NVS_READONLY, &bh) == ESP_OK) {
+    for (int i = 0; i < 2; i++) {
+      size_t len = BUILD_SHA_LEN;
+      builds[i].present = nvs_get_blob(bh, builds[i].key, builds[i].sha, &len) == ESP_OK &&
+                          len == BUILD_SHA_LEN;
+    }
+    nvs_close(bh);
+  }
   nvs_flash_deinit();
   esp_err_t err = nvs_flash_erase();  // every sector of the partition, physically
   ESP_LOGW(TAG, "WIPE: NVS partition erased (%s)%s", esp_err_to_name(err),
@@ -93,6 +110,12 @@ void storage_wipe(bool keep_wifi) {
       nvs_commit(h);
       nvs_close(h);
     }
+  }
+  if (nvs_open(BUILD_NVS_NS, NVS_READWRITE, &bh) == ESP_OK) {
+    for (int i = 0; i < 2; i++)
+      if (builds[i].present) nvs_set_blob(bh, builds[i].key, builds[i].sha, BUILD_SHA_LEN);
+    nvs_commit(bh);
+    nvs_close(bh);
   }
   memset(kept, 0, sizeof kept);  // the Wi-Fi password doesn't linger in RAM
 }

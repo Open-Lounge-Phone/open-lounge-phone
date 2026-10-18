@@ -183,6 +183,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
   if (in->vm_stage == VM_FAILED) return set1(out, "MESSAGE NOT SENT");
 
   const phone_config_t *c = in->config;
+  // New firmware a grown-up hasn't allowed yet (Ask me first): it calls only them until then.
+  if (c && c->hold) return set2(out, "ASK A GROWN-UP", "NEW FIRMWARE");
   // The daily check-in: asked until I'm OK (1, handset down); thanked once the server has it.
   if (in->checked_in) return set2(out, "THANK YOU", "CHECKED IN");
   if (c && c->checkin_by[0] && !c->checkin_done) {

@@ -28,6 +28,11 @@ describe("statusLines", () => {
     ]);
   });
 
+  it("a phone waiting for a grown-up to allow its new firmware says so, over everything idle", () => {
+    const config: DeviceConfig = { buttons: [], hold: true, quiet: true };
+    expect(lines({ config })).toEqual(["ASK A GROWN-UP", "NEW FIRMWARE"]);
+  });
+
   it("reports connectivity", () => {
     expect(lines({ connection: "offline" })).toEqual(["OFFLINE", "RECONNECTING"]);
     expect(lines({ connection: "connecting" })).toEqual(["CONNECTING"]);

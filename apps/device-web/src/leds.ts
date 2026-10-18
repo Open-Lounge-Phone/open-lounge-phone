@@ -49,6 +49,8 @@ export interface DeviceConfig {
   checkin?: { by: string; done: boolean; alerted?: true };
   /** This phone may post a chime (MENU 4). */
   chime?: { text: string };
+  /** New firmware a guardian hasn't allowed yet (Ask me first): ASK A GROWN-UP. */
+  hold?: true;
 }
 
 export interface LedInput {

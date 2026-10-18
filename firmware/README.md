@@ -303,6 +303,17 @@ PENDING_VERIFY → ABORTED after the crash) were made by the bootloader itself i
 test would make them on the stopped emulator if it ever stalled there, and says which happened.
 **Needs the real board:** a power cut mid-update, and the first boot of a blank board's bootloader.
 
+### Which build it runs (`hello.build`)
+
+Every hello carries the running image's SHA-256 (ESP-IDF's app ELF hash), its project name and
+version, and `official` (`build.c`, pure parts in `build_core.c`). When an update has checked out and
+its slot is selected, `ota.c` records that image's hash in NVS (namespace `build`, key `v_<slot>`);
+at boot the running image is compared with its slot's record. Only a match is `official: true`: a
+build from source, a USB flash, or an image in a slot the phone never updated itself is `false`. The
+records survive both wipes. The server uses this to tell a kids' phone's guardians about firmware
+that isn't an official update (docs/security-model.md "Firmware changes"). Firmware someone wrote
+can report anything; only hardware Secure Boot (planned) rules that out.
+
 ## Encrypted storage
 
 Everything the phone keeps lives in NVS: its device key (the P-256 key that signs in to the

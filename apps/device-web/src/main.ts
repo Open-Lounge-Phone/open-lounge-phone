@@ -397,6 +397,7 @@ async function handle(msg: ServerToDevice): Promise<void> {
         ...(msg.extensions ? { extensions: true } : {}),
         ...(msg.checkin ? { checkin: msg.checkin } : {}),
         ...(msg.chime ? { chime: msg.chime } : {}),
+        ...(msg.hold ? { hold: true as const } : {}),
       };
       if (msg.utcOffsetMin !== undefined) utcOffsetMin = msg.utcOffsetMin;
       // I'm OK was pressed and the server has it now: thank them for a moment.

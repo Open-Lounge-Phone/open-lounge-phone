@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "app.h"
+#include "build.h"
 #include "esp_app_desc.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
@@ -302,6 +303,9 @@ static const char *install(const ota_manifest_t *m) {
   if (esp_ota_get_partition_description(part, &d) != ESP_OK || strcmp(d.version, m->version))
     return "the image's version differs from the manifest";
   if (esp_ota_set_boot_partition(part) != ESP_OK) return "could not select the new slot";
+  // The image checked out (manifest signature, hash, format and signature): this phone installed
+  // it itself, so it reports it as official when it runs it (build.c).
+  build_record_installed(part);
   return NULL;
 }
 

@@ -20,6 +20,7 @@ typedef struct {
   char labels[MAX_BUTTONS][25];  // by stored index ((page - 1) * 10 + slot); "" = unmapped
   bool quiet;
   char quiet_until[6];        // "HH:MM" or ""
+  bool hold;                  // new firmware a guardian hasn't allowed yet: ASK A GROWN-UP
   int missed_count;
   char missed[MAX_MISSED][25];  // newest first
   bool missed_callback[MAX_MISSED];  // …a public line's call back that wasn't taken

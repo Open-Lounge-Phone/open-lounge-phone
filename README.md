@@ -14,7 +14,9 @@ doorbell and an elder's daily check-in.
   get voicemail with a transcript instead of waking anyone up), and its guardian sees when it
   was last online. Kids' phones on the market are closed boxes with a fixed feature list; this
   one is open, so a child can learn how it works and tinker with it as they grow, while the
-  phone's rules stay with their guardians until they decide otherwise.
+  phone's rules stay with their guardians until they decide otherwise. When it starts running
+  firmware that isn't an official update, its guardians hear about it straight away, and with
+  Ask me first it waits for their OK.
 - **Voicemail everywhere** — any call that isn't answered (no answer, declined, busy, quiet
   hours, unavailable) goes to a greeting — the standard one, your recorded name, or your own —
   and the message lands in the callee's inbox, across servers too.

@@ -1,5 +1,17 @@
 # Firmware changelog
 
+## 0.9.8 — unreleased
+
+- **The phone reports the firmware it runs** (`hello.build`, server 0.10.0): the running image's
+  SHA-256 (the app ELF hash), its project and version, and `official`. `official` is true only for
+  an image the phone installed itself through its signed update path: after an update checks out,
+  the phone records that image's hash in NVS for its update slot (`build` namespace, kept through
+  both wipes) and compares the running image with it at boot. A build from source or a USB flash
+  reports `false` (`build.c`, `build_core.c`; host-tested). The boot log says `BUILD … official=`.
+- **`ASK A GROWN-UP` / `NEW FIRMWARE`** while a guardian hasn't allowed new firmware on a kids'
+  phone (`config.hold`, Ask me first): the server sends only the grown-ups' keys then; other calls
+  say `ASK A GROWN-UP`, and calling such a phone says `WAITING FOR OK`.
+
 ## 0.9.7 — unreleased
 
 - **Choppy call audio (found on a board): the Opus encoder at complexity 1, not 5.** At 5, SILK's

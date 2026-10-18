@@ -121,6 +121,12 @@ export function Home({
                     </div>
                   )}
                   {!online && <p className="hint offline-hint">{offlineHint(d)}</p>}
+                  {d.held && (
+                    <p className="warning small" role="status">
+                      New firmware: waiting for {guardian ? "your" : "a grown-up's"} OK
+                      {guardian ? " under Manage." : "."}
+                    </p>
+                  )}
                   {!canCall && (
                     <p className="hint">
                       This phone doesn't take your calls

@@ -351,6 +351,25 @@ export interface Device {
    */
   leftBy: string | null;
   leftAt: number | null;
+  /**
+   * Hardware phones: the firmware from its last hello and since when it runs it (null until it
+   * reports one; browser phones never do). See docs/security-model.md "Firmware changes".
+   */
+  build: PhoneBuildRecord | null;
+  /** Kids' phones: wait for a guardian's OK after firmware that isn't an official update. */
+  askFirst: boolean;
+  /** Set while the phone waits for that OK: since when. */
+  heldAt: number | null;
+}
+
+/** A phone's firmware as the server keeps it. */
+export interface PhoneBuildRecord {
+  sha256: string;
+  project: string;
+  version: string;
+  official: boolean;
+  /** When the phone first connected with this build. */
+  at: number;
 }
 
 /** A space's privacy settings (docs/security-model.md). */
@@ -529,6 +548,13 @@ type DeviceRow = {
   model?: string | null;
   left_by?: string | null;
   left_at?: number | null;
+  build_sha?: string | null;
+  build_project?: string | null;
+  build_version?: string | null;
+  build_official?: number | null;
+  build_at?: number | null;
+  ask_first?: number | null;
+  held_at?: number | null;
 };
 type UserRow = {
   id: string;
@@ -583,6 +609,18 @@ const toDevice = (r: DeviceRow): Device => ({
   model: r.model ?? null,
   leftBy: r.left_by ?? null,
   leftAt: r.left_at ?? null,
+  build:
+    r.build_sha != null && r.build_at != null
+      ? {
+          sha256: r.build_sha,
+          project: r.build_project ?? "",
+          version: r.build_version ?? "",
+          official: r.build_official === 1,
+          at: r.build_at,
+        }
+      : null,
+  askFirst: r.ask_first !== 0,
+  heldAt: r.held_at ?? null,
 });
 const toUser = (r: UserRow): User => ({
   id: r.id,
@@ -1844,6 +1882,9 @@ export class Store {
       model: null,
       leftBy: null,
       leftAt: null,
+      build: null,
+      askFirst: true,
+      heldAt: null,
     };
     // A key re-paired to a new household replaces its old device record.
     await this.sql.batch([
@@ -1938,6 +1979,29 @@ export class Store {
       runs?.model ?? null,
       id,
     );
+  }
+
+  /** Records the firmware a phone now runs (`build.at` = since when). */
+  async setDeviceBuild(id: string, build: PhoneBuildRecord): Promise<void> {
+    await this.sql.run(
+      `UPDATE devices SET build_sha = ?, build_project = ?, build_version = ?, build_official = ?,
+         build_at = ? WHERE id = ?`,
+      build.sha256,
+      build.project,
+      build.version,
+      build.official ? 1 : 0,
+      build.at,
+      id,
+    );
+  }
+
+  /** Holds a phone until a guardian allows its firmware (`at`), or lets it go (null). */
+  async setDeviceHeld(id: string, at: number | null): Promise<void> {
+    await this.sql.run("UPDATE devices SET held_at = ? WHERE id = ?", at, id);
+  }
+
+  async setDeviceAskFirst(id: string, on: boolean): Promise<void> {
+    await this.sql.run("UPDATE devices SET ask_first = ? WHERE id = ?", on ? 1 : 0, id);
   }
 
   // --- space privacy -----------------------------------------------------------------

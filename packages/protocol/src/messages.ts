@@ -612,6 +612,25 @@ export const DeviceModel = z
   .enum(["web-emulator", "desktop", "esp32s3", "addon"])
   .describe("`addon` = an add-on (a service linked to a person's account, docs/add-ons.md).");
 
+export const PhoneBuild = z
+  .object({
+    sha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe("SHA-256 of the running app image (ESP-IDF's app ELF hash), lowercase hex."),
+    project: z.string().min(1).max(32).describe("The image's project name."),
+    version: z.string().min(1).max(32).describe("The image's version label."),
+    official: z
+      .boolean()
+      .describe(
+        "True only when the phone itself installed this image through its signed update path (it keeps the verified image's hash and compares it at boot). A build from source or a USB flash is `false`.",
+      ),
+  })
+  .describe(
+    'The firmware a phone is running, so its guardians hear when it changes (docs/security-model.md "Firmware changes"). Reported by the phone: firmware someone wrote can report anything.',
+  );
+export type PhoneBuild = z.infer<typeof PhoneBuild>;
+
 export const DeviceHello = z
   .object({
     t: z.literal("hello"),
@@ -626,6 +645,9 @@ export const DeviceHello = z
       .describe(
         "Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels).",
       ),
+    build: PhoneBuild.optional().describe(
+      "Hardware phones: the firmware image it is running (the browser phone sends none: it runs what the server serves).",
+    ),
     features: Names(16)
       .optional()
       .catch(undefined)
@@ -1091,6 +1113,12 @@ export const Config = z
       .optional()
       .describe(
         "The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`).",
+      ),
+    hold: z
+      .literal(true)
+      .optional()
+      .describe(
+        "A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP`; nobody can call it and it calls only its guardians (`buttons` lists only them) until a guardian allows the new firmware in the app.",
       ),
     server: ServerInfo.optional()
       .catch(undefined)
@@ -1658,6 +1686,23 @@ export const AccountNotice = z
     "Sent to your other open apps when your account is signed in to in a way that doesn't need your passkey; the session list (`GET /api/sessions`) shows how each session started.",
   );
 
+export const PhoneFirmware = z
+  .object({
+    t: z.literal("phone.firmware"),
+    ...Ref,
+    deviceId: Id,
+    name: z.string().min(1).max(24).describe("The phone's name."),
+    project: z.string().min(1).max(32),
+    version: z.string().min(1).max(32),
+    held: z
+      .boolean()
+      .describe("Ask me first is on: the phone waits until a guardian allows it (its page)."),
+    at: EpochMs.describe("When the phone first connected with it."),
+  })
+  .describe(
+    "Sent to a home's guardians when one of its kids' phones starts running firmware that isn't an official update (built at home, or flashed over USB). Official updates only go in the audit trail.",
+  );
+
 export const RoomsChanged = z
   .object({
     t: z.literal("rooms.changed"),
@@ -1692,6 +1737,7 @@ export const ServerToApp = z.discriminatedUnion("t", [
   AppReady,
   ConnectionsChanged,
   AccountNotice,
+  PhoneFirmware,
   LoungeProgress,
   MemberStatus,
   DeviceStatus,

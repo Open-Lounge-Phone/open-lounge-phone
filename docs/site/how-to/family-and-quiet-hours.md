@@ -91,6 +91,28 @@ words: "Dad tried to call · Not on the phone's list", "Tried to call Grandma ·
 "Missed call from Mom · left a voicemail". **Show older** goes further back, as far as your
 household keeps its call history (**Settings → Privacy**). Nothing that was said is in it.
 
+## When the phone's firmware changes
+
+A hardware phone tells the server which firmware it runs. When a kids' phone starts running
+firmware that isn't an official update (say your child built and flashed their own version), you
+get a notice in the app straight away: "Mia's phone is running new firmware: built at home,
+'mia-snake 2', today 4:12 PM." It's a good moment to ask them what they made. Official updates
+don't alert you; they're listed under **Settings → Changes**, with every other firmware change.
+
+The phone's **Manage** page shows the firmware it runs now, whether it's an official update or
+built at home, and since when. **Ask me first** (on unless you turn it off) makes a kids' phone
+wait for you after firmware that isn't an official update:
+
+- the phone shows `ASK A GROWN-UP`;
+- nobody can call it (callers can leave a message), and it can call only its grown-ups;
+- it stays like that until you tap **Allow** on its Manage page, or **Remove and wipe** it.
+
+**What it can't promise.** The phone reports its own firmware. Firmware someone writes
+themselves can claim to be anything, including an official update, so this notices honest
+changes, not someone set on hiding one. Only Secure Boot, where the chip runs nothing but signed
+firmware, could rule that out; a "Locked" option built on it is planned. The details are in the
+[security model](https://github.com/Open-Lounge-Phone/open-lounge-phone/blob/main/docs/security-model.md#firmware-changes).
+
 ## A daily check-in for someone you look after
 
 For a grandparent or anyone living alone, the [labs firmware](/extend/labs/) adds a daily

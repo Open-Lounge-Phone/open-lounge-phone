@@ -42,6 +42,14 @@ export function auditText(action: string, d: Record<string, unknown> | null): st
       return `added phone ${s("name")}`;
     case "phone.remove":
       return `removed phone ${s("name")}`;
+    case "phone.firmware.update":
+      return `updated itself to ${s("to")}`;
+    case "phone.firmware.change":
+      return `started running firmware built at home: ${s("to")}${d?.held ? ", waiting for a grown-up's OK" : ""}`;
+    case "phone.firmware.allow":
+      return `allowed the new firmware on ${phone}`;
+    case "phone.ask_first":
+      return `turned ${d?.on ? "on" : "off"} Ask me first on ${phone}`;
     case "phone.rename":
       return `renamed ${phone} to ${s("name")}`;
     case "phone.contact":

@@ -390,3 +390,19 @@ TEST(strip_shows_key_pages) {
   CHECK_STR(out[0], "PAGE 10/10");
   CHECK(strlen(out[1]) <= STATUS_WIDTH);
 }
+
+TEST(strip_held_phone_asks_a_grown_up) {
+  phone_state_t ph;
+  phone_init(&ph);
+  phone_config_t cfg = {.present = true, .hold = true, .quiet = true, .missed_count = 1};
+  snprintf(cfg.missed[0], sizeof cfg.missed[0], "GRAN");
+  strip_input_t in = {.connection = CONN_ONLINE, .state = &ph, .config = &cfg,
+                      .call_started_ms = -1, .local_minute = -1};
+  char out[2][STATUS_MAX + 1];
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "ASK A GROWN-UP");
+  CHECK_STR(out[1], "NEW FIRMWARE");
+  cfg.hold = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "QUIET HOURS");
+}

@@ -12,6 +12,7 @@ import {
   decodeAppToServer,
   decodeDeviceToServer,
   MIN_PROTOCOL_VERSION,
+  type PhoneBuild,
   PROTOCOL_VERSION,
   type ServerToApp,
   type ServerToDevice,
@@ -38,6 +39,7 @@ import type {
   RemoteRing,
   RemoteRoomJoin,
 } from "./fedCalls.ts";
+import { phoneConnected } from "./firmware.ts";
 import { HouseholdHub, type Peer } from "./hub.ts";
 import { limitsOf } from "./limits.ts";
 import { SERVER_INFO } from "./version.ts";
@@ -179,6 +181,8 @@ type DevicePhase =
       runs: { fw: string; model: string };
       /** What it handles beyond the base protocol (`hello.features`). */
       features?: string[];
+      /** The firmware image it reports (`hello.build`; hardware phones). */
+      build?: PhoneBuild;
     }
   /** An add-on (docs/add-ons.md) answers the same challenge with its own key. */
   | { kind: "addonChallenge"; addon: Addon; nonce: Uint8Array<ArrayBuffer>; fw: string }
@@ -500,6 +504,7 @@ export class Gateway implements Coordinator {
             nonce,
             runs: { fw: msg.fw, model: msg.model },
             ...(msg.features?.length ? { features: msg.features } : {}),
+            ...(msg.build ? { build: msg.build } : {}),
           };
           conn.send({ t: "auth.challenge", nonce: toBase64Url(nonce) });
           return;
@@ -585,9 +590,16 @@ export class Gateway implements Coordinator {
           }
           cancelHello();
           await this.env.store.touchDevice(device.id, this.env.now(), phase.runs);
+          // Its firmware: a change may tell its guardians and hold it (firmware.ts).
+          const firmware = await phoneConnected(this.env, device, phase.runs.model, phase.build);
           const hub = this.hub(device.householdId);
           // What it runs now (whether its client can record, for instance).
-          const peer = await hub.connectDevice({ ...device, ...phase.runs }, conn, phase.features);
+          const peer = await hub.connectDevice(
+            { ...firmware.device, ...phase.runs },
+            conn,
+            phase.features,
+          );
+          if (firmware.notice) await hub.announce(firmware.notice);
           if (closed()) {
             await hub.disconnect(peer);
             return;

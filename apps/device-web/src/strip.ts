@@ -214,6 +214,8 @@ export function statusLines(input: StatusInput): StatusLines {
   if (input.leave?.stage === "sending") return ["SENDING MESSAGE"];
   if (input.leave?.stage === "sent") return ["MESSAGE SENT"];
   if (input.leave?.stage === "failed") return ["MESSAGE NOT SENT"];
+  // New firmware a grown-up hasn't allowed yet (Ask me first): it calls only them until then.
+  if (config?.hold) return ["ASK A GROWN-UP", "NEW FIRMWARE"];
   // A notice from the space, until a key dismisses it or it expires.
   const notice = input.notice?.lines.filter(Boolean).map(clip);
   if (notice?.length)

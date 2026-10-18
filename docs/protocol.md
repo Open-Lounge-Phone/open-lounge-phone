@@ -59,6 +59,7 @@ First message on every connection.
 | `fw` | string (len ≤32) | yes | Firmware / emulator version. |
 | `buttons` | integer (≥1, ≤16) | yes | Number of speed-dial buttons. |
 | `display` | `"eink"` \| `"seg14"` \| `"oled"` \| `"none"` | yes | Status display fitted: `eink` = a 2.13-inch e-paper module on the board's display header (standard); `seg14` / `oled` / `none` remain for other builds and the browser phone (`none` = keys, LEDs and voice only, with printed key labels). |
+| `build` | { sha256: string (`^[0-9a-f]{64}$`), project: string (len ≤32), version: string (len ≤32), official: boolean } |  | Hardware phones: the firmware image it is running (the browser phone sends none: it runs what the server serves). |
 | `features` | string (len ≤32)[] |  | What the phone handles beyond the base protocol, so the server sends it only what it shows truthfully: `missed-calls` (missed calls in `config.missed` with `kind: "call"`, and `call.back`), `call-waiting` (a second call while in one, `call.ringing.waiting`), `key-pages` (speed-dial keys beyond the first ten, in `config.pages`; BACK turns the page). A phone that doesn't list one gets today's behaviour (missed calls left out; a second call refused as busy; only the first page of keys). Unknown names are ignored. |
 
 ### `call.extension`
@@ -539,6 +540,7 @@ Sent after authentication and whenever guardians change settings.
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 | `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |
+| `hold` | `true` |  | A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP`; nobody can call it and it calls only its guardians (`buttons` lists only them) until a guardian allows the new firmware in the app. |
 | `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | What the server speaks (protocol range, features), so a phone can leave out what it doesn't offer. |
 | `update` | { minProtocol: integer, message: string (len ≤32) } |  | The phone's protocol is older than the server accepts: show `message`, don't treat the phone as signed in, and retry rarely (the server closes the connection next). Sent before authentication, with no other settings. |
 
@@ -1144,6 +1146,20 @@ Sent to your other open apps when your account is signed in to in a way that doe
 | `id` | string (len ≤64) |  |  |
 | `kind` | `"recovered"` \| `"signin_link"` | yes | `recovered`: someone signed in to your account with its recovery code; `signin_link`: with a sign-in link a guardian or admin made. |
 | `at` | integer (≥0) | yes |  |
+
+### `phone.firmware`
+
+Sent to a home's guardians when one of its kids' phones starts running firmware that isn't an official update (built at home, or flashed over USB). Official updates only go in the audit trail.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (len ≤64) |  |  |
+| `deviceId` | string (len ≤64) | yes |  |
+| `name` | string (len ≤24) | yes | The phone's name. |
+| `project` | string (len ≤32) | yes |  |
+| `version` | string (len ≤32) | yes |  |
+| `held` | boolean | yes | Ask me first is on: the phone waits until a guardian allows it (its page). |
+| `at` | integer (≥0) | yes | When the phone first connected with it. |
 
 ### `lounge.progress`
 

@@ -243,9 +243,15 @@ export class TestServer {
     return { status: 201, deviceId: done.deviceId, key };
   }
 
-  async connectDevice(deviceId: string, key: CryptoKeyPair, features?: string[]) {
+  /** Connects a paired phone; `extra` adds to (or replaces) its hello's fields. */
+  async connectDevice(
+    deviceId: string,
+    key: CryptoKeyPair,
+    features?: string[],
+    extra: Record<string, unknown> = {},
+  ) {
     const conn = this.openDevice();
-    conn.write({ ...hello(deviceId), ...(features ? { features } : {}) });
+    conn.write({ ...hello(deviceId), ...(features ? { features } : {}), ...extra });
     const { nonce } = await conn.next("auth.challenge");
     const sig = await crypto.subtle.sign("Ed25519", key.privateKey, fromBase64Url(nonce));
     conn.write({ t: "auth.proof", sig: toBase64Url(new Uint8Array(sig)) });

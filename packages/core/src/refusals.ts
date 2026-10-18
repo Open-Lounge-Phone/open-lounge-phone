@@ -24,6 +24,10 @@ export const LEFT_PHONE_NOTE = "Nobody can call that phone: its owner left";
 export const LEFT_PHONE_CANT_NOTE = "This phone's owner left: it calls only the people on its list";
 /** Nothing you may call at that address (whether or not anything is there). */
 export const CANT_CALL_NOTE = "You can't call that address";
+/** A kids' phone waiting for a guardian to allow its new firmware takes no calls. */
+export const HELD_PHONE_NOTE = "That phone is waiting for a grown-up's OK";
+/** …and calls only its guardians. */
+export const HELD_CANT_NOTE = "Until a grown-up says OK, this phone calls only them";
 
 /** What a phone's two status lines say for a refusal note (16 characters each), if known. */
 const STATUS: Record<string, [string, string]> = {
@@ -34,6 +38,8 @@ const STATUS: Record<string, [string, string]> = {
   [ADDON_NOT_LINKED_NOTE]: ["NO SUCH ADD-ON", "PRESS A KEY"],
   [ADDONS_OFF_NOTE]: ["ADD-ONS ARE OFF", "PRESS A KEY"],
   [CANT_CALL_NOTE]: ["CAN'T CALL THAT", "PRESS A KEY"],
+  [HELD_PHONE_NOTE]: ["WAITING FOR OK", "PRESS A KEY"],
+  [HELD_CANT_NOTE]: ["ASK A GROWN-UP", "PRESS A KEY"],
 };
 
 export const refusalStatus = (note: string | undefined): [string, string] | undefined =>

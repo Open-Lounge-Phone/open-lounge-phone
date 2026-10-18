@@ -20,6 +20,8 @@ import {
   controlCheck,
   effectiveHours,
   goesToVoicemail,
+  HELD_CANT_NOTE,
+  HELD_PHONE_NOTE,
   huntSteps,
   isOpen,
   isQuietAt,
@@ -190,6 +192,21 @@ interface DevicePeer extends Peer {
   /** The notice this phone was last sent (`<id>:<audio token>`), "" = none. Not persisted. */
   noticeSig?: string;
 }
+
+/**
+ * What a held phone (waiting for a guardian to allow its new firmware) may not do: dial anything
+ * but its keys (a key dials only a guardian then), hand a call on, or post to the space.
+ */
+const HELD_REFUSES: ReadonlySet<DeviceToServer["t"]> = new Set([
+  "call.extension",
+  "call.address",
+  "call.back",
+  "call.transfer",
+  "call.merge",
+  "notice.chime",
+  "greeting.begin",
+  "greeting.reset",
+]);
 
 const infoOf = ({ key: _key, conn: _conn, ...info }: Peer): PeerInfo => info;
 
@@ -745,6 +762,7 @@ export class HouseholdHub {
         hook: "down",
         ...(device.ownerUserId ? { owner: device.ownerUserId } : {}),
         ...(deviceMode(device) === "left" ? { left: device.leftBy ?? "" } : {}),
+        ...(device.heldAt !== null && deviceMode(device) === "kids" ? { held: true as const } : {}),
         ...(device.kind === "lounge" ? { lounge: { nonce: "", nonceExpiresAt: 0 } } : {}),
         ...(device.model && RECORDING_MODELS.has(device.model) ? { canRecord: true } : {}),
         ...(features?.length ? { features: [...features] } : {}),
@@ -881,6 +899,10 @@ export class HouseholdHub {
       if (peer.kind === "addon") return this.handleAddon(peer, msg);
       const device = this.devices.get(peer.id);
       if (device !== peer) return; // stale connection
+      // Waiting for a guardian's OK: only calls to its guardians (keys) and what a call needs.
+      if (device.held && HELD_REFUSES.has(msg.t)) {
+        return this.refuse(device, "denied", HELD_CANT_NOTE);
+      }
       switch (msg.t) {
         case "hook":
           device.hook = msg.state;
@@ -1105,6 +1127,9 @@ export class HouseholdHub {
         else delete peer.owner;
         if (deviceMode(device) === "left") peer.left = device.leftBy ?? "";
         else delete peer.left;
+        // A guardian allowed its new firmware (or turned Ask me first off).
+        if (device.heldAt !== null && deviceMode(device) === "kids") peer.held = true;
+        else delete peer.held;
         this.remember(peer);
         if (before !== peer.owner) {
           for (const u of [before, peer.owner]) if (u) await this.announceMember(u);
@@ -1411,6 +1436,9 @@ export class HouseholdHub {
       this.scheduleFor(device),
     ]);
     const contact = resolveButton(buttons, new Map(contacts.map((c) => [c.id, c])), index);
+    if (device.held && !(contact && (await this.isGuardian(contact.id)))) {
+      return this.refuse(device, "denied", HELD_CANT_NOTE);
+    }
     // A kids' phone's call activity: who it tried to call, if it's refused.
     if (this.isKidsPhone(device)) {
       this.kidCall = {
@@ -1556,6 +1584,7 @@ export class HouseholdHub {
     if (decision.decision === "voicemail") return this.refuse(user, "voicemail", undefined, vm);
     const peer = this.devices.get(deviceId);
     if (!peer) return this.refuse(user, "unreachable", undefined, vm);
+    if (peer.held) return this.refuse(user, "unreachable", HELD_PHONE_NOTE, vm);
     if (!this.canDial(user)) return this.refuse(user, "busy", CALLER_BUSY_NOTE);
     // In a call: call waiting (if it may ring softly there), else busy. Handset up: busy.
     const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
@@ -2436,9 +2465,17 @@ export class HouseholdHub {
         .filter((l) => parseAddonAddress(l.address))
         .map((l) => l.id),
     );
+    // Held (waiting for a guardian's OK): only the keys that call a guardian.
+    const guardians = peer.held
+      ? new Set(
+          (await store.listUsers(this.householdId))
+            .filter((u) => u.role === "guardian")
+            .map((u) => u.id),
+        )
+      : undefined;
     const mapped = [...buttons]
       .map(([index, userId]) => ({ index, userId, contact: byId.get(userId) }))
-      .filter((b) => b.contact?.deviceCanCall)
+      .filter((b) => b.contact?.deviceCanCall && (!guardians || guardians.has(b.userId)))
       .map((b) => ({
         index: b.index,
         label: b.contact?.label ?? "",
@@ -2469,8 +2506,11 @@ export class HouseholdHub {
             },
           }
         : {}),
-      ...(extensions ? { extensions: true } : {}),
-      ...home,
+      ...(extensions && !peer.held ? { extensions: true } : {}),
+      // Held: no chime or intercom either (they reach the space's other phones).
+      ...(peer.held
+        ? { ...(home.checkin ? { checkin: home.checkin } : {}), hold: true as const }
+        : home),
       server: serverInfo(this.env),
     };
     peer.conn.send(fitConfig(config));
@@ -4329,7 +4369,7 @@ export class HouseholdHub {
       if (decision.decision === "deny" || !contact) return refused("denied");
       if (decision.decision === "voicemail") return refused("voicemail");
       const peer = this.devices.get(device.id);
-      if (!peer) return refused("unreachable");
+      if (!peer || peer.held) return refused("unreachable");
       const waiting = this.busy(peer.key) ? (await this.waitingRing(peer.key)).length > 0 : false;
       if ((this.busy(peer.key) || peer.hook === "up") && !waiting) return refused("busy");
       const room = this.openRoom(
@@ -6063,6 +6103,12 @@ export class HouseholdHub {
   }
 
   // --- recording (docs/security-model.md) ------------------------------------------------
+
+  /** A guardian of this space (by user id). */
+  private async isGuardian(userId: string): Promise<boolean> {
+    const u = await this.env.store.getUser(userId);
+    return u?.householdId === this.householdId && u.role === "guardian";
+  }
 
   /** A kids' phone: a household phone of ours without an owner, or one elsewhere we know of. */
   private isKidsPhone(p: Peer): boolean {

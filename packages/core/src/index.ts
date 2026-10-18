@@ -5,6 +5,7 @@ export * from "./callRoom.ts";
 export * from "./checkin.ts";
 export * from "./device.ts";
 export * from "./fingerprint.ts";
+export * from "./firmware.ts";
 export * from "./funding.ts";
 export * from "./keyPages.ts";
 export * from "./lines.ts";

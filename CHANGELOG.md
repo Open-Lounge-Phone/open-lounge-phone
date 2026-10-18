@@ -14,6 +14,20 @@ redeploy. Compatibility rules: "Versions and compatibility" in [docs/protocol.md
 
 On `main`, not tagged yet.
 
+- **A kids' phone's guardians hear when its firmware changes** (docs/security-model.md "Firmware
+  changes"). Hardware phones report the image they run (`hello.build`: its SHA-256, project,
+  version, and `official` when the phone installed it through its signed update path; firmware
+  0.9.8). The server keeps each phone's last build (migration 0037). Firmware on a kids' phone
+  that isn't an official update sends the home's guardians a live notice (`phone.firmware`):
+  "Mia's phone is running new firmware: built at home, 'mia-snake 2', today 4:12 PM." Official
+  updates and other phones' changes go only in the audit trail; browser phones are never tracked.
+- **Ask me first** (kids' phones, on by default): after such a change the phone is held
+  (`config.hold`: it shows `ASK A GROWN-UP`) until a guardian taps **Allow** on its Manage page
+  (or removes and wipes it). A held phone can't be called and calls only its guardians. Routes
+  `PUT /api/devices/:id/ask-first`, `POST /api/devices/:id/allow`; `GET /api/devices` adds
+  `build`, `askFirst` and `held`. The Manage page has a Firmware card; the browser phone shows the
+  hold.
+
 ## 0.9.0 (2026-10-16, `server-v0.9.0`)
 
 **Update everything together** (server, apps, phones' firmware, add-on

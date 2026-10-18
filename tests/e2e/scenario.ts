@@ -148,9 +148,48 @@ export async function pairAndCall({ base, setupToken }: Target): Promise<void> {
   await fetch(`${base}/api/voicemails/${vmId}`, { method: "DELETE", headers: auth });
   expect(await (await fetch(`${base}/api/voicemails`, { headers: auth })).json()).toEqual([]);
 
+  // The phone's firmware (docs/security-model.md "Firmware changes"): the same phone as a
+  // hardware one, first on an official build, then on one built at home. Mom hears about it and
+  // the phone waits for her OK (Ask me first) until she allows it.
+  device.ws.close();
+  const hardware = async (build: Record<string, unknown>) => {
+    const phone = await socket(`${ws}/ws/device?device=${deviceId}`);
+    phone.send({ ...hello, model: "esp32s3", fw: "0.9.8", build, deviceId: deviceId as string });
+    const challenge = await phone.next("auth.challenge");
+    const proof = await crypto.subtle.sign(
+      "Ed25519",
+      keys.privateKey,
+      fromBase64Url(challenge.nonce as string),
+    );
+    phone.send({ t: "auth.proof", sig: toBase64Url(new Uint8Array(proof)) });
+    return { phone, config: await phone.next("config") };
+  };
+  const official = { sha256: "a".repeat(64), project: "openloungephone", version: "0.9.8" };
+  const before = await hardware({ ...official, official: true });
+  expect(before.config.hold).toBeUndefined();
+  before.phone.ws.close();
+  const changed = await hardware({
+    sha256: "b".repeat(64),
+    project: "kid-build",
+    version: "1",
+    official: false,
+  });
+  expect(changed.config).toMatchObject({ hold: true });
+  expect(await app.next("phone.firmware")).toMatchObject({
+    deviceId,
+    project: "kid-build",
+    held: true,
+  });
+  const allow = await fetch(`${base}/api/devices/${deviceId}/allow`, {
+    method: "POST",
+    headers: auth,
+  });
+  expect(allow.status).toBe(200);
+  expect((await changed.phone.next("config")).hold).toBeUndefined();
+  changed.phone.ws.close();
+
   // The API can't be used across households or without auth.
   expect((await fetch(`${base}/api/devices`)).status).toBe(401);
 
-  device.ws.close();
   app.ws.close();
 }
