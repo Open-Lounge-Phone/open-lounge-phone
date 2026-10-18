@@ -46,7 +46,7 @@ network, ever.
 ## Status
 
 The software works end to end today. The hardware has its first **early dev board prototype**:
-[hardware v0.1](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) (rev A), ordered from JLCPCB on 2026-09-30. Its files are in that release. **Board v0.9 is coming soon** as a fully assembled board or a bare PCB; [join the interest list](https://github.com/Open-Lounge-Phone/open-lounge-phone/discussions/1).
+[hardware v0.1](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) (rev A), ordered from JLCPCB on 2026-09-30. Its files are in that release. **Board v0.3 is coming soon** as a fully assembled board or a bare PCB; [join the interest list](https://github.com/Open-Lounge-Phone/open-lounge-phone/discussions/1).
 
 | Phase | What | State |
 |---|---|---|

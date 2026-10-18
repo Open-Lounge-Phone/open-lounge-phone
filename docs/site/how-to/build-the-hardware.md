@@ -29,8 +29,8 @@ BOM/CPL, schematic and layer PDFs, STEP) and the build and flash guide are in th
 [hw-v0.1 release](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1).
 :::
 
-:::tip[Board v0.9: coming soon]
-For tinkerers: board v0.9 will be offered **fully assembled** or as a **bare PCB** to populate yourself. No price
+:::tip[Board v0.3: coming soon]
+For tinkerers: board v0.3 will be offered **fully assembled** or as a **bare PCB** to populate yourself. No price
 or date yet. [Join the interest list](https://github.com/Open-Lounge-Phone/open-lounge-phone/discussions/1) and say which you'd want.
 :::
 
