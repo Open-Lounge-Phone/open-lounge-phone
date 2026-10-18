@@ -7,7 +7,7 @@ codec for an off-the-shelf analog handset, a piezo ringer and one status LED. 53
 2-layer board. It has **no** battery, NFC, speaker, per-key LEDs, hardware mute switch or mic
 lights.
 
-Branch `hw-v0.901` (not released): the same board plus an RJ45 with PoE (W5500, isolated
+Board v0.2 (designed, not built): the same board plus an RJ45 with PoE (W5500, isolated
 802.3af module), DRC clean; DESIGN.md §12a.
 
 Status: **schematic done and checked (M1)**, **placement done (M2)**: 156 × 88 mm, all SMD on
@@ -55,7 +55,7 @@ Hardware designs in this directory are licensed under the
 ## Power
 
 - **Rev A (hw v0.1) boards:** USB-C only.
-- **v0.901 boards:** a USB-C charger, or one Ethernet cable from a PoE switch port or a PoE
+- **v0.2 boards:** a USB-C charger, or one Ethernet cable from a PoE switch port or a PoE
   injector that follows IEEE 802.3af or 802.3at. Network and power then come on that one cable,
   up to 100 m. Plugging in both is fine: PoE takes over.
 - **Use a real charger or PoE.** A computer's USB port is only for debugging (flashing and the
@@ -75,13 +75,13 @@ draws more than that in every network mode; it is an 802.3af class 0 device (any
 | Tag | What | Date |
 |---|---|---|
 | [`hw-v0.1`](https://github.com/Open-Lounge-Phone/open-lounge-phone/releases/tag/hw-v0.1) | Minimal board, silkscreen **rev A**: the first board ordered from JLCPCB. The release holds the exact Gerbers, BOM/CPL, schematic and layer PDFs, STEP, and the build guide | 2026-09-30 |
-| `hw-v0.901` (branch, not released) | Sidebar revision: the minimal board plus an **RJ45 with PoE** (W5500 on SPI, isolated 802.3af module, USB/PoE diode-OR), silkscreen **v0.901**; the proto box gets a hood over the RJ45 (DESIGN.md §12a). Not ordered | 2026-10-15 |
+| v0.2 (not tagged) | The wired revision: the minimal board plus an **RJ45 with PoE** (W5500 on SPI, isolated 802.3af module, USB/PoE diode-OR), silkscreen **v0.2**; the proto box gets a hood over the RJ45 (DESIGN.md §12a). Not ordered | 2026-10-15 |
 
 Hardware releases are tagged `hw-vX.Y`; firmware releases are tagged `fw-vX.Y.Z`. A board revision
 gets a new `hw-` tag and a new silkscreen rev letter, and the fab files for a tag come from that
 tag's release, not from a fresh `make fab` (the router isn't byte-for-byte deterministic yet).
 Phones never follow GitHub's "latest release" (which can be a hardware release): official
 firmware takes updates from the fixed `fw-stable` release, one manifest per board, signed and
-naming the board it is for (`minimal-revA` = `hw-v0.1`: `firmware-manifest.json`; `minimal-v0901`
-= hw v0.901: `firmware-manifest-minimal-v0901.json`); firmware built from source has updates
+naming the board it is for (`minimal-revA` = `hw-v0.1`: `firmware-manifest.json`; `minimal-v02`
+= hw v0.2: `firmware-manifest-minimal-v02.json`); firmware built from source has updates
 off until you add your own key. See `firmware/README.md` "Updates" and "Your keys, your server".

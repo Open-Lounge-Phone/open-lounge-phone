@@ -12,7 +12,7 @@ TITLE = "3V3 LDO: start-up vs EN, Wi-Fi burst load step, dropout at low VBUS"
 # Board values (schematic/board_main.py). Effective MLCC capacitance at DC bias (assumption):
 # 0603 10 uF/10 V at 5 V ~ 45 %, 0603 2.2 uF/16 V at 3.3 V ~ 70 %, 0805 22 uF/25 V at 3.3 V
 # ~ 55 %, 1 uF/100 nF ~ 85 %.
-# hw v0.901: USB VBUS reaches the LDO through the OR diode D3 (B5819W) and C_IN is 4.7 uF
+# hw v0.2: USB VBUS reaches the LDO through the OR diode D3 (B5819W) and C_IN is 4.7 uF
 # (0603 4.7 uF/16 V at ~4.5 V ~ 55 %)
 C_IN = 4.7e-6 * 0.55
 C_OUT_LDO = 2.2e-6 * 0.70
@@ -57,7 +57,7 @@ def run(ctx: Ctx) -> Bench:
               assumptions=[
                   "VBUS 4.40 V at the receptacle (USB 2.0 low-power port minimum) and a 5.0 V "
                   "source behind a 0.3 ohm / 1 uH cable (hot-plug).",
-                  "hw v0.901: the USB OR diode (B5819W, fitted to 0.30 V / 0.1 A, 0.45 V / "
+                  "hw v0.2: the USB OR diode (B5819W, fitted to 0.30 V / 0.1 A, 0.45 V / "
                   "0.5 A, ~0.55 V / 1 A) between VBUS and the LDO; C_IN 4.7 uF.",
                   "Effective MLCC capacitance after DC bias: 4.7 uF@4.5 V 55 %, 2.2 uF 70 %, "
                   "22 uF 55 %; 20 mohm LDO-to-module trace.",

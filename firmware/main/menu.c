@@ -354,7 +354,7 @@ int menu_lines(const menu_t *m, char out[MENU_LINES][25]) {
       if (!strcmp(url, PROV_HUB_URL)) snprintf(host, sizeof host, "PUBLIC HUB");
       else if (url[0]) prov_server_host(url, host, sizeof host);
       else snprintf(host, sizeof host, "NOT SET");
-      // A board with a wired network (hw v0.901) heads it with the cable: WIRED NETWORK and its
+      // A board with a wired network (hw v0.2) heads it with the cable: WIRED NETWORK and its
       // address when in use, else what the cable is doing over the Wi-Fi line.
       const char *cable = net_cable_line();
       snprintf(out[0], 25, "%s", cable ? cable : "NETWORK");

@@ -17,7 +17,7 @@ typedef enum {
   PROV_EV_TICK,        // time passes
   PROV_EV_SAVED,       // the page saved new credentials
   PROV_EV_OPEN,        // the console / menu asked for setup
-  PROV_EV_WIRED_UP,    // online over a cable (hw v0.901): a network without Wi-Fi
+  PROV_EV_WIRED_UP,    // online over a cable (hw v0.2): a network without Wi-Fi
 } prov_event_t;
 
 typedef enum { PROV_ACT_NONE, PROV_ACT_START_AP, PROV_ACT_STOP_AP, PROV_ACT_REBOOT } prov_action_t;
@@ -88,7 +88,7 @@ typedef enum {
 
 /**
  * `name`: the network picked or typed ("" = none). `has_saved`: a Wi-Fi network is saved.
- * `cable`: the phone is online over a cable (hw v0.901), so Wi-Fi is optional.
+ * `cable`: the phone is online over a cable (hw v0.2), so Wi-Fi is optional.
  */
 prov_wifi_t prov_wifi_answer(const char *name, bool has_saved, bool cable);
 

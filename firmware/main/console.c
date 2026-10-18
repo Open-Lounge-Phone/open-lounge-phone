@@ -328,7 +328,7 @@ void console_start(void) {
       {.command = "setup", .help = "setup [test [ssid [pass]]]: open the Wi-Fi setup network (test: fetch/post its page from the phone)",
        .func = cmd_setup},
       {.command = "ota", .help = "ota [check|now|url <u>|url default]: firmware updates", .func = cmd_ota},
-      {.command = "eth", .help = "the wired network (hw v0.901): link, speed, address, MAC", .func = cmd_eth},
+      {.command = "eth", .help = "the wired network (hw v0.2): link, speed, address, MAC", .func = cmd_eth},
       {.command = "reboot", .help = "restart", .func = cmd_reboot},
   };
   for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++)

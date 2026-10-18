@@ -1,5 +1,5 @@
 # Power budget of the board, checked by checks.check_power_budget on every build.
-# Currents in mA. hw v0.901: two 5 V sources (USB VBUS, the PoE module) each through a Schottky
+# Currents in mA. hw v0.2: two 5 V sources (USB VBUS, the PoE module) each through a Schottky
 # into V5; two 3.3 V LDOs from V5 (U2: module, codec, display; U5: the W5500); the ringer runs
 # from V5 directly.
 #

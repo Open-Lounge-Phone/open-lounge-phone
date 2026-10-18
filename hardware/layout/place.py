@@ -60,7 +60,7 @@ J3_PIN1 = (DISP_X0 + 1.93, DISP_Y0 + DISP_H / 2 + 1.5 * 2.54)     # BUSY, outer 
 STANDOFFS = [(DISP_X0 + DISP_W - 2.8, DISP_Y0 + 2.8), (DISP_X0 + DISP_W - 2.8, DISP_Y0 + DISP_H - 2.8)]
 
 HOOK = (16.0, YF)                # 13th MX switch, band front-left
-# hw v0.901 wired network, in the strip between MENU and BACK at the right end (top side: the
+# hw v0.2 wired network, in the strip between MENU and BACK at the right end (top side: the
 # RJ45 and the PoE module under a raised lid; bottom: the W5500 and the PoE parts)
 J4_AT = (148.7, 49.5)            # RJ45: midpoint of its locating holes; mouth 3.5 mm past the
                                  # right edge (flush with the case wall), PoE pins toward the rear
@@ -107,7 +107,7 @@ PAIRS = {
     # neighbour 4.7k holds the earpiece line at 0 V DC
     "R8": (13.0, 4.0, "up"), "C13": (13.0, 7.3, "down"), "R9": (13.0, 10.7, "up"),
     "R7": (11.2, 16.6, "up"),
-    # hw v0.901: the USB OR diode on the VBUS line (cathode toward the LDO) and the BOOT
+    # hw v0.2: the USB OR diode on the VBUS line (cathode toward the LDO) and the BOOT
     # button's series resistor next to SW2
     "D3": (22.1, 14.5, "down"), "R14": (29.6, 52.75, "left"),
     # PoE input side, bottom, one row under the module's input half: the TVS (cathode toward
@@ -139,7 +139,7 @@ REAR = (0.5, 0.5, 36.0, 34.2)
 EAR = (7.0, 9.5, 12.0, 25.0)                  # OUTP -> 22 uF -> 22 R -> jack ring 1
 MIC = (11.2, 3.0, 14.4, 26.0)                 # bias + coupling column right of it
 DRV = (14.2, 10.0, 17.6, 34.2)                # ringer driver: left of the USB lines
-ETH = (100.0, 34.0, 129.5, 62.8)              # hw v0.901: the W5500 and its parts
+ETH = (100.0, 34.0, 129.5, 62.8)              # hw v0.2: the W5500 and its parts
 PHY = (125.0, 51.5, 138.0, 62.8)              # its PHY terminations, toward the RJ45's chip pins
 SHIELD = (138.0, 56.0, 156.0, 62.8)           # the RJ45 shield cap, at its front tab
 AUTO = [
@@ -161,7 +161,7 @@ AUTO = [
     ("D2", [("2", "U1:=STATUS_LED")], (0.5, 57.0, 4.4, 66.0)),
     ("R13", [("1", "U1:=STATUS_LED"), ("2", "D2:2")], (0.5, 53.9, 4.4, 66.0)),
 ] + [
-    # ---- hw v0.901: Ethernet (bottom, around U4; DESIGN.md §12a). Boxes keep each part on its
+    # ---- hw v0.2: Ethernet (bottom, around U4; DESIGN.md §12a). Boxes keep each part on its
     # side of the W5500 so the hand-routed SPI fan (west), PHY pairs (east) and the PoE side stay
     # clear; the router joins them.
     # the W5500's own pin capacitors first (closest to their pins), then the supplies' parts
@@ -194,7 +194,7 @@ MOVES = {"R1": (17.75, 10.525), "C3": (1.675, 32.125, "down"), "C4": (3.475, 32.
 LANES = [(20.8, 21.5, 37.0, 27.3), (20.8, 21.5, 27.3, 44.0),     # rear keys
          (20.8, 43.5, 44.0, 50.0),                                # display
          (5.2, 57.5, 37.0, 65.5), (5.2, 52.7, 13.0, 65.5)]        # front keys
-# hw v0.901: where parts outside the PoE input side may not go (3 mm around its copper) and
+# hw v0.2: where parts outside the PoE input side may not go (3 mm around its copper) and
 # the bottom screw heads of the display standoffs H5/H6
 POE_KEEP = [(130.6, 27.6, 156.0, 41.2),       # the module's input half + its input pins
             (128.5, 38.5, 146.4, 51.2)]       # BR1 and the RJ45's PoE pins (7-10)
@@ -217,7 +217,7 @@ NETCLASSES = {  # name: (track, clearance), patterns
     "Power": (0.6, 0.2, ["VBUS", "3V3", "V5", "POE_5V", "ETH_3V3", "ETH_3V3A"]),
     "USB": (0.3, 0.15, ["USB_DP", "USB_DN"]),
     "Audio": (0.25, 0.2, ["HS_EAR", "HS_MIC", "EAR_AC", "DAC_OUTP", "MIC1P", "MIC1N", "MIC_BIAS"]),
-    # hw v0.901 wired network: the PHY pairs; the isolated PoE input (fab-common.kicad_dru keeps
+    # hw v0.2 wired network: the PHY pairs; the isolated PoE input (fab-common.kicad_dru keeps
     # it 3 mm from everything else); the RJ45 shield
     "Eth": (0.25, 0.15, ["ETH_TXP", "ETH_TXN", "ETH_RXP", "ETH_RXN", "ETH_RDP_J", "ETH_RDN_J"]),
     "PoE": (0.5, 0.25, ["POE_VA1", "POE_VA2", "POE_VB1", "POE_VB2", "POE_VIN_P", "POE_VIN_N"]),
@@ -583,7 +583,7 @@ def build() -> Path:
     for ref, (x, y) in zip(stand, STANDOFFS):
         place(fps[ref], x, y)
     place_module(fps["U1"])
-    # hw v0.901: RJ45 (mouth to the right edge, pin 1 to the rear-front side), PoE module,
+    # hw v0.2: RJ45 (mouth to the right edge, pin 1 to the rear-front side), PoE module,
     # W5500 (PHY pins toward the RJ45)
     place_oriented(fps["J4"], *J4_AT, "top",
                    lambda f, x, y: pad_at(f, "1")[0] < x and pad_at(f, "1")[1] > y
@@ -698,7 +698,7 @@ def tidy_refs(fps) -> None:
                 item.SetLayer(fab)
 
 
-REV = "v0.901 (PoE)"
+REV = "v0.2 (PoE)"
 # J3 = the WeAct module's header order (DESIGN.md §6): odd pins in the outer column
 J3_NAMES = {"1": "BUSY", "2": "RES", "3": "DC", "4": "CS", "5": "SCL", "6": "SDA", "7": "GND",
             "8": "VCC"}
@@ -714,7 +714,7 @@ def marking(board) -> None:
     # connectors: the USB-C and the handset jack sit under the rear edge (bottom side)
     text(board, F, "USB-C 5V", FIXED["J1"][0], 1.35, 0.8, 0.15)
     text(board, F, "HANDSET", FIXED["J2"][0], 1.35, 0.8, 0.15)
-    # hw v0.901: the wired network's connector, beside its mouth
+    # hw v0.2: the wired network's connector, beside its mouth
     text(board, F, "LAN / PoE", J4_AT[0] - 4.0, J4_AT[1] + 11.4, 0.8, 0.15)
     # display socket: name + pin order beside each column
     jx, jy = J3_PIN1

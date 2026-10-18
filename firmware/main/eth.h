@@ -1,4 +1,4 @@
-// The wired network on hw v0.901: a WIZnet W5500 (10/100 MAC + PHY) on the display's SPI bus,
+// The wired network on hw v0.2: a WIZnet W5500 (10/100 MAC + PHY) on the display's SPI bus,
 // polled (its INTn has no GPIO), with ESP-IDF's esp_eth driver and esp_netif (DHCP). In a QEMU
 // build for that board, QEMU's OpenCores Ethernet stands in for it. Rev A builds have none of
 // this: every function below is a stub that says so. Which network is used is netsel.c's choice;

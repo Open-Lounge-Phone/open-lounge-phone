@@ -66,15 +66,15 @@ jobs:
           # The image from the defaults: rev A, no server, no update key, no update URL, no
           # wired network code linked.
           python3 tools/check_release_scheme.py --default-build build
-      - name: Build (board, hw v0.901 with the wired network)
+      - name: Build (board, hw v0.2 with the wired network)
         working-directory: firmware
         run: |
           . "$IDF_PATH/export.sh"
-          idf.py -B build-v0901 -D SDKCONFIG=build-v0901/sdkconfig \
-            -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.v0901" build
-          idf.py -B build-v0901 size
+          idf.py -B build-v02 -D SDKCONFIG=build-v02/sdkconfig \
+            -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.v02" build
+          idf.py -B build-v02 size
           # Its board id, the W5500 driver in, and still no server, update key or URL.
-          python3 tools/check_release_scheme.py --board-build build-v0901
+          python3 tools/check_release_scheme.py --board-build build-v02
       - name: Build (Wokwi simulator)
         working-directory: firmware
         run: |
@@ -89,7 +89,7 @@ jobs:
           # capture shows it contacts nobody.
           tools/qemu.sh build
           python3 tools/qemu_smoke.py
-      - name: QEMU, hw v0.901 (its Ethernet as the cable, pulled and plugged back in)
+      - name: QEMU, hw v0.2 (its Ethernet as the cable, pulled and plugged back in)
         working-directory: firmware
         run: |
           . "$IDF_PATH/export.sh"

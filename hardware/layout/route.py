@@ -229,7 +229,7 @@ def display(cu):
     jx, jy = pad(cu.b, "J3", "2")
     y = 56.5
     cu.track("EPD_RST", B, chamfer([(rx, ry), (rx, y), (jx, y), (jx, jy)], [0.6, 0.7]), BUS_W)
-    # IO0 = ETH_CS (hw v0.901): out of the corner pin into R14 (1 k), R14 -> SW2 (BOOT, both pads
+    # IO0 = ETH_CS (hw v0.2): out of the corner pin into R14 (1 k), R14 -> SW2 (BOOT, both pads
     # of its contact); ETH_CS itself hops onto the top layer toward the W5500 (eth_hand())
     bx, by = pad(cu.b, "U1", "27")
     r14a, r14b = pad(cu.b, "R14", "1"), pad(cu.b, "R14", "2")
@@ -241,7 +241,7 @@ def display(cu):
 
 
 def v5_trunk(cu):
-    """hw v0.901: the PoE side's 5 V (D5's cathode, at the right end) to the V5 node at the LDO,
+    """hw v0.2: the PoE side's 5 V (D5's cathode, at the right end) to the V5 node at the LDO,
     on the top layer along y 18.5 (between the rear switches' holes and their legends), with a
     short bottom hop under the top 3V3 trunk at x 36; a branch down to the Ethernet LDO U5."""
     b = cu.b
@@ -265,7 +265,7 @@ def v5_trunk(cu):
 
 
 def eth_hand(cu):
-    """hw v0.901: the structured part of the wired network, by hand (the router joins the rest
+    """hw v0.2: the structured part of the wired network, by hand (the router joins the rest
     in ETH_WINDOW).
 
     - SPI: one bottom bundle from J3 / the module, top to bottom in the W5500's pin order (DIN,
@@ -328,7 +328,7 @@ def eth_hand(cu):
 
 
 def u4_escape(cu):
-    """hw v0.901: the W5500's supply and ground pins at 0.5 mm pitch: each ground pin inward to its
+    """hw v0.2: the W5500's supply and ground pins at 0.5 mm pitch: each ground pin inward to its
     own GND via under the package (the top GND pour joins them); AVDD pins 4/8 and 21 inward
     (the router finishes them, with a via of its own), pin 11 round the free corner to pin 15;
     VDD (28) and the LED pins (25, 27) outward west to vias beside the package (the crystal's XI
@@ -377,7 +377,7 @@ def u4_escape(cu):
 
 
 def phy_rx(cu):
-    """hw v0.901: the RX pair from the W5500 (pins 5 RX-, 6 RX+) through its AC coupling (C30, C29)
+    """hw v0.2: the RX pair from the W5500 (pins 5 RX-, 6 RX+) through its AC coupling (C30, C29)
     to the RJ45 (pins 5 RD-, 4 RD+), 3 mm south of the PoE side until it is inside the RJ45's own
     pin grid; terminations R23/R22 to C31 south of it (RX- reaches R23 over a via pair); the
     joined centre tap (pin 3) to R24 / C32."""
@@ -412,7 +412,7 @@ def phy_rx(cu):
 
 
 def eth_leds(cu):
-    """hw v0.901: the W5500's LED lines (vias beside its west side, u4_escape) on the top layer
+    """hw v0.2: the W5500's LED lines (vias beside its west side, u4_escape) on the top layer
     down to the front and east along it to the LED resistors at the right edge; the ETH_3V3 feed
     for the RJ45's LED anodes (pins 11, 13) on the top layer round the RJ45's shield tab."""
     b = cu.b
@@ -437,7 +437,7 @@ def eth_leds(cu):
 
 
 def poe_hand(cu):
-    """hw v0.901: the isolated PoE input side (net class PoE, 0.5 mm), by hand: the RJ45's
+    """hw v0.2: the isolated PoE input side (net class PoE, 0.5 mm), by hand: the RJ45's
     cable-side centre taps to the bridges (BR1 mode A west of the RJ45, BR2 mode B under the
     module), VIN+ along the module's input half to the TVS and pins 5/6, VIN- on the top layer
     along y 35.6 and 39.6 to pins 7/8. 3 mm from everything else (fab-common.kicad_dru)."""
@@ -519,7 +519,7 @@ def usb(cu):
     gx, gy = pad(b, "R1", "2")
     cu.track("GND", B, [(gx, gy), (gx, 12.7)], 0.3)
     cu.via("GND", gx, 12.7)
-    # R2's via sits west of its pad (hw v0.901: the USB OR diode D3 is east of it)
+    # R2's via sits west of its pad (hw v0.2: the USB OR diode D3 is east of it)
     gx, gy = pad(b, "R2", "2")
     cu.track("GND", B, [(gx, gy), (20.55, gy + gx - 20.55), (20.55, 12.45)], 0.3)
     cu.via("GND", 20.55, 12.45)
@@ -527,7 +527,7 @@ def usb(cu):
 
 def power(cu):
     b = cu.b
-    # ---- hw v0.901: VBUS (east pad A9/B4) -> D3 (USB OR diode) -> V5 -> LDO + C_IN; the
+    # ---- hw v0.2: VBUS (east pad A9/B4) -> D3 (USB OR diode) -> V5 -> LDO + C_IN; the
     # piezo, its 1 k and the TVS's supply pin hang off V5 west of it, reached through the gap
     # between the TVS's pad rows (crosses nothing). The west pad A4/B9 is the plug's VBUS too and
     # stays unrouted. The PoE 5 V comes in on the top layer (v5_trunk()).
@@ -1245,7 +1245,7 @@ LEFTOVER = ["MIC1P", "HS_MIC", "ES8311_ADCVREF", "ES8311_DACVREF", "MIC1N", "ES8
 # may hop through vias like any digital net
 VIA_NET = {"MIC1P": 1e9, "HS_MIC": 1e9, "MIC1N": 50.0}
 CORNER = (0.0, 0.0, 40.0, 60.0)          # router window: the electronics band
-# hw v0.901: second window over the wired network (W5500, RJ45, PoE) at the right end
+# hw v0.2: second window over the wired network (W5500, RJ45, PoE) at the right end
 ETH_WINDOW = (98.0, 15.0, 156.0, 64.0)
 # routing order: the isolated PoE side first (the tightest), then the module output, the PHY
 # pairs, supplies, the W5500's own pins, the LEDs and the SPI ends
@@ -1305,7 +1305,7 @@ def zones(board):
 
 
 def poe_keepouts(board):
-    """hw v0.901: no copper pour within 3 mm of the PoE input side, on both layers (the zone filler
+    """hw v0.2: no copper pour within 3 mm of the PoE input side, on both layers (the zone filler
     run from Python doesn't apply fab-common.kicad_dru's custom rules; DRC does, and checks it).
     One rule area per PoE pad / track / via: its bounding box grown by the isolation distance."""
     g = POE_ISO + 0.1
@@ -1461,7 +1461,7 @@ def leftovers(placed, attempts=8):
 
 
 def eth_gnd(r, cu):
-    """hw v0.901: each of the W5500's ground pins joined to the GND vias under it (router A*;
+    """hw v0.2: each of the W5500's ground pins joined to the GND vias under it (router A*;
     the fills can't reach between 0.5 mm-pitch pins)."""
     b = cu.b
     fp = b.FindFootprintByReference("U4")
@@ -1489,7 +1489,7 @@ ETH_W = {"ETH_3V3": 0.3, "ETH_3V3A": 0.3, "V5": 0.4, "POE_5V": 0.5}
 
 
 def eth_router(board, cu, order=None):
-    """hw v0.901: route ETH_NETS in their window (deterministic order, failures logged)."""
+    """hw v0.2: route ETH_NETS in their window (deterministic order, failures logged)."""
     r = Router(board, ETH_WINDOW)
     r.extend_ends = True
     for x0, y0, x1, y1 in PS1_KEEPOUT:

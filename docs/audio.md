@@ -70,7 +70,7 @@ makes s/f/th hard to tell apart.
   - libopus encodes on the audio task's stack, which is 36 KB (it uses about 26 KB). The Opus
     states (about 40 KB) are in PSRAM, so internal RAM stays for the call's network.
   - Flash: Opus adds about 175 KB and the echo canceller (item 5) about 35 KB. The images are
-    1.59 MB (rev A) and 1.63 MB (hw v0.901), with 373 KB and 340 KB of the 1.875 MB app
+    1.59 MB (rev A) and 1.63 MB (hw v0.2), with 373 KB and 340 KB of the 1.875 MB app
     partition free: the partition table stays as it is.
 
 **Tests.**

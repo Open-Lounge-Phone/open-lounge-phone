@@ -118,7 +118,7 @@ static void send_page(httpd_req_t *req, const char *error) {
   httpd_resp_set_type(req, "text/html; charset=utf-8");
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
   httpd_resp_sendstr_chunk(req, HEAD);
-  // A board with a working cable (hw v0.901) is online already: Wi-Fi is optional.
+  // A board with a working cable (hw v0.2) is online already: Wi-Fi is optional.
   bool cable = net_uplink() == NET_WIRED;
   httpd_resp_sendstr_chunk(req, cable ? "<h1>Set up your phone</h1><p>Choose its server.</p>"
                                         "<p class=ok>The network cable is connected: Wi-Fi is "
@@ -215,7 +215,7 @@ static esp_err_t post_save(httpd_req_t *req) {
   char saved[33] = "", ip[16];
   int rssi;
   net_wifi_info(saved, sizeof saved, &rssi, ip, sizeof ip);
-  // No network named: keep the saved one, or none at all on a working cable (hw v0.901).
+  // No network named: keep the saved one, or none at all on a working cable (hw v0.2).
   bool cable = net_uplink() == NET_WIRED;
   bool keep_wifi =
       !err && prov_wifi_answer(name, saved[0] && net_has_wifi(), cable) == PROV_WIFI_KEEP;
@@ -347,7 +347,7 @@ void prov_start_ap(void) {
   memcpy(ap.ap.password, s_pass, strlen(s_pass));
   esp_err_t err = esp_wifi_set_config(WIFI_IF_AP, &ap);
   if (err != ESP_OK) ESP_LOGE(TAG, "AP config failed: %s", esp_err_to_name(err));
-  net_setup_radio(true);  // hw v0.901 on its cable: the radio is off until now
+  net_setup_radio(true);  // hw v0.2 on its cable: the radio is off until now
   scan();
   start_dns();
   start_http();
@@ -364,7 +364,7 @@ void prov_stop_ap(void) {
 #if !CONFIG_OLP_QEMU
   esp_wifi_set_mode(WIFI_MODE_STA);
   net_slow_retry(false);
-  net_setup_radio(false);  // hw v0.901 on its cable: the radio goes off again
+  net_setup_radio(false);  // hw v0.2 on its cable: the radio goes off again
 #endif
   s_active = false;
   ESP_LOGI(TAG, "PROV AP DOWN");

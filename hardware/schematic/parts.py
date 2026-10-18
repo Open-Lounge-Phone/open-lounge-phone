@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from lib import CAP_EXTRA, RES_EXTRA, SPECS, spec
 
-# Passives beyond lib.py's basic tables (hw v0.901 wired network), checked with lcsc.py
+# Passives beyond lib.py's basic tables (hw v0.2 wired network), checked with lcsc.py
 RES_EXTRA.update({
     ("49.9", "0603"): ("C23185", "0603WAF499JT5E"),     # W5500 TX pull-ups / RX termination
     ("12.4k", "0603"): ("C22865", "0603WAF1242T5E"),    # W5500 EXRES1, 1 %
@@ -202,7 +202,7 @@ spec(
 
 
 # ---------------------------------------------------------------------------------------------
-# Wired network (hw v0.901): W5500 Ethernet controller on SPI, an RJ45 with PoE magnetics, an
+# Wired network (hw v0.2): W5500 Ethernet controller on SPI, an RJ45 with PoE magnetics, an
 # isolated 802.3af PoE module. Diode-OR of USB VBUS and the PoE 5 V.
 
 spec(

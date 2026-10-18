@@ -24,7 +24,7 @@
 #   QEMU_HOSTFWD may hold several forwards separated by spaces ("tcp::8081-10.0.2.16:80").
 #   QEMU_MONITOR=47700          the QEMU monitor on 127.0.0.1:<port> (telnet-style text); the
 #                               phone's network is the netdev "cable": `set_link cable off` pulls
-#                               the cable out of a build for hw v0.901 (tools/qemu_cable.py)
+#                               the cable out of a build for hw v0.2 (tools/qemu_cable.py)
 set -euo pipefail
 FW="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$FW"

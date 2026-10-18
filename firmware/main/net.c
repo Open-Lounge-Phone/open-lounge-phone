@@ -1,7 +1,7 @@
 // Wi-Fi station (credentials from NVS, else Kconfig) and the WebSocket to the server
 // (esp_websocket_client + TLS with the ESP-IDF certificate bundle). The setup network (SoftAP
 // provisioning) is prov.c; it saves credentials here. On a board with a wired network (hw
-// v0.901) it also runs the choice between the cable and Wi-Fi (netsel.c) and applies it: the
+// v0.2) it also runs the choice between the cable and Wi-Fi (netsel.c) and applies it: the
 // cable's PHY (eth.c), the Wi-Fi station and radio, and the default route.
 #include "net.h"
 
@@ -61,7 +61,7 @@ static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 #endif
 
 /** Wi-Fi joined (with an address) or lost: the app hears it directly (rev A) or through the
- * network choice (hw v0.901: it may be the cable that matters). */
+ * network choice (hw v0.2: it may be the cable that matters). */
 static void post_wifi(bool up) {
 #if BOARD_HAS_ETHERNET
   app_post(EV_NET, up ? NS_WIFI_IP : NS_WIFI_DOWN, NULL);
@@ -280,7 +280,7 @@ static void start_qemu_ethernet(void) {
 #endif
 
 #if BOARD_HAS_ETHERNET
-// --- the cable or Wi-Fi (hw v0.901) ------------------------------------------------------------
+// --- the cable or Wi-Fi (hw v0.2) ------------------------------------------------------------
 
 /** The radio runs while the station is wanted or the setup network is open. With it off, the
  * SAR ADC keeps the random number generator truly random (TLS, keys): the radio is its other
@@ -409,7 +409,7 @@ void net_start(void) {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
 #if CONFIG_OLP_QEMU && BOARD_HAS_ETHERNET
-  // QEMU for hw v0.901: its Ethernet is the cable (eth.c) and there is no Wi-Fi radio. The saved
+  // QEMU for hw v0.2: its Ethernet is the cable (eth.c) and there is no Wi-Fi radio. The saved
   // Wi-Fi still counts for the choice (sdkconfig.qemu names one): the phone then powers the
   // "PHY" down and looks for the cable now and then, as on the board.
   nvs_str("ssid", s_ssid, sizeof s_ssid, CONFIG_OLP_WIFI_SSID);

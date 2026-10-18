@@ -32,7 +32,7 @@ int net_wifi_channel(void);
 /** Wi-Fi status for MENU and the console: SSID, RSSI (dBm) and IP. */
 void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_len);
 
-// --- the network in use: the cable (hw v0.901) or Wi-Fi -----------------------------------------
+// --- the network in use: the cable (hw v0.2) or Wi-Fi -----------------------------------------
 
 typedef enum {
   NET_SAME,       // nothing the app needs to know
@@ -42,7 +42,7 @@ typedef enum {
 } net_change_t;
 
 /**
- * hw v0.901: runs the network choice (netsel.c) for an EV_NET event (`ev` = ns_event_t) or a
+ * hw v0.2: runs the network choice (netsel.c) for an EV_NET event (`ev` = ns_event_t) or a
  * tick (NS_TICK) and applies it (the cable's PHY, the Wi-Fi radio, the default route). `busy`: a
  * call is on. Rev A: always NET_SAME (Wi-Fi posts EV_WIFI_UP / EV_WIFI_DOWN as it always did).
  */
@@ -61,5 +61,5 @@ const char *net_problem(void);
 /** MENU 3's first line on a board with a wired network ("WIRED NETWORK", "CABLE UNPLUGGED"…),
  * NULL on rev A. */
 const char *net_cable_line(void);
-/** The setup network opens (true) or closes: hw v0.901 turns the radio on for it. */
+/** The setup network opens (true) or closes: hw v0.2 turns the radio on for it. */
 void net_setup_radio(bool on);

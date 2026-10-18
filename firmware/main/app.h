@@ -43,7 +43,7 @@ typedef enum {
   EV_LAN,          // the house intercom's receive task: data = "<ip>|<sealed line>" (malloc'd)
   EV_INTERCOM,     // MENU -> 4 -> a digit: a = the room's index, -1 = every room
   EV_CHIME,        // MENU -> 4: post the chime (a notice to every phone of the space)
-  EV_NET,          // hw v0.901 (a wired network): a = netsel's ns_event_t (cable or Wi-Fi changed)
+  EV_NET,          // hw v0.2 (a wired network): a = netsel's ns_event_t (cable or Wi-Fi changed)
 } ev_type_t;
 
 typedef struct {

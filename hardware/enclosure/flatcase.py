@@ -80,7 +80,7 @@ R_CORNER = 10.0
 BODY = (-MARGIN, F.BOARD_W + MARGIN, -MARGIN, F.BOARD_H + MARGIN)
 COLUMNS = [(-5.0, -5.0), (F.BOARD_W + 5.0, -5.0), (F.BOARD_W + 5.0, F.BOARD_H + 5.0),
            (-5.0, F.BOARD_H + 5.0), (40.0, F.BOARD_H + 5.0)]   # outside the board and the plugs
-# the wired board (v0.901): the RJ45 and the PoE module stand 13.3 / 8.5 mm on the board's top
+# the wired board (v0.2): the RJ45 and the PoE module stand 13.3 / 8.5 mm on the board's top
 # at its right end, under a notch in the front plate; the RJ45's mouth faces right
 NOTCH = (P.HOOD[0], F.Y(P.HOOD[2]), F.Y(P.HOOD[1])) if P.NETWORK else None   # x0, y0, y1
 

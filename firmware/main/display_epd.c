@@ -106,7 +106,7 @@ static esp_err_t epd_init(void) {
                       .mode = GPIO_MODE_INPUT,
                       .pull_down_en = GPIO_PULLDOWN_ENABLE};
   gpio_config(&in);
-  // The bus is shared with the W5500 on hw v0.901 (board_spi.c).
+  // The bus is shared with the W5500 on hw v0.2 (board_spi.c).
   esp_err_t err = board_spi_init();
   if (err != ESP_OK) return err;
   spi_device_interface_config_t dev = {

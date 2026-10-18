@@ -27269,7 +27269,7 @@
 			)
 		)
 	)
-	(gr_text "CERN-OHL-S-2.0  v0.901 (PoE)"
+	(gr_text "CERN-OHL-S-2.0  v0.2 (PoE)"
 		(at 124 98.5 0)
 		(layer "F.SilkS")
 		(uuid "bab4a4aa-7156-4b66-9593-0ef731680bcd")

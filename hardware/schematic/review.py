@@ -40,8 +40,8 @@ BLOCKS = [
     ("keys", "Keys and hook: 13 MX hot-swap sockets, one GPIO each (internal pull-ups)"),
     ("audio", "Audio: ES8311 codec + 3.5 mm TRRS handset jack (CTIA)"),
     ("ui", "Display header, piezo ringer, status LED, board marking, mounting holes"),
-    ("ethernet", "Ethernet (v0.901): W5500 on the display SPI, its own 3.3 V LDO, RJ45 magnetics"),
-    ("poe", "PoE (v0.901): two bridges, TVS, isolated 802.3af DP9900LP-5V module, 3 mm isolation"),
+    ("ethernet", "Ethernet (v0.2): W5500 on the display SPI, its own 3.3 V LDO, RJ45 magnetics"),
+    ("poe", "PoE (v0.2): two bridges, TVS, isolated 802.3af DP9900LP-5V module, 3 mm isolation"),
 ]
 PAGE = (16.54, 11.69)   # A3 landscape, inches
 REPEATED = {"HOTSWAP"}
@@ -102,7 +102,7 @@ def new_page(title, sub=""):
     ax.text(0.4, PAGE[1] - 0.45, title, fontsize=14, weight="bold", va="top")
     if sub:
         ax.text(0.4, PAGE[1] - 0.8, sub, fontsize=8, va="top", color="#444")
-    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone minimal board, hw v0.901 (RJ45 + PoE) - generated from the "
+    ax.text(PAGE[0] - 0.4, 0.25, "Open Lounge Phone minimal board, hw v0.2 (RJ45 + PoE) - generated from the "
             "SKiDL netlist by hardware/schematic/review.py. Blue = signal net, red = supply "
             "rail; same name = connected. CERN-OHL-S-2.0.", fontsize=6.5, ha="right",
             color="#666")
@@ -137,7 +137,7 @@ def main() -> int:
     with PdfPages(out) as pdf:
         # ---- page 1: overview
         w, h = DESIGN.board_mm
-        fig, ax = new_page("Open Lounge Phone - minimal board v0.901 (RJ45 + PoE), schematic review",
+        fig, ax = new_page("Open Lounge Phone - minimal board v0.2 (RJ45 + PoE), schematic review",
                            f"{DESIGN.layers}-layer board, {w:.0f} x {h:.0f} mm. Pages "
                            f"2-{len(BLOCKS) + 1}: one page per block. Hardware docs: "
                            "hardware/DESIGN.md.")

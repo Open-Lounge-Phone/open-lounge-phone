@@ -63,7 +63,7 @@ def main() -> int:
     keys["HOOK"] = {"gpio": by_net["HOOK"], "net": "HOOK", "switch": switch_of("HOOK"),
                     "active": "low = handset on the hook (internal pull-up)", "rtc": True}
     data = {
-        "board": "Open Lounge Phone main board", "rev": "v0.901 (rev A + RJ45/PoE)",
+        "board": "Open Lounge Phone main board", "rev": "v0.2 (rev A + RJ45/PoE)",
         "module": "ESP32-S3-WROOM-1U-N16R8 (16 MB flash, 8 MB octal PSRAM)",
         "sources": ["hardware/schematic/pin_table.yaml", "hardware/build/main/main.net"],
         "gpio": gpio,

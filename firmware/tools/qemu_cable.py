@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The wired network (hw v0.901) end to end in QEMU, with QEMU's Ethernet as the cable.
+"""The wired network (hw v0.2) end to end in QEMU, with QEMU's Ethernet as the cable.
 
-    firmware/tools/qemu_cable.py            build (build-qemu-v0901) + run, ~4 minutes
+    firmware/tools/qemu_cable.py            build (build-qemu-v02) + run, ~4 minutes
     OLP_FW_NO_BUILD=1 firmware/tools/qemu_cable.py
 
-QEMU has no W5500: a QEMU build for hw v0.901 (sdkconfig.v0901) drives its OpenCores Ethernet
+QEMU has no W5500: a QEMU build for hw v0.2 (sdkconfig.v02) drives its OpenCores Ethernet
 through the same network choice (netsel.c), the same esp_netif/DHCP and the same app code; the
 QEMU monitor's `set_link cable off|on` pulls the cable out and plugs it back in. QEMU has no Wi-Fi
 either, so a "saved Wi-Fi" (sdkconfig.qemu names one) is never joined: the phone falls back to it,
@@ -33,10 +33,10 @@ import urllib.request
 
 FW = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 QEMU_SH = os.path.join(FW, "tools", "qemu.sh")
-BUILD = os.environ.get("OLP_QEMU_BUILD", "build-qemu-v0901")
+BUILD = os.environ.get("OLP_QEMU_BUILD", "build-qemu-v02")
 MONITOR = int(os.environ.get("QEMU_CABLE_MONITOR", "47731"))
 HTTP = int(os.environ.get("QEMU_CABLE_HTTP", "47732"))
-ENV = {**os.environ, "OLP_QEMU_BUILD": BUILD, "OLP_QEMU_EXTRA_DEFAULTS": "sdkconfig.v0901",
+ENV = {**os.environ, "OLP_QEMU_BUILD": BUILD, "OLP_QEMU_EXTRA_DEFAULTS": "sdkconfig.v02",
        "QEMU_MONITOR": str(MONITOR), "QEMU_HOSTFWD": f"tcp::{HTTP}-:80"}
 ENV.pop("OLP_SIM_SERVER", None)  # no server baked in: the test sets a dead local one
 

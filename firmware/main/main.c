@@ -641,7 +641,7 @@ static void draw_check(int w, int h, int64_t now) {
   if (!ssid[0]) snprintf(wifi, sizeof wifi, "NOT SET");
   else if (!net_wifi_up()) snprintf(wifi, sizeof wifi, "%.14s, NOT JOINED", ssid);
   else snprintf(wifi, sizeof wifi, "%.12s %d DBM CH %d", ssid, rssi, net_wifi_channel());
-  if (net_uplink() == NET_WIRED) {  // hw v0.901 on its cable: the link instead of Wi-Fi
+  if (net_uplink() == NET_WIRED) {  // hw v0.2 on its cable: the link instead of Wi-Fi
     eth_info_t e;
     eth_info(&e);
     net_label = "CABLE";
@@ -731,7 +731,7 @@ void app_print_status(void) {
 #endif
 }
 
-// --- the network: Wi-Fi, or the cable on hw v0.901 ---------------------------------------------
+// --- the network: Wi-Fi, or the cable on hw v0.2 ---------------------------------------------
 
 static bool s_started;      // the server connection was opened once (it reconnects by itself)
 #if BOARD_HAS_ETHERNET
@@ -798,7 +798,7 @@ static void network_changed(net_change_t c) {
 // --- the Wi-Fi setup network ----------------------------------------------------------------
 
 static void prov_event(prov_event_t ev, bool forced) {
-  // A working cable (hw v0.901) is a network too: setup isn't needed for one.
+  // A working cable (hw v0.2) is a network too: setup isn't needed for one.
   bool has_network = net_has_wifi() || net_uplink() == NET_WIRED;
   switch (prov_step(&s_prov, ev, has_network, forced, now_ms())) {
     case PROV_ACT_START_AP:
@@ -1639,7 +1639,7 @@ void app_main(void) {
         case EV_WIFI_DOWN:
           network_down();
           break;
-        case EV_NET:  // hw v0.901: the cable or Wi-Fi changed (netsel.c); never on rev A
+        case EV_NET:  // hw v0.2: the cable or Wi-Fi changed (netsel.c); never on rev A
 #if BOARD_HAS_ETHERNET
           network_changed(net_select(ev.a, network_busy()));
 #endif

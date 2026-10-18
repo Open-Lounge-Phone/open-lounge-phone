@@ -51,7 +51,7 @@ void net_wifi_info(char *ssid, size_t ssid_len, int *rssi, char *ip, size_t ip_l
   snprintf(ip, ip_len, "10.0.0.2");
 }
 void net_server_url(char *out, size_t len) { snprintf(out, len, "wss://example.org"); }
-// The network in use: Wi-Fi (rev A) unless a test puts the phone on a cable (hw v0.901).
+// The network in use: Wi-Fi (rev A) unless a test puts the phone on a cable (hw v0.2).
 static net_uplink_t s_net_uplink = NET_WIFI;
 static const char *s_cable_line;  // NULL: no wired network on this board
 bool net_wifi_up(void) { return s_net_uplink == NET_WIFI; }
@@ -302,7 +302,7 @@ TEST(menu_4_is_the_intercom_or_the_chime) {
   CHECK(s_ev_type == -1);
 }
 
-TEST(menu_network_screen_on_wifi) {  // rev A, and hw v0.901 without a cable
+TEST(menu_network_screen_on_wifi) {  // rev A, and hw v0.2 without a cable
   s_net_uplink = NET_WIFI;
   s_cable_line = NULL;
   menu_t m = {0};
@@ -314,7 +314,7 @@ TEST(menu_network_screen_on_wifi) {  // rev A, and hw v0.901 without a cable
   CHECK_STR(out[1], "HOME -50");
   CHECK_STR(out[2], "EXAMPLE.ORG");
   CHECK_STR(out[3], "1 CHANGE");
-  // hw v0.901 on Wi-Fi: the cable's state heads the screen, Wi-Fi below.
+  // hw v0.2 on Wi-Fi: the cable's state heads the screen, Wi-Fi below.
   s_cable_line = "CABLE UNPLUGGED";
   menu_lines(&m, out);
   CHECK_STR(out[0], "CABLE UNPLUGGED");

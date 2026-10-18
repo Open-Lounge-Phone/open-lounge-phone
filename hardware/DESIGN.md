@@ -329,12 +329,12 @@ Still open:
    cups hang below the handle, and its weight (≥ 121 g for a 45 gf hook switch).
 5. The earlier questions that still stand: base envelope and toy classification (Kids).
 
-## 12a. hw v0.901: wired network and PoE
+## 12a. hw v0.2: wired network and PoE
 
 A sidebar revision of the minimal board (owner request 2026-10-15): an **RJ45 with Power over
 Ethernet**, so a phone can run from one cable like a desk phone. Everything of rev A stays where
 it was (refs, placement, routes); the network is added at the board's right end, between the
-MENU and BACK keys. Silkscreen rev **v0.901**. The owner's "no I/O expander" rule holds.
+MENU and BACK keys. Silkscreen rev **v0.2**. The owner's "no I/O expander" rule holds.
 
 | Block | Parts | Ref |
 |---|---|---|
@@ -375,7 +375,7 @@ the module's LDO runs no hotter than in rev A. V5 carries ≤ 9.4 µF (USB attac
 | both | USB-C charger, PoE | 618 mA | of 1400 mA (PoE), 1500 mA (charger) |
 | Wi-Fi with the PHY on, no cable | computer USB, USB-C charger, PoE | 525 mA | WARN on a computer port (500 mA) |
 
-**Supported power (owner rule).** A v0.901 phone runs from PoE or a real USB-C charger. A
+**Supported power (owner rule).** A v0.2 phone runs from PoE or a real USB-C charger. A
 computer's USB port is only for debugging (flashing, the console), and only with the PoE cable
 also plugged in, so PoE carries the load; a computer port alone is not a supported power source.
 The reason is the two rows above that draw more than a computer port's 500 mA. The board has no
@@ -427,7 +427,7 @@ board (JLC reference, cost.py): **$17.98 at 100, $15.30 at 1000** (rev A $7.64 /
 module ($4.24), the W5500 ($1.82) and the RJ45 ($1.22) are most of the difference.
 
 **Firmware** (0.9.5, `firmware/README.md` "Wired network"): a board choice in the build
-(`minimal-revA` / `minimal-v0901`; a rev A build has no wired network code and never drives IO0 or
+(`minimal-revA` / `minimal-v02`; a rev A build has no wired network code and never drives IO0 or
 IO45); ESP-IDF's esp_eth W5500 driver polled on SPI2 (16 MHz, shared with the display at 10 MHz),
 MAC from `esp_read_mac(ESP_MAC_ETH)`; a working cable is used and the Wi-Fi radio is off; on
 Wi-Fi the PHY is in power-down (PHYCFGR) and woken every 30 s for a 6 s look (when the two are on
@@ -450,7 +450,7 @@ the 2.9" display option is unaffected (J4/PS1 are right of its standoffs).
 - ST USBLC6-2 datasheet p1-2; HOOYA PJ-31060 drawing rev A2 p1; TDK PS series buzzers p2;
   JSCJ MMBT3904 rev 2.1 p1; Lite-On LTST-C230KRKT p1, p3; XKB TS-1187A rev A0; HanElectricity
   CPG151101S11-2 and Kailh KH-PS2206-43 drawings p1. Links in [components/](components/README.md).
-- hw v0.901: WIZnet W5500 datasheet v1.1.0 (pins p8-10, MISO p10/p61, reset and clock p60-61,
+- hw v0.2: WIZnet W5500 datasheet v1.1.0 (pins p8-10, MISO p10/p61, reset and clock p60-61,
   currents p59-60) and its reference schematics (W5500 with magjack, joined centre tap); HanRun
   HR871150C rev 00 (schematic p1, drawing p2, PCB layout p3); SDAPO DP9900 series (pins and typical
   connection p3, ADJ p4, characteristics p5-6, LP package p8); MDD MB1S-MB10S rev 2024A2 p1;

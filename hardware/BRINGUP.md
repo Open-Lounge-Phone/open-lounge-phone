@@ -13,7 +13,7 @@ headset.
 1. Before the module is powered: no short between 3V3 and GND (> 1 kΩ).
 2. Plug USB-C: 3V3 = 3.25-3.35 V at the LDO output. Current with the firmware idle: < 150 mA.
 3. `idf.py -p <port> flash monitor`. If the port doesn't appear: hold BOOT, press RESET, release
-   (hw v0.901: hold BOOT while plugging USB in instead, §8.2).
+   (hw v0.2: hold BOOT while plugging USB in instead, §8.2).
 4. The boot log shows `Open Lounge Phone firmware`, `fingerprint: …`, the display draws.
 
 ## 1. Keys, hook, jack, ringer, LED
@@ -127,17 +127,17 @@ Only on a board meant to stay a phone: a release build burns an eFuse key on its
 4. `esptool.py read_flash 0x9000 0x6000 nvs.bin`: the Wi-Fi name and password don't appear in it.
 5. Remove the phone in the app: `WIPE: NVS partition erased`, a new pairing code, Wi-Fi kept.
 
-## 8. hw v0.901 only: wired network and PoE
+## 8. hw v0.2 only: wired network and PoE
 
-The v0.901 board adds an RJ45 (J4) with PoE magnetics, a W5500 (U4) on the display's SPI bus and
+The v0.2 board adds an RJ45 (J4) with PoE magnetics, a W5500 (U4) on the display's SPI bus and
 an isolated 802.3af PoE module (PS1), diode-OR'd with USB into the 5 V rail V5 (`DESIGN.md` §12a).
-Flash the **v0.901 build** (`firmware/README.md` "Building for each board": `sdkconfig.v0901`,
-board id `minimal-v0901`); the rev A build never touches the W5500. How the firmware drives it
+Flash the **v0.2 build** (`firmware/README.md` "Building for each board": `sdkconfig.v02`,
+board id `minimal-v02`); the rev A build never touches the W5500. How the firmware drives it
 and chooses between the cable and Wi-Fi: `firmware/README.md` "Wired network". Until the
 firmware runs, the PHY idles at ~65 mA in auto-negotiation (USB peak 526 mA vs 500 in the
 budget: fine on any real charger, but note it); the firmware powers it down while on Wi-Fi.
 
-**Power for these tests** (hardware/README.md "Power"): a v0.901 phone runs from PoE or a real
+**Power for these tests** (hardware/README.md "Power"): a v0.2 phone runs from PoE or a real
 USB-C charger. The debug setup is **PoE plus a computer's USB for the console**: the PoE cable
 carries the load, the computer port only flashes and reads the console. Don't run the network
 tests from a computer port alone: with the PHY and Wi-Fi on together the board draws more than its
@@ -212,5 +212,5 @@ Board serial / date, 3V3, idle current, the ES8311 id, the SPL at volume 10, the
 word per handset, call setup time (`RTC CONNECTED … ms`), underruns per minute, `dry=`, the
 `enc=` / `dec=` / `aec=` times, the echo test per handset (loss and delay), `erl=` in calls,
 whether echo was heard with the canceller off and on, the sidetone level chosen, and how each phone OS handled the setup page. On
-hw v0.901: the `eth` line, the 5 V current with the PHY off and on, how long a plugged cable took
+hw v0.2: the `eth` line, the 5 V current with the PHY off and on, how long a plugged cable took
 to be used, the switch's PoE class and power, and any audio underruns during an e-paper refresh.

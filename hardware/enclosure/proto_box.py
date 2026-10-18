@@ -65,11 +65,11 @@ BZ1_C, BZ1_D, BZ1_H = (15.8, 15.0), 12.2, 6.5      # piezo body centre (between 
 LED = (2.755, 59.325)                              # D2 reverse-mount LED, shines up through a hole
 USB_X, JACK_X = 19.5, 6.5                          # J1 / J2 centres on the rear edge (bottom side)
 BUTTONS = [(3.345, 23.045, "RESET SW1"), (35.0, 52.8, "BOOT SW2")]   # bottom side: floor pinholes
-# hw v0.901 (default; OLP_BOARD=v0.1 builds the shell for the first board): the wired network at
+# hw v0.2 (default; OLP_BOARD=v0.1 builds the shell for the first board): the wired network at
 # the right end (layout/place.py J4_AT, PS1_PIN1). The RJ45 (13.3 mm) and the PoE module (8 mm)
 # stand on the board's top under a HOOD on the lid, between the MENU and BACK keycaps; the RJ45's
 # mouth comes out through the right wall (tray below the lid top, hood above it).
-BOARD_REV = os.environ.get("OLP_BOARD", "v0.901")
+BOARD_REV = os.environ.get("OLP_BOARD", "v0.2")
 NETWORK = BOARD_REV != "v0.1"
 J4_AT = (148.7, 49.5)
 RJ45_W, RJ45_D, RJ45_H, RJ45_SPRING_W = 16.0, 21.2, 13.3, 18.35   # HanRun HR871150C (rev 00 p2)
@@ -97,7 +97,7 @@ LID_T = 2.0
 Z_LT = Z_BT + PLATE_ABOVE_PCB  # lid (plate) top 14.6
 Z_LU = Z_LT - LID_T            # lid underside = the tray's ledge 12.6 (flat: the lid prints on it)
 TOP_CLEAR = Z_LU - Z_BT        # 3.0 above the board top under the flat lid
-Z_HOOD_IN = Z_BT + RJ45_H + HOOD_CLEAR             # hood ceiling (hw v0.901)
+Z_HOOD_IN = Z_BT + RJ45_H + HOOD_CLEAR             # hood ceiling (hw v0.2)
 Z_HOOD_TOP = Z_HOOD_IN + HOOD_ROOF
 BOT_CLEAR = Z_BB - Z_FLOOR     # 6.0 below the board bottom
 
@@ -189,7 +189,7 @@ HEIGHTS = [
     ("Kailh", 1.85), ("CPG151101S11", 1.85), ("SOT-223", 1.8), ("SOT-23", 1.2), ("QFN", 1.0),
     ("MountingHole", 0.1), ("logo", 0.05), ("name", 0.05),
     ("_1206_", 1.2), ("_0805_", 1.3), ("_0603_", 0.9), ("_0402_", 0.6),
-    # hw v0.901
+    # hw v0.2
     ("RJ45_HanRun_HR871150C", RJ45_H), ("Silvertel_Ag99xxLP", PS1_H), ("CP_EIA-7343", 2.8),
     ("TO-269AA", 2.7), ("D_SMA", 2.3), ("D_SOD-123", 1.35), ("LQFP-48", 1.6),
     ("Crystal_SMD_3225", 0.8), ("_2512_", 0.7), ("L_0603", 0.9),
@@ -397,7 +397,7 @@ def envelope() -> Part:
 
 
 def hood_box(z0, z1, grow=0.0) -> Part:
-    """hw v0.901: the hood's outline (board x HOOD[0] to the case's right face, HOOD's y range)."""
+    """hw v0.2: the hood's outline (board x HOOD[0] to the case's right face, HOOD's y range)."""
     return box(bx2x(HOOD[0]) - grow, OUT_W, by2y(HOOD[2]) - grow, by2y(HOOD[1]) + grow, z0, z1)
 
 

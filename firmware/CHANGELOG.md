@@ -65,18 +65,18 @@ last section lists what only a real board can check (none of this has run on one
 - Console: `audio agc on|off`, `audio sidetone off|low|normal`, `audio echo on|off|test`,
   `audio source <hz>` (the test device's tone); `audio` shows the codecs' and echo's numbers.
 
-## 0.9.5 — 2026-10-15: wired network for hw v0.901, a board choice
+## 0.9.5 — 2026-10-15: wired network for hw v0.2, a board choice
 
 Nothing changes on the boards that exist (rev A, hw v0.1): a default build is the rev A build,
 with no wired network code in it, and behaves as 0.9.4.
 
-- **Board choice** (menuconfig → Open Lounge Phone → Board): rev A (the default) or hw v0.901 (the
-  RJ45 + PoE revision; `sdkconfig.v0901`). It decides the pins in use and the board id updates are
-  signed for: `minimal-revA` or `minimal-v0901` (no longer settable by hand), so an update for one
+- **Board choice** (menuconfig → Open Lounge Phone → Board): rev A (the default) or hw v0.2 (the
+  RJ45 + PoE revision; `sdkconfig.v02`). It decides the pins in use and the board id updates are
+  signed for: `minimal-revA` or `minimal-v02` (no longer settable by hand), so an update for one
   board never installs on the other. Each board has its own manifest in the update channel; rev A
-  keeps `firmware-manifest.json`, hw v0.901 reads `firmware-manifest-minimal-v0901.json`.
+  keeps `firmware-manifest.json`, hw v0.2 reads `firmware-manifest-minimal-v02.json`.
   `tools/release.sh build` signs both (`--board` for one).
-- **Wired network** (hw v0.901): the W5500 on the display's SPI bus (polled, no INT/RST lines;
+- **Wired network** (hw v0.2): the W5500 on the display's SPI bus (polled, no INT/RST lines;
   the e-paper and the W5500 take turns on the bus), DHCP, the same DNS, TLS and call paths as
   Wi-Fi. A cable with a link and an address is used and the Wi-Fi radio is off; no cable, no
   address, or the cable pulled: Wi-Fi, with the cable's PHY powered down and woken every 30 s to
@@ -92,8 +92,8 @@ with no wired network code in it, and behaves as 0.9.4.
   `CABLE AFTER CALL`, `NO DHCP ON CABLE`); the phone check shows the cable's speed instead of
   Wi-Fi while it's in use.
 - **Console**: `eth` (link, speed and duplex, address, MAC); on rev A it says there is no wired
-  network. `status` adds a `NET` line on hw v0.901.
-- **QEMU**: a QEMU build for hw v0.901 uses QEMU's Ethernet as the cable; `tools/qemu_cable.py`
+  network. `status` adds a `NET` line on hw v0.2.
+- **QEMU**: a QEMU build for hw v0.2 uses QEMU's Ethernet as the cable; `tools/qemu_cable.py`
   pulls it out and plugs it back in through the QEMU monitor (`QEMU_MONITOR` in `tools/qemu.sh`).
 
 ## 0.9.4 — 2026-10-15: mute, call waiting, missed calls, redial, the house intercom

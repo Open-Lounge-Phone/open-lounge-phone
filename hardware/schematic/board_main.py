@@ -1,4 +1,4 @@
-"""The minimal board (M1, owner decision 2026-09-30): core only plus one status LED; hw v0.901
+"""The minimal board (M1, owner decision 2026-09-30): core only plus one status LED; hw v0.2
 adds a wired network (RJ45, W5500, isolated PoE).
 
 2 layers, 156 x 88 mm (M2 placement, DESIGN.md §9). Blocks (one review page each):
@@ -17,9 +17,9 @@ adds a wired network (RJ45, W5500, isolated PoE).
            four M3 mounting holes.
 - ethernet: W5500 (SPI: the display's clock and data lines, CS on GPIO0 = BOOT, MISO on GPIO45)
            per WIZnet's joined-centre-tap reference, its own SGM2212-3.3, the RJ45's chip side
-           and LEDs (hw v0.901).
+           and LEDs (hw v0.2).
 - poe:     the RJ45's cable-side centre taps -> two bridges (mode A + B) -> SMAJ58A -> an
-           isolated DP9900LP-5V module -> a Schottky into V5 (hw v0.901).
+           isolated DP9900LP-5V module -> a Schottky into V5 (hw v0.2).
 
 Not on this board (owner): NFC, battery/charger/fuel gauge, per-key LEDs, I/O expander, hall
 sensor, privacy-light circuits, mute switch, speaker/amp, accelerometer, radar, extra ESD
@@ -67,7 +67,7 @@ def power(n, GND, VBUS, V5, V3V3):
     """USB-C sink: 5.1 k Rd on each CC pin = a plain 5 V sink at USB default power (no PD).
     No fuse: a compliant USB source current-limits its VBUS, the board has no battery, and the
     LDO limits (>= 810 mA) and shuts down on over-temperature (SGM2212 p6, p10).
-    hw v0.901: VBUS reaches the 5 V rail V5 through a Schottky (the PoE 5 V comes in through
+    hw v0.2: VBUS reaches the 5 V rail V5 through a Schottky (the PoE 5 V comes in through
     another, poe()), so neither source can feed the other. Only the receptacle's A9/B4 VBUS
     pad is routed (the plug joins all four VBUS contacts; 0.5 A on two contacts)."""
     j = make("USB-C", ref="J1", note="power + native USB (flash/console)")
@@ -123,7 +123,7 @@ def mcu(n, GND, V3V3):
     rst["A"] += n["EN"]
     rst["B"] += GND
     # BOOT: GPIO0 has an internal weak pull-up (p13); the button pulls it low at reset.
-    # hw v0.901: GPIO0 is also the W5500's chip select (ETH_CS, 10 k pull-up in ethernet()), so
+    # hw v0.2: GPIO0 is also the W5500's chip select (ETH_CS, 10 k pull-up in ethernet()), so
     # the button reaches it through 1 k: 3.3 V x 1k / 11k = 0.30 V at reset (download mode), and
     # a press while firmware drives CS only costs 3.3 mA.
     sw = n["BOOT_SW"] = Net("BOOT_SW")    # its 1 k series resistor is made in ethernet()

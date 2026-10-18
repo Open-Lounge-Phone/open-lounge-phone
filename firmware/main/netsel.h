@@ -1,4 +1,4 @@
-// Which network the phone uses on a board with a wired network (hw v0.901: the RJ45 and Wi-Fi),
+// Which network the phone uses on a board with a wired network (hw v0.2: the RJ45 and Wi-Fi),
 // the pure part: no ESP-IDF here, unit-tested on the host (firmware/test/host/test_netsel.c).
 // The ESP side (net.c, eth.c) feeds it events and makes its outputs true. README "Wired network".
 //

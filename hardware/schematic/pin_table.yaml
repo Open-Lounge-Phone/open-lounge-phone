@@ -9,7 +9,7 @@
 #          never pull the pin HIGH at reset (a key or hook switch to GND, a transistor base, an
 #          LED): the required strap value is the default low (GPIO45 3.3 V flash, GPIO46 any).
 #          GPIO0 keeps its internal weak pull-up (SPI boot); BOOT pulls it low.
-# Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: none (hw v0.901: IO45 = ETH_MISO).
+# Fixed: PSRAM 35-37 unused (octal PSRAM), native USB 19/20. Free: none (hw v0.2: IO45 = ETH_MISO).
 gpio:
   0:  {net: ETH_CS, strap: true, note: "W5500 chip select (10k pull-up = SPI boot) + BOOT button through 1k (0.30 V at reset)"}
   1:  {net: STATUS_LED, note: "front side, far left: LED at the band's front-left"}

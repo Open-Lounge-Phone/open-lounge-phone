@@ -53,15 +53,15 @@ def board_h(m: dict) -> str:
     define("PIN_BUZZER", n2g["BUZZER"], "piezo via NPN, ~4 kHz")
     define("PIN_STATUS_LED", n2g["STATUS_LED"], "active high")
     define("PIN_BOOT", p["boot_button"]["gpio"],
-           "through 1k; also the W5500's CS (hw v0.901)" if "ETH_CS" in n2g else "")
+           "through 1k; also the W5500's CS (hw v0.2)" if "ETH_CS" in n2g else "")
     out.append("")
-    if "ethernet" in p:                  # hw v0.901: W5500 on the display's SPI bus
+    if "ethernet" in p:                  # hw v0.2: W5500 on the display's SPI bus
         e = p["ethernet"]["spi"]
         out += [
-            "// hw v0.901 (CONFIG_OLP_BOARD_V0901) adds a W5500 on the display's SPI bus. Rev A (hw v0.1,",
+            "// hw v0.2 (CONFIG_OLP_BOARD_V02) adds a W5500 on the display's SPI bus. Rev A (hw v0.1,",
             "// the default board) has none: there GPIO0 is only the BOOT button and GPIO45 is free, so a",
             "// rev A build never drives them or looks for the chip.",
-            "#if CONFIG_OLP_BOARD_V0901",
+            "#if CONFIG_OLP_BOARD_V02",
         ]
         define("BOARD_HAS_ETHERNET", 1, "W5500, polled (no INT / RST GPIO)")
         define("PIN_ETH_CS", e["cs"], "10k pull-up; BOOT through 1k")

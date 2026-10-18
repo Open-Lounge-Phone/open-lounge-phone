@@ -64,7 +64,7 @@ TEST(prov_open_from_menu) {
   CHECK(prov_step(&p, PROV_EV_OPEN, true, false, 3000) == PROV_ACT_NONE);
 }
 
-// hw v0.901: a working cable is a network, so setup doesn't demand Wi-Fi.
+// hw v0.2: a working cable is a network, so setup doesn't demand Wi-Fi.
 TEST(prov_a_working_cable_at_power_on_needs_no_setup) {
   prov_t p;
   prov_init(&p);

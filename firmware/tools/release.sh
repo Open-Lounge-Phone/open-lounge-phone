@@ -10,7 +10,7 @@
 #   firmware/tools/release.sh keygen            your key pair: firmware/keys/ota_signing_key.pem
 #                                               and keys/ota_signing_pub.pem (both gitignored)
 #   firmware/tools/release.sh build             signed builds of PROJECT_VER for every board into
-#                                               build-release/dist/ (--board reva|v0901: one)
+#                                               build-release/dist/ (--board reva|v02: one)
 #   firmware/tools/release.sh publish --draft   a DRAFT fw-vX.Y.Z release (default); the channel is
 #                                               untouched, so no phone sees it
 #   firmware/tools/release.sh publish --release the real release + the channel update: phones
@@ -21,7 +21,7 @@
 #
 # Boards: each has its own board id signed into its manifest (a phone refuses another board's) and
 # its own manifest in the channel: rev A (minimal-revA) firmware-manifest.json, the name phones
-# already read; hw v0.901 (minimal-v0901) firmware-manifest-minimal-v0901.json.
+# already read; hw v0.2 (minimal-v02) firmware-manifest-minimal-v02.json.
 #
 # Source builds have no update key and no channel (updates off). Only these release builds embed
 # one: the official key and channel (sdkconfig.release), or yours with --repo. The private key
@@ -34,7 +34,7 @@ REPO="$OFFICIAL"
 KEY="keys/ota_signing_key.pem"
 B="build-release"
 CHANNEL="fw-stable"
-BOARDS="reva v0901"
+BOARDS="reva v02"
 BOARD_ARG=""
 cmd="${1:-}"
 [ $# -gt 0 ] && shift
@@ -42,7 +42,7 @@ args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) REPO="${2:?--repo owner/name}"; shift 2 ;;
-    --board) BOARD_ARG="${2:?--board reva|v0901}"; shift 2 ;;
+    --board) BOARD_ARG="${2:?--board reva|v02}"; shift 2 ;;
     *) args+=("$1"); shift ;;
   esac
 done
@@ -84,9 +84,9 @@ case "$cmd" in
     v="$(version)"
     boards="${BOARD_ARG:-$BOARDS}"
     for b in $boards; do
-      case " $BOARDS " in *" $b "*) ;; *) echo "unknown board $b (reva, v0901)" >&2; exit 1 ;; esac
+      case " $BOARDS " in *" $b "*) ;; *) echo "unknown board $b (reva, v02)" >&2; exit 1 ;; esac
     done
-    rm -rf "$B" "$B"-v0901
+    rm -rf "$B" "$B"-v02
     mkdir -p "$B/dist"
     for b in $boards; do
       d="$(board_dir "$b")"

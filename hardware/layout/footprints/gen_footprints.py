@@ -9,7 +9,7 @@ Only parts with no suitable official KiCad footprint live here (official library
   pins 3.0 @ (-3.81,-2.54)/(2.54,-5.08)) and the widely used Kailh socket land
   (2.55 x 2.5 pads @ (-7.085,-2.54)/(5.842,-5.08)) - [UNVERIFIED] against the -2 suffix drawing.
   Used for the 12 keys and the hook switch.
-- RJ45_HanRun_HR871150C (hw v0.901): RJ45 with PoE magnetics and 2 LEDs, drawn from HanRun's
+- RJ45_HanRun_HR871150C (hw v0.2): RJ45 with PoE magnetics and 2 LEDs, drawn from HanRun's
   recommended PCB layout (component side view, rev 00 p3); origin = midpoint of the two
   locating holes, +y toward the rear, the mouth at y -10.80 (it overhangs the board edge). Pin 6
   is not fitted. Pads 5 and 7 (chip side / PoE side neighbours) are 1.3 mm for a wider gap.
