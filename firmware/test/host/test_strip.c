@@ -402,7 +402,18 @@ TEST(strip_held_phone_asks_a_grown_up) {
   CHECK(strip_lines(&in, out) == 2);
   CHECK_STR(out[0], "ASK A GROWN-UP");
   CHECK_STR(out[1], "NEW FIRMWARE");
+  // Lifted, and after a key it refused: still only that (it makes no calls).
+  ph.kind = PH_OFFHOOK;
+  CHECK(strip_lines(&in, out) == 2);
+  CHECK_STR(out[0], "ASK A GROWN-UP");
+  CHECK_STR(out[1], "NEW FIRMWARE");
+  snprintf(ph.last_end, sizeof ph.last_end, "denied");
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "ASK A GROWN-UP");
   cfg.hold = false;
+  strip_lines(&in, out);
+  CHECK_STR(out[0], "NOT ALLOWED");
+  phone_init(&ph);
   strip_lines(&in, out);
   CHECK_STR(out[0], "QUIET HOURS");
 }

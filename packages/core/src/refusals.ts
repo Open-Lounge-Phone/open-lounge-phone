@@ -26,8 +26,8 @@ export const LEFT_PHONE_CANT_NOTE = "This phone's owner left: it calls only the 
 export const CANT_CALL_NOTE = "You can't call that address";
 /** A kids' phone waiting for a guardian to allow its new firmware takes no calls. */
 export const HELD_PHONE_NOTE = "That phone is waiting for a grown-up's OK";
-/** …and calls only its guardians. */
-export const HELD_CANT_NOTE = "Until a grown-up says OK, this phone calls only them";
+/** …and makes no calls at all. */
+export const HELD_CANT_NOTE = "Until a grown-up says OK, this phone can't make calls";
 
 /** What a phone's two status lines say for a refusal note (16 characters each), if known. */
 const STATUS: Record<string, [string, string]> = {

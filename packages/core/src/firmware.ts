@@ -20,15 +20,14 @@ export interface FirmwareContext {
 }
 
 export type FirmwareChange =
-  /** Nothing to record: a browser phone, or the same image as before. */
+  /** Nothing to record: a browser phone, a phone that reports no build, or the same image. */
   | { kind: "none" }
   /** The first build this server sees for the phone (at pairing): recorded, nothing else. */
   | { kind: "first" }
   /** An official update the phone installed itself: recorded and audited, no alert. */
   | { kind: "official" }
   /**
-   * Firmware that isn't an official update (built from source, flashed over USB, or not
-   * reported at all): audited; a kids' phone's guardians are told (`notify`) and, with Ask me
+   * Firmware that isn't an official update (built from source, or flashed over USB): audited; a kids' phone's guardians are told (`notify`) and, with Ask me
    * first, the phone waits for their OK (`hold`).
    */
   | { kind: "changed"; notify: boolean; hold: boolean };
@@ -37,23 +36,16 @@ export type FirmwareChange =
 export const UNTRACKED_MODELS: ReadonlySet<string> = new Set(["web-emulator", "addon"]);
 
 /**
- * A hardware phone that reports no build at all is treated as an unofficial one with no name,
- * so leaving the field out never hides a change.
+ * What `next` (from this connection's hello) means after `previous` (stored), if any. Only
+ * phones that report a build are checked: one that reports none is left alone (nothing is
+ * recorded, nobody is told, it isn't held).
  */
-export const UNREPORTED_BUILD: ReportedBuild = {
-  sha256: "",
-  project: "unknown",
-  version: "unknown",
-  official: false,
-};
-
-/** What `next` (from this connection's hello) means after `previous` (stored), if any. */
 export function firmwareChange(
   previous: { sha256: string } | undefined,
-  next: ReportedBuild,
+  next: ReportedBuild | undefined,
   ctx: FirmwareContext,
 ): FirmwareChange {
-  if (UNTRACKED_MODELS.has(ctx.model)) return { kind: "none" };
+  if (UNTRACKED_MODELS.has(ctx.model) || !next) return { kind: "none" };
   if (!previous) return { kind: "first" };
   if (previous.sha256 === next.sha256) return { kind: "none" };
   if (next.official) return { kind: "official" };

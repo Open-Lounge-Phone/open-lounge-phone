@@ -1118,7 +1118,7 @@ export const Config = z
       .literal(true)
       .optional()
       .describe(
-        "A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP`; nobody can call it and it calls only its guardians (`buttons` lists only them) until a guardian allows the new firmware in the app.",
+        "A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP` (also off the hook); nobody can call it and it makes no calls (`buttons` is empty, no `missed`, every key is refused) until a guardian allows the new firmware in the app.",
       ),
     server: ServerInfo.optional()
       .catch(undefined)

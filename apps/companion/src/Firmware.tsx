@@ -48,7 +48,7 @@ export function FirmwareCard({
             <strong>{phoneOf(device.name)} is waiting for your OK.</strong> It started running
             firmware built at home
             {build ? `: '${build.label}', ${formatWhen(build.since, now)}` : ""}. Until you allow
-            it, nobody can call it and it calls only its grown-ups.
+            it, it can't make or take calls.
           </p>
           {confirming ? (
             <div className="row">
@@ -110,7 +110,7 @@ export function FirmwareCard({
           <p className="hint">
             When this phone starts running firmware that isn't an official update, you hear about it
             right away. With Ask me first it also waits for your OK: until then it shows ASK A
-            GROWN-UP, nobody can call it, and it calls only its grown-ups.
+            GROWN-UP and can't make or take calls.
           </p>
         </>
       )}

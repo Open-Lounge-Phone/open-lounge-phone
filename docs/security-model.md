@@ -105,16 +105,19 @@ it).
   - an **official update**: an audit-trail entry ("updated itself to 0.9.8"), no alert;
   - **anything else on a kids' phone**: a live notice to the home's guardians in the app ("Mia's
     phone is running new firmware: built at home, 'mia-snake 2', today 4:12 PM") and an audit-trail
-    entry; a hardware phone that stops reporting a build counts as a change;
+    entry;
   - **anything else on other phones** (a person's own, Lounge phones): an audit-trail entry only.
-  The first build a server sees for a phone (at pairing) is recorded without an alert.
+  The first build a server sees for a phone (at pairing) is recorded without an alert. Only phones
+  that report a build are checked: a hardware phone that reports none is left alone (no notice, no
+  hold, no audit entry).
 - **Ask me first** (kids' phones, on by default; on the phone's page): after a change that isn't an
   official update the phone is held until a guardian taps **Allow** (or removes and wipes it). While
   held, the phone shows `ASK A GROWN-UP`, nobody can call it (callers hear it is waiting and may leave
-  a voicemail), and it calls only its guardians: its keys show only theirs, and extensions, call backs,
-  transfers, chimes and the house intercom are off. Turning Ask me first off also lets a held phone go.
+  a voicemail), and it makes no calls at all, not even to its guardians: its keys show nothing, every
+  key is refused, and extensions, call backs, transfers, chimes and the house intercom are off.
+  Turning Ask me first off also lets a held phone go.
 - **The honest limit**: the build is what the phone says. Firmware someone wrote themselves can
-  report any hash and `official: true`, so this catches honest changes (a child flashing their own
+  report any hash and `official: true`, or report nothing at all, so this catches honest changes (a child flashing their own
   project, a USB reflash), not a determined liar. Only hardware Secure Boot, where the chip boots
   nothing but signed images, can rule that out; a "Locked" option built on it is planned.
 

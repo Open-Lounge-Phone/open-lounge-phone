@@ -31,6 +31,13 @@ describe("statusLines", () => {
   it("a phone waiting for a grown-up to allow its new firmware says so, over everything idle", () => {
     const config: DeviceConfig = { buttons: [], hold: true, quiet: true };
     expect(lines({ config })).toEqual(["ASK A GROWN-UP", "NEW FIRMWARE"]);
+    // Lifted, and after a key it refused: still only that (it makes no calls).
+    for (const deviceState of [
+      { kind: "offhook" },
+      { kind: "offhook", lastEnd: "denied" },
+    ] as const) {
+      expect(lines({ config, deviceState })).toEqual(["ASK A GROWN-UP", "NEW FIRMWARE"]);
+    }
   });
 
   it("reports connectivity", () => {

@@ -540,7 +540,7 @@ Sent after authentication and whenever guardians change settings.
 | `houseLine` | boolean |  | Lounge phone with nobody signed in: `buttons` are the space's house-line keys, and pressing one calls as the space (off unless the space turns it on). |
 | `here` | { name: string (len ≤24), where: string (len ≤24) }[] |  | Lounge phone with nobody signed in, when the space turns on "who's here": people signed in at its other Lounge phones who are open to chat. |
 | `extensions` | boolean |  | The phone's space is a team or org with extensions: MENU offers Dial extension (`call.extension`). |
-| `hold` | `true` |  | A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP`; nobody can call it and it calls only its guardians (`buttons` lists only them) until a guardian allows the new firmware in the app. |
+| `hold` | `true` |  | A kids' phone with Ask me first started running firmware that isn't an official update: it waits for a guardian's OK. Show `ASK A GROWN-UP` (also off the hook); nobody can call it and it makes no calls (`buttons` is empty, no `missed`, every key is refused) until a guardian allows the new firmware in the app. |
 | `server` | { software: string (len ≤64), protocol: { min: integer, max: integer }, features: string (len ≤32)[] } |  | What the server speaks (protocol range, features), so a phone can leave out what it doesn't offer. |
 | `update` | { minProtocol: integer, message: string (len ≤32) } |  | The phone's protocol is older than the server accepts: show `message`, don't treat the phone as signed in, and retry rarely (the server closes the connection next). Sent before authentication, with no other settings. |
 

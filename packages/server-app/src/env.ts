@@ -255,7 +255,7 @@ export interface PeerInfo {
   left?: string;
   /**
    * A kids' phone waiting for a guardian to allow its new firmware (Ask me first): nobody can
-   * call it and it calls only its guardians.
+   * call it and it makes no calls.
    */
   held?: true;
   /** Present for Lounge phones. */

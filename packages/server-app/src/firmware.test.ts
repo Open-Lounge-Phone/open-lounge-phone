@@ -119,21 +119,24 @@ describe("a kids' phone's firmware", () => {
       held: true,
     });
 
-    // Held: ASK A GROWN-UP, only the guardian's key, nobody can call it.
-    expect(config).toMatchObject({ hold: true, buttons: [{ index: 0, label: "Jesse" }] });
+    // Held: ASK A GROWN-UP, no keys at all, nobody can call it (the caller may leave a message).
+    expect(config).toMatchObject({ hold: true, buttons: [] });
     const call = await bobCalls(bApp, phone, deviceId);
     expect(call.rang).toBe(false);
     expect(call.state).toMatchObject({ state: "ended", note: HELD_PHONE_NOTE });
-    // It calls only its guardians: Bob's key and an extension are refused, Jesse's key rings.
+    expect(call.state.voicemail).toBeDefined();
+    // It makes no calls: not even its guardian's key, nor a call back or an extension.
     phone.write({ t: "hook", state: "up" });
-    phone.write({ t: "button", index: 1 });
-    expect(await phone.nextState("ended")).toMatchObject({ note: HELD_CANT_NOTE });
-    phone.write({ t: "call.extension", number: "204" });
-    expect(await phone.nextState("ended")).toMatchObject({ note: HELD_CANT_NOTE });
-    phone.write({ t: "button", index: 0 });
-    const ring = await jApp.next("call.ringing");
-    jApp.write({ t: "call.hangup", callId: ring.callId });
-    await phone.nextState("ended");
+    for (const msg of [
+      { t: "button", index: 0 },
+      { t: "button", index: 1 },
+      { t: "call.back", id: "vm_x" },
+      { t: "call.extension", number: "204" },
+    ]) {
+      phone.write(msg);
+      expect(await phone.nextState("ended")).toMatchObject({ note: HELD_CANT_NOTE });
+    }
+    expect(jApp.all("call.ringing")).toEqual([]);
     phone.write({ t: "hook", state: "down" });
 
     // Only a guardian may allow it.
@@ -197,12 +200,18 @@ describe("a kids' phone's firmware", () => {
     expect(await view()).toMatchObject({ held: false });
   });
 
-  it("a hardware phone that stops reporting its build counts as a change", async () => {
-    const { jApp, connect } = await home();
+  it("a hardware phone that reports no build is ignored: no notice, no hold, no audit entry", async () => {
+    const { jApp, bApp, deviceId, connect, view, audit } = await home();
+    (await connect(hw())).phone.close(1000, "bye");
+    expect((await view()).build).toBeNull();
     (await connect(hw(official("0.9.7", "a")))).phone.close(1000, "bye");
-    const { config } = await connect(hw());
-    expect(await jApp.next("phone.firmware")).toMatchObject({ version: "unknown" });
-    expect(config?.hold).toBe(true);
+    const { phone, config } = await connect(hw());
+    expect(config?.hold).toBeUndefined();
+    expect(config?.buttons).toHaveLength(2);
+    expect(jApp.all("phone.firmware")).toEqual([]);
+    expect((await audit()).filter((a) => a.startsWith("phone.firmware"))).toEqual([]);
+    expect(await view()).toMatchObject({ build: { label: "0.9.7" }, held: false });
+    expect((await bobCalls(bApp, phone, deviceId)).rang).toBe(true);
   });
 });
 

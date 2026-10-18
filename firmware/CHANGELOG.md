@@ -1,5 +1,12 @@
 # Firmware changelog
 
+## 0.9.9 — unreleased
+
+- **A held phone makes no calls** (Ask me first, server 0.10.0): lifted, and after any key, it
+  still shows `ASK A GROWN-UP` / `NEW FIRMWARE` (the server sends it no keys and refuses every
+  call until a guardian allows its firmware or turns Ask me first off). The refusal note it maps
+  to `ASK A GROWN-UP` is now "Until a grown-up says OK, this phone can't make calls".
+
 ## 0.9.8 — unreleased
 
 - **The phone reports the firmware it runs** (`hello.build`, server 0.10.0): the running image's
@@ -9,8 +16,7 @@
   both wipes) and compares the running image with it at boot. A build from source or a USB flash
   reports `false` (`build.c`, `build_core.c`; host-tested). The boot log says `BUILD … official=`.
 - **`ASK A GROWN-UP` / `NEW FIRMWARE`** while a guardian hasn't allowed new firmware on a kids'
-  phone (`config.hold`, Ask me first): the server sends only the grown-ups' keys then; other calls
-  say `ASK A GROWN-UP`, and calling such a phone says `WAITING FOR OK`.
+  phone (`config.hold`, Ask me first); calling such a phone says `WAITING FOR OK`.
 
 ## 0.9.7 — unreleased
 

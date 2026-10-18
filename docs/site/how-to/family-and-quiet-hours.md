@@ -104,7 +104,7 @@ built at home, and since when. **Ask me first** (on unless you turn it off) make
 wait for you after firmware that isn't an official update:
 
 - the phone shows `ASK A GROWN-UP`;
-- nobody can call it (callers can leave a message), and it can call only its grown-ups;
+- nobody can call it (callers can leave a message), and it can't call anyone, not even you;
 - it stays like that until you tap **Allow** on its Manage page, or **Remove and wipe** it.
 
 **What it can't promise.** The phone reports its own firmware. Firmware someone writes

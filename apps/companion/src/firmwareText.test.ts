@@ -20,7 +20,7 @@ describe("firmware notice", () => {
         "en-US",
       ),
     ).toBe(
-      "Kid phone is running new firmware: built at home, '0.9.8-dev', today 4:12 PM. It waits for your OK before it calls anyone but you.",
+      "Kid phone is running new firmware: built at home, '0.9.8-dev', today 4:12 PM. It can't make or take calls until you OK it.",
     );
   });
   it("names phones and origins", () => {

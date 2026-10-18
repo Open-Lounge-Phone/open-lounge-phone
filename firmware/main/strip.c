@@ -143,6 +143,8 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
       if (!s->room_id[0]) return set1(out, "JOINING ROOM");
       return set2(out, s->recorded ? "REC IN ROOM" : "IN ROOM", s->muted ? "MUTED" : "");
     case PH_OFFHOOK: {
+      // New firmware a grown-up hasn't allowed yet (Ask me first): it makes no calls until then.
+      if (in->config && in->config->hold) return set2(out, "ASK A GROWN-UP", "NEW FIRMWARE");
       if (s->lost) return set2(out, "CONNECTION LOST", "PRESS A KEY");
       if (s->held[0]) return *name ? set2(out, "ON HOLD", name) : set2(out, "CALL ON HOLD", "MENU 1 RESUMES");
       if (s->callback) return set2(out, "PLACE KEPT", "WE'LL CALL BACK");
@@ -183,7 +185,7 @@ int strip_lines(const strip_input_t *in, char out[2][STATUS_MAX + 1]) {
   if (in->vm_stage == VM_FAILED) return set1(out, "MESSAGE NOT SENT");
 
   const phone_config_t *c = in->config;
-  // New firmware a grown-up hasn't allowed yet (Ask me first): it calls only them until then.
+  // New firmware a grown-up hasn't allowed yet (Ask me first): it makes no calls until then.
   if (c && c->hold) return set2(out, "ASK A GROWN-UP", "NEW FIRMWARE");
   // The daily check-in: asked until I'm OK (1, handset down); thanked once the server has it.
   if (in->checked_in) return set2(out, "THANK YOU", "CHECKED IN");

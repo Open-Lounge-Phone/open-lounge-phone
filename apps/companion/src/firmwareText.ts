@@ -13,7 +13,7 @@ export function firmwareNotice(
 ): string {
   const when = formatWhen(n.at, now, locale);
   const text = `${phoneOf(n.name)} is running new firmware: built at home, '${buildLabel(n)}', ${when.charAt(0).toLowerCase()}${when.slice(1)}.`;
-  return n.held ? `${text} It waits for your OK before it calls anyone but you.` : text;
+  return n.held ? `${text} It can't make or take calls until you OK it.` : text;
 }
 
 /** Where a build came from, for the phone's page. */

@@ -194,10 +194,11 @@ interface DevicePeer extends Peer {
 }
 
 /**
- * What a held phone (waiting for a guardian to allow its new firmware) may not do: dial anything
- * but its keys (a key dials only a guardian then), hand a call on, or post to the space.
+ * What a held phone (waiting for a guardian to allow its new firmware) may not do: place any
+ * call (keys included), hand a call on, or post to the space.
  */
 const HELD_REFUSES: ReadonlySet<DeviceToServer["t"]> = new Set([
+  "button",
   "call.extension",
   "call.address",
   "call.back",
@@ -899,7 +900,7 @@ export class HouseholdHub {
       if (peer.kind === "addon") return this.handleAddon(peer, msg);
       const device = this.devices.get(peer.id);
       if (device !== peer) return; // stale connection
-      // Waiting for a guardian's OK: only calls to its guardians (keys) and what a call needs.
+      // Waiting for a guardian's OK: no calls at all, nothing that reaches the space.
       if (device.held && HELD_REFUSES.has(msg.t)) {
         return this.refuse(device, "denied", HELD_CANT_NOTE);
       }
@@ -1436,9 +1437,6 @@ export class HouseholdHub {
       this.scheduleFor(device),
     ]);
     const contact = resolveButton(buttons, new Map(contacts.map((c) => [c.id, c])), index);
-    if (device.held && !(contact && (await this.isGuardian(contact.id)))) {
-      return this.refuse(device, "denied", HELD_CANT_NOTE);
-    }
     // A kids' phone's call activity: who it tried to call, if it's refused.
     if (this.isKidsPhone(device)) {
       this.kidCall = {
@@ -2465,17 +2463,10 @@ export class HouseholdHub {
         .filter((l) => parseAddonAddress(l.address))
         .map((l) => l.id),
     );
-    // Held (waiting for a guardian's OK): only the keys that call a guardian.
-    const guardians = peer.held
-      ? new Set(
-          (await store.listUsers(this.householdId))
-            .filter((u) => u.role === "guardian")
-            .map((u) => u.id),
-        )
-      : undefined;
-    const mapped = [...buttons]
+    // Held (waiting for a guardian's OK): no keys at all, it calls nobody.
+    const mapped = [...(peer.held ? [] : buttons)]
       .map(([index, userId]) => ({ index, userId, contact: byId.get(userId) }))
-      .filter((b) => b.contact?.deviceCanCall && (!guardians || guardians.has(b.userId)))
+      .filter((b) => b.contact?.deviceCanCall)
       .map((b) => ({
         index: b.index,
         label: b.contact?.label ?? "",
@@ -2497,7 +2488,8 @@ export class HouseholdHub {
       ...(quietUntil ? { quietUntil } : {}),
       utcOffsetMin: utcOffsetMinutes(now, schedule.timeZone),
       now: now.getTime(),
-      ...(missed.length ? { missed } : {}),
+      // Held: no missed calls to call back either.
+      ...(missed.length && !peer.held ? { missed } : {}),
       ...(greeting
         ? {
             greeting: {
@@ -6103,12 +6095,6 @@ export class HouseholdHub {
   }
 
   // --- recording (docs/security-model.md) ------------------------------------------------
-
-  /** A guardian of this space (by user id). */
-  private async isGuardian(userId: string): Promise<boolean> {
-    const u = await this.env.store.getUser(userId);
-    return u?.householdId === this.householdId && u.role === "guardian";
-  }
 
   /** A kids' phone: a household phone of ours without an owner, or one elsewhere we know of. */
   private isKidsPhone(p: Peer): boolean {

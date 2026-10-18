@@ -3,12 +3,7 @@
 // guardians hear about firmware that isn't an official update the moment the phone connects
 // with it, and with Ask me first the phone waits for their OK. Official updates and every other
 // phone's changes go only in the space's audit trail.
-import {
-  buildLabel,
-  firmwareChange,
-  type ReportedBuild,
-  UNREPORTED_BUILD,
-} from "@openloungephone/core";
+import { buildLabel, firmwareChange } from "@openloungephone/core";
 import { type Device, deviceMode, type User } from "@openloungephone/db";
 import type { PhoneBuild, ServerToApp } from "@openloungephone/protocol";
 import type { Hono } from "hono";
@@ -33,14 +28,14 @@ export async function phoneConnected(
   reported: PhoneBuild | undefined,
 ): Promise<FirmwareOutcome> {
   const { store } = env;
-  const next: ReportedBuild = reported ?? UNREPORTED_BUILD;
   const kids = deviceMode(device) === "kids";
-  const change = firmwareChange(device.build ?? undefined, next, {
+  const change = firmwareChange(device.build ?? undefined, reported, {
     model,
     kids,
     askFirst: device.askFirst,
   });
-  if (change.kind === "none") return { device };
+  if (change.kind === "none" || !reported) return { device };
+  const next = reported;
   const now = env.now();
   const build = { ...next, at: now };
   await store.setDeviceBuild(device.id, build);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLabel, firmwareChange, UNREPORTED_BUILD } from "./firmware.ts";
+import { buildLabel, firmwareChange } from "./firmware.ts";
 
 const a = "a".repeat(64);
 const b = "b".repeat(64);
@@ -45,11 +45,9 @@ describe("firmwareChange", () => {
     }
   });
 
-  it("a hardware phone that stops reporting its build counts as a change", () => {
-    expect(firmwareChange({ sha256: a }, UNREPORTED_BUILD, kids)).toMatchObject({
-      kind: "changed",
-      hold: true,
-    });
+  it("a hardware phone that reports no build is ignored", () => {
+    expect(firmwareChange({ sha256: a }, undefined, kids)).toEqual({ kind: "none" });
+    expect(firmwareChange(undefined, undefined, kids)).toEqual({ kind: "none" });
   });
 });
 
